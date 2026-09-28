@@ -14,6 +14,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "core/history.h"
@@ -31,6 +32,7 @@
 #include "scene/story.h"
 #include "app/remote.h"
 #include "tools/gizmo.h"
+#include "tools/navmesh.h"
 
 struct SDL_Window;
 struct SDL_GLContextState;
@@ -43,7 +45,7 @@ enum class ToolMode {
   Place,       // put the chosen prefab, object or decor part where the cursor points
 };
 
-enum class DialogAction { OpenProject, SaveProjectAs, ExtractSourceIso, ExtractSourceFolder, ExtractOutput };
+enum class DialogAction { OpenProject, SaveProjectAs, ExtractSourceIso, ExtractSourceFolder, ExtractOutput, ExportNavMeshes };
 
 // What the Place tool puts in the level: a prefab, an object of the catalog or a decor part of a
 // level.
@@ -152,9 +154,22 @@ class App {
   void select_tool(bool clicked, bool released);
   void place_tool(bool clicked);
   void draw_tool_overlays();
+  void draw_navmesh_overlay();
   void handle_shortcuts();
   void autosave_tick();
   void poll_level_opening();
+
+  // nav meshes (actions.cpp): generated on a worker thread from the walkable surfaces of `region`,
+  // replacing the nav meshes there; applied (undoable) when ready. With points, only the pieces of
+  // ground next to one of them are kept.
+  bool start_navmesh_generation(const AABB& region, std::string* error, std::vector<Vec3> keep_from = {});
+  void poll_navmesh_generation();
+  bool navmesh_busy() const { return m_nav_future.valid(); }
+  std::vector<uint32_t> navmesh_nodes() const;  // the document's nav meshes
+  AABB navmesh_region_of_selection() const;     // around the selection, invalid without one
+  std::vector<Vec3> navmesh_points_of_selection() const;  // where the selected elements stand
+  // the nav meshes for the game (nav_export.h), ids from `first_aid`
+  bool export_navmeshes(const std::string& path, uint32_t first_aid, std::string* error);
 
   // document (actions.cpp)
   void set_library(const std::string& library_root, const std::string& game);
@@ -208,6 +223,7 @@ class App {
   void remote_poll();  // each frame: the requests received, the ones waiting for something
   void remote_dispatch(const std::string& tool, const json& args, RemoteReply reply);
   void remote_place(const json& args, RemoteReply reply);
+  void remote_place_many(const json& items, size_t next, json placed, RemoteReply reply);
   json remote_status();
   json remote_node_json(const Node& n);
   bool remote_unsaved(const json& args) const;
@@ -244,6 +260,8 @@ class App {
   void ui_node_inspector(Node& n);
   void ui_statusbar(float y, float h);
   void ui_windows();
+  void ui_navmesh_window();
+  void ui_navmesh_inspector(Node& n);
   void ui_labels();
   void ui_viewport_hint();
   void ui_story_bar();
@@ -291,6 +309,11 @@ class App {
   bool show_log = false;
   bool show_help = false;
   bool show_labels = true;
+  bool show_navmesh = true;          // the nav meshes drawn over the level
+  bool show_navmesh_window = false;  // Tools > Nav meshes
+  NavParams nav_params;
+  bool nav_keep_selected = false;    // keep only the ground the selected elements stand on
+  uint32_t nav_first_aid = 60000;    // the ids the exported nav meshes take
   int left_tab_request = -1;  // select this tab of the left panel next frame
 
  private:
@@ -352,6 +375,20 @@ class App {
   // level opening (a level loads on a worker thread)
   std::future<std::unique_ptr<Scene>> m_level_future;
   std::string m_level_name;
+  // nav mesh generation (a worker thread) and its last outcome
+  struct NavJob {
+    bool ok = false;
+    std::string error;
+    std::vector<NavMeshData> meshes;
+    NavBuildStats stats;
+    AABB region;
+  };
+  std::future<NavJob> m_nav_future;
+  NavJob m_nav_last;           // meshes moved into the document once applied
+  std::unordered_map<uint64_t, NavMeshData> m_nav_draw_cache;  // the polygons of each nav mesh drawn, by mesh
+  uint64_t m_nav_generation = 0;  // counts the generations applied (the remote waits on it)
+  // a batch of placements (place_many): one undo entry for all
+  std::unique_ptr<NodeChange> m_batch_change;
   // confirmation before losing unsaved changes
   std::function<void()> m_pending_discard;
   bool m_show_discard = false;

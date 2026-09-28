@@ -15,8 +15,10 @@ with Jak II (PAL) and the interface in English.
 8. [Prefabs](#7-prefabs)
 9. [Build a new level](#8-build-a-new-level)
 10. [Let an assistant build it](#9-let-an-assistant-build-it)
-11. [Save, and find help](#10-save-and-find-help)
-12. [Making these screenshots again](#making-these-screenshots-again)
+11. [A whole district, by an assistant](#10-a-whole-district-by-an-assistant)
+12. [Nav meshes: where the creatures walk](#11-nav-meshes-where-the-creatures-walk)
+13. [Save, and find help](#12-save-and-find-help)
+14. [Making these screenshots again](#making-these-screenshots-again)
 
 ## The approach
 
@@ -203,7 +205,52 @@ sequence is in [`tools/build_demo_level.py`](../../tools/build_demo_level.py), w
 level again (`python tools/build_demo_level.py`); how to connect Claude Code is in
 [the README](../../README.md#5-building-levels-with-an-assistant-mcp).
 
-## 10. Save, and find help
+## 10. A whole district, by an assistant
+
+![Ironworks from the air: blocks of the industrial zone's facades, streets, catwalks and a yard](13-district.png)
+
+The demo level is small. **Ironworks** is a district of Haven City in the style of the industrial
+zone, and as large: 448 by 448 meters, 15,465 elements, built in about 100 seconds through the
+editor's MCP server by [`tools/build_industrial_district.py`](../../tools/build_industrial_district.py),
+a small MCP client that calls the tools Claude Code gets (`place_many` places hundreds of elements
+in one call). The pictures are what `capture_view` returned to it.
+
+It builds the way the game's designers built the zone: from its modules, placed as the game places
+them. Each block is a ring of four *facade columns*, a ground facade, the upper facade standing on
+it and everything the game hangs on them (pipes, lamps, windows, stains, red lights and their
+glow), read from the zone's own facades of the same kind; three kinds of blocks, grey, orange with
+towers and with mansard roofs, each side from a different facade. The blocks get flat roofs and,
+on the orange ones, the game's corner joints; the streets end against wall buildings at the edge of
+the district. Nothing is left open, even where the game's camera never goes: the roofs, the tops of
+the street ends, the corners, under the ground.
+
+![The yard: floor vents with their red glow, steam stacks, the catwalk's ramp, a pipe bridge and barrels](14-district-yard.png)
+
+In the middle, a yard: floor vents with their red glow, steam stacks, warning lights, the zone's
+catwalk ramp coming down from the catwalks of two streets, a pipe bridge on metal pillars, barrel
+stacks. The neon signs are black in the editor: the game draws them with particle effects, which
+the editor shows as markers.
+
+## 11. Nav meshes: where the creatures walk
+
+![The nav meshes of the district: the streets, the yard and the catwalks, one color per mesh, the Nav meshes window and the inspector](15-navmesh.png)
+
+The enemies and citizens of Jak II and Jak 3 walk on nav meshes: flat polygons over the ground,
+on which the game finds their way. **Tools > Nav meshes** generates them from the walkable surfaces
+of the level, for a creature of the size you give (radius, height, step, slope): Recast (from
+recastnavigation) builds the polygons, and the editor fits them to what the game reads, convex
+polygons of 3 or 4 corners, at most 255 per mesh, each mesh in one piece, with the route table and
+the polygon grid the game uses. Here, the district's: the streets, the yard, the ramp and the
+catwalks, one color per mesh; the inspector says the selected one suits the game.
+
+**Only the ground under the selection** keeps the pieces of ground the selected elements stand on:
+creatures do not walk on roofs, ledges or in closed rooms. The script above keeps the ground
+connected to a few street points (the `from` of `generate_navmesh`): 8 nav meshes, 1,323 polygons,
+96,800 m2 in 0.6 seconds, and 151 pieces of ground away from the streets left out, the insides of
+the blocks among them. **Export the nav meshes...** writes them as the game's levels hold them, for
+a custom level builder.
+
+## 12. Save, and find help
 
 ![The Getting started window](12-help.png)
 
@@ -236,6 +283,13 @@ $E --screenshot $D docs/captures/07-scale.png scale --lang en
 $E --screenshot $D docs/captures/04-prefabs.png prefab --lang en \
    --select cty-tanker-barrel,cty-tanker-barrel-2,cty-tanker-barrel-3,market-crate-1
 $E --screenshot $D docs/captures/10-new-level.png project --lang en --camera -18,52,84,-12.1,-31.2
+
+# the district, built through the MCP server, its pictures from capture_view, and its nav meshes
+python tools/build_industrial_district.py --views build/demo
+cp build/demo/district-aerial.png docs/captures/13-district.png
+cp build/demo/district-yard.png docs/captures/14-district-yard.png
+$E --screenshot build/demo/ironworks.glb docs/captures/15-navmesh.png navmesh --lang en \
+   --camera 120,110,90,37.57,-31.88
 ```
 
 The setups (the word after the file name):
@@ -249,6 +303,7 @@ The setups (the word after the file name):
 | `catalog`, `models` | the level given loaded, the objects or the models of the Catalog panel |
 | `decor`, `decor-all` | the decor of the level given in the Catalog panel, or the decor of every level searched for `catwalk` |
 | `project` | a project (`.glb`) opened, the objects of the Catalog panel |
+| `navmesh` | the level or project given, its nav meshes drawn (made for the whole level when it has none), the largest selected, the Nav meshes window |
 | `extract` | the extraction window, extracting the disc given to a temporary folder deleted afterwards |
 | `help` | the Getting started window |
 

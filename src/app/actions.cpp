@@ -13,6 +13,7 @@
 #include "core/log.h"
 #include "core/prefs.h"
 #include "io/gltf_io.h"
+#include "io/nav_export.h"
 #include "scene/story.h"
 
 namespace ogle {
@@ -743,7 +744,7 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
     NodeChange c(scene);
     roots = place_prefab(scene, *prefab, m, &m_prefab_meshes[placement.path]);
     if (roots.empty()) return roots;
-    history.push(c.commit(strf(tr("undo.place"), placement.name.c_str())));
+    if (!m_batch_change) history.push(c.commit(strf(tr("undo.place"), placement.name.c_str())));
   } else {
     std::shared_ptr<Mesh> mesh = placement_mesh();
     const bool markerless = placement.kind == Placement::Kind::Object && placement.path.empty();
@@ -785,7 +786,7 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
       n.local = Transform::from_matrix(m);
       roots.push_back(scene.add(std::move(n)));
     }
-    history.push(c.commit(strf(tr("undo.place"), placement.name.c_str())));
+    if (!m_batch_change) history.push(c.commit(strf(tr("undo.place"), placement.name.c_str())));
   }
   selection = std::set<uint32_t>(roots.begin(), roots.end());
   primary = roots.front();
@@ -860,6 +861,11 @@ void App::open_dialog(DialogAction action) {
     case DialogAction::ExtractOutput:
       SDL_ShowOpenFolderDialog(dialog_callback, req, m_window, nullptr, false);
       break;
+    case DialogAction::ExportNavMeshes: {
+      static const SDL_DialogFileFilter nav_filter[] = {{"nav_data (.json)", "json"}};
+      SDL_ShowSaveFileDialog(dialog_callback, req, m_window, nav_filter, 1, nullptr);
+      break;
+    }
   }
 }
 
@@ -889,6 +895,12 @@ void App::process_dialog_results() {
       case DialogAction::ExtractOutput:
         extract.output = r.path;
         break;
+      case DialogAction::ExportNavMeshes: {
+        std::string p = r.path, err;
+        if (lower_ext(p) != ".json") p += ".json";
+        if (!export_navmeshes(p, nav_first_aid, &err)) LOG_ERROR(tr("log.navmesh_export_failed"), err.c_str());
+        break;
+      }
     }
   }
 }
@@ -950,6 +962,159 @@ void App::autosave_tick() {
       files.erase(files.begin());
     }
   }
+}
+
+}  // namespace ogle
+
+namespace ogle {
+
+// ------------------------------------------------------------------------------------------------
+// nav meshes
+// ------------------------------------------------------------------------------------------------
+
+std::vector<uint32_t> App::navmesh_nodes() const {
+  std::vector<uint32_t> out;
+  for (const auto& n : scene.nodes)
+    if (n.kind == NodeKind::NavMesh) out.push_back(n.id);
+  return out;
+}
+
+AABB App::navmesh_region_of_selection() const {
+  AABB b;
+  for (auto id : selection) {
+    const Node* n = scene.find(id);
+    if (!n) continue;
+    b.add(scene.world_bounds(*n));
+    for (auto d : scene.descendants(id))
+      if (const Node* dn = scene.find(d)) b.add(scene.world_bounds(*dn));
+  }
+  return b.valid() ? b.expanded(1.f) : b;
+}
+
+std::vector<Vec3> App::navmesh_points_of_selection() const {
+  std::vector<Vec3> out;
+  for (auto id : selection) {
+    const Node* n = scene.find(id);
+    if (!n || n->kind == NodeKind::NavMesh) continue;
+    AABB b = scene.world_bounds(*n);
+    for (auto d : scene.descendants(id))
+      if (const Node* dn = scene.find(d)) b.add(scene.world_bounds(*dn));
+    if (b.valid()) out.push_back({b.center().x, b.lo.y, b.center().z});
+  }
+  return out;
+}
+
+bool App::start_navmesh_generation(const AABB& region_in, std::string* error, std::vector<Vec3> keep_from) {
+  if (m_nav_future.valid()) {
+    if (error) *error = tr("navmesh.busy");
+    return false;
+  }
+  if (!document_open()) {
+    if (error) *error = tr("navmesh.no_document");
+    return false;
+  }
+  // the walkable surfaces: the decor shown, in world space, without the see-through surfaces
+  // (water, glows: navmesh_ignores) nor the objects (their models move, open, break)
+  const SceneCache& cache = scene.cache();
+  const AABB reach = region_in.valid() ? region_in.expanded(nav_params.agent_radius + 2.f) : AABB{};
+  auto verts = std::make_shared<std::vector<Vec3>>();
+  auto tris = std::make_shared<std::vector<uint32_t>>();
+  AABB all;
+  for (size_t i = 0; i < scene.nodes.size(); i++) {
+    const Node& n = scene.nodes[i];
+    if (n.kind != NodeKind::Render || !n.mesh || !cache.visible[i] || cache.actor[i]) continue;
+    const AABB& nb = cache.bounds[i];
+    if (reach.valid() && (nb.hi.x < reach.lo.x || nb.lo.x > reach.hi.x || nb.hi.z < reach.lo.z ||
+                          nb.lo.z > reach.hi.z || nb.hi.y < reach.lo.y || nb.lo.y > reach.hi.y))
+      continue;
+    const Mat4& w = cache.worlds[i];
+    for (const auto& p : n.mesh->prims) {
+      if (p.material >= 0 && p.material < (int)scene.materials.size() && navmesh_ignores(scene.materials[p.material]))
+        continue;
+      const uint32_t base = (uint32_t)verts->size();
+      for (const auto& v : p.pos) verts->push_back(w.point(v));
+      for (auto ix : p.idx) tris->push_back(base + ix);
+      all.add(nb);
+    }
+  }
+  if (tris->empty()) {
+    if (error) *error = tr("navmesh.nothing");
+    return false;
+  }
+  AABB region = region_in.valid() ? region_in : all;
+  NavParams params = nav_params;
+  params.keep_from = std::move(keep_from);
+  m_nav_future = std::async(std::launch::async, [verts, tris, region, params]() {
+    NavJob job;
+    job.region = region;
+    job.ok = build_navmeshes(*verts, *tris, region, params, &job.meshes, &job.stats, &job.error);
+    return job;
+  });
+  LOG_INFO(tr("log.navmesh_started"), tris->size() / 3);
+  return true;
+}
+
+void App::poll_navmesh_generation() {
+  using namespace std::chrono_literals;
+  if (!m_nav_future.valid() || m_nav_future.wait_for(0s) != std::future_status::ready) return;
+  NavJob job = m_nav_future.get();
+  if (!job.ok) {
+    LOG_WARN(tr("log.navmesh_failed"), job.error.c_str());
+    m_nav_last = std::move(job);
+    m_nav_generation++;
+    return;
+  }
+  // the new meshes replace those of the region
+  NodeChange c(scene);
+  std::unordered_set<uint32_t> doomed;
+  const AABB within = job.region.expanded(1.f);
+  for (auto id : navmesh_nodes())
+    if (within.contains(scene.world_bounds(*scene.find(id)).center())) doomed.insert(id);
+  for (auto id : doomed) c.save_subtree(id);
+  remove_subtrees(scene, doomed);
+  std::unordered_set<std::string> names;
+  for (const auto& n : scene.nodes) names.insert(n.name);
+  std::vector<uint32_t> added;
+  float area = 0;
+  for (const auto& m : job.meshes) {
+    area += m.area();
+    added.push_back(scene.add(navmesh_node(m, unique_name("navmesh", names))));
+  }
+  history.push(c.commit(strf(tr("undo.navmesh"), added.size())));
+  selection = std::set<uint32_t>(added.begin(), added.end());
+  primary = added.empty() ? 0 : added.front();
+  show_navmesh = true;
+  LOG_INFO(tr("log.navmesh_done"), job.stats.meshes, job.stats.polys, area, job.stats.ms / 1000.0);
+  job.meshes.clear();  // in the document now
+  m_nav_last = std::move(job);
+  m_nav_generation++;
+}
+
+bool App::export_navmeshes(const std::string& path, uint32_t first_aid, std::string* error) {
+  // each mesh where it is now (moved, turned), relative to the center of its corners
+  std::vector<NavMeshData> meshes;
+  std::vector<std::string> names;
+  for (auto id : navmesh_nodes()) {
+    const Node* n = scene.find(id);
+    NavMeshData m;
+    if (!n || !navmesh_of_node(*n, &m)) continue;
+    const Mat4 w = scene.world(*n);
+    AABB b;
+    for (auto& v : m.verts) b.add(v = w.point(v));
+    m.origin = b.center();
+    for (auto& v : m.verts) v = v - m.origin;
+    meshes.push_back(std::move(m));
+    names.push_back(n->name);
+  }
+  if (meshes.empty()) {
+    if (error) *error = tr("navmesh.none");
+    return false;
+  }
+  std::vector<NavExportEntry> entries;
+  for (size_t i = 0; i < meshes.size(); i++) entries.push_back({&meshes[i], first_aid + (uint32_t)i, names[i]});
+  if (!write_navmesh_blob(entries, path, error)) return false;
+  LOG_INFO(tr("log.navmesh_exported"), meshes.size(), path.c_str());
+  return true;
 }
 
 }  // namespace ogle

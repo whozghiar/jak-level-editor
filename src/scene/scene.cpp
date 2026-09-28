@@ -19,6 +19,7 @@ const char* kind_name(NodeKind k) {
     case NodeKind::Render: return "render";
     case NodeKind::Collision: return "collision";
     case NodeKind::Actor: return "actor";
+    case NodeKind::NavMesh: return "navmesh";
     default: return "group";
   }
 }

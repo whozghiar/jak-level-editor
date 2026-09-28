@@ -1,6 +1,7 @@
 # Third-party code
 
-Copied from jak-project's `third-party/` folder (same versions), so the editor builds on its own.
+Copied from jak-project's `third-party/` folder (same versions), so the editor builds on its own,
+except `recast/`.
 
 | Folder | Library | License |
 |---|---|---|
@@ -9,5 +10,7 @@ Copied from jak-project's `third-party/` folder (same versions), so the editor b
 | `tinygltf/` | tinygltf | MIT (header) |
 | `json/` | nlohmann json 3.12.0 | MIT (header) |
 | `stb/` | stb_image, stb_image_write | MIT or public domain (headers) |
+| `recast/` | Recast, the nav mesh generator of [recastnavigation](https://github.com/recastnavigation/recastnavigation) (its `Recast/` folder only, commit 9f4ce64, February 2026) | zlib (`recast/License.txt`) |
 
-SDL3 is not copied: see "Building" in the main README.
+`recast/` does not come from jak-project: the editor generates nav meshes with it (Tools > Nav
+meshes). SDL3 is not copied: see "Building" in the main README.

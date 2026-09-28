@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -27,6 +28,7 @@
 #include "io/game_data.h"
 #include "io/gltf_io.h"
 #include "io/library_index.h"
+#include "io/nav_export.h"
 #include "io/prefabs.h"
 #include "scene/story.h"
 
@@ -674,6 +676,181 @@ int run_selftest() {
   } catch (const std::exception& e) {
     std::printf("  exception: %s\n", e.what());
     check(false, "story: no exception");
+  }
+
+  // nav meshes: a floor around a block, in the game's limits; a floor too big for one mesh cut in
+  // several; the route table reaches every polygon; a node and a project keep them; the blob for
+  // the game reads back; the game's own mesh (OGLE_NAV_REFERENCE: a decompiler_out/jak2/entities/
+  // <level>-nav.json) passes the checks and gets the same polygon grid
+  {
+    auto floor_with_blocks = [](float half, int blocks, std::vector<Vec3>* v, std::vector<uint32_t>* t) {
+      *v = {{-half, 0, -half}, {half, 0, -half}, {half, 0, half}, {-half, 0, half}};
+      *t = {0, 2, 1, 0, 3, 2};
+      const uint32_t faces[6][4] = {{0, 1, 3, 2}, {4, 6, 7, 5}, {0, 4, 5, 1}, {2, 3, 7, 6}, {0, 2, 6, 4}, {1, 5, 7, 3}};
+      for (int bx = 0; bx < blocks; bx++)
+        for (int bz = 0; bz < blocks; bz++) {
+          // blocks 4 m wide, 3 m high, on a grid (one block in the middle when blocks == 1)
+          const float step = blocks > 1 ? 2.f * half / (float)(blocks + 1) : 0.f;
+          const float cx = blocks > 1 ? -half + step * (float)(bx + 1) : 0.f;
+          const float cz = blocks > 1 ? -half + step * (float)(bz + 1) : 0.f;
+          const uint32_t b = (uint32_t)v->size();
+          for (int i = 0; i < 8; i++)
+            v->push_back({cx + ((i & 1) ? 2.f : -2.f), (i & 2) ? 3.f : 0.f, cz + ((i & 4) ? 2.f : -2.f)});
+          for (auto& f : faces) t->insert(t->end(), {b + f[0], b + f[1], b + f[2], b + f[0], b + f[2], b + f[3]});
+        }
+    };
+    auto route_reaches_all = [](const NavMeshData& m) {
+      const auto route = navmesh_route_table(m);
+      const int n = (int)m.polys.size();
+      for (int from = 0; from < n; from++)
+        for (int to = 0; to < n; to++) {
+          int cur = from, steps = 0;
+          while (cur != to && steps++ < n) {
+            const size_t bit = ((size_t)to + (size_t)cur * n) * 2;
+            const int edge = (route[bit >> 3] >> (bit & 7)) & 3;
+            if (edge >= m.polys[cur].count || m.polys[cur].adj[edge] < 0) return false;
+            cur = m.polys[cur].adj[edge];
+          }
+          if (cur != to) return false;
+        }
+      return true;
+    };
+    std::vector<Vec3> v;
+    std::vector<uint32_t> t;
+    floor_with_blocks(20.f, 1, &v, &t);
+    AABB region;
+    region.add({-20, -1, -20});
+    region.add({20, 4, 20});
+    std::vector<NavMeshData> meshes;
+    NavBuildStats st;
+    std::string nav_err;
+    const bool built = build_navmeshes(v, t, region, NavParams{}, &meshes, &st, &nav_err);
+    bool fine = built && !meshes.empty(), block_free = true;
+    float area = 0;
+    for (const auto& m : meshes) {
+      fine &= navmesh_problem(m).empty();
+      area += m.area();
+      for (const auto& p : m.polys) {
+        Vec3 c{0, 0, 0};
+        for (int k = 0; k < p.count; k++) c += m.verts[p.v[k]];
+        c = c / (float)p.count + m.origin;
+        if (std::fabs(c.x) < 2.f && std::fabs(c.z) < 2.f) block_free = false;
+      }
+    }
+    // the floor without its border and the block, both widened by the creature's radius
+    check(fine && block_free && area > 1300.f && area < 1520.f,
+          "nav mesh: a floor around a block, convex polygons of 3 or 4 corners facing up, in one piece");
+    check(built && route_reaches_all(meshes[0]), "nav mesh: the route table leads from every polygon to every other");
+    // what the extractor writes for the decor (blended with its texture's alpha, color x2) is walked
+    // on; the water the editor draws and the glows are not
+    Material decor_mat, water_mat, glow_mat;
+    decor_mat.alpha = AlphaMode::Blend;
+    decor_mat.base_color = {2, 2, 2, 2};
+    water_mat.alpha = AlphaMode::Blend;
+    water_mat.base_color = {1.1f, 1.6f, 2.f, 0.75f};
+    glow_mat.alpha = AlphaMode::Blend;
+    glow_mat.base_color = {2, 2, 2, 2};
+    glow_mat.blend = BlendMode::Add;
+    check(!navmesh_ignores(decor_mat) && navmesh_ignores(water_mat) && navmesh_ignores(glow_mat),
+          "nav mesh: the levels' blended decor is walkable, water and glows are not");
+    // a roof apart from the floor: kept, unless only the ground next to a point of the floor is
+    // wanted (a point in the block, over a hole of the nav mesh, finds the floor around it)
+    {
+      std::vector<Vec3> two_v = v;
+      std::vector<uint32_t> two_t = t;
+      const uint32_t b = (uint32_t)two_v.size();
+      two_v.insert(two_v.end(), {{30, 6, -10}, {50, 6, -10}, {50, 6, 10}, {30, 6, 10}});
+      two_t.insert(two_t.end(), {b, b + 2, b + 1, b, b + 3, b + 2});
+      AABB two_region = region;
+      two_region.add({50, 8, 10});
+      std::vector<NavMeshData> both, floor_only;
+      NavBuildStats both_st, floor_st;
+      NavParams from_floor;
+      from_floor.keep_from = {{0, 0, 0}};
+      const bool made = build_navmeshes(two_v, two_t, two_region, NavParams{}, &both, &both_st, &nav_err) &&
+                        build_navmeshes(two_v, two_t, two_region, from_floor, &floor_only, &floor_st, &nav_err);
+      bool floor_kept = made && floor_only.size() == 1 && floor_st.left_out == 1 && both.size() == 2;
+      for (const auto& m : floor_only) floor_kept = floor_kept && m.origin.y < 1.f;
+      check(floor_kept, "nav mesh: only the ground next to a point, the roof apart left out");
+    }
+
+    std::vector<Vec3> big_v;
+    std::vector<uint32_t> big_t;
+    floor_with_blocks(150.f, 12, &big_v, &big_t);
+    AABB big_region;
+    big_region.add({-150, -1, -150});
+    big_region.add({150, 4, 150});
+    NavParams fine_params;
+    fine_params.max_edge = 4.f;
+    std::vector<NavMeshData> big;
+    NavBuildStats big_st;
+    const bool big_built = build_navmeshes(big_v, big_t, big_region, fine_params, &big, &big_st, &nav_err);
+    bool big_fine = big_built && big.size() >= 2 && big_st.split >= 1;
+    for (const auto& m : big) big_fine &= m.polys.size() <= 255 && navmesh_problem(m).empty();
+    check(big_fine, "nav mesh: ground of more than 255 polygons cut in several meshes, each suiting the game");
+
+    // a node, a project
+    NavMeshData back;
+    const Node nav_node = built ? navmesh_node(meshes[0], "navmesh-test") : Node{};
+    bool same = built && navmesh_of_node(nav_node, &back) && back.polys.size() == meshes[0].polys.size() &&
+                back.verts.size() == meshes[0].verts.size();
+    for (size_t i = 0; same && i < back.polys.size(); i++)
+      same = back.polys[i].count == meshes[0].polys[i].count &&
+             std::equal(back.polys[i].adj, back.polys[i].adj + 4, meshes[0].polys[i].adj);
+    Scene nav_scene, nav_back;
+    if (built) nav_scene.add(nav_node);
+    const std::string nav_project = (tmp / "navmesh.glb").string();
+    bool kept = built && save_project(nav_scene, nav_project, &err) && open_project(nav_back, nav_project, &err);
+    NavMeshData reopened;
+    const Node* reopened_node = nullptr;
+    for (const auto& n : nav_back.nodes)
+      if (n.kind == NodeKind::NavMesh) reopened_node = &n;
+    kept = kept && reopened_node && navmesh_of_node(*reopened_node, &reopened) &&
+           reopened.polys.size() == meshes[0].polys.size() &&
+           length(nav_back.world(*reopened_node).col3(3) - meshes[0].origin) < 1e-3f;
+    check(same && kept, "nav mesh: kept by its node and by a project");
+
+    // the blob for the game
+    NavBlobView view;
+    std::vector<NavMeshData> from_blob;
+    bool blob_ok = built && read_navmesh_blob(navmesh_blob({{&meshes[0], 61000, "navmesh-test"}}), &view) &&
+                   navmeshes_of_blob(view, &from_blob) && from_blob.size() == 1 &&
+                   from_blob[0].polys.size() == meshes[0].polys.size();
+    if (blob_ok) {
+      const int ent = view.roots.at(0).second;
+      const int mesh_ptr = view.ptr(ent + 48);
+      blob_ok = view.u32(ent + 44) == 61000 && mesh_ptr > 0 && view.u8(mesh_ptr + 9) == meshes[0].polys.size() &&
+                view.ptr(mesh_ptr + 12) > 0 && view.ptr(mesh_ptr + 16) > 0 &&
+                length(from_blob[0].origin - meshes[0].origin) < 1e-3f;
+      for (size_t i = 0; blob_ok && i < from_blob[0].polys.size(); i++)
+        for (int k = 0; k < from_blob[0].polys[i].count; k++)
+          blob_ok = blob_ok && from_blob[0].polys[i].adj[k] == meshes[0].polys[i].adj[k] &&
+                    length(from_blob[0].verts[from_blob[0].polys[i].v[k]] - meshes[0].verts[meshes[0].polys[i].v[k]]) < 1e-3f;
+      // res tags sorted as the game looks them up
+      std::vector<std::string> tag_names;
+      for (const auto& [word, name] : view.symbols)
+        if (name != "#f") tag_names.push_back(name);
+      blob_ok = blob_ok && tag_names == std::vector<std::string>{"name", "nearest-y-threshold", "nav-max-users"};
+    }
+    check(blob_ok, "nav mesh: the entity-nav-mesh blob for the level builder reads back (polygons, route, tags)");
+
+    if (const char* ref = std::getenv("OGLE_NAV_REFERENCE")) {
+      std::ifstream f(ref);
+      const json j = json::parse(f, nullptr, false);
+      NavBlobView game;
+      std::vector<NavMeshData> game_meshes;
+      bool same_grid = !j.is_discarded() && read_navmesh_blob(j, &game) && navmeshes_of_blob(game, &game_meshes) &&
+                       !game_meshes.empty() && navmesh_problem(game_meshes[0]).empty() && route_reaches_all(game_meshes[0]);
+      if (same_grid) {
+        const NavGrid g = navmesh_grid(game_meshes[0]);
+        const int mesh_ptr = game.ptr(game.roots.at(0).second + 48);
+        const int hash = game.ptr(mesh_ptr + 16);
+        const int buckets = game.ptr(hash - 4 + 32);
+        for (int k = 0; k < 3; k++) same_grid = same_grid && game.u8(hash - 4 + 28 + k) == g.dims[k];
+        for (size_t i = 0; same_grid && i < g.buckets.size(); i++) same_grid = game.u8(buckets + (int)i) == g.buckets[i];
+      }
+      check(same_grid, "nav mesh: the game's own mesh passes the checks, its route leads everywhere, same grid-hash");
+    }
   }
 
   // the scale gizmo, driven like the mouse would: an axis stretches along it, the center scales

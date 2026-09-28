@@ -10,7 +10,8 @@ without its creatures. A story bar shows it as the game shows it at any point of
 II and Jak 3): the palace square before and after Mar's tomb opens, Dead Town before and after its
 tower falls... A catalog holds every object of the game and the decor of each level, to put in a
 level or to build a new one, and an AI assistant (Claude Code...) can do the building for you
-through the editor's MCP server.
+through the editor's MCP server. The editor also generates the nav meshes the creatures of Jak II
+and Jak 3 walk on, within the game's limits, and writes them in the game's format.
 
 - No game data comes with the editor: everything is read from the user's disc.
 - It needs nothing but this repository and your disc: it does not use jak-project to build, to
@@ -85,7 +86,7 @@ Keep them together if you move the editor.
 
 SDL3 comes from an installed SDL3 package when CMake finds one, else from `OGLE_SDL3_SOURCE_DIR`,
 else it is downloaded (tag `release-3.4.10`); the first build takes a few minutes. Dear ImGui,
-glad, tinygltf, nlohmann json and stb are in `third-party/`.
+glad, tinygltf, nlohmann json, stb and Recast (the nav mesh generator) are in `third-party/`.
 
 ## 3. Extracting your game's levels
 
@@ -142,7 +143,7 @@ PNG files. The details (options, messages read by the editor, origin of the code
 
 ```text
 +----------------------------------------------------------------------+
-| File Edit View Help                                                  |
+| File Edit View Tools Help                                            |
 | [Move W] [Rotate E] [Snap] | [Copy] [Paste] [Delete] | [Create a prefab] | [Undo] [Redo] |
 +----------------+-----------------------------------+-----------------+
 | Levels|Catalog |                                   | Inspector       |
@@ -289,6 +290,46 @@ elements placed in the void go to height 0.
 
 ![A new level built from the catalog: two decks, a stretched bridge over a pool, lamps, crates and orbs](docs/captures/10-new-level.png)
 
+### Nav meshes
+
+The enemies and citizens of Jak II and Jak 3 walk on **nav meshes**: flat polygons over the ground
+of a level, on which the game finds their way. **Tools > Nav meshes** makes them from the level's
+walkable surfaces:
+
+1. Set **the creature**: its radius (how far it keeps from the walls), its height (the room it
+   needs above the floor), the highest step it climbs and the steepest slope it walks.
+   **Precision** holds the voxel size, the longest edge, the outline tolerance and the smallest
+   walkable island kept.
+2. **Generate for the whole level**, or **Generate around the selection** (only there): the nav
+   meshes of that region are replaced. With **Only the ground under the selection** checked, only
+   the pieces of walkable ground that the selected elements stand on are kept (select something in
+   a street): the roofs, ledges and closed rooms where no creature goes are left out.
+3. The new nav meshes are selected and drawn over the level, one color per mesh, their borders
+   brighter (**View > Nav meshes** hides them). The inspector gives a mesh's polygons, corners and
+   walkable area, and says whether it suits the game; **Generate this area again** makes it again
+   with the window's parameters.
+
+The walkable surfaces are those of the decor shown, without the water, dark eco, glows and light
+shafts, nor the objects (their models move, open or break). Recast (from recastnavigation) builds
+the polygons; the editor then fits them to what the game reads: convex polygons of 3 or 4 corners
+facing up, neighbors sharing their edges exactly, at most 255 polygons per mesh (a larger piece of
+ground is cut in several meshes, and the small pieces a cut leaves join a neighbor), each mesh in
+one piece. Each mesh gets the route table the game follows (the first step of the shortest way
+from every polygon to every other) and the polygon grid it uses to find the polygon under a point.
+A nav mesh is an element of the document: it can be deleted, undone and redone, and it is saved
+with the project.
+
+**Export the nav meshes...** writes them as the game's levels hold them, an `entity-nav-mesh` per
+mesh (polygons, route table, polygon grid, tags), in a `nav_data` file (`.json`) for a custom
+level builder; **First id** is the entity id of the first one, the next ones follow.
+
+![The nav meshes of a district: the streets, the yard and the catwalks, one color per mesh, the Nav meshes window and the inspector](docs/captures/15-navmesh.png)
+
+For the 448 x 448 m district of [the next part](#5-building-levels-with-an-assistant-mcp), keeping
+the ground connected to a few street points: 8 nav meshes, 1,323 polygons and 96,800 m2 in 0.6
+seconds; 151 pieces of ground away from the streets (the insides of the blocks, the facades'
+ledges, the tops of props) were left out.
+
 ### Saving
 
 **File > Save** (Ctrl+S) writes the level as a project: a standard `.glb` file that Blender also
@@ -324,16 +365,33 @@ The demo level of [the tour](docs/captures/README.md#9-let-an-assistant-build-it
 these tools by `tools/build_demo_level.py`, through the editor's remote control; the picture above
 is what `capture_view` returned.
 
+A larger example: **Ironworks**, a district in the style of the industrial zone and as large (448 x
+448 m, 15,465 elements), built in about 100 seconds by `tools/build_industrial_district.py`, a small
+MCP client of `--mcp` calling the tools of the table below. It reuses the zone's modules as the
+game places them: 15 closed blocks, each made of four of the zone's facades with everything the
+game hangs on them (pipes, lamps, windows, stains, red lights and their glow), roofs, the streets
+closed at the edge by wall buildings, catwalks with the zone's ramp, a yard with floor vents,
+steam stacks and a pipe bridge, and the district's nav meshes. Nothing is left open, even where the
+game's camera never goes (the roofs, the ends of the streets, under the ground). It needs a Jak II
+library, from which it reads where the game placed each piece:
+
+```bash
+python tools/build_industrial_district.py --out build/demo/ironworks.glb --views build/demo
+```
+
+![Ironworks from the air, as capture_view returned it](docs/captures/13-district.png)
+
 | Tool | What it does |
 |---|---|
 | `get_status` | the game, the document, the story view, the camera, the selection |
 | `list_levels`, `open_level`, `new_level` | the levels of the game; open one; start an empty one |
 | `list_catalog`, `list_models`, `list_decor`, `list_prefabs` | what can be placed: objects and effects, models, the decor of every level (searched by name) or of one, prefabs |
-| `place` | puts an object, a model, a decor part or a prefab at a position (meters, Y up), dropped to the ground if asked |
-| `find_nodes`, `get_node`, `raycast` | what the level holds and where: by name, type or distance; the ground under a point |
+| `place`, `place_many` | puts an object, a model, a decor part or a prefab at a position (meters, Y up), turned (`yaw_deg`, or `rotation_deg` on the three axes) and scaled, dropped to the ground if asked; `place_many` places up to 2,000 at once, undone at once |
+| `find_nodes`, `get_node`, `raycast` | what the level holds and where: by name, type, kind (nav meshes too) or distance; the ground under a point |
 | `transform_nodes`, `duplicate_nodes`, `delete_nodes`, `select` | move, turn, scale or stretch (`scale`, `scale_by`), copy, delete, show to the user |
 | `set_camera`, `capture_view` | look somewhere; a picture of the view, given to the assistant |
 | `set_story` | the story view of Jak II and Jak 3 levels |
+| `generate_navmesh`, `export_navmesh` | nav meshes for the whole level, the selection or a box, with the creature's size; only the ground connected to given points (`from`); written for the game |
 | `create_prefab`, `save_project`, `open_project`, `undo`, `redo` | the other actions of the editor |
 
 The editor listens on port 47821 of this computer only (127.0.0.1): other computers cannot reach
@@ -379,11 +437,24 @@ with the same arguments. A missing key shows its English text.
 ### Project (`.glb`)
 
 A regular glTF binary. Each node carries its kind in its extras (`og_kind`: `render`,
-`collision`, `actor`, `group`); instancing is kept (the copies of an element share its mesh). An
+`collision`, `actor`, `group`, `navmesh`); instancing is kept (the copies of an element share its
+mesh). A nav mesh keeps its polygons in `og_navmesh` (`verts` relative to the node's position,
+`polys`: 3 or 4 corner indices each, `adj`: the polygon across each edge, -1 at a border), and a
+fan of triangles as its mesh. An
 actor keeps the data of the game (`etype`, `aid`, `game_task`, `bsphere`, `lump`), and its model
 is a `render` child marked `og_actor_visual`. The surface of each collision triangle is kept
 (`og_tri_pat_views` in the mesh extras). The level the project comes from is in
 `asset.extras.ogle.settings`.
+
+### Nav meshes for the game (`.json`)
+
+What **Export the nav meshes...** and `export_navmesh` write: the `entity-nav-mesh` objects as they
+are in the game's memory, in the data blob format of OpenGOAL's level tools (`words`, `pointers`,
+`types`, `symbols`, `roots`), the `nav_data` of a level for a custom level builder. Each has its
+entity id, its `nav-mesh` (polygons with their vertices relative to the mesh's origin, the route
+table, the polygon grid, the bounds) and its tags (`name`, `nearest-y-threshold`, `nav-max-users`).
+The polygon grid follows the game's own rule: the grids the editor makes for the game's nav meshes
+are the ones the game has, byte for byte.
 
 ### Prefab (`.glb`)
 
@@ -444,7 +515,8 @@ open-goal-level-editor --selftest
 - `--screenshot` runs the whole editor in a hidden window and saves a picture of it (the
   screenshots of [the tour](docs/captures/README.md) were made this way). Setups: `levels`,
   `select`, `scale`, `prefab`, `catalog`, `models`, `decor`, `decor-all` (`<in>` is a level name of
-  the library), `project` (`<in>` is a project; `select`, `scale` and `prefab` take one too),
+  the library), `project` (`<in>` is a project; `select`, `scale`, `prefab` and `navmesh` take one
+  too), `navmesh` (the nav meshes and their window; made for the whole level when there are none),
   `extract` (`<in>` is an `.iso` or a disc folder: it is extracted to a temporary folder), `help`.
   `--story` shows the level with every state (`off`), at a step, or just after a task node
   (`canyon-insert-items-resolution`); `--select` names the elements `select`, `scale` and `prefab`
@@ -462,7 +534,7 @@ on Linux).
 
 ## 10. What was tested
 
-- `--selftest`: 48 checks (math, a library written like the extractor writes one, opening its
+- `--selftest`: 55 checks (math, a library written like the extractor writes one, opening its
   level: locked terrain, decor instances, actor with its model, collision surfaces; copy and paste
   with undo; prefab file names, saving, pivot, placing twice with shared meshes, the actors of a
   prefab named apart; project round trip, an empty project too, a stretched element's scale kept,
@@ -476,7 +548,19 @@ on Linux).
   read without loading it, a particle effect per group, the decor of every level; an actor copy
   named like the game names them;
   a request and its answer over the remote control; the game data of Jak II; the translations'
-  keys and arguments).
+  keys and arguments; nav meshes: a floor around a block in the game's limits, the route table
+  leading everywhere, the levels' blended decor walkable but not water and glows, only the ground
+  next to a point kept, a ground of more than 255 polygons cut in meshes that suit the game, a
+  mesh kept by its node and by a project, the blob for the game read back).
+- The nav meshes against the game's: the polygon grid the editor makes for each of the 61 nav
+  meshes of Jak II's levels (decompiled by OpenGOAL) is the game's, byte for byte. With
+  `OGLE_NAV_REFERENCE` set to one of them (`<level>-nav.json`), `--selftest` also checks that the
+  game's mesh reads back, passes the editor's checks, that its route leads everywhere and that
+  the grid is the same (`ctyinda`, `ctyindb`, `atoll`, `ctygena`).
+- The district of `tools/build_industrial_district.py`, built through `--mcp` against a hidden
+  editor, then opened in the editor: 15,465 elements, the corners of every block closed from the
+  streets, the roofs, the street ends and the underside closed; its nav meshes (8 meshes, 1,323
+  polygons, every one suiting the game, none inside a block) and their export for the game.
 - Jak II extracted again with this version: the 84 levels of the list open; the insides that were
   black (Hip Hog, garage, oracle, Vin's room, prison...) are lit; the shell of the palace square
   is 274 pieces (26 of terrain), Dead Town's 132; Dead Town's decor has 244 parts.
@@ -509,8 +593,8 @@ on Linux).
 
 Not tested yet: the extraction of Jak and Daxter and Jak 3 (no disc of these games was at hand),
 so neither their game data in the editor; the full `.iso` of a disc; the MCP server from Claude
-Code itself (it was driven by a test client speaking the same protocol); and a level made with the
-editor, built and played in the game.
+Code itself (it was driven by a test client speaking the same protocol); a level made with the
+editor, built and played in the game, and so nav meshes followed by creatures in the game.
 
 ## 11. Known limitations
 
@@ -535,8 +619,14 @@ editor, built and played in the game.
 - **Actor models are found by file name** (the type's name, `<type>-...` or `...-<type>`); the
   actors without one are drawn as a marker.
 - **Collision does not follow moved elements**: it is kept as the level had it.
+- **Nav meshes**: the meshes a large piece of ground is cut into are not linked (the game's
+  creatures do not go from one to the next); they do not follow the decor when it moves (generate
+  them again); the levels' own nav meshes are not read (the extraction does not take them). The
+  file for the game is the `nav_data` a level builder reads: OpenGOAL's Jak II level builder does
+  not take nav meshes yet.
 - **Animated models** are shown in their rest pose.
-- **No export to the game yet**: the editor saves projects (`.glb`).
+- **No export of the level to the game yet**: the editor saves projects (`.glb`); only the nav
+  meshes are written for the game.
 
 ## 12. Repository layout
 
@@ -544,19 +634,20 @@ editor, built and played in the game.
 src/core/      math, log, preferences, translations, undo history
 src/scene/     the document, picking (BVH), the story view
 src/io/        glTF import and export, the library of extracted levels, prefabs, game data, the
-               catalog, loading threads
+               catalog, loading threads, the nav meshes for the game (nav_export)
 src/render/    camera, OpenGL renderer, thumbnails, offscreen captures
-src/tools/     the gizmo
+src/tools/     the gizmo, the nav mesh generator (navmesh: Recast, then the game's limits)
 src/app/       window and main loop, document actions, interface panels, extraction window, the
                remote control and MCP server (remote*, mcp.cpp), tests
 lang/          translations of the interface (en.json, fr.json)
 data/          what the editor knows of each game (game-data.json, made by tools/gen_game_data.py)
 tools/         gen_game_data.py: writes data/ from OpenGOAL's decompiled code; build_demo_level.py:
-               builds the tour's demo level through the editor's remote control
+               builds the tour's demo level through the editor's remote control;
+               build_industrial_district.py: builds the tour's district through the MCP server
 library/       the levels extracted from your game (created by the extraction, ignored by git)
 extractor/     ogle-extract: main.cpp, the games' tables (data/) and the data readers of OpenGOAL's
                decompiler it is built from (opengoal/, ISC license)
-third-party/   Dear ImGui, glad, tinygltf, nlohmann json, stb
+third-party/   Dear ImGui, glad, tinygltf, nlohmann json, stb, Recast
 docs/captures/ the guided tour and its screenshots, and how to make them again
 .mcp.json      the MCP server, for Claude Code started in this folder
 ```

@@ -104,15 +104,24 @@ json tools() {
             {"level", str("kind 'decor': the level the part comes from (omitted: the first that has it)")},
             {"position", vec3("where, [x, y, z] in meters")},
             {"yaw_deg", num("turn around the vertical axis, in degrees")},
+            {"rotation_deg", vec3("instead of yaw_deg: [x, y, z] rotation in degrees")},
+            {"scale", {{"description", "[x, y, z] or one number: the scale along the element's own axes"}}},
             {"on_ground", boolean("true: dropped onto the first surface below the position")}},
            {"kind", "name", "position"}),
+      tool("place_many",
+           "Places many elements at once, each described like the arguments of place (kind, name, level, position, "
+           "yaw_deg or rotation_deg, scale, on_ground): to build a large area in a few calls. One undo entry for "
+           "all. Returns the new elements, and an error for each item that could not be placed.",
+           {{"items", {{"type", "array"}, {"description", "up to 2000 placements, each an object like place's arguments"},
+                       {"items", {{"type", "object"}}}}}},
+           {"items"}),
       tool("find_nodes",
            "Finds elements of the document by part of their name, actor type (etype), kind (actor, render, group) "
            "or near a point. Returns id, name, kind, type, position, size, and whether it is locked (terrain) or "
            "hidden by the story view. Locked terrain is left out unless include_locked.",
            {{"name", str("part of the name")},
             {"etype", str("an actor type, e.g. 'crate'")},
-            {"kind", {{"type", "string"}, {"enum", {"actor", "render", "group"}}}},
+            {"kind", {{"type", "string"}, {"enum", {"actor", "render", "group", "navmesh"}}}},
             {"near", vec3("a point, [x, y, z] in meters")},
             {"radius", num("distance from `near`, 20 m by default")},
             {"include_locked", boolean("also the terrain")},
@@ -146,6 +155,29 @@ json tools() {
             {"direction", vec3("[dx, dy, dz], [0, -1, 0] by default")},
             {"actors", boolean("also the actors' markers")}},
            {"origin"}),
+      tool("generate_navmesh",
+           "Generates nav meshes (where the creatures of Jak II and Jak 3 walk) from the walkable surfaces of the decor "
+           "shown, in the game's limits (convex polygons of 3 or 4 corners, at most 255 per mesh, each mesh in one "
+           "piece), replacing the nav meshes of the region. Waits until they are made; returns them (polygons, area, "
+           "problem if the game could not use one); with from, only the ground connected to given points. Undoable.",
+           {{"region", {{"description", "\"all\" (the default), \"selection\" or {\"min\": [x, y, z], \"max\": [x, y, z]} in meters"}}},
+            {"agent_radius", num("meters the creature keeps from walls (0.6 by default)")},
+            {"agent_height", num("meters of room it needs above the floor (2)")},
+            {"max_climb", num("highest step in meters (0.8)")},
+            {"max_slope", num("steepest walkable slope in degrees (45)")},
+            {"cell_size", num("voxel size in meters (0.5): finer follows walls closer")},
+            {"max_edge", num("longest polygon edge along walls in meters (60)")},
+            {"max_error", num("how far outlines may stray from walls in meters (0.8)")},
+            {"min_region", num("smallest walkable island kept, in square meters (16)")},
+            {"from", {{"description", "keep only the pieces of ground next to these points: [[x, y, z], ...] on the "
+                                      "streets where creatures go, or \"selection\" (where the selected elements "
+                                      "stand); roofs, ledges and closed rooms are left out"}}}}),
+      tool("export_navmesh",
+           "Writes the document's nav meshes for the game: entity-nav-mesh objects as the game's levels hold them "
+           "(polygons, route table, polygon grid) in a nav_data file (.json) for OpenGOAL's level builder.",
+           {{"path", str("the .json file to write")},
+            {"first_id", integer("the entity id of the first nav mesh (60000 by default): unique in the game, not an actor's")}},
+           {"path"}),
       tool("set_camera",
            "Moves the editor's camera: position and look_at (points in meters), or yaw_deg and pitch_deg, or frame "
            "('all', 'selection' or a list of ids).",
@@ -247,7 +279,8 @@ json call_tool(RemoteClient& client, int port, const std::string& name, const js
   const json request = {{"id", next_id++}, {"tool", name}, {"args", args.is_object() ? args : json::object()}};
   // the ones that may wait for a level to load or for the editor to read the levels
   const bool slow = name == "open_level" || name == "open_project" || name == "list_decor" || name == "place" ||
-                    name == "list_catalog" || name == "list_models";
+                    name == "list_catalog" || name == "list_models" || name == "place_many" ||
+                    name == "generate_navmesh";
   json answer;
   if (!client.call(request, &answer, slow ? 300000 : 60000, &err)) return tool_error(err);
   if (!answer.value("ok", false)) return tool_error(answer.value("error", std::string("the editor refused")));

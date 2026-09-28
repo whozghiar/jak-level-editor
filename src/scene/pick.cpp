@@ -25,6 +25,7 @@ PickHit pick(Scene& scene, const Ray& ray, const PickFilter& f) {
     if (!cache.visible[i]) continue;
     if (n.locked && !f.include_locked) continue;
     const bool allowed = (n.kind == NodeKind::Render && f.render) || (n.kind == NodeKind::Collision && f.collision) ||
+                         (n.kind == NodeKind::NavMesh && f.navmesh) ||
                          (n.kind == NodeKind::Actor && f.actors);
     if (!allowed) continue;
     const Mat4& w = cache.worlds[i];

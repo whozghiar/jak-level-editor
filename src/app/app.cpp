@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <unordered_set>
 
 #include "core/i18n.h"
 #include "core/log.h"
@@ -263,6 +264,7 @@ void App::frame(float dt) {
   store.update();
   if (!m_index_applied && library_index.ready()) apply_library_index();
   poll_level_opening();
+  poll_navmesh_generation();
   remote_poll();
   extract_poll();
 
@@ -293,6 +295,7 @@ void App::frame(float dt) {
   renderer.draw_scene(scene, rs, selection, hovered);
   if (rs.show_ocean && m_ocean && !scene.nodes.empty())
     renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, rs);
+  draw_navmesh_overlay();
   draw_tool_overlays();
   glViewport(0, 0, fbw, fbh);
 
@@ -433,6 +436,7 @@ void App::select_tool(bool clicked, bool released) {
   if (m_mouse_in_vp && !gizmo.active() && !m_box_selecting) {
     PickFilter f;
     f.actors = rs.show_actors;
+    f.navmesh = show_navmesh;
     f.include_locked = true;
     hovered = pick(scene, camera.ray(m_mouse_vp.x, m_mouse_vp.y, m_vp_w, m_vp_h), f).node;
     // a locked node (the terrain) hides what is behind it but is not chosen
@@ -508,7 +512,10 @@ void App::select_tool(bool clicked, bool released) {
       const SceneCache& cache = scene.cache();
       for (size_t i = 0; i < scene.nodes.size(); i++) {
         const Node& n = scene.nodes[i];
-        if ((n.kind != NodeKind::Render && n.kind != NodeKind::Actor) || n.locked || !cache.visible[i]) continue;
+        if ((n.kind != NodeKind::Render && n.kind != NodeKind::Actor &&
+             (n.kind != NodeKind::NavMesh || !show_navmesh)) ||
+            n.locked || !cache.visible[i])
+          continue;
         if (cache.actor[i]) continue;  // an actor's model: the actor is selected instead
         if (n.kind == NodeKind::Actor && !rs.show_actors) continue;
         AABB b = scene.world_bounds(n);
@@ -549,6 +556,50 @@ void App::place_tool(bool clicked) {
     return;
   }
   if (clicked && m_place_valid) place_at(m_place_matrix);
+}
+
+void App::draw_navmesh_overlay() {
+  if (!show_navmesh) return;
+  const SceneCache& cache = scene.cache();
+  // a color per mesh, see-through, its borders (where creatures stop) brighter
+  static const Vec3 kColors[] = {{0.15f, 0.85f, 0.75f}, {0.95f, 0.75f, 0.2f}, {0.55f, 0.6f, 1.f},
+                                 {0.95f, 0.4f, 0.55f},  {0.5f, 0.9f, 0.3f},   {0.9f, 0.55f, 0.95f}};
+  std::unordered_set<uint64_t> used;
+  int index = 0;
+  for (size_t i = 0; i < scene.nodes.size(); i++) {
+    const Node& n = scene.nodes[i];
+    if (n.kind != NodeKind::NavMesh || !n.mesh || !cache.visible[i]) continue;
+    const uint64_t key = n.mesh->uid;
+    auto it = m_nav_draw_cache.find(key);
+    if (it == m_nav_draw_cache.end()) {
+      NavMeshData m;
+      if (!navmesh_of_node(n, &m)) continue;
+      it = m_nav_draw_cache.emplace(key, std::move(m)).first;
+    }
+    const NavMeshData& m = it->second;
+    used.insert(key);
+    const Mat4& w = cache.worlds[i];
+    const bool sel = selection.count(n.id) != 0 || hovered == n.id;
+    const Vec3 c = kColors[index++ % 6];
+    const uint32_t fill = pack_rgba(c.x, c.y, c.z, sel ? 0.5f : 0.3f);
+    const uint32_t inner = pack_rgba(c.x, c.y, c.z, 0.55f);
+    const uint32_t border = sel ? pack_rgba(1.f, 0.6f, 0.15f, 1.f) : pack_rgba(c.x * 0.6f + 0.4f, c.y * 0.6f + 0.4f, c.z * 0.6f + 0.4f, 1.f);
+    const Vec3 lift{0, 0.06f, 0};
+    for (const auto& p : m.polys) {
+      Vec3 v[4];
+      for (int k = 0; k < p.count; k++) v[k] = w.point(m.verts[p.v[k]]);
+      for (int k = 1; k + 1 < p.count; k++) renderer.tri(v[0], v[k], v[k + 1], fill);
+      for (int k = 0; k < p.count; k++) {
+        // an inner edge is drawn once, from the polygon with the smaller index
+        const int j = p.adj[k];
+        if (j >= 0 && &m.polys[j] < &p) continue;
+        renderer.line(v[k] + lift, v[(k + 1) % p.count] + lift, j < 0 ? border : inner);
+      }
+    }
+  }
+  for (auto e = m_nav_draw_cache.begin(); e != m_nav_draw_cache.end();)  // forget the meshes gone
+    e = used.count(e->first) ? std::next(e) : m_nav_draw_cache.erase(e);
+  renderer.flush(true, true);
 }
 
 void App::draw_tool_overlays() {
@@ -633,6 +684,8 @@ void App::handle_shortcuts() {
 //   models  : the level `in` loaded, the models of the Catalog panel
 //   decor   : the level `in` loaded, its decor in the Catalog panel
 //   decor-all : the level `in` loaded, the decor of every level searched for "catwalk"
+//   navmesh : the level or project `in`, its nav meshes drawn (generated for the whole level when
+//             it has none), the largest selected, the Nav meshes window open
 int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std::string& out, int w,
                        int h, const std::string& setup) {
   Prefs::get().load();
@@ -649,10 +702,11 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
     const bool project_in = in.size() > 4 && (in.compare(in.size() - 4, 4, ".glb") == 0 ||
                                               in.compare(in.size() - 4, 4, ".GLB") == 0);
     const bool with_project =
-        setup == "project" || (project_in && (setup == "select" || setup == "scale" || setup == "prefab"));
+        setup == "project" ||
+        (project_in && (setup == "select" || setup == "scale" || setup == "prefab" || setup == "navmesh"));
     const bool with_level = !with_project && (setup == "levels" || setup == "select" || setup == "scale" ||
                                               setup == "prefab" || setup == "catalog" || setup == "models" ||
-                                              setup == "decor" || setup == "decor-all");
+                                              setup == "decor" || setup == "decor-all" || setup == "navmesh");
     if (with_project) open_project_file(in);  // the preferences are not written in this mode
     if (setup == "project") left_tab_request = 1;
     if (with_level) {
@@ -691,7 +745,7 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         frame(1.f / 60.f);
         // loading, or the catalog not complete yet (the index of the library)
         bool loading = m_level_future.valid() || store.pending() > 0 || thumbs.pending() > 0 || extract.process ||
-                       !m_index_applied;
+                       !m_index_applied || navmesh_busy();
         if (setup == "extract" && !extraction_started && !extract.process && extract.detected_source == in &&
             extract.detect_error.empty()) {
           extraction_started = true;
@@ -787,6 +841,15 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
             }
           } else if (setup != "extract") {
             frame_all();
+          }
+          if (setup == "navmesh") {
+            // the document's nav meshes, or new ones (selected when they are applied)
+            show_navmesh = true;
+            show_navmesh_window = true;
+            const auto navs = navmesh_nodes();
+            std::string err;
+            if (!navs.empty()) select_only(navs.front());
+            else if (!start_navmesh_generation(AABB{}, &err)) LOG_WARN("%s", err.c_str());
           }
           if (!opts.story.empty()) {
             StoryView v = story;

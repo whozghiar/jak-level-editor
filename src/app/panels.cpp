@@ -49,6 +49,7 @@ const char* kind_label(NodeKind k) {
   switch (k) {
     case NodeKind::Render: return tr("kind.render");
     case NodeKind::Collision: return tr("kind.collision");
+    case NodeKind::NavMesh: return tr("kind.navmesh");
     case NodeKind::Actor: return tr("kind.actor");
     default: return tr("kind.group");
   }
@@ -164,6 +165,7 @@ void App::ui_menu() {
     ImGui::Separator();
     ImGui::MenuItem(tr("menu.view.actors"), nullptr, &rs.show_actors);
     ImGui::MenuItem(tr("menu.view.ocean"), nullptr, &rs.show_ocean);
+    ImGui::MenuItem(tr("menu.view.navmesh"), nullptr, &show_navmesh);
     ImGui::MenuItem(tr("menu.view.labels"), nullptr, &show_labels);
     ImGui::MenuItem(tr("menu.view.grid"), nullptr, &rs.show_grid);
     ImGui::MenuItem(tr("menu.view.textures"), nullptr, &rs.textures);
@@ -174,6 +176,10 @@ void App::ui_menu() {
         if (ImGui::MenuItem(l.name.c_str(), nullptr, l.code == i18n_language())) set_language(l.code);
       ImGui::EndMenu();
     }
+    ImGui::EndMenu();
+  }
+  if (ImGui::BeginMenu(tr_id("menu.tools").c_str())) {
+    if (ImGui::MenuItem(tr("menu.tools.navmesh"), nullptr, show_navmesh_window)) show_navmesh_window = !show_navmesh_window;
     ImGui::EndMenu();
   }
   if (ImGui::BeginMenu(tr_id("menu.help").c_str())) {
@@ -870,6 +876,7 @@ void App::ui_node_inspector(Node& n) {
       ImGui::PopStyleColor();
     }
   }
+  if (n.kind == NodeKind::NavMesh) ui_navmesh_inspector(n);
   ImGui::Spacing();
   if (ImGui::Button(tr_id("inspector.copy").c_str())) copy_selection();
   ImGui::SameLine();
@@ -1054,7 +1061,137 @@ void App::ui_labels() {
 // floating windows and popups
 // ------------------------------------------------------------------------------------------------
 
+void App::ui_navmesh_inspector(Node& n) {
+  NavMeshData m;
+  if (!navmesh_of_node(n, &m)) return;
+  ImGui::SeparatorText(tr("navmesh.inspector"));
+  ImGui::Text(tr("navmesh.polys"), m.polys.size(), m.verts.size());
+  ImGui::Text(tr("navmesh.area"), m.area());
+  const std::string problem = navmesh_problem(m);
+  if (problem.empty()) {
+    ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.5f, 1), "%s", tr("navmesh.ok"));
+  } else {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0.6f, 0.3f, 1));
+    ImGui::TextWrapped(tr("navmesh.problem"), problem.c_str());
+    ImGui::PopStyleColor();
+  }
+  ImGui::BeginDisabled(navmesh_busy());
+  if (ImGui::Button(tr_id("navmesh.regenerate").c_str())) {
+    std::string err;
+    if (!start_navmesh_generation(scene.world_bounds(n).expanded(nav_params.agent_radius + 1.f), &err))
+      LOG_WARN("%s", err.c_str());
+  }
+  ImGui::EndDisabled();
+  tooltip(tr("navmesh.regenerate.tip"));
+}
+
+void App::ui_navmesh_window() {
+  if (!show_navmesh_window) return;
+  ImGui::SetNextWindowSize(ImVec2(430, 0), ImGuiCond_FirstUseEver);
+  if (!ImGui::Begin(tr_id("navmesh.title").c_str(), &show_navmesh_window)) {
+    ImGui::End();
+    return;
+  }
+  ImGui::TextWrapped("%s", tr("navmesh.help"));
+  NavParams& p = nav_params;
+  ImGui::SeparatorText(tr("navmesh.creature"));
+  ImGui::PushItemWidth(-190);
+  ImGui::DragFloat(tr_id("navmesh.radius").c_str(), &p.agent_radius, 0.05f, 0.1f, 5.f, "%.2f m");
+  tooltip(tr("navmesh.radius.tip"));
+  ImGui::DragFloat(tr_id("navmesh.height").c_str(), &p.agent_height, 0.05f, 0.5f, 10.f, "%.2f m");
+  tooltip(tr("navmesh.height.tip"));
+  ImGui::DragFloat(tr_id("navmesh.climb").c_str(), &p.max_climb, 0.05f, 0.f, 5.f, "%.2f m");
+  tooltip(tr("navmesh.climb.tip"));
+  ImGui::DragFloat(tr_id("navmesh.slope").c_str(), &p.max_slope, 0.5f, 5.f, 85.f, "%.0f deg");
+  tooltip(tr("navmesh.slope.tip"));
+  if (ImGui::TreeNode(tr_id("navmesh.detail").c_str())) {
+    ImGui::DragFloat(tr_id("navmesh.cell").c_str(), &p.cell_size, 0.01f, 0.1f, 4.f, "%.2f m");
+    tooltip(tr("navmesh.cell.tip"));
+    ImGui::DragFloat(tr_id("navmesh.edge").c_str(), &p.max_edge, 0.5f, 4.f, 200.f, "%.0f m");
+    tooltip(tr("navmesh.edge.tip"));
+    ImGui::DragFloat(tr_id("navmesh.error").c_str(), &p.max_error, 0.05f, 0.1f, 5.f, "%.2f m");
+    tooltip(tr("navmesh.error.tip"));
+    ImGui::DragFloat(tr_id("navmesh.min_region").c_str(), &p.min_region, 1.f, 0.f, 1000.f, "%.0f m2");
+    tooltip(tr("navmesh.min_region.tip"));
+    if (ImGui::Button(tr_id("navmesh.defaults").c_str())) p = NavParams{};
+    ImGui::TreePop();
+  }
+  ImGui::PopItemWidth();
+
+  ImGui::Spacing();
+  const bool busy = navmesh_busy();
+  const AABB around = navmesh_region_of_selection();
+  const std::vector<Vec3> points = navmesh_points_of_selection();
+  ImGui::Checkbox(tr_id("navmesh.keep_selected").c_str(), &nav_keep_selected);
+  tooltip(tr("navmesh.keep_selected.tip"));
+  const bool keep = nav_keep_selected;
+  ImGui::BeginDisabled(busy || !document_open() || (keep && points.empty()));
+  if (ImGui::Button(tr_id("navmesh.generate_all").c_str(), ImVec2(-1, 0))) {
+    std::string err;
+    if (!start_navmesh_generation(AABB{}, &err, keep ? points : std::vector<Vec3>{})) LOG_WARN("%s", err.c_str());
+  }
+  tooltip(tr("navmesh.generate_all.tip"));
+  ImGui::BeginDisabled(!around.valid());
+  if (ImGui::Button(tr_id("navmesh.generate_selection").c_str(), ImVec2(-1, 0))) {
+    std::string err;
+    if (!start_navmesh_generation(around, &err, keep ? points : std::vector<Vec3>{})) LOG_WARN("%s", err.c_str());
+  }
+  ImGui::EndDisabled();
+  tooltip(tr("navmesh.generate_selection.tip"));
+  ImGui::EndDisabled();
+  if (busy) {
+    ImGui::TextDisabled("%s", tr("navmesh.working"));
+  } else if (m_nav_generation) {
+    if (m_nav_last.ok) {
+      ImGui::TextDisabled(tr("navmesh.last"), m_nav_last.stats.meshes, m_nav_last.stats.polys, m_nav_last.stats.ms / 1000.0);
+      if (m_nav_last.stats.split) ImGui::TextWrapped(tr("navmesh.split"), m_nav_last.stats.split);
+      if (m_nav_last.stats.left_out) ImGui::TextWrapped(tr("navmesh.left_out"), m_nav_last.stats.left_out);
+    } else {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0.6f, 0.3f, 1));
+      ImGui::TextWrapped("%s", m_nav_last.error.c_str());
+      ImGui::PopStyleColor();
+    }
+  }
+
+  // what the document has
+  const auto nodes = navmesh_nodes();
+  size_t polys = 0, bad = 0;
+  float area = 0;
+  for (auto id : nodes) {
+    NavMeshData m;
+    if (!navmesh_of_node(*scene.find(id), &m)) continue;
+    polys += m.polys.size();
+    area += m.area();
+    bad += !navmesh_problem(m).empty();
+  }
+  ImGui::SeparatorText(tr("navmesh.document"));
+  ImGui::Text(tr("navmesh.count"), nodes.size(), polys, area);
+  if (bad) ImGui::TextColored(ImVec4(1, 0.6f, 0.3f, 1), tr("navmesh.bad"), bad);
+  ImGui::BeginDisabled(nodes.empty());
+  if (ImGui::Button(tr_id("navmesh.select_all").c_str())) {
+    selection = std::set<uint32_t>(nodes.begin(), nodes.end());
+    primary = nodes.front();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button(tr_id("navmesh.delete_all").c_str())) {
+    selection = std::set<uint32_t>(nodes.begin(), nodes.end());
+    delete_selection();
+  }
+  ImGui::EndDisabled();
+
+  ImGui::SeparatorText(tr("navmesh.export"));
+  ImGui::TextWrapped("%s", tr("navmesh.export.help"));
+  ImGui::SetNextItemWidth(140);
+  ImGui::InputScalar(tr_id("navmesh.first_id").c_str(), ImGuiDataType_U32, &nav_first_aid);
+  tooltip(tr("navmesh.first_id.tip"));
+  ImGui::BeginDisabled(nodes.empty() || bad > 0);
+  if (ImGui::Button(tr_id("navmesh.export_button").c_str(), ImVec2(-1, 0))) open_dialog(DialogAction::ExportNavMeshes);
+  ImGui::EndDisabled();
+  ImGui::End();
+}
+
 void App::ui_windows() {
+  ui_navmesh_window();
   if (show_help) {
     ImGui::SetNextWindowSize(ImVec2(600, 560), ImGuiCond_FirstUseEver);
     if (ImGui::Begin(tr_id("help.title").c_str(), &show_help)) {
@@ -1072,7 +1209,8 @@ void App::ui_windows() {
       ImGui::SeparatorText(tr("help.story"));
       for (const char* k : {"help.story.1", "help.story.2", "help.story.3"}) bullet(tr(k));
       ImGui::SeparatorText(tr("help.editing"));
-      for (const char* k : {"help.editing.1", "help.editing.2", "help.editing.3", "help.editing.4", "help.editing.5"})
+      for (const char* k : {"help.editing.1", "help.editing.2", "help.editing.3", "help.editing.4", "help.editing.5",
+                            "help.editing.6"})
         bullet(tr(k));
     }
     ImGui::End();

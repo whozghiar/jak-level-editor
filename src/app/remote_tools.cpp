@@ -102,6 +102,13 @@ json App::remote_node_json(const Node& n) {
   if (b.valid()) j["size"] = vec3_json(b.size());
   if (n.locked) j["locked"] = true;
   if (!scene.effectively_visible(n)) j["hidden"] = true;
+  NavMeshData nav;
+  if (n.kind == NodeKind::NavMesh && navmesh_of_node(n, &nav)) {
+    j["polygons"] = nav.polys.size();
+    j["area_m2"] = std::round(nav.area());
+    const std::string problem = navmesh_problem(nav);
+    if (!problem.empty()) j["problem"] = problem;
+  }
   return j;
 }
 
@@ -122,6 +129,7 @@ std::string App::capture_view_png(int w, int h) {
   renderer.draw_scene(scene, rs, selection, 0);
   if (rs.show_ocean && m_ocean && document_open())
     renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, rs);
+  draw_navmesh_overlay();
   const std::vector<uint8_t> png = target.png();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
@@ -303,6 +311,87 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "place") {
     remote_place(args, reply);
+
+  } else if (tool == "place_many") {
+    auto it = args.find("items");
+    if (it == args.end() || !it->is_array() || it->empty()) return reply(fail("items: a list of placements"));
+    if (it->size() > 2000) return reply(fail("items: at most 2000 at once"));
+    if (!document_open()) return reply(fail("no document: open_level or new_level first"));
+    remote_place_many(*it, 0, json::array(), reply);
+
+  } else if (tool == "generate_navmesh") {
+    // the parameters given, the others as the Nav meshes window has them
+    auto num = [&](const char* key, float& v) {
+      if (args.contains(key) && args[key].is_number()) v = args[key].get<float>();
+    };
+    num("cell_size", nav_params.cell_size);
+    num("agent_radius", nav_params.agent_radius);
+    num("agent_height", nav_params.agent_height);
+    num("max_climb", nav_params.max_climb);
+    num("max_slope", nav_params.max_slope);
+    num("max_edge", nav_params.max_edge);
+    num("max_error", nav_params.max_error);
+    num("min_region", nav_params.min_region);
+    AABB region;
+    const json r = args.contains("region") ? args["region"] : json("all");
+    if (r.is_string() && r.get<std::string>() == "selection") {
+      region = navmesh_region_of_selection();
+      if (!region.valid()) return reply(fail("region 'selection': nothing is selected"));
+    } else if (r.is_object()) {
+      Vec3 lo, hi;
+      if (!vec3_arg(r, "min", &lo) || !vec3_arg(r, "max", &hi))
+        return reply(fail("region: \"all\", \"selection\" or {\"min\": [x, y, z], \"max\": [x, y, z]}"));
+      region.add(lo);
+      region.add(hi);
+    }
+    // the pieces of ground to keep: next to these points, or to the selected elements
+    std::vector<Vec3> keep_from;
+    if (args.contains("from")) {
+      const json& f = args["from"];
+      if (f.is_string() && f.get<std::string>() == "selection") {
+        keep_from = navmesh_points_of_selection();
+        if (keep_from.empty()) return reply(fail("from 'selection': nothing is selected"));
+      } else if (f.is_array()) {
+        for (const auto& p : f) {
+          if (!p.is_array() || p.size() != 3 || !p[0].is_number() || !p[1].is_number() || !p[2].is_number())
+            return reply(fail("from: \"selection\" or a list of points [x, y, z]"));
+          keep_from.push_back({p[0].get<float>(), p[1].get<float>(), p[2].get<float>()});
+        }
+      } else {
+        return reply(fail("from: \"selection\" or a list of points [x, y, z]"));
+      }
+    }
+    std::string err;
+    if (!start_navmesh_generation(region, &err, std::move(keep_from))) return reply(fail(err));
+    const uint64_t generation = m_nav_generation;
+    m_remote_waits.push_back([this, generation, reply]() {
+      if (m_nav_generation == generation) return false;
+      if (!m_nav_last.ok) {
+        reply(fail("nav mesh not generated: " + m_nav_last.error));
+        return true;
+      }
+      // the new meshes are the selection
+      json meshes = json::array();
+      for (auto id : selection)
+        if (const Node* n = scene.find(id)) meshes.push_back(remote_node_json(*n));
+      const NavBuildStats& s = m_nav_last.stats;
+      reply(ok({{"meshes", meshes},
+                {"polygons", s.polys},
+                {"pieces_split", s.split},
+                {"pieces_left_out", s.left_out},
+                {"triangles_read", s.triangles},
+                {"grid", {s.grid_width, s.grid_depth}},
+                {"seconds", std::round(s.ms / 100.0) / 10.0}}));
+      return true;
+    });
+
+  } else if (tool == "export_navmesh") {
+    const std::string path = args.value("path", std::string());
+    if (path.empty()) return reply(fail("path: the nav_data file to write (.json)"));
+    const uint32_t first = args.value("first_id", nav_first_aid);
+    std::string err;
+    if (!export_navmeshes(path, first, &err)) return reply(fail(err));
+    reply(ok({{"path", path}, {"meshes", navmesh_nodes().size()}, {"first_id", first}}));
 
   } else if (tool == "find_nodes") {
     const std::string name = lower(args.value("name", std::string()));
@@ -564,6 +653,16 @@ void App::remote_place(const json& args, RemoteReply reply) {
   if (!document_open()) return reply(fail("no document: open_level or new_level first"));
   const float yaw = radians(args.value("yaw_deg", 0.f));
   const bool on_ground = args.value("on_ground", false);
+  // a full rotation (degrees around x, y, z) instead of the yaw, a scale ([x, y, z] or one number)
+  Vec3 rotation_deg, scale{1, 1, 1};
+  const bool has_rotation = vec3_arg(args, "rotation_deg", &rotation_deg);
+  if (args.contains("scale") && args["scale"].is_number()) {
+    const float k = args["scale"].get<float>();
+    scale = {k, k, k};
+  } else {
+    vec3_arg(args, "scale", &scale);
+  }
+  scale = {std::max(scale.x, 0.01f), std::max(scale.y, 0.01f), std::max(scale.z, 0.01f)};
 
   // what to place
   if (kind == "model") {
@@ -641,7 +740,8 @@ void App::remote_place(const json& args, RemoteReply reply) {
     const PickHit hit = pick(scene, Ray{position + Vec3{0, 1.f, 0}, {0, -1, 0}}, f);
     if (hit.hit()) p = hit.point;
   }
-  const Mat4 m = Mat4::translate(p) * Mat4::rotate(Quat::axis_angle({0, 1, 0}, yaw));
+  const Quat rot = has_rotation ? Quat::from_euler_deg(rotation_deg) : Quat::axis_angle({0, 1, 0}, yaw);
+  const Mat4 m = Mat4::translate(p) * Mat4::rotate(rot) * Mat4::scale(scale);
   // its model or its prefab may still be loading
   m_remote_waits.push_back([this, m, reply, kind]() {
     const bool markerless = placement.kind == Placement::Kind::Object && placement.path.empty();
@@ -664,6 +764,29 @@ void App::remote_place(const json& args, RemoteReply reply) {
       if (const Node* n = scene.find(id)) list.push_back(remote_node_json(*n));
     reply(ok({{"nodes", list}}));
     return true;
+  });
+}
+
+void App::remote_place_many(const json& items, size_t next, json placed, RemoteReply reply) {
+  // one undo entry for the whole batch
+  if (next == 0) m_batch_change = std::make_unique<NodeChange>(scene);
+  if (next >= items.size()) {
+    size_t count = 0;
+    for (const auto& p : placed) count += p.contains("id");
+    if (m_batch_change) {
+      if (count) history.push(m_batch_change->commit(strf(tr("undo.place_many"), count)));
+      m_batch_change.reset();
+    }
+    reply(ok({{"placed", count}, {"nodes", placed}}));
+    return;
+  }
+  remote_place(items[next], [this, items, next, placed, reply](json answer) mutable {
+    if (answer.value("ok", false)) {
+      for (const auto& n : answer["result"]["nodes"]) placed.push_back(n);
+    } else {
+      placed.push_back({{"index", next}, {"error", answer.value("error", std::string())}});
+    }
+    remote_place_many(items, next + 1, std::move(placed), reply);
   });
 }
 

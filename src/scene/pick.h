@@ -12,6 +12,7 @@ struct PickFilter {
   bool render = true;
   bool actors = true;
   bool collision = false;
+  bool navmesh = false;  // the nav meshes drawn over the level
   bool include_locked = false;
   const std::vector<uint32_t>* exclude_list = nullptr;  // these nodes and their descendants
 };

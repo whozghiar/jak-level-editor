@@ -23,8 +23,9 @@ namespace ogle {
 
 using json = nlohmann::json;
 
-enum class NodeKind { Group = 0, Render, Collision, Actor, Count };
-const char* kind_name(NodeKind k);  // "group", "render", "collision", "actor"
+// NavMesh: where creatures walk (tools/navmesh.h), drawn over the level, not part of its decor
+enum class NodeKind { Group = 0, Render, Collision, Actor, NavMesh, Count };
+const char* kind_name(NodeKind k);  // "group", "render", "collision", "actor", "navmesh"
 NodeKind kind_from_name(const std::string& s, NodeKind fallback);
 
 struct Texture {

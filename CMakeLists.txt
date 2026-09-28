@@ -3,7 +3,8 @@ project(open_goal_level_editor LANGUAGES C CXX)
 
 # A simple level editor for OpenGOAL (Jak 1, 2 and 3). It does not need jak-project to build or to
 # run: ogle-extract (extractor/) reads the user's own game disc and writes .glb files, the editor
-# loads a level from them, moves, rotates, copies and deletes its elements, and makes prefabs.
+# loads a level from them, moves, rotates, copies and deletes its elements, makes prefabs and nav
+# meshes.
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -63,6 +64,11 @@ add_library(ogle_imgui STATIC
 target_include_directories(ogle_imgui PUBLIC "${TP}/imgui" "${TP}/imgui/backends")
 target_link_libraries(ogle_imgui PUBLIC ${OGLE_SDL_TARGET})
 
+# Recast (recastnavigation): the nav mesh generator
+file(GLOB OGLE_RECAST_SOURCES CONFIGURE_DEPENDS "${TP}/recast/Source/*.cpp")
+add_library(ogle_recast STATIC ${OGLE_RECAST_SOURCES})
+target_include_directories(ogle_recast PUBLIC "${TP}/recast/Include")
+
 # ---------------------------------------------------------------------------------------------
 # The editor
 # ---------------------------------------------------------------------------------------------
@@ -75,7 +81,7 @@ target_include_directories(open-goal-level-editor PRIVATE
   "${TP}/tinygltf"
   "${TP}/json"
   "${TP}/stb")
-target_link_libraries(open-goal-level-editor PRIVATE ogle_imgui ogle_glad ${OGLE_SDL_TARGET})
+target_link_libraries(open-goal-level-editor PRIVATE ogle_imgui ogle_glad ogle_recast ${OGLE_SDL_TARGET})
 # the default folder of the extracted games: library/ in the editor's source tree (ignored by git)
 target_compile_definitions(open-goal-level-editor PRIVATE OGLE_PROJECT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
