@@ -6,12 +6,15 @@ one, and lets you select its elements to move, rotate, stretch, copy or delete t
 groups of elements as prefabs to place again anywhere.
 
 A level opens with its decor, its objects (crates, doors, platforms...), its water and ocean, and
-without its creatures. A story bar shows it as the game shows it at any point of the story (Jak
-II and Jak 3): the palace square before and after Mar's tomb opens, Dead Town before and after its
-tower falls... A catalog holds every object of the game and the decor of each level, to put in a
-level or to build a new one, and an AI assistant (Claude Code...) can do the building for you
-through the editor's MCP server. The editor also generates the nav meshes the creatures of Jak II
-and Jak 3 walk on, within the game's limits, and writes them in the game's format.
+without its creatures; the levels around it in the game can be added to it, each at its place, to
+work on the junction between two levels or to build a new one next to the game's. A story bar
+shows each level as the game shows it at any point of the story (Jak II and Jak 3): the palace
+square before and after Mar's tomb opens, Dead Town before and after its tower falls... A catalog
+holds every object of the game and the decor of each level, to put in a level or to build a new
+one, and an AI assistant (Claude Code...) can do the building for you through the editor's MCP
+server. The editor also generates the nav meshes the creatures of Jak II and Jak 3 walk on, and
+**exports the level for the game**: the files of OpenGOAL's level builder, for Jak and Daxter,
+Jak II or Jak 3, the level adapted to the game chosen.
 
 - No game data comes with the editor: everything is read from the user's disc.
 - It needs nothing but this repository and your disc: it does not use jak-project to build, to
@@ -49,9 +52,11 @@ step: from your disc to a level built by hand or by an assistant.
 
 - Windows 10/11 or Linux, 64-bit, with an OpenGL 3.3 graphics card.
 - Your PS2 copy of Jak and Daxter: The Precursor Legacy, Jak II or Jak 3: the disc image (`.iso`),
-  or the folder of a disc already extracted (for example `iso_data/jak2` of an OpenGOAL install).
-- Disk space: about 2.6 GB for all the levels of Jak II, and about 5 GB of free memory while they
-  are extracted.
+  or the folder of a disc already extracted. `iso_data/` in the editor's own folder is there for
+  them (put yours in `iso_data/jak1`, `iso_data/jak2`, `iso_data/jak3`, or however you like): it is
+  ignored by git, and where **File > Extract game assets...** looks first.
+- Disk space for all the levels of a game: 0.7 GB for Jak and Daxter (24 levels), 2.6 GB for
+  Jak II (147), 3.7 GB for Jak 3 (272); and about 5 GB of free memory while they are extracted.
 
 **To build it**
 
@@ -97,6 +102,8 @@ glad, tinygltf, nlohmann json, stb and Recast (the nav mesh generator) are in `t
 3. **Your disc**: choose your `.iso` file (**.iso file...**) or the folder of your disc
    (**Folder...**). The editor reads the disc and shows its game, version and serial (for
    example *Jak II: Renegade - pal - SCES-51608*); it tells you if the disc is another game.
+   The disc can be anywhere: nothing has to be copied to a particular folder, but both dialogs
+   open on `iso_data/` in the editor's own folder by default, ready if that is where you put yours.
 4. **Where to write the levels**: by default `library/` in the editor's own folder (the
    repository it was built from; `library/` next to the executable when it is moved elsewhere).
    `library/` is ignored by git. Each game goes to its own subfolder, so the three games share it.
@@ -111,7 +118,12 @@ done. The extractor reads nothing but your disc and its own tables (`ogle-extrac
 writes nothing outside the destination.
 
 Measured with Jak II PAL on a 16-core processor and an SSD: the 147 levels are extracted in less
-than a minute and take 2.6 GB.
+than a minute and take 2.6 GB. Jak and Daxter (NTSC, *Black Label*) and Jak 3 (NTSC) were extracted
+the same way, from disc folders of their own.
+
+![Jak and Daxter: the village, its sea and the far sea to the horizon](docs/captures/19-jak1.png)
+
+![Jak 3: Spargus](docs/captures/20-jak3.png)
 
 ### What is written
 
@@ -161,7 +173,8 @@ In the **Levels** panel, choose the game at the top if you extracted several, th
 list (the filter finds `cty` for the Haven City districts, a DGO name, etc.). A picture of the
 level appears under the list: **Load the level** (or double-click it). The level comes with its
 decor, its actors (each one drawn with its model when the extracted files have one) and its
-collision (kept, not shown).
+collision (kept, not shown). With **With its actors** unchecked, it comes without any actor: its
+decor alone (the same for **Add to the document**).
 
 The list only has the game's levels: the parts of a disc that are only actors (the actors a
 mission adds to a level, cutscenes) and the copies of a level found in another DGO are left out.
@@ -171,8 +184,12 @@ When a level opens:
   cutscenes. So are the logic actors that the game does not draw (particle spawners, cameras,
   triggers, managers). The objects stay: crates, doors, platforms, props, turrets...
 - **Water** (pools, fountains, falls) is drawn translucent, **dark eco** dark purple, **lava**
-  with its own texture: the water actors get the model of their "look". The level's **ocean**
-  is drawn at its height where it covers (View > Ocean hides it).
+  with its own texture: the water actors get the model of their "look". The **ocean** is drawn at
+  its height where its map covers, and, for the levels the game draws it with (the atoll, the
+  port, Jak and Daxter's coast...), the **far ocean** to the horizon, behind everything as the game
+  draws it. The ocean is the one of any level shown that has one, the level opened first (View >
+  Ocean hides it).
+- Jak and Daxter's levels are lit as at noon (the game changes their light with the time of day).
 - The levels the game shows with it come too (**Shown with this level** in the inspector, for
   example Samos' hut with Dead Town: uncheck one to hide it), and so do the actors the missions
   add to it (the **mission layers**), shown by the story bar when their mission is under way.
@@ -182,12 +199,14 @@ When a level opens:
 Some levels change along the game. The bar at the bottom of the view shows the level at a point
 of the story (Jak II and Jak 3):
 
-- The slider goes through the steps of the missions in the order of the game: at a step, the
-  steps before it are done. The text says the last step done, and which state of the level it
-  is (*state 2 / 3 of this level*).
-- The arrows jump to the previous and next **change of this level**: the palace square has three
-  states (Mar's tomb opens after `canyon-insert-items-resolution`), Dead Town four (its tower
-  falls at the end of the first visit, then the Titan suit missions change it).
+- The slider goes through the **states of the level**: the start of the game, then each step of
+  the missions that changes it, in the order of the game; the steps that change nothing there are
+  skipped. The palace square has three states among the 324 steps of Jak II's story (Mar's tomb
+  opens after `canyon-insert-items-resolution`), Dead Town four (its tower falls at the end of the
+  first visit, then the Titan suit missions change it). The text says the last task node done.
+- The arrows go to the previous and next state.
+- With several levels in the document, the list next to **Story** chooses the level the slider
+  moves: each level is at its own point of the story.
 - **Story** unchecked shows every state at once.
 
 What changes: the actors (the game keeps an actor while its kill mask and the level's task mask,
@@ -197,6 +216,38 @@ sewer's water. Nothing is removed from the document: hidden elements are only no
 saved project keeps every state.
 
 ![The palace square after canyon-insert-items-resolution: the broken statue and its rubble](docs/captures/05-story.png)
+
+### Several levels side by side
+
+The levels of a game share its world: each extracted level keeps the game's coordinates, so levels
+that are side by side in the game meet in the editor too, with nothing to align. With a level open
+(or a new one), choose another in the Levels panel and click **Add to the document**: it is loaded
+at its place, with the levels the game shows with it and the layers of its missions, and it can be
+undone. What for:
+
+- **The junction between two levels**: open `ctyinda`, add `ctyindb`, and the streets of the
+  industrial zone run from one level into the other; both are edited like one.
+- **A new level next to the game's**: **File > New level**, then add the levels of the zone it
+  will join: build at their side, at the right place in the game's world.
+
+The inspector (nothing selected) lists the document's **levels**: show or hide each level added,
+click its name to frame it, **Junction** frames where it meets the level opened (the strip where
+their boxes overlap), **Remove** takes it out of the document. **Around it in the game** lists the
+levels the game displays together with those of the document (read from the game's continue
+points, the places where it starts the player): click one to add it. A saved project keeps its
+levels, each under its group.
+
+**Select** (next to each level of the inspector), or **Edit > Select its level** (Ctrl+L) with an
+element of a level selected, selects the **whole level**: the gizmo stands in its middle, and
+moving or turning it moves the level with everything it holds (decor, collision, actors). For the
+level opened, its root elements are selected (without the levels added nor the nav meshes).
+
+Each level added is shown along the story as when the player is there: its own task mask, the
+layers its missions lend it, and its own point of the story (the list of the story bar).
+
+![ctyindb selected whole, next to ctyinda: the gizmo in its middle](docs/captures/17-level-selected.png)
+
+![ctyinda with ctyindb and ctywide added: the industrial zone, the city walls, the palace, and the inspector's levels](docs/captures/16-levels.png)
 
 ### Moving around
 
@@ -336,6 +387,72 @@ ledges, the tops of props) were left out.
 opens. Backups are kept next to it (`<project>.glb.backups/`), and **File > Open project**
 (Ctrl+O) opens it again.
 
+### Exporting for the game
+
+**File > Export for the game...** writes what the view shows (the levels and elements hidden, or
+not there at the point of the story shown, are left out) as a **custom level of OpenGOAL**: the
+files its level builder (`goalc/build_level`) takes, for the game chosen.
+
+- **Destination game**: Jak and Daxter, Jak II or Jak 3; for another game than the level's own,
+  the level is adapted to it (below).
+- **Name** (the level's name in the game, 3 to 10 lower case letters, digits or `-`, not a level of
+  the game), **Nickname** (3 letters: its DGO file), **ISO name** (8 letters at most), **First
+  actor id** (above the game's own actors' ids: 40,000 for Jak and Daxter, 50,000 for Jak II,
+  90,000 for Jak 3 by default).
+- **With the actors**, and the collision: **The game's collision** (the levels' own collision,
+  exact, where they have it; the builder makes the rest from the shape of the decor: the elements
+  placed, the new levels) or **Made from the decor** (all of it from the decor's shape, with
+  automatic walls: for levels whose own decor was moved or deleted).
+- **Start**: where the player starts, a continue point of the level opened by default (moved with
+  it).
+- **Written in**: the level goes to a folder of its name there; by default `exports/<game>/` next
+  to the extracted games, then the last folder used for that game. OpenGOAL reads its custom levels
+  from `custom_assets/<game>/levels/` of its checkout.
+
+![The export window after the export of the slums of Jak II for Jak 3, and its report](docs/captures/18-export.png)
+
+| File | What it is |
+|---|---|
+| `<name>.glb` | the decor in the game's space, one node per element with the builder's extras: `set_collision` + `ignore` on the decor covered by the game's collision (and on the see-through surfaces: water, glass), none on the rest (the builder makes their collision); the game's collision, one node per surface (`set_collision`, `set_invisible`, `collide_material`, `collide_event`, `collide_mode`, `noedge`, `nocamera`, `noentity`, `nolineofsight`) with the game's normals |
+| `<name>.jsonc` | the level for the builder: its names, `gltf_file`, `base_id`, the destination's own keys (Jak and Daxter's `sky`, `tex_remap`, `ambients`; Jak II and 3's `base_region_id`), the art groups of the actors' models, and the actors (`trans`, `etype`, `game_task`, `quat`, `bsphere`, `lump`: their data typed as the builder reads it) |
+| `<name>.gd` | its DGO: the art groups and the level |
+| `<name>-nav.json` | Jak 3: the document's nav meshes (`nav_data`) |
+| `level-info.gc` | the level's definition for `goal_src/<game>/engine/level/level-info.gc`, made from the test-zone's of that game, with its start |
+| `INSTALL.md` | how to add it to the game, and what the export changed |
+
+What is adapted to the destination game:
+
+- **Collision surfaces**: the builders take Jak and Daxter's fields and convert them for Jak II and
+  Jak 3. The surfaces of Jak II and 3 are written with them: their materials that Jak and Daxter
+  has keep theirs (stone too), the others take the nearest (`hdwood`: wood, `carpet`: straw, the
+  metals: metal...); their events beyond Jak and Daxter's (rails, slides, shocks) and their own
+  flags (`noboard`, `nopilot`, `nojak`...) are lost, and counted in the report. `nogrind`, on
+  nearly every surface of Jak II and 3, is off on every surface a builder makes: not counted.
+- **Actor types**: the types the destination game does not have are left out (and its
+  placeholders: types Jak 3 keeps for Jak II's entities, which spawn nothing of theirs, such as
+  `cty-fruit-stand`); Jak II's doors become Jak 3's (`hide-door-a` becomes `cty-door`...). The art
+  groups are the models the destination's code gives each type.
+- **What crates and pickups hold**, and what a security wall asks for: the destination's pickup of
+  the same name (`pass-red` is 29 in Jak II, 39 in Jak 3); a pickup it does not have empties the
+  crate. Jak and Daxter's power cells and scout flies, whose amount is a task, are left out.
+- **The story**: an actor's kill mask belongs to its level's story (the new level has its own), so
+  every actor is there all along; for another game, the task of an actor (`game_task`, `task`,
+  `task-actor`) and its scripts (`pair` data: `on-activate`...) are left out.
+- **Links between actors** by their id become links by name (the builder numbers the actors
+  again); a link to an actor that is not in the level is left out. The integers of 8 and 16 bits
+  are written on 32 (the builder has no smaller ones), and each actor's visibility box is left
+  out.
+
+The report of the window (and `INSTALL.md`) says each change and how many elements it concerns.
+To add the level to the game (also in `INSTALL.md`):
+
+1. Copy the folder to `custom_assets/<game>/levels/<name>/` of the jak-project checkout.
+2. In `goal_src/<game>/game.gp`, next to the test-zone's lines: `(build-custom-level "<name>")`
+   and `(custom-level-cgo "<NICK>.DGO" "<name>/<name>.gd")`.
+3. Add the definition of `level-info.gc` to `goal_src/<game>/engine/level/level-info.gc`, with an
+   `:index` no other level has.
+4. Build the game (`(mi)` in the REPL) and go there: `(bg-custom '<name>-vis)`.
+
 ## 5. Building levels with an assistant (MCP)
 
 The editor can be driven by an AI assistant such as Claude Code, through the
@@ -383,14 +500,16 @@ python tools/build_industrial_district.py --out build/demo/ironworks.glb --views
 
 | Tool | What it does |
 |---|---|
-| `get_status` | the game, the document, the story view, the camera, the selection |
-| `list_levels`, `open_level`, `new_level` | the levels of the game; open one; start an empty one |
+| `get_status` | the games extracted, the document (its levels too), the story view (each level's states), the camera, the selection |
+| `list_levels`, `open_level`, `new_level` | the levels of a game (`game`: another game extracted; `near`: the ones the game displays with a level); open one (`actors: false`: its decor alone); start an empty one |
+| `add_level`, `remove_level`, `get_level_info` | several levels side by side: add one at its place in the game's world (`actors` too), take it out; a level's neighbors, continue points (positions in meters), role, bounds and root elements in the document |
 | `list_catalog`, `list_models`, `list_decor`, `list_prefabs` | what can be placed: objects and effects, models, the decor of every level (searched by name) or of one, prefabs |
 | `place`, `place_many` | puts an object, a model, a decor part or a prefab at a position (meters, Y up), turned (`yaw_deg`, or `rotation_deg` on the three axes) and scaled, dropped to the ground if asked; `place_many` places up to 2,000 at once, undone at once |
 | `find_nodes`, `get_node`, `raycast` | what the level holds and where: by name, type, kind (nav meshes too) or distance; the ground under a point |
-| `transform_nodes`, `duplicate_nodes`, `delete_nodes`, `select` | move, turn, scale or stretch (`scale`, `scale_by`), copy, delete, show to the user |
-| `set_camera`, `capture_view` | look somewhere; a picture of the view, given to the assistant |
-| `set_story` | the story view of Jak II and Jak 3 levels |
+| `transform_nodes`, `duplicate_nodes`, `delete_nodes`, `select`, `set_visibility` | move, turn, scale or stretch (`scale`, `scale_by`), copy, delete, show to the user (`level`: a whole level, to move it), show or hide (a level's group: the whole level) |
+| `set_camera`, `capture_view` | look somewhere, or frame elements, a level or the junction of two levels; a picture of the view, given to the assistant |
+| `set_story` | the story view of Jak II and Jak 3 levels, each level at its own point: `level`, then `state` (1 to its number of states), `step` or `after_node` |
+| `export_level` | the document as a custom level of OpenGOAL for a game (`game`, `name`, `folder`...), adapted to it: the files written and what changed (`notes`) |
 | `generate_navmesh`, `export_navmesh` | nav meshes for the whole level, the selection or a box, with the creature's size; only the ground connected to given points (`from`); written for the game |
 | `create_prefab`, `save_project`, `open_project`, `undo`, `redo` | the other actions of the editor |
 
@@ -405,6 +524,7 @@ turns it off. The status bar shows **Assistant connected** while the MCP server 
 | W, E, R | Move, rotate, scale |
 | Click, Shift/Ctrl + click, drag | Select, add to the selection, box selection |
 | Ctrl+C, Ctrl+V, Ctrl+D, Del | Copy, paste, duplicate, delete |
+| Ctrl+L | Select the whole level of the selection |
 | Ctrl+Z, Ctrl+Y | Undo, redo |
 | F, Home | Frame the selection, frame the level |
 | R, Ctrl + wheel (while placing) | Turn what is being placed |
@@ -438,11 +558,13 @@ with the same arguments. A missing key shows its English text.
 
 A regular glTF binary. Each node carries its kind in its extras (`og_kind`: `render`,
 `collision`, `actor`, `group`, `navmesh`); instancing is kept (the copies of an element share its
-mesh). A nav mesh keeps its polygons in `og_navmesh` (`verts` relative to the node's position,
+mesh). The levels added to the level opened are groups marked `og_level` (with the level's name),
+their companions and mission layers `og_companion` and `og_layer` under them. A nav mesh keeps its
+polygons in `og_navmesh` (`verts` relative to the node's position,
 `polys`: 3 or 4 corner indices each, `adj`: the polygon across each edge, -1 at a border), and a
 fan of triangles as its mesh. An
-actor keeps the data of the game (`etype`, `aid`, `game_task`, `bsphere`, `lump`), and its model
-is a `render` child marked `og_actor_visual`. The surface of each collision triangle is kept
+actor keeps the data of the game (`etype`, `aid`, `game_task`, `bsphere`, `lump`, and the type of
+each tag of its lump in `lump_types`), and its model is a `render` child marked `og_actor_visual`. The surface of each collision triangle is kept
 (`og_tri_pat_views` in the mesh extras). The level the project comes from is in
 `asset.extras.ogle.settings`.
 
@@ -455,6 +577,11 @@ entity id, its `nav-mesh` (polygons with their vertices relative to the mesh's o
 table, the polygon grid, the bounds) and its tags (`name`, `nearest-y-threshold`, `nav-max-users`).
 The polygon grid follows the game's own rule: the grids the editor makes for the game's nav meshes
 are the ones the game has, byte for byte.
+
+### Level for the game
+
+What **Export for the game...** and `export_level` write: see
+[Exporting for the game](#exporting-for-the-game).
 
 ### Prefab (`.glb`)
 
@@ -471,10 +598,12 @@ holds no asset of the game, only names and rules read in OpenGOAL's decompiled c
 | `actors.roles` | the actor types that are creatures or logic actors (the others are objects) |
 | `actors.objects`, `actors.models`, `actors.skeletons` | the objects' families, the models each type draws, the skeleton groups the actors choose by name |
 | `actors.effects`, `actors.unlisted` | the particle effects (part-spawner and its subtypes), the logic the catalog does not offer |
+| `actors.placeholders` | the types the game's type table keeps for an older game's entities, which spawn nothing of theirs (Jak 3's `cty-fruit-stand`...) |
 | `actors.water_looks` | the model of each look of the water actors |
-| `oceans` | each ocean map: its corner, height and the 96 m cells it covers |
-| `levels` | per level: task level, base task mask, ocean, layer or not, companion levels |
+| `oceans` | each ocean map: its corner, height, the 96 m cells it covers, the color of its far ocean |
+| `levels` | per level: task level, base task mask, ocean and far ocean, layer or not, companion levels, neighbors (the levels the game displays with it) and continue points (name, position in meters, the levels shown there) |
 | `story` | the task nodes in the order of the game (task masks, borrowed layers), and the decor prototypes, actor types and ocean heights that depend on them |
+| `enums` | the enums the export for another game maps by name (`pickup-type`) |
 
 `tools/gen_game_data.py` writes it from a checkout of jak-project (read only), for example:
 
@@ -492,7 +621,7 @@ then rebuild (the files are copied next to the executable).
 `<level>-background.glb` holds the level's shell (tfrag) in pieces (the large ones, the terrain,
 marked `og_terrain`), its decor (one group per prototype whose instances share the mesh), its collision (one node per surface: `collide_pat`, the exact
 32-bit value, and `collide_game`) and its actors (nodes with `kind: "actor"` and the actor's
-data). Materials that the PS2 blends additively (glows, light beams) keep their blend in
+data, with the type of each tag of its lump in `lump_types`). Materials that the PS2 blends additively (glows, light beams) keep their blend in
 `extras.og_blend` (`add`, `add_alpha`, `subtract`, `half`). `level.json` lists the actors by type
 with the data of one of each (the catalog's templates) and the art-names they choose.
 
@@ -502,25 +631,28 @@ get the lit interiors, the shell in pieces and the catalog's templates.
 ## 9. Command line
 
 ```text
-open-goal-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>]
+open-goal-level-editor [project.glb] [--library <folder>] [--lang <code>] [--game <game>]
+                       [--remote-port <port>]
 open-goal-level-editor --screenshot <in> <image.png> [setup] [--size WxH] [--library <folder>]
-                       [--lang <code>] [--camera x,y,z,yaw,pitch] [--story off|<step>|<node>]
-                       [--select a,b,...]
+                       [--lang <code>] [--game <game>] [--camera x,y,z,yaw,pitch]
+                       [--story off|<step>|<node>] [--select a,b,...] [--add a,b,...]
 open-goal-level-editor --mcp [--remote-port <port>]
 open-goal-level-editor --selftest
 ```
 
 - `--library` chooses the folder of the extracted games (instead of `library/`), `--lang` the
-  language, for one session.
+  language, `--game` the game shown (`jak1`, `jak2`, `jak3`), for one session.
 - `--screenshot` runs the whole editor in a hidden window and saves a picture of it (the
   screenshots of [the tour](docs/captures/README.md) were made this way). Setups: `levels`,
   `select`, `scale`, `prefab`, `catalog`, `models`, `decor`, `decor-all` (`<in>` is a level name of
   the library), `project` (`<in>` is a project; `select`, `scale`, `prefab` and `navmesh` take one
   too), `navmesh` (the nav meshes and their window; made for the whole level when there are none),
+  `export` (the level exported for another game to a temporary folder: the window and its report),
   `extract` (`<in>` is an `.iso` or a disc folder: it is extracted to a temporary folder), `help`.
   `--story` shows the level with every state (`off`), at a step, or just after a task node
   (`canyon-insert-items-resolution`); `--select` names the elements `select`, `scale` and `prefab`
-  use.
+  use (a level added: `select` selects it whole); `--add` adds levels to the one loaded, one after
+  the other.
 - `--mcp` is the MCP server of [5](#5-building-levels-with-an-assistant-mcp); `--remote-port` the
   port of the editor's remote control (47821, `0` turns it off); `--hidden` runs the editor without
   a window and without changing the preferences (tests of the MCP server).
@@ -534,7 +666,7 @@ on Linux).
 
 ## 10. What was tested
 
-- `--selftest`: 55 checks (math, a library written like the extractor writes one, opening its
+- `--selftest`: 67 checks (math, a library written like the extractor writes one, opening its
   level: locked terrain, decor instances, actor with its model, collision surfaces; copy and paste
   with undo; prefab file names, saving, pivot, placing twice with shared meshes, the actors of a
   prefab named apart; project round trip, an empty project too, a stretched element's scale kept,
@@ -551,7 +683,36 @@ on Linux).
   keys and arguments; nav meshes: a floor around a block in the game's limits, the route table
   leading everywhere, the levels' blended decor walkable but not water and glows, only the ground
   next to a point kept, a ground of more than 255 polygons cut in meshes that suit the game, a
-  mesh kept by its node and by a project, the blob for the game read back).
+  mesh kept by its node and by a project, the blob for the game read back; several levels: one
+  added at its place with its companion and mission layer under its group, shown along the story
+  as when the player is there, each level at its own point of the story and the steps where an
+  added level changes, a level opened without its actors, a level appended to a document with its
+  textures and materials shared or renumbered, the neighbors and continue points of the game data;
+  the export for the game: collision surfaces as the builder takes them and what is lost, the
+  data of actors typed as the builder reads it, the types of the destination (a door changed, a
+  placeholder left out), pickups by name, a small level of Jak II exported for Jak 3 (its files, a
+  pickup renumbered, a link by name, the story's data left out, the game's collision one node per
+  surface, the shell not colliding twice, a placed box colliding by its shape) and for Jak II
+  (its types and scripts kept)).
+- Jak and Daxter NTSC (*Black Label*, SCUS-97124) and Jak 3 NTSC (SCUS-97330), from disc folders
+  of their own: 24 and 272 levels extracted (0.7 and 3.7 GB), 24 and
+  105 levels listed; the village of Jak and Daxter with its sea and far sea, Spargus and the
+  desert of Jak 3 open.
+- The export for the game, through `--mcp` against a hidden editor: the slums of Jak II
+  (`ctysluma`, 15,819 meshes, 33,700 collision triangles) for Jak 3 (4 actors kept, 12 of types
+  Jak 3 does not have or only as placeholders, a door changed, a pass renumbered), for Jak II;
+  Jak and Daxter's village for Jak and Daxter (73 actors) and for Jak II (47 actors, the scout
+  flies of its crates left out); Jak 3's desert for Jak II. The files read back: the `.jsonc` parsed, the `.glb` with its
+  collision nodes and extras.
+- The story of the levels one by one, through `--mcp`: `ctywide` has 68 states among the 324 steps
+  (the burning bush missions change it one after the other), `ctysluma` 3, `ctyport` without its
+  actors 1; a level at its state while the others stay at theirs.
+- Several levels of Jak II: `ctyinda` with `ctyindb` and `ctywide` added (27,160 elements, the
+  capture of the tour in 6 seconds; `ctyindb` added in 0.3 s); the streets of the industrial zone
+  continue from one level into the other (hidden, `ctyindb` shows where `ctyinda` stops); through
+  `--mcp`: `add_level`, `get_level_info`, `list_levels near`, `set_visibility`, the junction
+  framed, the adding undone and redone, a second adding refused, the project saved and opened
+  again with its levels, `remove_level`, a new level with `ctyinda` added.
 - The nav meshes against the game's: the polygon grid the editor makes for each of the 61 nav
   meshes of Jak II's levels (decompiled by OpenGOAL) is the game's, byte for byte. With
   `OGLE_NAV_REFERENCE` set to one of them (`<level>-nav.json`), `--selftest` also checks that the
@@ -591,19 +752,19 @@ on Linux).
 - The extraction window from start to end (disc read, extraction, the Levels panel showing the
   levels), with a small `.iso` made from the same disc.
 
-Not tested yet: the extraction of Jak and Daxter and Jak 3 (no disc of these games was at hand),
-so neither their game data in the editor; the full `.iso` of a disc; the MCP server from Claude
-Code itself (it was driven by a test client speaking the same protocol); a level made with the
-editor, built and played in the game, and so nav meshes followed by creatures in the game.
+Not tested yet: the full `.iso` of a disc; the MCP server from Claude Code itself (it was driven by
+a test client speaking the same protocol); a level exported by the editor, built by OpenGOAL's
+level builder and played in the game (the files follow the builders' code, read for this), and so
+nav meshes followed by creatures in the game.
 
 ## 11. Known limitations
 
-- **Jak and Daxter and Jak 3**: the extractor has their tables, but their extraction was not
-  tested.
 - **Reflections (envmap) are not drawn**, and the additive blends of the PS2 are approximated:
   water is a translucent blue surface, dark eco a dark purple one.
-- **The light is still**: each surface takes the brightest of its level's light layers, where the
-  game mixes them as time goes (the sun, lamps, flickering), and very bright surfaces are softened.
+- **The light is still**: each surface takes the brightest of its level's light layers (Jak and
+  Daxter's: noon), where the game mixes them as time goes (the sun, lamps, flickering), and very
+  bright surfaces are softened. **View > Fog** only hazes the low-detail backdrop scenery meshes
+  (made to be seen through the game's own fog): nothing nearer is fogged.
 - **The catalog's objects** come from the extracted levels and the game's code. A new object
   takes the data of one of its type: check it before building the level for the game. The
   particle effects are markers: their particles are not drawn.
@@ -618,15 +779,28 @@ editor, built and played in the game, and so nav meshes followed by creatures in
   states), not read yet. Its creatures are left out from a list of types made without testing.
 - **Actor models are found by file name** (the type's name, `<type>-...` or `...-<type>`); the
   actors without one are drawn as a marker.
-- **Collision does not follow moved elements**: it is kept as the level had it.
+- **Collision does not follow moved elements**: it is kept as the level had it (the export's
+  **Made from the decor** makes it from the decor as it is).
+- **Several levels**: each is loaded whole (the city of Jak II is many levels: add the ones you
+  work on); an added level is shown along the story as when the player is in it, not as the game
+  mixes the levels it has loaded; one ocean map is drawn (the level opened's, else the first level
+  shown with one); the game's load boundaries (where it loads and unloads levels) are not shown.
 - **Nav meshes**: the meshes a large piece of ground is cut into are not linked (the game's
   creatures do not go from one to the next); they do not follow the decor when it moves (generate
   them again); the levels' own nav meshes are not read (the extraction does not take them). The
   file for the game is the `nav_data` a level builder reads: OpenGOAL's Jak II level builder does
   not take nav meshes yet.
 - **Animated models** are shown in their rest pose.
-- **No export of the level to the game yet**: the editor saves projects (`.glb`); only the nav
-  meshes are written for the game.
+- **The export for the game** has not been built with OpenGOAL's level builder nor played yet.
+  What it does not do: the code of the objects that live in a level's own files (particle effects,
+  a level's logic) is not added to the DGO (`INSTALL.md` says where to find it); the positions
+  inside the actors' data (paths, targets) stay the game's when an actor or a level is moved; the
+  collision of the levels' own decor is the game's as extracted (a piece moved or deleted keeps its
+  collision: export with **Made from the decor**); the builders cannot write Jak II and 3's own
+  surfaces (see [Exporting for the game](#exporting-for-the-game)); the scripts kept for the same
+  game (`pair` data) need a level builder that reads them; the level's definition keeps the
+  test-zone's `:index`, to change; the regions, cameras and ambient sounds of the levels are not
+  exported; Jak and Daxter's levels take village1's sky.
 
 ## 12. Repository layout
 
@@ -634,7 +808,8 @@ editor, built and played in the game, and so nav meshes followed by creatures in
 src/core/      math, log, preferences, translations, undo history
 src/scene/     the document, picking (BVH), the story view
 src/io/        glTF import and export, the library of extracted levels, prefabs, game data, the
-               catalog, loading threads, the nav meshes for the game (nav_export)
+               catalog, loading threads, the nav meshes for the game (nav_export), the export of a
+               level for the game (game_export)
 src/render/    camera, OpenGL renderer, thumbnails, offscreen captures
 src/tools/     the gizmo, the nav mesh generator (navmesh: Recast, then the game's limits)
 src/app/       window and main loop, document actions, interface panels, extraction window, the
@@ -644,7 +819,10 @@ data/          what the editor knows of each game (game-data.json, made by tools
 tools/         gen_game_data.py: writes data/ from OpenGOAL's decompiled code; build_demo_level.py:
                builds the tour's demo level through the editor's remote control;
                build_industrial_district.py: builds the tour's district through the MCP server
-library/       the levels extracted from your game (created by the extraction, ignored by git)
+library/       the levels extracted from your game (created by the extraction, ignored by git);
+               library/projects/ is where a new project is saved by default
+iso_data/      put your own disc images or disc folders here for the extraction to read (ignored
+               by git, only a .gitignore of its own is kept)
 extractor/     ogle-extract: main.cpp, the games' tables (data/) and the data readers of OpenGOAL's
                decompiler it is built from (opengoal/, ISC license)
 third-party/   Dear ImGui, glad, tinygltf, nlohmann json, stb, Recast
@@ -668,5 +846,5 @@ it reuses their license, the ISC license.
 
 Third-party code keeps its own license, listed in `third-party/README.md`. Jak and Daxter, Jak II
 and Jak 3 belong to Sony Interactive Entertainment and were developed by Naughty Dog: no data of
-the games is in the repository; the screenshots of `docs/captures/` show levels of Jak II extracted
-from a copy of the game.
+the games is in the repository; the screenshots of `docs/captures/` show levels of Jak II, Jak and
+Daxter and Jak 3 extracted from copies of the games.

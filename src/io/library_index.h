@@ -30,6 +30,7 @@ struct LevelIndex {
 
 // A decor part of a level of the library, for the decor of all the levels.
 struct DecorEntry {
+  std::string game;        // the game it comes from
   std::string level;       // the folder it comes from
   std::string background;  // that level's background file
   int64_t stamp = 0;       // its date (thumbnails)

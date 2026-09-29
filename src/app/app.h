@@ -22,6 +22,7 @@
 #include "io/asset_store.h"
 #include "io/catalog.h"
 #include "io/game_data.h"
+#include "io/game_export.h"
 #include "io/library_index.h"
 #include "io/prefabs.h"
 #include "render/camera.h"
@@ -45,7 +46,15 @@ enum class ToolMode {
   Place,       // put the chosen prefab, object or decor part where the cursor points
 };
 
-enum class DialogAction { OpenProject, SaveProjectAs, ExtractSourceIso, ExtractSourceFolder, ExtractOutput, ExportNavMeshes };
+enum class DialogAction {
+  OpenProject,
+  SaveProjectAs,
+  ExtractSourceIso,
+  ExtractSourceFolder,
+  ExtractOutput,
+  ExportNavMeshes,
+  ExportFolder
+};
 
 // What the Place tool puts in the level: a prefab, an object of the catalog or a decor part of a
 // level.
@@ -105,6 +114,10 @@ struct AppOptions {
   std::string story;
   // --select a,b,...: the elements captures select (by name) instead of choosing one
   std::string select;
+  // --add a,b,...: the levels captures add to the one loaded (its neighbors)
+  std::string add;
+  // --game jak1|jak2|jak3: the game of the library shown (for this session)
+  std::string game;
   int remote_port = kRemotePort;  // the MCP server's connection (0: none)
   bool hidden = false;            // --hidden: no window shown (tests)
 };
@@ -117,8 +130,15 @@ bool save_project(const Scene& scene, const std::string& path, std::string* erro
 // game's data (may be null): without the creatures and logic actors, the water actors with the
 // model of their look, and the levels the game shows with it (companions, the layers the story
 // lends it: see scene/story.h).
+// Without `actors`, the level comes without any actor (its objects too): its decor alone.
 bool open_level(Scene& scene, const AssetLibrary& library, const GameData* data, const LevelEntry& level,
-                std::string* error);
+                std::string* error, bool actors = true);
+// Adds a level of the library to a document, at its place in the game's world (the levels' files
+// share the game's coordinates, so levels side by side in the game meet here too): under a group
+// (extras.og_level), with the levels the game shows with it and the layers of its missions under
+// that group. Returns the group, 0 when the level cannot be read.
+uint32_t add_level(Scene& scene, const AssetLibrary& library, const GameData* data, const LevelEntry& level,
+                   std::string* error, bool actors = true);
 // Whether the Levels panel lists a level: not a layer of the story (the actors a mission adds to
 // another level), not actors alone (no collision: cutscenes...), not a copy of a level found in
 // another DGO.
@@ -170,6 +190,56 @@ class App {
   std::vector<Vec3> navmesh_points_of_selection() const;  // where the selected elements stand
   // the nav meshes for the game (nav_export.h), ids from `first_aid`
   bool export_navmeshes(const std::string& path, uint32_t first_aid, std::string* error);
+  // the document's nav meshes where they are now, each around the center of its corners
+  void world_navmeshes(std::vector<NavMeshData>* meshes, std::vector<std::string>* names) const;
+
+  // File > Export for the game (actions.cpp, io/game_export.h): what the view shows, as a custom
+  // level of OpenGOAL for Jak 1, Jak II or Jak 3, adapted to that game
+  bool export_for_game(const LevelExportOptions& opts, LevelExportReport* report, std::string* error);
+  // the export's options for the document and a destination (names, folder, where the player starts)
+  LevelExportOptions default_export_options(Game destination);
+  // where the player starts: a continue point of the level opened (moved with it), else the ground
+  // at the middle of the document
+  Vec3 export_start_point();
+  void open_export_window();
+  bool show_export_window = false;
+  LevelExportOptions export_options;  // the window's
+
+  // several levels in a document (actions.cpp): the level opened, the levels added (neighbors),
+  // the companions and layers of each
+  struct DocumentLevel {
+    enum Role { Main, Added, Companion, Layer };
+    std::string name;
+    Role role = Main;
+    uint32_t group = 0;  // its group; 0 for the level opened
+    uint32_t host = 0;   // companions and layers: the group of the level they come with, 0 the one opened
+    std::string game;    // its own game: "jak1", "jak2", "jak3" (may differ from the level opened's)
+  };
+  std::vector<DocumentLevel> document_levels() const;
+  bool level_in_document(const std::string& name) const;
+  // a level of the library added on a worker thread, then to the document (undoable) when ready
+  bool add_level_to_document(const LevelEntry& level, std::string* error);
+  // levels are opened and added with their actors (the objects: the creatures never come), or
+  // with their decor alone (Levels panel)
+  bool load_actors = false;
+  void poll_level_adding();
+  bool level_adding() const { return m_add_future.valid(); }
+  bool remove_document_level(uint32_t group, std::string* error);
+  AABB document_level_bounds(uint32_t group) const;  // 0: the level opened (collision left out)
+  // a whole level, to move it: an added level's group, or the root elements of the level opened
+  // (with its companions and layers, without the levels added nor the nav meshes)
+  std::vector<uint32_t> document_level_roots(uint32_t group) const;
+  uint32_t level_of_node(uint32_t id) const;  // the added level's group it is in, 0 for the one opened
+  void select_level(uint32_t group);
+  // roughly: within the camera's field of view and not past its far plane (a cone, not the exact
+  // frustum: good enough to decide whether a point needs framing to be seen)
+  bool camera_sees(const Vec3& p) const;
+  // where two levels of the document meet: the overlap of their boxes (a few meters around the
+  // seam), invalid when they do not touch
+  AABB document_junction(uint32_t group_a, uint32_t group_b) const;
+  // the levels the game displays with those of the document (its data), in the library and not
+  // in the document yet
+  std::vector<std::string> document_neighbors();
 
   // document (actions.cpp)
   void set_library(const std::string& library_root, const std::string& game);
@@ -181,6 +251,7 @@ class App {
   void set_story_view(const StoryView& view);
   void apply_story_view();
   void update_ocean();
+  void set_ocean_backdrop();  // the far ocean in the render settings, before the viewport is drawn
   void load_level(const LevelEntry& level);
   void open_project_file(const std::string& path);
   void save(bool save_as);
@@ -188,6 +259,10 @@ class App {
   void toggle_select(uint32_t id);
   std::vector<uint32_t> selection_roots() const;  // selected nodes without selected ancestors
   Mat4 selection_frame() const;                   // gizmo pivot and orientation
+  // the middle of most of a large group's geometry (a whole level), in the world; kept in the
+  // group's space until the document changes
+  Vec3 group_center(uint32_t id, const std::vector<uint32_t>& descendants) const;
+  mutable std::unordered_map<uint32_t, std::pair<uint64_t, Vec3>> m_group_centers;
   PickHit pick_surface(const Vec2& mouse_vp);     // what is under a viewport point
   void delete_selection();
   void copy_selection();
@@ -225,7 +300,11 @@ class App {
   void remote_place(const json& args, RemoteReply reply);
   void remote_place_many(const json& items, size_t next, json placed, RemoteReply reply);
   json remote_status();
+  std::string remote_use_game(const json& args);  // "" or what is wrong
   json remote_node_json(const Node& n);
+  // what get_level_info says of a level; game: which extracted one (else whichever has it, or
+  // the browsed one when none does)
+  json remote_level_json(const std::string& name, const std::string& game = std::string());
   bool remote_unsaved(const json& args) const;
   std::string capture_view_png(int w, int h);  // the 3D view from the camera, PNG in base64
 
@@ -240,6 +319,10 @@ class App {
   void extract_stop();  // kills a running ogle-extract
   void extract_line(const std::string& line);
   void ui_extract_window();
+  void ui_export_window();
+  std::optional<LevelExportReport> m_export_report;  // the window's last export
+  std::string m_export_error;
+  std::string m_export_level;  // the level export_options were made for
 
   // interface (panels.cpp)
   void draw_ui();
@@ -284,26 +367,43 @@ class App {
   std::string project_path;
   uint64_t saved_revision = 0;
 
-  // the library: the extracted games, the levels of the one shown, loading and thumbnails
+  // the library: the extracted games, the levels of the one shown, loading and thumbnails.
+  // Every extracted game is always scanned and available (all_libraries), so that the catalog
+  // and the document never distinguish games: `library` only picks what the Levels panel and
+  // File > New level show by default (their own convenience, not a restriction on what can be
+  // placed or added). A document freely mixes levels and actors of any extracted game; each
+  // keeps its own game as its extras "og_game" (a level's group, or an actor placed apart), and
+  // only the export to a game cares which is which.
   std::string library_root;
   std::vector<GameFolder> games;
-  AssetLibrary library;
+  std::map<std::string, AssetLibrary> all_libraries;  // every extracted game, by "jak1"/"jak2"/"jak3"
+  AssetLibrary library;                               // the one the Levels panel browses
+  AssetLibrary* library_for(const std::string& game);  // an entry of all_libraries, else null
+  // switches the browsed game without rescanning (all_libraries already has every extracted one)
+  bool browse_game(const std::string& game);
   AssetStore store;
   Thumbnails thumbs{store};
   std::vector<PrefabInfo> prefabs;
-  std::vector<CatalogObject> catalog;  // the objects of the library's game
-  std::vector<CatalogModel> catalog_models;  // its other models (props)
-  // what the catalog reads of every level on a worker thread: their decor, the art-names of their
-  // actors (all the variants and effects); the catalog is built again once it is ready
-  LibraryIndex library_index;
-  std::vector<DecorEntry> all_parts;  // the decor of every level
-  void apply_library_index();
+  std::vector<CatalogObject> catalog;        // the objects of every extracted game
+  std::vector<CatalogModel> catalog_models;  // their other models (props)
+  // what the catalog reads of every level of every game on a worker thread (one per game): their
+  // decor, the art-names of their actors (all the variants and effects); merged into the catalog
+  // as each game's becomes ready
+  std::map<std::string, LibraryIndex> library_indexes;
+  std::vector<DecorEntry> all_parts;  // the decor of every level of every game
+  void apply_library_index();   // any game's index that just became ready
+  void rebuild_catalog();       // catalog, catalog_models and all_parts, from every extracted game
   Placement placement;
   Clipboard clipboard;
   ExtractState extract;
   // the story: the point of the game the level is shown at, the steps where the document changes
   StoryView story;
-  std::vector<int> story_steps;
+  std::vector<int> story_steps;  // where the level opened changes
+  // where each level added changes (its name), and the level the story bar shows ("" the opened)
+  std::map<std::string, std::vector<int>> level_story_steps;
+  std::string story_level;
+  // the states of a level: 1, then each step where it changes ("" the level opened)
+  std::vector<int> story_states(const std::string& level) const;
 
   // windows and panels
   bool show_log = false;
@@ -368,13 +468,19 @@ class App {
   std::string m_decor_level;     // the level whose decor is shown, "" for every level
   std::shared_ptr<Scene> m_decor_scene;
   std::vector<CatalogPart> m_decor_parts;
-  bool m_index_applied = false;
+  bool m_index_applied = false;  // the browsed game's index (the Levels panel's progress bar)
+  std::set<std::string> m_index_merged;  // every game whose index is already folded into the catalog
   size_t m_all_prototypes = 0, m_all_pieces = 0;
-  std::string m_all_parts_filter = "";  // the filter m_all_parts_shown was made for
+  std::string m_all_parts_filter = "";  // the filter m_all_parts_shown was made for
   std::vector<size_t> m_all_parts_shown;
   // level opening (a level loads on a worker thread)
   std::future<std::unique_ptr<Scene>> m_level_future;
   std::string m_level_name;
+  // a level being added to the document (a worker thread too)
+  std::future<std::unique_ptr<Scene>> m_add_future;
+  std::string m_adding_level;
+  std::string m_add_error;       // why the last level could not be added, "" when it was
+  uint64_t m_levels_added = 0;   // counts the additions finished (the remote waits on it)
   // nav mesh generation (a worker thread) and its last outcome
   struct NavJob {
     bool ok = false;
@@ -417,6 +523,8 @@ class App {
   std::vector<Material> m_ocean_materials;
   std::string m_ocean_map;
   float m_ocean_height = 0;
+  bool m_ocean_far = false;  // the far ocean drawn: a level of the document asks for it
+  Vec3 m_ocean_far_color;
 
   friend void dialog_callback(void*, const char* const*, int);
 };

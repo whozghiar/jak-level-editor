@@ -380,7 +380,9 @@ void extract_from_level(const ObjectFileDB& db,
       }
       auto& t = types[etype];
       if (t.is_null()) {
-        t = {{"count", 0}, {"lump", actor.value("lump", nlohmann::json::object())}};
+        t = {{"count", 0},
+             {"lump", actor.value("lump", nlohmann::json::object())},
+             {"lump_types", actor.value("lump_types", nlohmann::json::object())}};
       }
       t["count"] = t["count"].get<int>() + 1;
       // the actors that choose their model by name (art-name): every name, once

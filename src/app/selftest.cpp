@@ -26,6 +26,7 @@
 #include "io/asset_library.h"
 #include "io/catalog.h"
 #include "io/game_data.h"
+#include "io/game_export.h"
 #include "io/gltf_io.h"
 #include "io/library_index.h"
 #include "io/nav_export.h"
@@ -113,6 +114,28 @@ json read_json_file(const fs::path& path) {
   std::ifstream f(path, std::ios::binary);
   std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
   return json::parse(text, nullptr, false);
+}
+
+// a .jsonc of the level builder: its comment lines left out
+json read_jsonc_file(const fs::path& path) {
+  std::ifstream f(path, std::ios::binary);
+  std::string text, line;
+  while (std::getline(f, line)) {
+    const size_t at = line.find_first_not_of(" \t");
+    if (at == std::string::npos || line.compare(at, 2, "//") != 0) text += line + "\n";
+  }
+  return json::parse(text, nullptr, false);
+}
+
+// the JSON chunk of a .glb
+json read_glb_json(const fs::path& path) {
+  std::ifstream f(path, std::ios::binary);
+  std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  if (bytes.size() < 20) return json();
+  uint32_t json_len;
+  std::memcpy(&json_len, &bytes[12], 4);
+  if (20 + (size_t)json_len > bytes.size()) return json();
+  return json::parse(std::string(bytes.begin() + 20, bytes.begin() + 20 + json_len), nullptr, false);
 }
 
 // A level written like ogle-extract writes one: a background with the terrain (tfrag), a decor
@@ -238,7 +261,8 @@ json rip_actor(const std::string& name, const std::string& etype, const json& lu
 
 // A game with a story: the level "town" (a rock the mission breaks into rubble, a crate there
 // until the mission ends, a statue broken by it, a creature, a logic actor, a cutscene character,
-// a water pool), the hut the game shows with it, the layer of the mission's actors.
+// a water pool), the hut the game shows with it, the layer of the mission's actors, and "port",
+// the level next to it (100 m away along x).
 const char* kStoryGameData = R"({
  "format": 1, "game": "jak2",
  "actors": {"roles": {"grunt": "creature", "part-spawner": "logic"}, "creature_suffixes": ["-highres"],
@@ -247,8 +271,14 @@ const char* kStoryGameData = R"({
             "objects": {"crate": "crate", "statue-broken": "breakable", "no-model-thing": "other"}},
  "oceans": {"*ocean-map-test*": {"corner": [-96, -1.5, -96], "cell": 96, "cells": ["11", "01"], "color": [0.1, 0.2, 0.3]}},
  "levels": {
-  "town": {"taskname": "town", "base_mask": 1, "ocean": "*ocean-map-test*", "layer": false, "traffic": false, "companions": ["hut"]},
-  "hut": {"taskname": "town", "base_mask": 1, "ocean": null, "layer": false, "traffic": false, "companions": []},
+  "town": {"taskname": "town", "base_mask": 1, "ocean": "*ocean-map-test*", "layer": false, "traffic": false, "companions": ["hut"],
+           "neighbors": ["hut", "port"],
+           "continues": [{"name": "town-start", "position": [1, 0, 2], "shows": ["hut", "port", "town"]}]},
+  "hut": {"taskname": "town", "base_mask": 1, "ocean": null, "layer": false, "traffic": false, "companions": [],
+          "neighbors": ["port", "town"], "continues": []},
+  "port": {"taskname": "port", "base_mask": 1, "ocean": null, "layer": false, "traffic": false, "companions": [],
+           "neighbors": ["hut", "town"],
+           "continues": [{"name": "port-start", "position": [100, 0, 5], "shows": ["port", "town"]}]},
   "lmission": {"taskname": "lmission", "base_mask": 0, "ocean": null, "layer": true, "traffic": false, "companions": []}
  },
  "story": {
@@ -323,6 +353,13 @@ bool write_story_library(const fs::path& root) {
                                                             {"kill-mask", 4294905854.0}, {"next-actor", "x"}}}}}};
   ok &= write_rip_level(game, "town", decor("town", {"rock", "rubble"}), town_actors, 2, terrain, town_types);
   ok &= write_rip_level(game, "hut", decor("hut", {}), json::array(), 2);
+  // port: its shell 100 m away along x, as ripped (in the game's space)
+  Scene port = decor("port", {"crane"});
+  for (auto& n : port.nodes)
+    if (n.mesh && n.name != "crane.mb-0")
+      for (auto& v : n.mesh->prims[0].pos) v = v + Vec3{100, 0, 0};
+  ok &= write_rip_level(game, "port", port, json::array({rip_actor("barrel-1", "crate", json::object(), {100, 0, 3})}),
+                        2, {{"port-floor", {{"og_terrain", true}}}, {"port-wall", {{"og_terrain", false}}}});
   ok &= write_rip_level(game, "lmission", Scene(), json::array({rip_actor("lcrate-1", "crate", json::object())}), 0);
   // the models: the pool's look, the crate
   std::string err;
@@ -545,7 +582,7 @@ int run_selftest() {
     std::string listed_levels;
     for (const auto& l : story_lib.levels())
       if (level_listed(l, &data)) listed_levels += l.name + " ";
-    check(scanned_story && listed_levels == "hut town ", "levels listed: the layer of a mission is not");
+    check(scanned_story && listed_levels == "hut port town ", "levels listed: the layer of a mission is not");
     Scene town;
     const LevelEntry* town_entry = story_lib.level("town");
     const bool town_opened = town_entry && open_level(town, story_lib, &data, *town_entry, &err);
@@ -594,6 +631,71 @@ int run_selftest() {
     check(start && after && all,
           "story: kill masks, type and prototype rules, borrowed layer at two steps; everything when off");
     check(story_changes(town, data) == std::vector<int>{4}, "story: the steps where the level changes");
+    // several levels: port opened, town added at its place with its companion and its mission's
+    // layer under its group, shown as when the player is in town (its layer borrowed at the start)
+    {
+      Scene doc;
+      const LevelEntry* port_entry = story_lib.level("port");
+      const bool port_opened = port_entry && open_level(doc, story_lib, &data, *port_entry, &err);
+      const uint32_t town_group = port_opened ? add_level(doc, story_lib, &data, *town_entry, &err) : 0;
+      auto in_doc = [&](const std::string& name) -> const Node* {
+        for (const auto& x : doc.nodes)
+          if (x.name == name) return &x;
+        return nullptr;
+      };
+      const Node* hut_group = nullptr;
+      const Node* layer_group = nullptr;
+      for (const auto& x : doc.nodes) {
+        if (x.extras.value("og_companion", std::string()) == "hut") hut_group = &x;
+        if (x.extras.value("og_layer", std::string()) == "lmission") layer_group = &x;
+      }
+      const Node* wall_alone = node_named("town-wall");
+      const Node* wall_added = in_doc("town-wall");
+      const Node* port_wall = in_doc("port-wall");
+      const bool placed = town_group && doc.find(town_group)->extras.value("og_level", std::string()) == "town" &&
+                          hut_group && layer_group && doc.is_ancestor(town_group, hut_group->id) &&
+                          doc.is_ancestor(town_group, layer_group->id) && wall_alone && wall_added && port_wall &&
+                          length(doc.world_bounds(*wall_added).center() - town.world_bounds(*wall_alone).center()) < 1e-4f &&
+                          std::fabs(doc.world_bounds(*port_wall).center().x - 120.f) < 1e-3f;
+      check(placed, "levels: one added at its place, its companion and mission layer under its group");
+      auto doc_shown = [&](const char* name) {
+        const Node* x = in_doc(name);
+        return x && doc.effectively_visible(*x);
+      };
+      StoryView v;
+      v.step = 1;
+      apply_story(doc, &data, v);
+      const bool at_start = doc_shown("crate-1") && doc_shown("lcrate-1") && doc_shown("barrel-1");
+      v.step = 4;
+      apply_story(doc, &data, v);
+      const bool at_end = !doc_shown("crate-1") && !doc_shown("lcrate-1") && doc_shown("rubble.mb");
+      check(at_start && at_end, "levels: an added level shown as when the player is there, its layer too");
+      // each level at its own point of the story: town still at the start while port is at the end
+      v.step = 4;
+      v.level_steps["town"] = 1;
+      apply_story(doc, &data, v);
+      const bool town_early = doc_shown("crate-1") && doc_shown("lcrate-1");
+      check(town_early && story_changes(doc, data, "town") == std::vector<int>{4} &&
+                story_changes(doc, data, "no-such-level").empty(),
+            "story: each level at its own step, and the steps where an added level changes");
+      Scene bare;
+      const bool bare_opened = open_level(bare, story_lib, &data, *town_entry, &err, false);
+      size_t bare_actors = 0, bare_decor = 0;
+      for (const auto& x : bare.nodes) {
+        bare_actors += x.kind == NodeKind::Actor;
+        bare_decor += x.kind == NodeKind::Render;
+      }
+      check(bare_opened && bare_actors == 0 && bare_decor > 0, "levels: opened without their actors, the decor alone");
+      const LevelInfo* town_info = data.level("town");
+      const LevelInfo* port_info = data.level("port");
+      check(town_info && std::find(town_info->neighbors.begin(), town_info->neighbors.end(), "port") !=
+                             town_info->neighbors.end() &&
+                port_info && port_info->continues.size() == 1 && port_info->continues[0].name == "port-start" &&
+                length(port_info->continues[0].position - Vec3{100, 0, 5}) < 1e-4f &&
+                port_info->continues[0].shows == std::vector<std::string>{"port", "town"},
+            "game data: a level's neighbors and continue points");
+    }
+
     check(data.ocean("*ocean-map-test*") && data.ocean("*ocean-map-test*")->cells == std::vector<uint8_t>{1, 1, 0, 1} &&
               std::fabs(data.ocean_height("town", 1) + 1.5f) < 1e-5f,
           "game data: the ocean of a level, its cells and height");
@@ -676,6 +778,66 @@ int run_selftest() {
   } catch (const std::exception& e) {
     std::printf("  exception: %s\n", e.what());
     check(false, "story: no exception");
+  }
+
+  // a level loaded apart, appended to a document: new ids, its parents kept, the textures and
+  // materials the document has shared, its meshes on the document's materials
+  {
+    auto texture = [](const char* name, uint8_t value) {
+      Texture t;
+      t.name = name;
+      t.width = t.height = 2;
+      t.rgba.assign(16, value);
+      return t;
+    };
+    Scene doc, other;
+    doc.add_texture(texture("wall", 10));
+    Material wall_mat;
+    wall_mat.name = "wall";
+    wall_mat.texture = 0;
+    doc.add_material(wall_mat);
+    Node a{};
+    a.name = "a";
+    a.kind = NodeKind::Render;
+    a.mesh = make_box("a", 0);
+    doc.add(a);
+    other.add_texture(texture("roof", 20));
+    other.add_texture(texture("wall", 10));
+    Material roof_mat;
+    roof_mat.name = "roof";
+    roof_mat.texture = 0;
+    Material other_wall = wall_mat;
+    other_wall.texture = 1;
+    other.add_material(roof_mat);
+    other.add_material(other_wall);
+    Node group{};
+    group.name = "group";
+    const uint32_t g = other.add(group);
+    Node roof{}, wall{};
+    roof.name = "roof";
+    roof.kind = wall.kind = NodeKind::Render;
+    roof.parent = wall.parent = g;
+    roof.mesh = make_box("roof", 0);
+    wall.name = "wall";
+    wall.mesh = make_box("wall", 1);
+    other.add(roof);
+    other.add(wall);
+    const auto roots = doc.append(std::move(other));
+    std::set<uint32_t> ids;
+    for (const auto& n : doc.nodes) ids.insert(n.id);
+    const Node* new_group = roots.size() == 1 ? doc.find(roots[0]) : nullptr;
+    const Node* new_roof = nullptr;
+    const Node* new_wall = nullptr;
+    for (const auto& n : doc.nodes) {
+      if (n.name == "roof") new_roof = &n;
+      if (n.name == "wall") new_wall = &n;
+    }
+    const bool appended =
+        ids.size() == 4 && new_group && new_roof && new_wall && new_roof->parent == new_group->id &&
+        new_wall->parent == new_group->id && doc.textures.size() == 2 && doc.materials.size() == 2 &&
+        new_wall->mesh->prims[0].material == 0 && doc.materials[new_roof->mesh->prims[0].material].name == "roof" &&
+        doc.textures[doc.materials[new_roof->mesh->prims[0].material].texture].name == "roof" && other.nodes.empty();
+    check(appended, "levels: a level appended to a document, its textures and materials shared or renumbered");
   }
 
   // nav meshes: a floor around a block, in the game's limits; a floor too big for one mesh cut in
@@ -929,6 +1091,178 @@ int run_selftest() {
     const uint8_t bytes[] = {'M', 'a', 'n'};
     check(round_trip && base64_encode(bytes, 3) == "TWFu" && base64_encode(bytes, 2) == "TWE=",
           "remote control: a request and its answer over the local connection");
+  }
+
+  // the export for the game: surfaces, data of actors, types, and a level of Jak II for Jak 3 and II
+  {
+    std::string loss;
+    const BuilderSurface wall = builder_surface(0x5cc8, Game::Jak2, Game::Jak3, &loss);  // stone wall, nopilot
+    const bool wall_ok = wall.material == 0 && wall.mode == 1 && wall.event == 0 && loss == "nopilot";
+    const BuilderSurface wall1 = builder_surface(0x5cc8, Game::Jak2, Game::Jak1, &loss);
+    const bool wall1_ok = wall1.material == 0 && loss.empty();
+    builder_surface((28u << 10) | (13u << 18), Game::Jak2, Game::Jak3, &loss);  // hdwood, rail
+    const bool rail_lost = loss == "rail";
+    const BuilderSurface hdwood = builder_surface(28u << 10, Game::Jak2, Game::Jak3, &loss);
+    const bool hdwood_ok = hdwood.material == 6 && loss == "hdwood";
+    const uint32_t jak1_pat = (1u << 3) | (6u << 6) | (1u << 12) | (1u << 14) | 4u;  // wall, wood, nolos, deadly, noedge
+    const BuilderSurface j1 = builder_surface(jak1_pat, Game::Jak1, Game::Jak2, &loss);
+    const bool jak1_ok = j1.mode == 1 && j1.material == 6 && j1.nolineofsight && j1.event == 1 && j1.noedge && loss.empty();
+    check(wall_ok && wall1_ok && rail_lost && hdwood_ok && jak1_ok,
+          "export: collision surfaces as the builder takes them (Jak 1's fields), what is lost said");
+
+    const bool lumps_ok =
+        builder_lump_value("abc", "string") == json("abc") && builder_lump_value("'steel", "symbol") == json("'steel") &&
+        builder_lump_value(json::array({"'a", "'b"}), "symbol") == json::array({"symbol", "a", "b"}) &&
+        builder_lump_value(1.5, "float") == json::array({"float", 1.5}) &&
+        builder_lump_value(json::array({3, 4}), "uint8") == json::array({"uint32", 3, 4}) &&
+        builder_lump_value(json::array({1, 2, 3, 4}), "vector") == json::array({"vector", json::array({1.0, 2.0, 3.0, 4.0})}) &&
+        builder_lump_value("'citb-bunny", "type") == json::array({"type", "citb-bunny"}) &&
+        builder_lump_value("(want-load 'a)", "pair") == json::array({"pair", "(want-load 'a)"}) &&
+        builder_lump_value(3, "") == json::array({"int32", 3}) && builder_lump_value(json::array({1}), "actor-group").is_null();
+    check(lumps_ok, "export: the data of actors as the builder reads them (typed, symbols, vectors, scripts)");
+
+    GameData jak2d, jak3d;
+    const bool datas = jak2d.load(game_data_path("jak2"), &err) && jak3d.load(game_data_path("jak3"), &err);
+    check(datas && export_actor_type("hide-door-a", Game::Jak2, Game::Jak3, &jak3d) == "cty-door" &&
+              export_actor_type("crate", Game::Jak2, Game::Jak3, &jak3d) == "crate" &&
+              export_actor_type("cty-fruit-stand", Game::Jak2, Game::Jak3, &jak3d).empty() &&
+              jak3d.enum_value("pickup-type", "money") == 10 && jak2d.enum_value("pickup-type", "money") == 9 &&
+              jak2d.enum_name("pickup-type", 22) == "skill",
+          "export: actor types of the destination (a door changed, a placeholder left out), pickups by name");
+
+    // a small level of Jak II: its shell with the game's collision, a box placed, three actors
+    Scene s;
+    s.settings.game = Game::Jak2;
+    s.settings.level = "testlvl";
+    Material m;
+    m.name = "stone";
+    const int mat = s.add_material(m);
+    Node tfrag;
+    tfrag.name = "testlvl-tfrag-normal";
+    const uint32_t tfrag_id = s.add(tfrag);
+    Node floor_node;
+    floor_node.name = "testlvl-floor";
+    floor_node.kind = NodeKind::Render;
+    floor_node.parent = tfrag_id;
+    floor_node.mesh = make_floor(mat);
+    const uint32_t floor_id = s.add(floor_node);
+    Node col_group;
+    col_group.name = "testlvl-collision";
+    const uint32_t col_group_id = s.add(col_group);
+    Node col;
+    col.name = "testlvl-collision-0";
+    col.kind = NodeKind::Collision;
+    col.parent = col_group_id;
+    col.mesh = make_floor(-1);
+    col.mesh->prims[0].tri_pat = {0x5cc8u, 28u << 10};
+    s.add(col);
+    Node box;
+    box.name = "box-1";
+    box.kind = NodeKind::Render;
+    box.mesh = make_box("box", mat);
+    box.local.t = {10, 0, 0};
+    const uint32_t box_id = s.add(box);
+    auto actor = [&](const std::string& name, const std::string& etype, uint32_t aid, json lump, json types,
+                     bool visible = true) {
+      Node a;
+      a.name = name;
+      a.kind = NodeKind::Actor;
+      a.visible = visible;
+      a.local.t = {5, 1, 5};
+      lump["name"] = name;
+      a.extras = json{{"etype", etype}, {"aid", aid}, {"game_task", 7}, {"bsphere", {5, 1, 5, 2}},
+                      {"lump", lump}, {"lump_types", types}};
+      s.add(a);
+    };
+    actor("crate-1", "crate", 101,
+          {{"eco-info", {9, 5}}, {"kill-mask", 16384}, {"task-actor", 3}, {"next-actor", 102},
+           {"visvol", {{0, 0, 0, 1}, {1, 1, 1, 1}}}},
+          {{"eco-info", "int32"}, {"kill-mask", "uint32"}, {"task-actor", "uint8"}, {"next-actor", "uint32"},
+           {"visvol", "vector"}, {"name", "string"}});
+    actor("hide-door-a-1", "hide-door-a", 102, {{"on-activate", "(want-load 'x)"}}, {{"on-activate", "pair"}});
+    actor("fort-entry-gate-1", "fort-entry-gate", 103, json::object(), json::object());
+    actor("crate-2", "crate", 104, json::object(), json::object(), false);
+    s.begin_frame();
+
+    const fs::path out = tmp / "export";
+    LevelExportOptions o;
+    o.game = Game::Jak3;
+    o.name = "my-test";
+    o.nickname = default_nickname(o.name);
+    o.iso_name = default_iso_name(o.name);
+    o.folder = out.generic_string();
+    o.start = {1, 2, 3};
+    LevelExportReport r;
+    const bool exported = datas && check_export_names(o).empty() && export_level_for_game(s, &jak2d, &jak3d, o, &r, &err);
+    const fs::path dir = out / "my-test";
+    bool files = exported && r.files.size() == 5;
+    for (const char* f : {"my-test.glb", "my-test.jsonc", "my-test.gd", "level-info.gc", "INSTALL.md"})
+      files &= fs::is_regular_file(dir / f, ec);
+    const json level = read_jsonc_file(dir / "my-test.jsonc");
+    const json* crate_j = nullptr;
+    const json* door_j = nullptr;
+    if (level.is_object() && level.contains("actors"))
+      for (const auto& a : level["actors"]) {
+        if (a.value("etype", std::string()) == "crate") crate_j = &a;
+        if (a.value("etype", std::string()) == "cty-door") door_j = &a;
+      }
+    const bool actors_ok =
+        level.is_object() && level["actors"].size() == 2 && crate_j && door_j &&
+        (*crate_j)["lump"]["eco-info"] == json::array({"int32", 10, 5}) &&
+        (*crate_j)["lump"]["next-actor"] == json::array({"string", "hide-door-a-1"}) &&
+        !(*crate_j)["lump"].contains("kill-mask") && !(*crate_j)["lump"].contains("visvol") &&
+        !(*crate_j)["lump"].contains("task-actor") && (*crate_j).value("game_task", -1) == 0 &&
+        !(*door_j)["lump"].contains("on-activate") && level.value("automatic_wall_detection", false) &&
+        level.value("nickname", std::string()) == "mte" && level.value("base_id", 0) == (int)default_base_id(Game::Jak3);
+    check(files && actors_ok,
+          "export for Jak 3: the files, a pickup renumbered, a link by name, the story's data left out, a door changed");
+    const json glb = read_glb_json(dir / "my-test.glb");
+    size_t surfaces = 0;
+    bool floor_ignored = false, box_collides = false;
+    if (glb.is_object())
+      for (const auto& n : glb["nodes"]) {
+        const json e = n.value("extras", json::object());
+        if (e.value("set_invisible", 0) == 1) surfaces++;
+        if (n.value("name", std::string()) == "testlvl-floor") floor_ignored = e.value("ignore", 0) == 1;
+        if (n.value("name", std::string()) == "box-1") box_collides = !e.contains("set_collision");
+      }
+    std::set<std::string> keys;
+    for (const auto& note : r.notes) keys.insert(note.key);
+    const bool notes_ok = keys.count("export.note.types_missing") && keys.count("export.note.types_mapped") &&
+                          keys.count("export.note.story_data") && keys.count("export.note.surfaces") &&
+                          keys.count("export.note.kill_masks") && keys.count("export.note.hidden") &&
+                          keys.count("export.note.pickups_mapped") && r.collision_triangles == 2 &&
+                          r.collision_from_decor == 1;
+    check(surfaces == 2 && floor_ignored && box_collides && notes_ok,
+          "export: the game's collision one node per surface, the shell not colliding twice, the box by its shape");
+    // the same level for its own game: its door, its scripts and its pickups as they are
+    o.game = Game::Jak2;
+    const bool same = datas && export_level_for_game(s, &jak2d, &jak2d, o, &r, &err);
+    const json level2 = read_jsonc_file(dir / "my-test.jsonc");
+    bool kept = false;
+    if (same && level2.is_object())
+      for (const auto& a : level2["actors"]) {
+        if (a.value("etype", std::string()) == "hide-door-a")
+          kept = a["lump"]["on-activate"] == json::array({"pair", "(want-load 'x)"});
+      }
+    check(same && kept && level2["actors"].size() == 3, "export for its own game: its types and scripts kept");
+    (void)floor_id;
+    (void)box_id;
+  }
+
+  // this editor's own tree: never jak-project's, which it neither builds against nor runs
+  {
+    const std::string library = default_library_root(), iso = default_iso_data_dir(), projects = default_projects_dir();
+    auto not_jak_project = [](const std::string& p) {
+      std::string s = p;
+      for (auto& c : s) if (c == '\\') c = '/';
+      return s.find("/jak-project/") == std::string::npos;
+    };
+    check(not_jak_project(library) && not_jak_project(iso) && not_jak_project(projects) &&
+              fs::path(iso).parent_path() == fs::path(library).parent_path() &&
+              fs::path(projects).parent_path() == fs::path(library) && fs::path(iso).filename() == "iso_data" &&
+              fs::path(projects).filename() == "projects",
+          "directories: the library, iso_data and projects defaults are this editor's own, siblings, never jak-project's");
   }
 
   // the game data shipped with the editor

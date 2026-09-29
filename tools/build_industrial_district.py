@@ -40,6 +40,7 @@ import json
 import math
 import os
 import random
+import socket
 import struct
 import subprocess
 import time
@@ -510,6 +511,15 @@ class Mcp:
     def __init__(self, port):
         self.editor = subprocess.Popen([EDITOR, '--hidden', '--remote-port', str(port)],
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # the MCP server starts an editor of its own when none answers: wait for this one first
+        for _ in range(150):
+            try:
+                socket.create_connection(('127.0.0.1', port), timeout=1).close()
+                break
+            except OSError:
+                time.sleep(0.2)
+        else:
+            raise SystemExit('the editor did not start')
         self.server = subprocess.Popen([EDITOR, '--mcp', '--remote-port', str(port)], stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         self.next_id = 1

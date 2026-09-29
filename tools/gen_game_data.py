@@ -9,11 +9,18 @@ and the extractor's type table (extractor/data/<game>/all-types.gc).
                       names its particle group)
   actors.unlisted     the logic the catalog does not offer: it does nothing, brings creatures,
                       runs a cutscene or a demo
+  actors.placeholders types the type table keeps for the entities of an older game, that spawn
+                      nothing of theirs (process-drawable-reserved)
   actors.water_looks  the model of each "look" of the water-anim actors (water, dark eco, lava)
-  oceans              the ocean maps: corner, height and the cells the ocean covers
-  levels              per level: task level, base task mask, ocean, layer or companion levels
+  oceans              the ocean maps: corner, height, the cells the ocean covers, and the color of
+                      the far ocean (the sea to the horizon, drawn behind everything)
+  levels              per level: task level, base task mask, ocean, layer or companion levels,
+                      neighbors (the levels the game displays together with it) and continue
+                      points (where the game starts the player, in meters, and the levels shown)
   story               the task nodes in game order (task masks, borrowed layers) and what the
                       story shows or hides: decor prototypes of a level, actor types
+  enums               enums of the game the export for another game maps by name (pickup-type:
+                      what crates and pickups hold)
 
 Usage: python tools/gen_game_data.py <jak-project>/goal_src [jak1 jak2 jak3]
 """
@@ -238,6 +245,15 @@ def is_new(x, type_name):
     """(new 'static 'type_name ...)"""
     return (is_list(x) and len(x) >= 3 and x[0] == 'new' and unquote(x[1]) == 'static'
             and unquote(x[2]) == type_name)
+
+
+def game_units(x):
+    """A number of the game's units (4096 per meter): a literal or (meters n), else None."""
+    if isinstance(x, (int, float)) and not isinstance(x, bool):
+        return float(x)
+    if is_list(x) and len(x) == 2 and x[0] == 'meters' and isinstance(x[1], (int, float)):
+        return float(x[1]) * 4096.0
+    return None
 
 
 def kwargs(form):
@@ -546,6 +562,12 @@ def game_data(goal_src, game):
         for m in rx_owner.finditer(text):
             g = m.groups()
             method, owner = (g[0], g[1]) if g[1] else (g[2], g[3]) if g[3] else ('', g[4]) if g[4] else (g[5], g[6])
+            # a defbehavior can name a bare base type (process, process-tree) as owner: a generic
+            # utility spawned as one-off code on many unrelated processes (a jungle camera trigger
+            # attached to `process` in Jak 1), not a type of its own; it draws nothing on its own
+            # (unlike process-drawable and below), so it never owns a model
+            if 'process-drawable' not in lineage(owner):
+                continue
             init = 'init' in (method or '')
             body = text[m.start():form_end(text, m.start())]
             for sm in rx_skel.finditer(body):
@@ -583,10 +605,16 @@ def game_data(goal_src, game):
     out['actors']['unlisted'] = sorted(t for t in parent
                                        if roles.get(t) == 'logic' and any(x in cfg['unlisted'] for x in lineage(t))
                                        and 'water-anim' not in lineage(t))  # Jak 1's water is a water-vol
+    # the types kept in the type table for the entities of older games, that spawn nothing of
+    # theirs (Jak 3's cty-fruit-stand...): not objects of the game
+    placeholders = sorted(t for t in parent if t != 'process-drawable-reserved'
+                          and 'process-drawable-reserved' in lineage(t))
+    out['actors']['placeholders'] = placeholders
     for t in list(out['actors']['objects']):
-        if t in roles:
+        if t in roles or t in placeholders:
             del out['actors']['objects'][t]
-    out['actors']['models'] = {t: ms for t, ms in sorted(type_models.items()) if t in parent or t in own_models}
+    out['actors']['models'] = {t: ms for t, ms in sorted(type_models.items())
+                               if (t in parent or t in own_models) and t not in placeholders}
     # the models of the skeleton groups by name, for the actors that choose theirs by name
     # (art-name: "skel-" + its value)
     out['actors']['skeletons'] = {re.sub(r'^skel-', '', k): v for k, v in sorted(skel_models.items())
@@ -655,9 +683,14 @@ def game_data(goal_src, game):
             if rgb:
                 color = [round(min(sum(float(c.get(k, 0)) for c in rgb) / len(rgb) / 128.0, 1.0), 3)
                          for k in ('r', 'g', 'b')]
+        far = kwargs(kw['far-color']) if is_new(kw.get('far-color'), 'vector') else {}
+        far_color = [round(min(float(far.get(k, 0.0)) / 128.0, 1.0), 3) for k in 'xyz'] if far else color
         oceans[name] = {'corner': [round(float(corner.get(k, 0.0)) / 4096.0, 4) for k in ('x', 'y', 'z')],
-                        'cell': 96.0, 'cells': rows, 'color': color}
+                        'cell': 96.0, 'cells': rows, 'color': color, 'far_color': far_color}
     out['oceans'] = dict(sorted(oceans.items()))
+
+    # --- enums: their values differ between the games, their names mostly do not ----------------
+    out['enums'] = {name: enum_values(engine, name) for name in ('pickup-type',)}
 
     # --- levels ----------------------------------------------------------------------------------
     task_bits = enum_values(engine, 'task-mask')
@@ -677,13 +710,36 @@ def game_data(goal_src, game):
                'ocean': str(ocean) if isinstance(ocean, Sym) and str(ocean) in oceans else None}
         if lev['ocean'] and ocean_height_field:
             lev['ocean_height'] = round(float(kw.get('ocean-height', 0.0)) / 4096.0, 4)
-        wants = set()
+        # the far ocean (the sea to the horizon): Jak II's ocean-far?, Jak 3's level flag; Jak 1
+        # draws it with its ocean map
+        flags = kw.get('level-flags')
+        lev['ocean_far'] = (kw.get('ocean-far?') is True or (is_list(flags) and 'ocean-far' in [str(f) for f in flags])
+                            or (game == 'jak1' and lev['ocean'] is not None))
+        # its continue points (where the game starts the player): their position, and the levels
+        # the game displays there (Jak II and III: the want list; Jak 1: lev0 and lev1)
+        continues, wants = [], set()
         for f in walk(unquote(kw.get('continues', []))):
-            if is_new(f, 'level-buffer-state'):
-                k = kwargs(f)
-                if unquote(k.get('display?')) in ('display', 'special') and unquote(k.get('name')):
-                    wants.add(str(unquote(k['name'])))
+            if not is_new(f, 'continue-point'):
+                continue
+            k = kwargs(f)
+            shows = []
+            for w in walk(k.get('want', [])):
+                if is_new(w, 'level-buffer-state') or is_new(w, 'level-buffer-state-small'):
+                    wk = kwargs(w)
+                    if unquote(wk.get('display?')) in ('display', 'special') and unquote(wk.get('name')):
+                        shows.append(str(unquote(wk['name'])))
+            for i in (0, 1):
+                lv, disp = unquote(k.get('lev%d' % i)), unquote(k.get('disp%d' % i))
+                if isinstance(lv, Sym) and disp in ('display', 'special'):
+                    shows.append(str(lv))
+            trans = kwargs(k['trans']) if is_new(k.get('trans'), 'vector') else {}
+            position = [game_units(trans.get(c, 0.0)) for c in 'xyz']
+            continues.append({'name': str(k.get('name', '')),
+                              'position': [round(v / 4096.0, 2) for v in position] if None not in position else None,
+                              'shows': sorted(set(shows))})
+            wants.update(shows)
         lev['wants'] = sorted(wants - {name})
+        lev['continues'] = continues
         borrow, display = kw.get('borrow-level'), kw.get('borrow-display?')
         slots = [str(x) if isinstance(x, Sym) else None for x in borrow[4:]] if is_list(borrow) else []
         modes = [str(unquote(x)) if isinstance(unquote(x), Sym) else None for x in display[4:]] if is_list(display) else []
@@ -854,7 +910,16 @@ def game_data(goal_src, game):
                              and levels[w]['taskname'] == name]
         # the city clears the "ctywide" bit of the task mask (its traffic manager)
         lev['traffic'] = name == 'ctywide' or 'ctywide' in lev['wants']
-    for lev in levels.values():
+    # neighbors: the levels the game displays together with it at a continue point (its own or
+    # another level's), the layers left out
+    neighbors = {name: set() for name in levels}
+    for name, lev in levels.items():
+        for cp in lev['continues']:
+            shown = {lv for lv in set(cp['shows']) | {name} if lv in levels and not levels[lv]['layer']}
+            for a in shown:
+                neighbors[a].update(shown - {a})
+    for name, lev in levels.items():
+        lev['neighbors'] = sorted(neighbors[name])
         del lev['wants']
         if not any(lv for lv, _ in lev['borrow']):
             del lev['borrow']

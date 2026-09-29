@@ -26,6 +26,7 @@ out vec3 v_nrm;
 out vec2 v_uv;
 out vec4 v_col;
 out vec4 v_tint;
+out vec3 v_world;
 void main() {
   int base = (u_instance_base + gl_InstanceID) * 5;
   mat4 model = mat4(texelFetch(u_instances, base), texelFetch(u_instances, base + 1),
@@ -38,7 +39,9 @@ void main() {
   v_uv = a_uv;
   v_col = a_col;
   v_tint = a_tint;
-  gl_Position = u_viewproj * (model * vec4(a_pos, 1.0));
+  vec4 world = model * vec4(a_pos, 1.0);
+  v_world = world.xyz;
+  gl_Position = u_viewproj * world;
 }
 )";
 
@@ -47,6 +50,7 @@ in vec3 v_nrm;
 in vec2 v_uv;
 in vec4 v_col;
 in vec4 v_tint;
+in vec3 v_world;
 uniform sampler2D u_tex;
 uniform int u_has_tex;
 uniform vec4 u_base;
@@ -55,6 +59,11 @@ uniform float u_cutoff;
 uniform int u_use_vcol;
 uniform float u_vcol_scale;
 uniform int u_shade;
+uniform int u_fog;
+uniform vec3 u_fog_color;
+uniform float u_fog_start;
+uniform float u_fog_end;
+uniform vec3 u_cam_pos;
 out vec4 o_color;
 // lit colors above 0.8 rolled off towards 1 instead of cut: a bright texture under a bright light
 // (the PS2 doubles vertex colors) keeps its detail instead of turning white
@@ -74,6 +83,11 @@ void main() {
     if (!gl_FrontFacing) n = -n;
     float l = 0.45 + 0.55 * max(dot(n, normalize(vec3(0.35, 1.0, 0.25))), 0.0);
     c.rgb *= l;
+  }
+  if (u_fog == 1) {
+    float d = length(v_world - u_cam_pos);
+    float f = clamp((d - u_fog_start) / max(u_fog_end - u_fog_start, 1.0), 0.0, 1.0);
+    c.rgb = mix(c.rgb, u_fog_color, f);
   }
   c.rgb = mix(c.rgb, v_tint.rgb, v_tint.a);
   o_color = c;
@@ -197,6 +211,11 @@ bool Renderer::init(std::string* error) {
   m_u.mesh_use_vcol = loc(m_mesh_prog, "u_use_vcol");
   m_u.mesh_vcol_scale = loc(m_mesh_prog, "u_vcol_scale");
   m_u.mesh_viewproj = loc(m_mesh_prog, "u_viewproj");
+  m_u.mesh_fog = loc(m_mesh_prog, "u_fog");
+  m_u.mesh_fog_color = loc(m_mesh_prog, "u_fog_color");
+  m_u.mesh_fog_start = loc(m_mesh_prog, "u_fog_start");
+  m_u.mesh_fog_end = loc(m_mesh_prog, "u_fog_end");
+  m_u.mesh_cam_pos = loc(m_mesh_prog, "u_cam_pos");
   m_u.solid_color = loc(m_solid_prog, "u_color");
   m_u.solid_mvp = loc(m_solid_prog, "u_mvp");
 
@@ -417,6 +436,16 @@ void Renderer::begin(const Camera& cam, int x, int y, int w, int h, const Render
   m_planes[3] = add(r3, r1, -1);
   m_planes[4] = add(r3, r2, 1);
   m_planes[5] = add(r3, r2, -1);
+  if (rs.far_ocean && rs.show_ocean) {
+    // a plane around the camera reaching the far clip, not depth tested: the scene covers it
+    const float r = cam.zfar * 0.7f, y = rs.far_ocean_y;
+    const Vec3 c{cam.pos.x, y, cam.pos.z};
+    const uint32_t col = pack_rgba(rs.far_ocean_color[0], rs.far_ocean_color[1], rs.far_ocean_color[2], 1.f);
+    const Vec3 a = c + Vec3{-r, 0, -r}, b = c + Vec3{r, 0, -r}, d = c + Vec3{r, 0, r}, e = c + Vec3{-r, 0, r};
+    tri(a, b, d, col);
+    tri(a, d, e, col);
+    flush(false);
+  }
   if (rs.show_grid) grid(cam);
 }
 
@@ -595,6 +624,10 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
   m_bound_vao = ~0u;
   glUniform1f(m_u.mesh_vcol_scale, rs.vertex_color_scale);
   glUniformMatrix4fv(m_u.mesh_viewproj, 1, GL_FALSE, m_viewproj.m);
+  glUniform3f(m_u.mesh_fog_color, rs.fog_color[0], rs.fog_color[1], rs.fog_color[2]);
+  glUniform1f(m_u.mesh_fog_start, rs.fog_start);
+  glUniform1f(m_u.mesh_fog_end, rs.fog_end);
+  glUniform3f(m_u.mesh_cam_pos, m_cam_pos.x, m_cam_pos.y, m_cam_pos.z);
   if (rs.wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDepthMask(GL_TRUE);
   // opaque and masked primitives, then blended ones (with depth writes too: the PS2 draws most
@@ -610,6 +643,7 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
     }
     for (const auto& b : buckets) {
       auto& gm = gpu_mesh(*b.mesh);
+      const bool backdrop = rs.fog && b.mesh->extras.value("og_backdrop", false);
       bool based = false;
       for (const auto& gp : gm.prims) {
         const Material* mat = gp.material >= 0 && gp.material < (int)scene.materials.size()
@@ -618,6 +652,7 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
         if (material_pass(mat) != pass) continue;
         if (!based) {
           bind_instances(b.first);
+          glUniform1i(m_u.mesh_fog, backdrop ? 1 : 0);
           based = true;
         }
         if (pass == 2) set_blend(mat->blend);
@@ -701,6 +736,7 @@ void Renderer::draw_mesh(Mesh& mesh, const Mat4& world, const std::vector<Materi
   m_bound_vao = ~0u;
   glUniform1f(m_u.mesh_vcol_scale, rs.vertex_color_scale);
   glUniformMatrix4fv(m_u.mesh_viewproj, 1, GL_FALSE, m_viewproj.m);
+  glUniform1i(m_u.mesh_fog, 0);  // a single mesh drawn apart (preview, thumbnail): no fog
   // a see-through preview does not hide what is behind it
   const bool ghost = alpha < 1.f;
   bind_instances(0);

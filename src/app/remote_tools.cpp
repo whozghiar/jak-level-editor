@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <set>
 #include <unordered_set>
 
 #include "app/app.h"
@@ -125,6 +126,7 @@ std::string App::capture_view_png(int w, int h) {
   glClearColor(0.07f, 0.08f, 0.09f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   scene.begin_frame();
+  set_ocean_backdrop();
   renderer.begin(camera, 0, 0, w, h, rs, (float)w, (float)h);
   renderer.draw_scene(scene, rs, selection, 0);
   if (rs.show_ocean && m_ocean && document_open())
@@ -134,6 +136,19 @@ std::string App::capture_view_png(int w, int h) {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
   return base64_encode(png.data(), png.size());
+}
+
+// args.game: the extracted game the library shows from then on (as the Levels panel's choice)
+std::string App::remote_use_game(const json& args) {
+  if (!args.contains("game")) return {};
+  const std::string game = args.value("game", std::string());
+  if (game == library.game()) return {};
+  for (const auto& g : games)
+    if (g.game == game) {
+      browse_game(game);
+      return library.game() == game ? std::string() : "the game " + game + " could not be read";
+    }
+  return "game: not extracted (get_status: games)";
 }
 
 json App::remote_status() {
@@ -152,7 +167,7 @@ json App::remote_status() {
               {"elements", scene.nodes.size()},
               {"actors", actors},
               {"unsaved", history.revision() != saved_revision && document_open()},
-              {"loading", m_level_future.valid()}}},
+              {"loading", m_level_future.valid() || level_adding()}}},
             {"camera",
              {{"position", vec3_json(camera.pos)},
               {"yaw_deg", round3(camera.yaw * 57.29578f)},
@@ -162,14 +177,78 @@ json App::remote_status() {
             {"can_undo", history.can_undo()},
             {"can_redo", history.can_redo()}};
   if (const GameData* data = document_game_data(); data && data->has_story()) {
-    json s = {{"enabled", story.enabled}, {"step", story.step}, {"steps", data->step_count()},
-              {"changes_of_this_level", story_steps}};
+    json s = {{"enabled", story.enabled}, {"step", story.step}, {"steps", data->step_count()}};
     if (story.step > 1) s["after_node"] = data->node(story.step - 1).name;
+    // each level at its point: its states (the steps where it changes) and the one shown
+    json levels = json::object();
+    auto level_json = [&](const std::string& name, int step) {
+      const auto states = story_states(name == scene.settings.level ? std::string() : name);
+      int state = 1;
+      for (size_t i = 1; i < states.size(); i++)
+        if (states[i] <= step) state = (int)i + 1;
+      json l = {{"step", step}, {"state", state}, {"states", states}};
+      if (step > 1) l["after_node"] = data->node(step - 1).name;
+      return l;
+    };
+    levels[scene.settings.level] = level_json(scene.settings.level, story.step);
+    for (const auto& [name, changes] : level_story_steps) levels[name] = level_json(name, story.step_of(name));
+    s["levels"] = levels;
     j["story"] = s;
   }
   if (document_open()) {
     const AABB b = scene.focus_bounds();
     if (b.valid()) j["document"]["bounds"] = {{"min", vec3_json(b.lo)}, {"max", vec3_json(b.hi)}};
+    // its levels: the one opened, the ones added, the companions (layers left out)
+    json levels = json::array();
+    for (const auto& l : document_levels()) {
+      if (l.role == DocumentLevel::Layer) continue;
+      json e = {{"name", l.name},
+                {"role", l.role == DocumentLevel::Main ? "opened" : l.role == DocumentLevel::Added ? "added" : "companion"}};
+      if (l.group) {
+        e["group"] = l.group;
+        if (const Node* g = scene.find(l.group)) e["visible"] = g->visible;
+      }
+      levels.push_back(e);
+    }
+    j["document"]["levels"] = levels;
+    if (level_adding()) j["document"]["adding"] = m_adding_level;
+  }
+  return j;
+}
+
+json App::remote_level_json(const std::string& name, const std::string& game) {
+  json j = {{"name", name}};
+  AssetLibrary* lib = game.empty() ? nullptr : library_for(game);
+  if (!lib)
+    for (auto& [g, l] : all_libraries)
+      if (l.level(name)) {
+        lib = &l;
+        break;
+      }
+  if (!lib) lib = &library;
+  const LevelEntry* entry = lib->level(name);
+  j["in_library"] = entry != nullptr;
+  if (entry) j["dgo"] = entry->dgo;
+  for (const auto& l : document_levels()) {
+    if (l.name != name || l.role == DocumentLevel::Layer) continue;
+    j["in_document"] = l.role == DocumentLevel::Main ? "opened" : l.role == DocumentLevel::Added ? "added" : "companion";
+    if (l.group) j["group"] = l.group;
+    const AABB b = document_level_bounds(l.group);
+    if (b.valid()) j["bounds"] = {{"min", vec3_json(b.lo)}, {"max", vec3_json(b.hi)}};
+    break;
+  }
+  if (!j.contains("in_document")) j["in_document"] = false;
+  // what moves it whole (transform_nodes): its group, or the roots of the level opened
+  if (j["in_document"] == "opened" || j["in_document"] == "added")
+    j["roots"] = document_level_roots(j.value("group", 0u));
+  const GameData* data = game_data_for(lib->game()).get();
+  if (const LevelInfo* info = data ? data->level(name) : nullptr) {
+    j["neighbors"] = info->neighbors;
+    j["companions"] = info->companions;
+    json cps = json::array();
+    for (const auto& c : info->continues)
+      cps.push_back({{"name", c.name}, {"position", vec3_json(c.position)}, {"shows", c.shows}});
+    j["continue_points"] = cps;
   }
   return j;
 }
@@ -183,20 +262,89 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     reply(ok(remote_status()));
 
   } else if (tool == "list_levels") {
+    if (const std::string err = remote_use_game(args); !err.empty()) return reply(fail(err));
     const std::string f = lower(args.value("filter", std::string()));
+    // near: only the levels the game displays together with that one
+    const std::string near = args.value("near", std::string());
+    const GameData* data = game_data_for(library.game()).get();
+    const LevelInfo* around = data && !near.empty() ? data->level(near) : nullptr;
+    if (!near.empty() && !around) return reply(fail("near: no game data for the level '" + near + "'"));
+    std::set<std::string> in_document;
+    for (const auto& l : document_levels())
+      if (l.role != DocumentLevel::Layer) in_document.insert(l.name);
     json levels = json::array();
-    for (const auto& l : library.levels())
-      if (l.listed && (f.empty() || l.name.find(f) != std::string::npos || lower(l.dgo).find(f) != std::string::npos))
-        levels.push_back({{"name", l.name}, {"dgo", l.dgo}});
+    for (const auto& l : library.levels()) {
+      if (!l.listed || !(f.empty() || l.name.find(f) != std::string::npos || lower(l.dgo).find(f) != std::string::npos))
+        continue;
+      if (around && std::find(around->neighbors.begin(), around->neighbors.end(), l.name) == around->neighbors.end())
+        continue;
+      json e = {{"name", l.name}, {"dgo", l.dgo}};
+      if (in_document.count(l.name)) e["in_document"] = true;
+      levels.push_back(e);
+    }
     reply(ok({{"game", library.game()}, {"levels", levels}}));
 
-  } else if (tool == "open_level") {
+  } else if (tool == "get_level_info") {
+    const std::string name = args.value("name", scene.settings.level);
+    if (name.empty()) return reply(fail("name: a level (see list_levels)"));
+    reply(ok(remote_level_json(name, args.value("game", std::string()))));
+
+  } else if (tool == "add_level") {
+    if (const std::string err = remote_use_game(args); !err.empty()) return reply(fail(err));
     const std::string name = args.value("name", std::string());
     const LevelEntry* level = library.level(name);
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
+    std::string err;
+    const bool with_actors = load_actors;
+    load_actors = args.value("actors", true);
+    const bool started = add_level_to_document(*level, &err);
+    load_actors = with_actors;
+    if (!started) return reply(fail(err));
+    const uint64_t before = m_levels_added;
+    m_remote_waits.push_back([this, reply, name, before]() {
+      if (m_levels_added == before) return false;
+      if (!m_add_error.empty()) reply(fail(m_add_error));
+      else reply(ok(remote_level_json(name)));
+      return true;
+    });
+
+  } else if (tool == "remove_level") {
+    const std::string name = args.value("name", std::string());
+    uint32_t group = 0;
+    for (const auto& l : document_levels())
+      if (l.name == name && l.role == DocumentLevel::Added) group = l.group;
+    if (!group) return reply(fail("no level '" + name + "' added to the document (the level opened stays)"));
+    std::string err;
+    if (!remove_document_level(group, &err)) return reply(fail(err));
+    reply(ok(remote_status()));
+
+  } else if (tool == "set_visibility") {
+    const auto ids = ids_arg(args);
+    if (ids.empty() || !args.contains("visible") || !args["visible"].is_boolean())
+      return reply(fail("ids and visible (true or false)"));
+    const bool visible = args["visible"].get<bool>();
+    NodeChange c(scene);
+    size_t changed = 0;
+    for (auto id : ids)
+      if (Node* n = scene.find(id); n && n->visible != visible) {
+        c.save(id);
+        n->visible = visible;
+        changed++;
+      }
+    if (changed) history.push(c.commit(tr("undo.visibility")));
+    reply(ok({{"changed", changed}}));
+
+  } else if (tool == "open_level") {
+    const std::string name = args.value("name", std::string());
     if (m_level_future.valid()) return reply(fail("a level is already loading"));
     if (remote_unsaved(args)) return reply(fail("the document has unsaved changes: save_project first, or discard_changes: true"));
+    if (const std::string err = remote_use_game(args); !err.empty()) return reply(fail(err));
+    const LevelEntry* level = library.level(name);
+    if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
+    const bool before = load_actors;
+    load_actors = args.value("actors", true);
     load_level(*level);
+    load_actors = before;
     m_remote_waits.push_back([this, reply, name]() {
       if (m_level_future.valid()) return false;
       if (scene.settings.source_group != name) reply(fail("the level " + name + " could not be opened (see the editor's log)"));
@@ -219,6 +367,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "list_catalog") {
     const std::string family = args.value("family", std::string());
+    const std::string game_f = args.value("game", std::string());
     const std::string f = lower(args.value("filter", std::string()));
     const int offset = std::max(0, args.value("offset", 0));
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
@@ -226,9 +375,10 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     int matching = 0;
     for (const auto& o : catalog) {
       if (!family.empty() && o.family != family) continue;
+      if (!game_f.empty() && o.game != game_f) continue;
       if (!f.empty() && o.name.find(f) == std::string::npos && o.etype.find(f) == std::string::npos) continue;
       if (matching++ < offset || (int)objects.size() >= limit) continue;
-      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family}};
+      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family}, {"game", o.game}};
       if (!o.model.empty()) j["model"] = o.model;
       else j["drawn_without_model"] = true;
       if (o.count) j["in_game"] = o.count;
@@ -240,15 +390,17 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     reply(ok({{"total", matching}, {"offset", offset}, {"objects", objects}, {"families", families}}));
 
   } else if (tool == "list_models") {
+    const std::string game_f = args.value("game", std::string());
     const std::string f = lower(args.value("filter", std::string()));
     const int offset = std::max(0, args.value("offset", 0));
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
     json models = json::array();
     int matching = 0;
     for (const auto& m : catalog_models) {
+      if (!game_f.empty() && m.game != game_f) continue;
       if (!f.empty() && m.name.find(f) == std::string::npos && m.group.find(f) == std::string::npos) continue;
       if (matching++ < offset || (int)models.size() >= limit) continue;
-      models.push_back({{"name", m.name}, {"from", m.group}});
+      models.push_back({{"name", m.name}, {"from", m.group}, {"game", m.game}});
     }
     reply(ok({{"total", matching}, {"offset", offset}, {"models", models}}));
 
@@ -268,6 +420,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
           if (matching++ < offset || (int)parts.size() >= limit) continue;
           json j = {{"name", e.part.name},
                     {"level", e.level},
+                    {"game", e.game},
                     {"kind", e.part.kind == CatalogPart::Kind::Prototype ? "prototype" : "piece"},
                     {"triangles", e.part.triangles}};
           if (e.levels > 1) j["in_levels"] = e.levels;
@@ -278,7 +431,16 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       });
       return;
     }
-    const LevelEntry* level = library.level(name);
+    // any extracted game: the one given, else whichever has that level
+    const std::string game_f = args.value("game", std::string());
+    AssetLibrary* lib = game_f.empty() ? nullptr : library_for(game_f);
+    if (!lib)
+      for (auto& [g, l] : all_libraries)
+        if (l.level(name)) {
+          lib = &l;
+          break;
+        }
+    const LevelEntry* level = lib ? lib->level(name) : nullptr;
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
     const std::string background = level->background;
     m_remote_waits.push_back([this, reply, background, f, offset, limit, name]() {
@@ -392,6 +554,46 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     std::string err;
     if (!export_navmeshes(path, first, &err)) return reply(fail(err));
     reply(ok({{"path", path}, {"meshes", navmesh_nodes().size()}, {"first_id", first}}));
+
+  } else if (tool == "export_level") {
+    if (!document_open()) return reply(fail("no level open: open_level or open_project first"));
+    Game game = scene.settings.game;
+    if (args.contains("game")) {
+      const std::string g = args.value("game", std::string());
+      if (g != "jak1" && g != "jak2" && g != "jak3") return reply(fail("game: jak1, jak2 or jak3"));
+      game = game_from_name(g);
+    }
+    LevelExportOptions o = default_export_options(game);
+    o.name = args.value("name", std::string());
+    o.nickname = args.value("nickname", default_nickname(o.name));
+    o.iso_name = args.value("iso_name", default_iso_name(o.name));
+    if (args.contains("base_id") && args["base_id"].is_number_integer()) o.base_id = args["base_id"].get<uint32_t>();
+    o.folder = args.value("folder", o.folder);
+    o.actors = args.value("actors", true);
+    const std::string collision = args.value("collision", std::string("game"));
+    if (collision != "game" && collision != "decor") return reply(fail("collision: 'game' or 'decor'"));
+    o.game_collision = collision == "game";
+    vec3_arg(args, "start", &o.start);
+    if (const std::string bad = check_export_names(o); !bad.empty()) return reply(fail(tr_en(bad.c_str())));
+    LevelExportReport r;
+    std::string err;
+    if (!export_for_game(o, &r, &err)) return reply(fail(err));
+    json notes = json::array();
+    for (const auto& n : r.notes)
+      notes.push_back({{"key", n.key}, {"count", n.count}, {"detail", n.detail},
+                       {"text", strf(tr_en(n.key.c_str()), n.count, n.detail.c_str())}});
+    reply(ok({{"folder", r.dir},
+              {"files", r.files},
+              {"game", game_name(game)},
+              {"meshes", r.meshes},
+              {"triangles", r.triangles},
+              {"collision_triangles", r.collision_triangles},
+              {"meshes_colliding_by_shape", r.collision_from_decor},
+              {"actors", r.actors},
+              {"art_groups", r.art_groups},
+              {"navmeshes", r.navmeshes},
+              {"start", vec3_json(o.start)},
+              {"notes", notes}}));
 
   } else if (tool == "find_nodes") {
     const std::string name = lower(args.value("name", std::string()));
@@ -537,8 +739,30 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     Vec3 position, target;
     if (args.contains("frame")) {
       const json& f = args["frame"];
+      // a level of the document by its name, its group (0 for the one opened) or -1
+      auto group_of = [&](const json& name) -> int64_t {
+        if (!name.is_string()) return -1;
+        for (const auto& l : document_levels())
+          if (l.name == name.get<std::string>() && l.role != DocumentLevel::Layer) return l.group;
+        return -1;
+      };
       if (f.is_string() && f.get<std::string>() == "all") {
         frame_all();
+      } else if (f.is_object() && f.contains("level")) {
+        const int64_t g = group_of(f["level"]);
+        if (g < 0) return reply(fail("frame.level: a level of the document (get_status: document.levels)"));
+        const AABB b = document_level_bounds((uint32_t)g);
+        if (!b.valid()) return reply(fail("frame.level: that level has nothing to frame"));
+        camera.frame(b);
+      } else if (f.is_object() && f.contains("junction")) {
+        const json& pair = f["junction"];
+        const int64_t a = pair.is_array() && pair.size() == 2 ? group_of(pair[0]) : -1;
+        const int64_t b = pair.is_array() && pair.size() == 2 ? group_of(pair[1]) : -1;
+        if (a < 0 || b < 0 || a == b) return reply(fail("frame.junction: two levels of the document"));
+        const AABB j = document_junction((uint32_t)a, (uint32_t)b);
+        if (!j.valid()) return reply(fail("frame.junction: these two levels do not meet"));
+        camera.pitch = -0.6f;
+        camera.frame(j);
       } else {
         auto ids = f.is_array() ? ids_arg(args, "frame") : std::vector<uint32_t>(selection.begin(), selection.end());
         AABB b;
@@ -568,6 +792,16 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     reply(answer);
 
   } else if (tool == "select") {
+    if (args.contains("level")) {
+      // a whole level: its group, or the root elements of the level opened
+      const std::string name = args.value("level", std::string());
+      int64_t group = -1;
+      for (const auto& l : document_levels())
+        if (l.name == name && (l.role == DocumentLevel::Main || l.role == DocumentLevel::Added)) group = l.group;
+      if (group < 0) return reply(fail("level: the level opened or a level added (get_status: document.levels)"));
+      select_level((uint32_t)group);
+      return reply(ok({{"selection", std::vector<uint32_t>(selection.begin(), selection.end())}}));
+    }
     selection.clear();
     for (auto id : ids_arg(args))
       if (scene.find(id)) selection.insert(id);
@@ -578,17 +812,35 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const GameData* data = document_game_data();
     if (!data || !data->has_story()) return reply(fail("no story view for this document (Jak II and Jak 3 levels only)"));
     StoryView v = story;
+    // which level: the one opened (the default), or a level added, at its own point of the story
+    std::string level = args.value("level", std::string());
+    if (level == scene.settings.level) level.clear();
+    if (!level.empty() && !level_story_steps.count(level))
+      return reply(fail("level: the level opened or a level added (get_status: document.levels)"));
+    auto set_step = [&](int s) {
+      if (level.empty()) v.step = s;
+      else v.level_steps[level] = s;
+    };
     if (args.contains("enabled") && args["enabled"].is_boolean()) v.enabled = args["enabled"].get<bool>();
-    if (args.contains("step") && args["step"].is_number_integer()) v.step = args["step"].get<int>();
+    if (args.contains("step") && args["step"].is_number_integer()) set_step(args["step"].get<int>());
+    if (args.contains("state") && args["state"].is_number_integer()) {
+      const auto states = story_states(level);
+      const int s = args["state"].get<int>();
+      if (s < 1 || s > (int)states.size())
+        return reply(fail("state: 1 to " + std::to_string(states.size()) + " for this level"));
+      set_step(states[s - 1]);
+      v.enabled = true;
+    }
     if (args.contains("after_node") && args["after_node"].is_string()) {
       const std::string node = args["after_node"].get<std::string>();
       int found = -1;
       for (int i = 0; i < data->step_count(); i++)
         if (data->node(i).name == node) found = i;
       if (found < 0) return reply(fail("no task node '" + node + "'"));
-      v.step = found + 1;
+      set_step(found + 1);
       v.enabled = true;
     }
+    story_level = level;
     set_story_view(v);
     reply(ok(remote_status()["story"]));
 
@@ -664,20 +916,22 @@ void App::remote_place(const json& args, RemoteReply reply) {
   }
   scale = {std::max(scale.x, 0.01f), std::max(scale.y, 0.01f), std::max(scale.z, 0.01f)};
 
-  // what to place
+  // what to place: by name (and, when several extracted games have one, its own game)
+  const std::string game_f = args.value("game", std::string());
+  auto matches_game = [&](const std::string& g) { return game_f.empty() || g == game_f; };
   if (kind == "model") {
     const CatalogModel* found = nullptr;
     for (const auto& m : catalog_models)
-      if (m.name == name) found = &m;
+      if (m.name == name && matches_game(m.game)) found = &m;
     if (!found) return reply(fail("no model '" + name + "' in the catalog (see list_models)"));
     start_model_placement(*found, false);
   } else if (kind == "object") {
     const CatalogObject* found = nullptr;
     for (const auto& o : catalog)
-      if (o.name == name) found = &o;
+      if (o.name == name && matches_game(o.game)) found = &o;
     if (!found)
       for (const auto& o : catalog)
-        if (o.etype == name && !found) found = &o;
+        if (o.etype == name && matches_game(o.game) && !found) found = &o;
     if (!found) return reply(fail("no object '" + name + "' in the catalog (see list_catalog)"));
     start_object_placement(*found, false);
   } else if (kind == "prefab") {
@@ -689,8 +943,9 @@ void App::remote_place(const json& args, RemoteReply reply) {
     start_placement(found->path, found->name, false);
   } else if (kind == "decor") {
     std::string level_name = args.value("level", std::string());
+    std::string level_game = args.value("game", std::string());
     if (level_name.empty()) {
-      // the first level with a part of that name
+      // the first level with a part of that name, of any extracted game
       if (!m_index_applied) {
         m_remote_waits.push_back([this, args, reply]() {
           if (!m_index_applied) return false;
@@ -702,18 +957,27 @@ void App::remote_place(const json& args, RemoteReply reply) {
       for (const auto& e : all_parts)
         if (e.part.name == name || e.part.name == name + ".mb") {
           level_name = e.level;
+          level_game = e.game;
           break;
         }
       if (level_name.empty()) return reply(fail("no decor part '" + name + "' in the levels (see list_decor)"));
     }
-    const LevelEntry* level = library.level(level_name);
+    // its own library: the game given, else whichever extracted game has that level (captured by
+    // value: used again next frame, after this call returns, while its own model loads)
+    auto level_library = [this, level_game, level_name]() -> AssetLibrary* {
+      if (AssetLibrary* lib = level_game.empty() ? nullptr : library_for(level_game)) return lib;
+      for (auto& [g, lib] : all_libraries)
+        if (lib.level(level_name)) return &lib;
+      return &library;
+    };
+    const LevelEntry* level = level_library()->level(level_name);
     if (!level) return reply(fail("level: the level the decor part comes from (see list_decor)"));
     auto source = store.level(level->background, true);
     if (!source) {
       if (store.failed_level(level->background)) return reply(fail("the decor of that level cannot be read"));
       // loading: try again next frame
-      m_remote_waits.push_back([this, args, reply, level_name]() {
-        const LevelEntry* level = library.level(level_name);
+      m_remote_waits.push_back([this, args, reply, level_name, level_library]() {
+        const LevelEntry* level = level_library()->level(level_name);
         if (level && !store.level(level->background, true) && !store.failed_level(level->background)) return false;
         remote_place(args, reply);
         return true;

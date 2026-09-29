@@ -243,8 +243,10 @@ Mat4 Scene::world(const Node& n) const {
 const SceneCache& Scene::cache() const {
   SceneCache& c = m_cache;
   const size_t n = nodes.size();
-  if (c.frame == m_frame && c.count == n && (!n || (c.first_id == nodes.front().id && c.last_id == nodes.back().id)))
-    return c;
+  // the node set itself (as opposed to only their transforms, which a drag changes every frame):
+  // count and the id at each end are enough to tell, as cheaply as the frame counter itself
+  const bool same_nodes = c.count == n && (!n || (c.first_id == nodes.front().id && c.last_id == nodes.back().id));
+  if (c.frame == m_frame && same_nodes) return c;
   c.frame = m_frame;
   c.count = n;
   c.first_id = n ? nodes.front().id : 0;
@@ -290,17 +292,23 @@ const SceneCache& Scene::cache() const {
       done[j] = 1;
     }
   }
-  c.mesh_groups.clear();
-  std::unordered_map<const Mesh*, size_t> group_of;
-  for (size_t i = 0; i < n; i++) {
-    const Node& node = nodes[i];
-    if (node.kind != NodeKind::Render || !node.mesh) continue;
-    auto it = group_of.find(node.mesh.get());
-    if (it == group_of.end()) {
-      it = group_of.emplace(node.mesh.get(), c.mesh_groups.size()).first;
-      c.mesh_groups.push_back({node.mesh.get(), {}});
+  // instances of a prototype (a decor piece, an actor's model) keep the same index in `nodes`
+  // while only transforms change (a drag): regrouping by mesh, with its many small allocations,
+  // is only needed when the node set itself changed
+  if (!same_nodes) {
+    c.mesh_groups.clear();
+    std::unordered_map<const Mesh*, size_t> group_of;
+    group_of.reserve(n / 4 + 1);
+    for (size_t i = 0; i < n; i++) {
+      const Node& node = nodes[i];
+      if (node.kind != NodeKind::Render || !node.mesh) continue;
+      auto it = group_of.find(node.mesh.get());
+      if (it == group_of.end()) {
+        it = group_of.emplace(node.mesh.get(), c.mesh_groups.size()).first;
+        c.mesh_groups.push_back({node.mesh.get(), {}});
+      }
+      c.mesh_groups[it->second].second.push_back((uint32_t)i);
     }
-    c.mesh_groups[it->second].second.push_back((uint32_t)i);
   }
   return c;
 }
@@ -338,19 +346,18 @@ AABB Scene::bounds() const {
   return b;
 }
 
-AABB Scene::focus_bounds() const {
-  // the 2nd to 98th percentile of the nodes' boxes on each axis
+AABB focus_box(const std::vector<AABB>& boxes) {
+  AABB all;
   std::vector<float> lo[3], hi[3];
-  for (const auto& n : nodes) {
-    if (n.kind == NodeKind::Group || n.kind == NodeKind::Collision) continue;
-    AABB b = world_bounds(n);
+  for (const auto& b : boxes) {
     if (!b.valid()) continue;
+    all.add(b);
     for (int a = 0; a < 3; a++) {
       lo[a].push_back(b.lo[a]);
       hi[a].push_back(b.hi[a]);
     }
   }
-  if (lo[0].size() < 20) return bounds();
+  if (lo[0].size() < 20) return all;
   AABB out;
   Vec3 l, h;
   for (int a = 0; a < 3; a++) {
@@ -361,7 +368,15 @@ AABB Scene::focus_bounds() const {
   }
   out.add(l);
   out.add(h);
-  return out.valid() ? out : bounds();
+  return out.valid() ? out : all;
+}
+
+AABB Scene::focus_bounds() const {
+  std::vector<AABB> boxes;
+  for (const auto& n : nodes)
+    if (n.kind != NodeKind::Group && n.kind != NodeKind::Collision) boxes.push_back(world_bounds(n));
+  const AABB b = focus_box(boxes);
+  return b.valid() ? b : bounds();
 }
 
 int Scene::add_material(Material m) {
@@ -379,6 +394,69 @@ void Scene::clear() {
   textures.clear();
   materials.clear();
   next_id = 1;
+}
+
+namespace {
+
+uint64_t fnv1a(const std::vector<uint8_t>& data) {
+  uint64_t h = 1469598103934665603ull;
+  for (uint8_t b : data) h = (h ^ b) * 1099511628211ull;
+  return h;
+}
+
+bool same_material(const Material& a, const Material& b) {
+  return a.name == b.name && a.texture == b.texture && a.alpha == b.alpha && a.blend == b.blend &&
+         a.cutoff == b.cutoff && a.double_sided == b.double_sided && a.base_color.x == b.base_color.x &&
+         a.base_color.y == b.base_color.y && a.base_color.z == b.base_color.z && a.base_color.w == b.base_color.w;
+}
+
+}  // namespace
+
+std::vector<uint32_t> Scene::append(Scene&& src) {
+  // textures: the same image (name, size, pixels) is shared
+  std::unordered_map<uint64_t, std::vector<int>> by_hash;
+  for (int i = 0; i < (int)textures.size(); i++) by_hash[fnv1a(textures[i].rgba)].push_back(i);
+  std::vector<int> tex_map(src.textures.size(), -1);
+  for (size_t i = 0; i < src.textures.size(); i++) {
+    Texture& t = src.textures[i];
+    const uint64_t h = fnv1a(t.rgba);
+    for (int j : by_hash[h])
+      if (textures[j].name == t.name && textures[j].width == t.width && textures[j].height == t.height &&
+          textures[j].rgba == t.rgba)
+        tex_map[i] = j;
+    if (tex_map[i] < 0) {
+      tex_map[i] = add_texture(std::move(t));
+      by_hash[h].push_back(tex_map[i]);
+    }
+  }
+  std::vector<int> mat_map(src.materials.size(), -1);
+  for (size_t i = 0; i < src.materials.size(); i++) {
+    Material m = std::move(src.materials[i]);
+    if (m.texture >= 0 && m.texture < (int)tex_map.size()) m.texture = tex_map[m.texture];
+    for (int j = 0; j < (int)materials.size() && mat_map[i] < 0; j++)
+      if (same_material(materials[j], m)) mat_map[i] = j;
+    if (mat_map[i] < 0) mat_map[i] = add_material(std::move(m));
+  }
+  // the meshes (shared by the copies of a prototype) take the new material numbers once
+  std::set<Mesh*> renumbered;
+  for (auto& n : src.nodes) {
+    if (!n.mesh || !renumbered.insert(n.mesh.get()).second) continue;
+    for (auto& p : n.mesh->prims)
+      if (p.material >= 0 && p.material < (int)mat_map.size()) p.material = mat_map[p.material];
+  }
+  std::unordered_map<uint32_t, uint32_t> ids;
+  for (const auto& n : src.nodes) ids[n.id] = next_id++;
+  std::vector<uint32_t> roots;
+  nodes.reserve(nodes.size() + src.nodes.size());
+  for (auto& n : src.nodes) {
+    n.id = ids[n.id];
+    auto p = n.parent ? ids.find(n.parent) : ids.end();
+    n.parent = p != ids.end() ? p->second : 0;
+    if (!n.parent) roots.push_back(n.id);
+    nodes.push_back(std::move(n));
+  }
+  src.clear();
+  return roots;
 }
 
 }  // namespace ogle

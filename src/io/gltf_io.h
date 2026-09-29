@@ -6,7 +6,11 @@
 //   Project : the editor's document. Keeps the hierarchy, every node kind and the editor's extras
 //             (og_kind, the surface of each collision triangle, actor data).
 //   Prefab  : some nodes and their descendants, placed around a pivot (a prefab file).
+//   Builder : for OpenGOAL's level builder (io/game_export.h): some nodes alone, each at its world
+//             matrix, with the builder's extras and none of the editor's, and more meshes.
 
+#include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -32,12 +36,16 @@ struct ImportResult {
 bool import_gltf(Scene& scene, const std::string& path, const ImportOptions& opts,
                  ImportResult* result, std::string* error);
 
-enum class ExportMode { Project, Prefab };
+enum class ExportMode { Project, Prefab, Builder };
 
 struct ExportOptions {
   ExportMode mode = ExportMode::Project;
-  std::vector<uint32_t> only;  // Prefab mode: these nodes and their descendants
+  std::vector<uint32_t> only;  // Prefab mode: these nodes and their descendants; Builder: these alone
   Mat4 pivot = Mat4::identity();  // Prefab mode: the roots are written relative to this frame
+  // Builder mode: the extras of each node (none when missing), and meshes in world space written
+  // as more nodes, with their extras
+  std::map<uint32_t, json> node_extras;
+  std::vector<std::pair<std::shared_ptr<Mesh>, json>> extra_meshes;
 };
 
 bool export_glb(const Scene& scene, const std::string& path, const ExportOptions& opts,

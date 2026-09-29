@@ -18,6 +18,7 @@ struct Prefs {
   std::map<std::string, std::string> extract_sources;  // game -> the user's .iso or disc folder
   std::string language;                                // "" = the system's
   std::vector<std::string> recent_projects;
+  std::map<std::string, std::string> export_folders;   // game -> where levels are exported for it
   // the command line modes (captures, tests) read the preferences, never write them
   static inline bool read_only = false;
 

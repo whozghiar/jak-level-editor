@@ -1,9 +1,10 @@
 # A guided tour of the OpenGOAL Level Editor
 
 This tour shows, picture by picture, how the editor works and why it works that way: from your
-game disc to a level you built yourself, by hand or with an AI assistant. Every picture was made by
-the editor itself (its `--screenshot` mode, see [the last part](#making-these-screenshots-again)),
-with Jak II (PAL) and the interface in English.
+game disc to a level you built yourself, by hand or with an AI assistant, and exported for the
+game. Every picture was made by the editor itself (its `--screenshot` mode, see
+[the last part](#making-these-screenshots-again)), with Jak II (PAL) and the interface in English,
+and two with Jak and Daxter and Jak 3 (NTSC).
 
 1. [The approach](#the-approach)
 2. [Extract your game](#1-extract-your-game)
@@ -17,8 +18,10 @@ with Jak II (PAL) and the interface in English.
 10. [Let an assistant build it](#9-let-an-assistant-build-it)
 11. [A whole district, by an assistant](#10-a-whole-district-by-an-assistant)
 12. [Nav meshes: where the creatures walk](#11-nav-meshes-where-the-creatures-walk)
-13. [Save, and find help](#12-save-and-find-help)
-14. [Making these screenshots again](#making-these-screenshots-again)
+13. [Several levels, side by side](#12-several-levels-side-by-side)
+14. [Export it for the game](#13-export-it-for-the-game)
+15. [Save, and find help](#14-save-and-find-help)
+16. [Making these screenshots again](#making-these-screenshots-again)
 
 ## The approach
 
@@ -34,6 +37,7 @@ flowchart LR
     library --> editor["The editor"]
     data --> editor
     editor --> project["Your level<br/>(project .glb, prefabs)"]
+    editor --> export["A custom level of OpenGOAL<br/>for Jak 1, Jak II or Jak 3"]
     assistant["AI assistant<br/>(Claude Code...)"] <-->|"MCP tools"| editor
 ```
 
@@ -66,6 +70,15 @@ its serial number (here Jak II, PAL, SCES-51608). Choose where the levels go (3)
 editor's folder by default, and click **Extract all the levels**. For Jak II, the 147 levels of the
 disc took 54 seconds.
 
+The disc can be anywhere: nothing has to be copied to a particular folder, but the dialog opens on
+`iso_data/` in the editor's own folder by default (`iso_data/jak1`, `iso_data/jak2`,
+`iso_data/jak3`, or however you like: it is ignored by git), ready if that is where you put yours.
+Each game goes to its own folder of the library, and the Levels panel switches between them.
+
+![Jak and Daxter: the village, its sea and the far sea to the horizon](19-jak1.png)
+
+![Jak 3: Spargus](20-jak3.png)
+
 ## 2. Open a level
 
 ![A level opened: the Levels panel, the 3D view and the inspector](01-overview.png)
@@ -80,20 +93,22 @@ The window has three parts:
 - on the right, the **inspector**: what is loaded, or what is selected.
 
 Here is Jak II's atoll: 13,278 elements and 81 actors, drawn with the colors of its lights, its
-water and its ocean. Levels open **without their creatures** (enemies, characters, the Titan suit):
-the editor is for places and objects. The level the game shows with this one (`atollext`) is shown
-too, and can be hidden in the inspector.
+water and its ocean, and the far ocean to the horizon as the game draws it. Levels open **without
+their creatures** (enemies, characters, the Titan suit): the editor is for places and objects; with
+**With its actors** unchecked, a level opens with its decor alone. The level the game shows with
+this one (`atollext`) is shown too, and can be hidden in the inspector.
 
 ## 3. See it along the story
 
 ![The palace square after Mar's tomb opened: the broken statue and its rubble](05-story.png)
 
 A level changes as the story goes: in Jak II, the statue of the palace square falls when Mar's tomb
-opens. The **story bar**, at the bottom of the view, shows the level at a point of the game: move
-along the 324 steps of the story, or jump with the arrows to the previous or next change of this
-level. Here, just after `canyon-insert-items-resolution`: the broken statue and its rubble,
-which the start of the game does not show. Uncheck **Story** to see every state of the level at
-once.
+opens. The **story bar**, at the bottom of the view, shows the level at a point of the game. Its
+slider goes through the **states of the level**, not through the 324 steps of the story: the start
+of the game, then each step that changes this level. The palace square has three: here the third,
+just after `canyon-insert-items-resolution`, with the broken statue and its rubble that the start
+of the game does not show. With several levels, a list next to **Story** chooses the level: each
+one is at its own point of the story. Uncheck **Story** to see every state of the level at once.
 
 The editor knows this from the game data: the missions in the order of the game, and what each one
 shows or hides.
@@ -250,7 +265,49 @@ connected to a few street points (the `from` of `generate_navmesh`): 8 nav meshe
 the blocks among them. **Export the nav meshes...** writes them as the game's levels hold them, for
 a custom level builder.
 
-## 12. Save, and find help
+## 12. Several levels, side by side
+
+![ctyinda with ctyindb and ctywide added: the industrial zone, the city walls and the palace; the inspector lists the levels added and the levels around them](16-levels.png)
+
+In the game, levels follow one another: Haven City alone is some twenty of them, loaded two or
+three at a time as the player goes. The extracted levels keep the game's coordinates, so levels
+that are side by side in the game meet in the editor too. With `ctyinda` open, **Add to the
+document** (Levels panel) brings `ctyindb` at its place, and the streets of the industrial zone run
+from one level into the other; `ctywide` brings the city walls, the palace and its towers around
+them. Here the document holds 27,160 elements of three levels.
+
+The inspector lists the **levels**: show or hide each one added, frame it, frame the **Junction**
+where it meets the level opened, or remove it. **Around it in the game** gives the levels the game
+displays with those of the document, read from its continue points: a click adds one. That is what
+working on a transition between two levels needs, and it works from a new level too: **File > New
+level**, add the levels of the zone to join, and build next to them at the right place in the
+game's world. An assistant does the same with `add_level`, `get_level_info` (neighbors, continue
+points, bounds) and `set_camera` with `{"frame": {"junction": ["ctyinda", "ctyindb"]}}`.
+
+![ctyindb selected whole next to ctyinda: the gizmo in its middle](17-level-selected.png)
+
+**Select**, next to a level in the inspector (or **Edit > Select its level**, Ctrl+L, from any of
+its elements), selects the whole level: the gizmo stands in its middle, and moving or turning it
+moves the level with its decor, collision and actors, to shift a level or make room between two.
+
+## 13. Export it for the game
+
+![The export window: the slums of Jak II exported for Jak 3, and the report of what changed](18-export.png)
+
+**File > Export for the game...** writes what the view shows as a **custom level of OpenGOAL**: the
+`.glb`, `.jsonc` and `.gd` files its level builder takes, the level's definition for the game's
+code and an `INSTALL.md` with the lines to add. Choose the destination: Jak and Daxter, Jak II or
+Jak 3. For another game than the level's own, the level is adapted: here the slums of Jak II for
+Jak 3. The collision surfaces are written as the builders take them (the materials Jak 3's builder
+cannot give take the nearest), the types Jak 3 does not have are left out (the market's fruit
+stands are only placeholders in Jak 3), the hideout's door becomes Jak 3's `cty-door`, the red pass
+a security wall asks for is renumbered (29 in Jak II, 39 in Jak 3), and the data tied to Jak II's
+story is left out. The report says each change and how many elements it concerns.
+
+The level keeps its place in the game's world: exported with the levels added to it, a transition
+between two levels or a new level next to the game's comes out where it was built.
+
+## 14. Save, and find help
 
 ![The Getting started window](12-help.png)
 
@@ -290,6 +347,16 @@ cp build/demo/district-aerial.png docs/captures/13-district.png
 cp build/demo/district-yard.png docs/captures/14-district-yard.png
 $E --screenshot build/demo/ironworks.glb docs/captures/15-navmesh.png navmesh --lang en \
    --camera 120,110,90,37.57,-31.88
+
+# several levels side by side, one selected whole
+$E --screenshot ctyinda docs/captures/16-levels.png levels --lang en --add ctyindb,ctywide \
+   --camera 1330,330,330,140.77,-26.11
+$E --screenshot ctyinda docs/captures/17-level-selected.png select --lang en --add ctyindb --select ctyindb
+
+# the export for the game, and a level of Jak and Daxter and of Jak 3
+$E --screenshot ctysluma docs/captures/18-export.png export --lang en
+$E --screenshot village1 docs/captures/19-jak1.png levels --lang en --game jak1
+$E --screenshot wascitya docs/captures/20-jak3.png levels --lang en --game jak3
 ```
 
 The setups (the word after the file name):
@@ -297,21 +364,23 @@ The setups (the word after the file name):
 | Setup | What the picture shows |
 |---|---|
 | `levels` | the level given loaded, the Levels panel |
-| `select` | the level given, one of its decor elements selected (near the middle of the level), the gizmo on it |
+| `select` | the level given, one of its decor elements selected (near the middle of the level), the gizmo on it; a level added named by `--select`: selected whole |
 | `scale` | the element stretched, the scale gizmo: a catwalk of the level given, or the first stretched element of a project |
 | `prefab` | a prefab made of a few elements and a copy placed next to them, the Prefabs panel |
 | `catalog`, `models` | the level given loaded, the objects or the models of the Catalog panel |
 | `decor`, `decor-all` | the decor of the level given in the Catalog panel, or the decor of every level searched for `catwalk` |
 | `project` | a project (`.glb`) opened, the objects of the Catalog panel |
 | `navmesh` | the level or project given, its nav meshes drawn (made for the whole level when it has none), the largest selected, the Nav meshes window |
+| `export` | the level given exported for another game (Jak 3 for Jak II's levels, else Jak II) to a temporary folder: the export window and its report |
 | `extract` | the extraction window, extracting the disc given to a temporary folder deleted afterwards |
 | `help` | the Getting started window |
 
-The options: `--size WxH` (1600x900 by default), `--camera x,y,z,yaw,pitch` (position in meters,
-angles in degrees), `--story off|<step>|<node>` (the point of the story shown) and
-`--select a,b,...` (the elements `select`, `scale` and `prefab` use, by name). A capture never
+The options: `--size WxH` (1600x900 by default), `--game jak1|jak2|jak3` (the game whose levels are
+used), `--camera x,y,z,yaw,pitch` (position in meters, angles in degrees), `--story off|<step>|<node>` (the point of the story shown),
+`--select a,b,...` (the elements `select`, `scale` and `prefab` use, by name) and `--add a,b,...`
+(levels added to the one loaded). A capture never
 changes the editor's preferences, and the prefab of `prefab` is written to a temporary folder.
 
-The screenshots show levels of Jak II extracted from a copy of the game. The game belongs to Sony
-Interactive Entertainment and was developed by Naughty Dog; the editor is built on the work of the
+The screenshots show levels of Jak II, Jak and Daxter and Jak 3 extracted from copies of the games.
+The games belong to Sony Interactive Entertainment and were developed by Naughty Dog; the editor is built on the work of the
 OpenGOAL team, with which it is not affiliated (see [`LICENSE`](../../LICENSE)).

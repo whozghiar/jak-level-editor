@@ -110,6 +110,14 @@ const char* tr(const char* key) {
   return key;
 }
 
+const char* tr_en(const char* key) {
+  if (const Table* t = g_english.load()) {
+    auto it = t->texts.find(std::string_view(key));
+    if (it != t->texts.end()) return it->second.c_str();
+  }
+  return key;
+}
+
 std::string tr_id(const char* key) { return std::string(tr(key)) + "###" + key; }
 
 }  // namespace ogle

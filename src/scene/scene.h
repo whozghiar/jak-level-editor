@@ -1,6 +1,7 @@
 #pragma once
 
-// The editor's document: a level loaded from the library, made of nodes.
+// The editor's document: a level loaded from the library (and the levels added to it, each under
+// its group: see scene/story.h), made of nodes.
 //
 //   Render    : visible geometry (terrain, decor instances, actor models)
 //   Collision : the level's collision surfaces, kept with the level but not shown
@@ -170,11 +171,19 @@ class Scene {
   int add_material(Material m);
   int add_texture(Texture t);
   void clear();
+  // Moves the nodes, materials and textures of `src` into this scene (a level loaded apart): the
+  // nodes get new ids, the textures and materials this scene already has are shared. Returns the
+  // new ids of src's roots.
+  std::vector<uint32_t> append(Scene&& src);
 
  private:
   uint64_t m_frame = 0;
   mutable SceneCache m_cache;
 };
+
+// Where most of these boxes are: the 2nd to 98th percentile on each axis, so that a stray piece
+// far away does not count; their union when they are few.
+AABB focus_box(const std::vector<AABB>& boxes);
 
 // Marker size of actors without a model (meters)
 constexpr float kMarkerRadius = 0.6f;

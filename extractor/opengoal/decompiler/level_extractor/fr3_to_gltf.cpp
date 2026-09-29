@@ -272,13 +272,19 @@ int make_tex_buffer_accessor(const std::vector<T>& vertices, tinygltf::Model& mo
   return accessor_idx;
 }
 
+// Jak 1: the palette of the time of the day shown (2: noon, *default-interp-table*); -1 for the
+// light layers of Jak II and Jak 3. Set by save_level_background_as_gltf.
+int g_day_palette = -1;
+
 /*!
  * The color of a vertex, for the editor. The game mixes the 8 palettes of a level with weights it
  * sets each frame: in Jak II and Jak 3 they are light layers (the sun, the lamps of each area:
- * palette 0 alone is black indoors), in Jak 1 the times of the day. Their brightest value shows
- * every area lit by its own lights.
+ * palette 0 alone is black indoors), and their brightest value shows every area lit by its own
+ * lights; in Jak 1 they are the times of the day, and one time is shown (the brightest of each
+ * channel over the day would mix the sunset's red with the noon's green).
  */
 u8 lit_color(const tfrag3::PackedTimeOfDay& tod, int color, int channel) {
+  if (g_day_palette >= 0) return tod.read(color, g_day_palette, channel);
   u8 best = 0;
   for (int palette = 0; palette < 8; palette++) {
     best = std::max(best, tod.read(color, palette, channel));
@@ -2537,6 +2543,7 @@ void add_shrub_instanced(const tfrag3::Level& level,
 void save_level_background_as_gltf(const tfrag3::Level& level,
                                    const fs::path& glb_file,
                                    const LevelEntities* entities) {
+  g_day_palette = entities && entities->game == "jak1" ? 2 : -1;
   // the top level container for everything is the model.
   tinygltf::Model model;
 

@@ -84,11 +84,15 @@ bool GameData::load(const std::string& path, std::string* error) {
   for (const auto& t : at(actors, "water_types")) m_water_types[str(t)] = true;
   for (const auto& t : at(actors, "effects")) m_effects.insert(str(t));
   for (const auto& t : at(actors, "unlisted")) m_unlisted.insert(str(t));
+  for (const auto& t : at(actors, "placeholders")) m_placeholders.insert(str(t));
   for (const auto& m : at(actors, "water_looks")) m_water_looks.push_back(str(m));
   for (const auto& [type, family] : at(actors, "objects").items()) m_objects[type] = str(family);
   for (const auto& [type, models] : at(actors, "models").items())
     for (const auto& m : models) m_type_models[type].push_back(str(m));
   for (const auto& [name, model] : at(actors, "skeletons").items()) m_skeletons[name] = str(model);
+  for (const auto& [en, values] : at(j, "enums").items())
+    for (const auto& [name, v] : values.items())
+      if (v.is_number_integer()) m_enums[en][name] = v.get<int>();
 
   // oceans
   for (const auto& [name, o] : at(j, "oceans").items()) {
@@ -105,6 +109,8 @@ bool GameData::load(const std::string& path, std::string* error) {
     }
     const json& color = at(o, "color");
     if (color.size() == 3) map.color = {color[0].get<float>(), color[1].get<float>(), color[2].get<float>()};
+    const json& far = at(o, "far_color");
+    map.far_color = far.size() == 3 ? Vec3{far[0].get<float>(), far[1].get<float>(), far[2].get<float>()} : map.color;
     m_oceans[name] = std::move(map);
   }
 
@@ -116,8 +122,18 @@ bool GameData::load(const std::string& path, std::string* error) {
     info.ocean = str(at(l, "ocean"));
     if (l.contains("ocean_height") && l["ocean_height"].is_number()) info.ocean_height = l["ocean_height"].get<float>();
     info.layer = l.value("layer", false);
+    info.ocean_far = l.value("ocean_far", false);
     info.traffic = l.value("traffic", false);
     for (const auto& c : at(l, "companions")) info.companions.push_back(str(c));
+    for (const auto& c : at(l, "neighbors")) info.neighbors.push_back(str(c));
+    for (const auto& c : at(l, "continues")) {
+      ContinuePoint cp;
+      cp.name = c.value("name", std::string());
+      const json& p = at(c, "position");
+      if (p.size() == 3) cp.position = {p[0].get<float>(), p[1].get<float>(), p[2].get<float>()};
+      for (const auto& s : at(c, "shows")) cp.shows.push_back(str(s));
+      info.continues.push_back(std::move(cp));
+    }
     const json& slots = at(l, "borrow");
     for (size_t i = 0; i < slots.size(); i++)
       if (slots[i].is_array() && slots[i].size() == 2) info.borrow.push_back(read_borrow(slots[i], name, (int)i));
@@ -256,6 +272,27 @@ std::string GameData::skeleton_of_model(const std::string& model) const {
   for (const auto& [name, m] : m_skeletons)
     if (m == model && (best.empty() || name < best)) best = name;
   return best;
+}
+
+bool GameData::has_type(const std::string& etype) const {
+  if (m_placeholders.count(etype)) return false;
+  return m_roles.count(etype) || m_objects.count(etype) || m_type_models.count(etype) || m_effects.count(etype) ||
+         m_unlisted.count(etype) || m_water_types.count(etype);
+}
+
+int GameData::enum_value(const std::string& en, const std::string& name) const {
+  auto e = m_enums.find(en);
+  if (e == m_enums.end()) return -1;
+  auto it = e->second.find(name);
+  return it == e->second.end() ? -1 : it->second;
+}
+
+std::string GameData::enum_name(const std::string& en, int value) const {
+  auto e = m_enums.find(en);
+  if (e != m_enums.end())
+    for (const auto& [name, v] : e->second)
+      if (v == value) return name;
+  return {};
 }
 
 std::string GameData::object_family(const std::string& etype) const {

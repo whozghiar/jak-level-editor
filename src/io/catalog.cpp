@@ -79,6 +79,8 @@ Node make_catalog_actor(const CatalogObject& object, const std::string& name) {
   json lump = object.lump.is_object() ? object.lump : json::object();
   lump["name"] = name;
   n.extras = json{{"etype", object.etype}, {"game_task", 0}, {"lump", lump}};
+  if (object.lump_types.is_object() && !object.lump_types.empty()) n.extras["lump_types"] = object.lump_types;
+  if (!object.game.empty()) n.extras["og_game"] = object.game;  // its own game (export.h: og_game)
   return n;
 }
 
@@ -92,6 +94,7 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
   struct Seen {
     int count = 0;
     json lump;
+    json lump_types;
     std::vector<std::string> levels;
     std::map<std::string, Art> arts;  // the art-names of its actors: the models, the particle groups they choose
     bool plain = false;               // some of its actors choose none
@@ -103,6 +106,8 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
       Seen& s = seen[etype];
       s.count += info.value("count", 0);
       if (s.lump.is_null() && info.contains("lump")) s.lump = info["lump"];
+      if (auto t = info.find("lump_types"); t != info.end() && t->is_object())
+        for (const auto& [tag, type] : t->items()) s.lump_types[tag] = type;
       if (s.levels.size() < 8) s.levels.push_back(level.name);
       auto note = [&](const json& art) {
         if (!art.is_string()) return;
@@ -150,6 +155,7 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
     if (it == seen.end()) return;
     o.count = it->second.count;
     o.levels = it->second.levels;
+    o.lump_types = it->second.lump_types;
     if (o.lump.is_null() || o.lump.empty()) o.lump = portable_lump(it->second.lump);
   };
   // what an art-name of a type gives: its actors, its level, its data
@@ -287,11 +293,16 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
       out.push_back(std::move(o));
     }
   }
-  std::sort(out.begin(), out.end(), [](const CatalogObject& a, const CatalogObject& b) {
-    const int fa = family_rank(a.family), fb = family_rank(b.family);
-    return fa != fb ? fa < fb : a.name < b.name;
-  });
+  sort_catalog(out);
   return out;
+}
+
+void sort_catalog(std::vector<CatalogObject>& objects) {
+  std::sort(objects.begin(), objects.end(), [](const CatalogObject& a, const CatalogObject& b) {
+    const int fa = family_rank(a.family), fb = family_rank(b.family);
+    if (fa != fb) return fa < fb;
+    return a.name != b.name ? a.name < b.name : a.game < b.game;
+  });
 }
 
 std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const GameData* data,

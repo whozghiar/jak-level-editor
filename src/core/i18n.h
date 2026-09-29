@@ -29,6 +29,8 @@ std::string i18n_system_language();
 
 // The text of a key in the selected language.
 const char* tr(const char* key);
+// In English, whatever the language selected (files written for the game's code).
+const char* tr_en(const char* key);
 // An ImGui label whose id does not change with the language: "<text>###<key>".
 std::string tr_id(const char* key);
 

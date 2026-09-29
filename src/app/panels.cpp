@@ -143,6 +143,8 @@ void App::ui_menu() {
     if (ImGui::MenuItem(tr("menu.file.save"), "Ctrl+S", false, document_open())) save(false);
     if (ImGui::MenuItem(tr("menu.file.save_as"), "Ctrl+Shift+S", false, document_open())) save(true);
     ImGui::Separator();
+    if (ImGui::MenuItem(tr("menu.file.export_game"), nullptr, false, document_open())) open_export_window();
+    ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.file.quit"))) request_quit();
     ImGui::EndMenu();
   }
@@ -157,6 +159,7 @@ void App::ui_menu() {
     ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.edit.create_prefab"), nullptr, false, sel)) m_show_new_prefab = true;
     if (ImGui::MenuItem(tr("menu.edit.select_none"), tr("key.escape"), false, sel)) select_only(0);
+    if (ImGui::MenuItem(tr("menu.edit.select_level"), "Ctrl+L", false, sel)) select_level(level_of_node(primary));
     ImGui::EndMenu();
   }
   if (ImGui::BeginMenu(tr_id("menu.view").c_str())) {
@@ -165,6 +168,7 @@ void App::ui_menu() {
     ImGui::Separator();
     ImGui::MenuItem(tr("menu.view.actors"), nullptr, &rs.show_actors);
     ImGui::MenuItem(tr("menu.view.ocean"), nullptr, &rs.show_ocean);
+    ImGui::MenuItem(tr("menu.view.fog"), nullptr, &rs.fog);
     ImGui::MenuItem(tr("menu.view.navmesh"), nullptr, &show_navmesh);
     ImGui::MenuItem(tr("menu.view.labels"), nullptr, &show_labels);
     ImGui::MenuItem(tr("menu.view.grid"), nullptr, &rs.show_grid);
@@ -286,14 +290,18 @@ void App::ui_levels_panel() {
   const GameFolder* current = nullptr;
   for (const auto& g : games)
     if (g.path == library.root()) current = &g;
+  // set_library reassigns `games` (freshly listed): deferred until this loop over it is done,
+  // else the range-based for below would iterate a vector replaced under it mid-click
+  std::string switch_to;
   ImGui::SetNextItemWidth(-1);
   if (ImGui::BeginCombo("##game", current ? current->name.c_str() : "?")) {
     for (const auto& g : games) {
       std::string label = g.name + "##" + g.game;
-      if (ImGui::Selectable(label.c_str(), current == &g) && current != &g) set_library(library_root, g.game);
+      if (ImGui::Selectable(label.c_str(), current == &g) && current != &g) switch_to = g.game;
     }
     ImGui::EndCombo();
   }
+  if (!switch_to.empty()) browse_game(switch_to);
   ImGui::SetNextItemWidth(-1);
   ImGui::InputTextWithHint("##filter", tr("levels.filter"), &m_levels_filter);
   const std::string f = lower(m_levels_filter);
@@ -307,10 +315,21 @@ void App::ui_levels_panel() {
   }
   ImGui::TextDisabled(tr("levels.count"), shown.size(), listed);
 
-  const bool loading = m_level_future.valid();
+  const bool loading = m_level_future.valid() || level_adding();
   const LevelEntry* selected = library.level(m_selected_level);
   const float preview = std::min(ImGui::GetContentRegionAvail().x, 180.f);
-  const float footer = selected ? preview + ImGui::GetFrameHeightWithSpacing() * 3 : ImGui::GetFrameHeightWithSpacing() * 2;
+  const float footer = selected ? preview + ImGui::GetFrameHeightWithSpacing() * 5 : ImGui::GetFrameHeightWithSpacing() * 4;
+  // the levels of the document besides the one opened (counted again when it changes)
+  static uint64_t added_rev = ~0ull;
+  static size_t added_nodes = ~(size_t)0;
+  static std::set<std::string> added;
+  if (added_rev != history.revision() || added_nodes != scene.nodes.size()) {
+    added_rev = history.revision();
+    added_nodes = scene.nodes.size();
+    added.clear();
+    for (const auto& l : document_levels())
+      if (l.role == DocumentLevel::Added || l.role == DocumentLevel::Companion) added.insert(l.name);
+  }
   ImGui::BeginChild("levels", ImVec2(0, -footer), ImGuiChildFlags_Borders);
   ImGuiListClipper clipper;
   clipper.Begin((int)shown.size());
@@ -328,6 +347,7 @@ void App::ui_levels_panel() {
       }
       ImGui::SameLine();
       if (is_open) ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.5f, 1.f), "%s", tr("levels.open_mark"));
+      else if (added.count(l->name)) ImGui::TextColored(ImVec4(0.45f, 0.7f, 0.95f, 1.f), "%s", tr("levels.added_mark"));
       else ImGui::TextDisabled("%s", l->dgo.c_str());
     }
   }
@@ -349,13 +369,26 @@ void App::ui_levels_panel() {
     ImGui::TextDisabled("%s", selected->dgo.c_str());
     ImGui::EndGroup();
   }
+  ImGui::Checkbox(tr_id("levels.with_actors").c_str(), &load_actors);
+  tooltip(tr("levels.with_actors.tip"));
   ImGui::BeginDisabled(!selected || loading);
-  if (ImGui::Button(loading ? tr_id("levels.loading").c_str() : tr_id("levels.load").c_str(), ImVec2(-1, 34)) &&
+  if (ImGui::Button(m_level_future.valid() ? tr_id("levels.loading").c_str() : tr_id("levels.load").c_str(),
+                    ImVec2(-1, 34)) &&
       selected) {
     LevelEntry entry = *selected;
     confirm_discard([this, entry]() { load_level(entry); });
   }
   ImGui::EndDisabled();
+  // or add it to the document, at its place in the game's world
+  const bool in_document = selected && (selected->name == scene.settings.level || added.count(selected->name));
+  ImGui::BeginDisabled(!selected || loading || !document_open() || in_document);
+  if (ImGui::Button(level_adding() ? tr_id("levels.adding").c_str() : tr_id("levels.add").c_str(), ImVec2(-1, 0)) &&
+      selected) {
+    std::string err;
+    if (!add_level_to_document(*selected, &err)) LOG_WARN("%s", err.c_str());
+  }
+  ImGui::EndDisabled();
+  tooltip(in_document ? tr("levels.add.in_document") : tr("levels.add.tip"));
   if (ImGui::SmallButton(tr_id("levels.extract_more").c_str())) open_extract_window();
 }
 
@@ -462,7 +495,7 @@ void App::ui_catalog_objects() {
     if (placing) ImGui::PopStyleColor();
     if (ImGui::BeginItemTooltip()) {
       ImGui::TextUnformatted(o.name.c_str());
-      ImGui::TextDisabled("%s", tr(("family." + o.family).c_str()));
+      ImGui::TextDisabled("%s - %s", tr(("family." + o.family).c_str()), tr(("game." + o.game).c_str()));
       ImGui::Text(tr("inspector.type"), o.etype.c_str());
       if (o.family == "effect") {
         ImGui::Text(tr("catalog.particles"), o.lump.value("art-name", std::string()).c_str());
@@ -523,7 +556,7 @@ void App::ui_catalog_models() {
     if (placing) ImGui::PopStyleColor();
     if (ImGui::BeginItemTooltip()) {
       ImGui::TextUnformatted(m.name.c_str());
-      ImGui::TextDisabled(tr("catalog.from"), m.group.c_str());
+      ImGui::TextDisabled(tr("catalog.from"), (m.group + " - " + tr(("game." + m.game).c_str())).c_str());
       ImGui::TextDisabled("%s", tr("catalog.model_tip"));
       ImGui::TextDisabled("%s", tr("catalog.place_tip"));
       ImGui::EndTooltip();
@@ -638,11 +671,17 @@ void App::ui_catalog_decor() {
 }
 
 void App::ui_catalog_decor_all() {
-  if (!library_index.ready()) {
-    // the levels are being read (once: then from the cache)
-    const int total = std::max(1, library_index.total());
-    ImGui::TextDisabled(tr("catalog.indexing"), library_index.done(), library_index.total());
-    ImGui::ProgressBar((float)library_index.done() / total, ImVec2(-1, 0), "");
+  // every extracted game's levels are read once (then from each game's own cache)
+  int done = 0, total = 0;
+  bool all_ready = true;
+  for (const auto& [g, idx] : library_indexes) {
+    done += idx.done();
+    total += idx.total();
+    all_ready = all_ready && idx.ready();
+  }
+  if (!all_ready) {
+    ImGui::TextDisabled(tr("catalog.indexing"), done, total);
+    ImGui::ProgressBar(total > 0 ? (float)done / total : 0.f, ImVec2(-1, 0), "");
     return;
   }
   ImGui::SetNextItemWidth(-1);
@@ -775,6 +814,8 @@ void App::ui_inspector(float x, float y, float w, float h) {
       static size_t counted_nodes = ~(size_t)0;
       static size_t objects = 0, actors = 0;
       static std::vector<uint32_t> companions, layers;
+      static std::vector<DocumentLevel> levels;
+      static std::vector<std::string> neighbors;
       if (counted_rev != history.revision() || counted_nodes != scene.nodes.size()) {
         counted_rev = history.revision();
         counted_nodes = scene.nodes.size();
@@ -782,6 +823,8 @@ void App::ui_inspector(float x, float y, float w, float h) {
         objects = actors = 0;
         companions.clear();
         layers.clear();
+        levels = document_levels();
+        neighbors = document_neighbors();
         for (size_t i = 0; i < scene.nodes.size(); i++) {
           const Node& node = scene.nodes[i];
           if (node.kind == NodeKind::Render && !cache.actor[i]) objects++;
@@ -791,6 +834,88 @@ void App::ui_inspector(float x, float y, float w, float h) {
         }
       }
       ImGui::Text(tr("inspector.counts"), objects, actors);
+      // its levels: the one opened, the ones added (shown or not, framed, selected whole to move
+      // them, removed)
+      {
+        bool any_added = false;
+        for (const auto& l : levels) any_added |= l.role == DocumentLevel::Added;
+        ImGui::SeparatorText(tr(any_added ? "inspector.added_levels" : "inspector.levels_title"));
+        // the next button on the same line when it fits there, else on the next line
+        const float edge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+        auto next = [edge](const std::string& label) {
+          const ImGuiStyle& st = ImGui::GetStyle();
+          const float w = ImGui::CalcTextSize(label.c_str(), nullptr, true).x + st.FramePadding.x * 2;
+          if (ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= edge) ImGui::SameLine();
+        };
+        if (ImGui::SmallButton((scene.settings.level + "##frame-main").c_str())) {
+          const AABB b = document_level_bounds(0);
+          if (b.valid()) camera.frame(b);
+        }
+        tooltip(tr("inspector.added_levels.main.tip"));
+        next(tr_id("inspector.added_levels.select"));
+        if (ImGui::SmallButton(tr_id("inspector.added_levels.select").c_str())) select_level(0);
+        tooltip(tr("inspector.added_levels.select.tip"));
+        for (const auto& l : levels) {
+          if (l.role != DocumentLevel::Added) continue;
+          Node* g = scene.find(l.group);
+          if (!g) continue;
+          ImGui::PushID((int)l.group);
+          const Node before = *g;
+          bool v = g->visible;
+          if (ImGui::Checkbox("##shown", &v)) {
+            g->visible = v;
+            commit_node_edit(before, tr("undo.visibility"));
+          }
+          tooltip(tr("inspector.added_levels.shown.tip"));
+          ImGui::SameLine();
+          if (ImGui::SmallButton(l.name.c_str())) {
+            const AABB b = document_level_bounds(l.group);
+            if (b.valid()) camera.frame(b);
+          }
+          tooltip(tr("inspector.added_levels.frame.tip"));
+          next(tr_id("inspector.added_levels.junction"));
+          if (ImGui::SmallButton(tr_id("inspector.added_levels.junction").c_str())) {
+            const AABB j = document_junction(0, l.group);
+            if (j.valid()) {
+              camera.pitch = -0.6f;
+              camera.frame(j);
+            } else {
+              LOG_WARN(tr("log.no_junction"), scene.settings.level.c_str(), l.name.c_str());
+            }
+          }
+          tooltip(tr("inspector.added_levels.junction.tip"));
+          next(tr_id("inspector.added_levels.select"));
+          if (ImGui::SmallButton(tr_id("inspector.added_levels.select").c_str())) select_level(l.group);
+          tooltip(tr("inspector.added_levels.select.tip"));
+          next(tr_id("inspector.added_levels.remove"));
+          if (ImGui::SmallButton(tr_id("inspector.added_levels.remove").c_str())) {
+            std::string err;
+            if (!remove_document_level(l.group, &err)) LOG_WARN("%s", err.c_str());
+          }
+          ImGui::PopID();
+        }
+      }
+      // the levels around it in the game, to add
+      if (!neighbors.empty()) {
+        ImGui::SeparatorText(tr("inspector.neighbors"));
+        ImGui::BeginDisabled(level_adding() || m_level_future.valid());
+        float x = 0;
+        const float avail = ImGui::GetContentRegionAvail().x;
+        for (const auto& name : neighbors) {
+          const float w = ImGui::CalcTextSize(name.c_str()).x + ImGui::GetStyle().FramePadding.x * 2;
+          if (x > 0 && x + w < avail) ImGui::SameLine();
+          else x = 0;
+          x += w + ImGui::GetStyle().ItemSpacing.x;
+          if (ImGui::SmallButton((name + "##neighbor").c_str()))
+            if (const LevelEntry* e = library.level(name)) {
+              std::string err;
+              if (!add_level_to_document(*e, &err)) LOG_WARN("%s", err.c_str());
+            }
+          tooltip(tr("inspector.neighbors.tip"));
+        }
+        ImGui::EndDisabled();
+        if (level_adding()) ImGui::TextDisabled(tr("inspector.neighbors.adding"), m_adding_level.c_str());
+      }
       // the levels shown with it, the layers of the missions
       if (!companions.empty()) {
         ImGui::SeparatorText(tr("inspector.companions"));
@@ -956,59 +1081,70 @@ void App::ui_story_bar() {
   StoryView v = story;
   bool changed = ImGui::Checkbox(tr_id("story.enabled").c_str(), &v.enabled);
   tooltip(tr("story.enabled.tip"));
-  // the states of the level: from the start, and from each step that changes it
-  int state_start = 1, state = 1;
-  for (int c : story_steps)
-    if (c <= v.step) {
-      state_start = c;
-      state++;
+  // the level shown: its own point of the story, when the document has several
+  if (!level_story_steps.empty()) {
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(std::min(150.f, ImGui::GetContentRegionAvail().x * 0.2f));
+    const std::string& main = scene.settings.level;
+    if (ImGui::BeginCombo("##story-level", story_level.empty() ? main.c_str() : story_level.c_str())) {
+      if (ImGui::Selectable(main.c_str(), story_level.empty())) story_level.clear();
+      for (const auto& [name, steps] : level_story_steps)
+        if (ImGui::Selectable(name.c_str(), story_level == name)) story_level = name;
+      ImGui::EndCombo();
     }
-  int prev = 0, next = 0;
-  if (state_start > 1) {
-    prev = 1;
-    for (int c : story_steps)
-      if (c < state_start) prev = c;
+    tooltip(tr("story.level.tip"));
   }
-  for (int c : story_steps)
-    if (c > v.step) {
-      next = c;
-      break;
-    }
+  // its states: from the start, and from each step that changes it (the steps where nothing
+  // changes for it are skipped)
+  const std::vector<int> states = story_states(story_level);
+  const int step = story_level.empty() ? v.step : v.step_of(story_level);
+  int state = 1;
+  for (size_t i = 1; i < states.size(); i++)
+    if (states[i] <= step) state = (int)i + 1;
+  const int count = (int)states.size();
+  auto set_state = [&](int s) {
+    const int to = states[std::clamp(s, 1, count) - 1];
+    if (story_level.empty()) v.step = to;
+    else v.level_steps[story_level] = to;
+    changed = true;
+  };
   const float label_w = std::min(420.f, ImGui::GetContentRegionAvail().x * 0.42f);
   ImGui::SameLine();
   ImGui::BeginDisabled(!v.enabled);
-  ImGui::BeginDisabled(!prev);
-  if (ImGui::ArrowButton("##prev", ImGuiDir_Left)) {
-    v.step = prev;
-    changed = true;
-  }
+  ImGui::BeginDisabled(state <= 1);
+  if (ImGui::ArrowButton("##prev", ImGuiDir_Left)) set_state(state - 1);
   ImGui::EndDisabled();
   tooltip(tr("story.prev.tip"));
   ImGui::SameLine();
   ImGui::SetNextItemWidth(std::max(80.f, ImGui::GetContentRegionAvail().x - label_w - ImGui::GetFrameHeight() -
                                              style.ItemSpacing.x * 2));
-  const std::string format = "%d / " + std::to_string(data->step_count());
-  changed |= ImGui::SliderInt("##step", &v.step, 1, data->step_count(), format.c_str(), ImGuiSliderFlags_AlwaysClamp);
-  tooltip(tr("story.slider.tip"));
+  int slider = state;
+  ImGui::BeginDisabled(count <= 1);
+  const std::string format = "%d / " + std::to_string(count);
+  if (ImGui::SliderInt("##state", &slider, 1, std::max(count, 1), format.c_str(), ImGuiSliderFlags_AlwaysClamp) &&
+      slider != state)
+    set_state(slider);
+  ImGui::EndDisabled();
+  tooltip(tr(count <= 1 ? "story.slider.none" : "story.slider.tip"));
   ImGui::SameLine();
-  ImGui::BeginDisabled(!next);
-  if (ImGui::ArrowButton("##next", ImGuiDir_Right)) {
-    v.step = next;
-    changed = true;
-  }
+  ImGui::BeginDisabled(state >= count);
+  if (ImGui::ArrowButton("##next", ImGuiDir_Right)) set_state(state + 1);
   ImGui::EndDisabled();
   tooltip(tr("story.next.tip"));
   ImGui::EndDisabled();
   ImGui::SameLine();
+  const int shown_step = states[state - 1];
   std::string text;
   if (!v.enabled) {
     text = tr("story.all");
+  } else if (count <= 1) {
+    text = tr("story.no_change");
   } else {
-    text = v.step <= 1 ? std::string(tr("story.start")) : strf(tr("story.after"), data->node(v.step - 1).name.c_str());
-    text += "   " + strf(tr("story.state"), state, (int)story_steps.size() + 1);
+    text = shown_step <= 1 ? std::string(tr("story.start"))
+                           : strf(tr("story.after"), data->node(shown_step - 1).name.c_str());
   }
   ImGui::TextUnformatted(fit_text(text, label_w).c_str());
-  if (v.enabled && v.step > 1) tooltip(data->node(v.step - 1).name.c_str());
+  if (v.enabled && shown_step > 1) tooltip(data->node(shown_step - 1).name.c_str());
   ImGui::End();
   if (changed) set_story_view(v);
 }
@@ -1190,8 +1326,112 @@ void App::ui_navmesh_window() {
   ImGui::End();
 }
 
+void App::ui_export_window() {
+  if (!show_export_window) return;
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSizeConstraints(ImVec2(520, 0), ImVec2(900, vp->Size.y * 0.9f));
+  if (!ImGui::Begin(tr_id("export.title").c_str(), &show_export_window)) {
+    ImGui::End();
+    return;
+  }
+  LevelExportOptions& o = export_options;
+  ImGui::TextWrapped("%s", tr("export.help"));
+  ImGui::PushItemWidth(-200);
+  // the destination: its own defaults (ids, folder) when they were the other game's
+  static const Game games[] = {Game::Jak1, Game::Jak2, Game::Jak3};
+  auto game_label = [](Game g) { return tr((std::string("game.") + game_name(g)).c_str()); };
+  if (ImGui::BeginCombo(tr_id("export.game").c_str(), game_label(o.game))) {
+    for (Game g : games) {
+      if (ImGui::Selectable(game_label(g), g == o.game) && g != o.game) {
+        const LevelExportOptions fresh = default_export_options(g);
+        if (o.base_id == default_base_id(o.game)) o.base_id = fresh.base_id;
+        o.folder = fresh.folder;
+        o.game = g;
+      }
+    }
+    ImGui::EndCombo();
+  }
+  tooltip(tr("export.game.tip"));
+  if (o.game != scene.settings.game) ImGui::TextWrapped(tr("export.adapted"), game_label(o.game));
+
+  ImGui::SeparatorText(tr("export.names"));
+  auto text_field = [](const char* key, std::string& value, size_t max) {
+    char buf[256];
+    std::snprintf(buf, sizeof(buf), "%s", value.c_str());
+    if (ImGui::InputText(tr_id(key).c_str(), buf, std::min(sizeof(buf), max + 1))) value = buf;
+    tooltip(tr((std::string(key) + ".tip").c_str()));
+  };
+  text_field("export.name", o.name, 10);
+  text_field("export.nickname", o.nickname, 3);
+  text_field("export.iso_name", o.iso_name, 8);
+  ImGui::InputScalar(tr_id("export.base_id").c_str(), ImGuiDataType_U32, &o.base_id);
+  tooltip(tr("export.base_id.tip"));
+
+  ImGui::SeparatorText(tr("export.content"));
+  ImGui::Checkbox(tr_id("export.actors").c_str(), &o.actors);
+  tooltip(tr("export.actors.tip"));
+  int collision = o.game_collision ? 0 : 1;
+  ImGui::RadioButton(tr_id("export.collision.game").c_str(), &collision, 0);
+  tooltip(tr("export.collision.game.tip"));
+  ImGui::SameLine();
+  ImGui::RadioButton(tr_id("export.collision.decor").c_str(), &collision, 1);
+  tooltip(tr("export.collision.decor.tip"));
+  o.game_collision = collision == 0;
+  ImGui::DragFloat3(tr_id("export.start").c_str(), &o.start.x, 0.1f, 0.f, 0.f, "%.1f");
+  tooltip(tr("export.start.tip"));
+  ImGui::SameLine();
+  if (ImGui::SmallButton(tr_id("export.start.reset").c_str())) o.start = export_start_point();
+  tooltip(tr("export.start.reset.tip"));
+
+  ImGui::SeparatorText(tr("export.folder"));
+  text_field("export.folder_path", o.folder, 250);
+  ImGui::SameLine();
+  if (ImGui::SmallButton(tr_id("export.browse").c_str())) open_dialog(DialogAction::ExportFolder);
+  ImGui::TextDisabled(tr("export.folder.hint"), game_name(o.game));
+  ImGui::PopItemWidth();
+
+  ImGui::Spacing();
+  const std::string bad = check_export_names(o);
+  if (!bad.empty()) ImGui::TextColored(ImVec4(1, 0.6f, 0.3f, 1), "%s", tr(bad.c_str()));
+  ImGui::BeginDisabled(!bad.empty() || !document_open());
+  if (ImGui::Button(tr_id("export.button").c_str(), ImVec2(-1, 34))) {
+    LevelExportReport rep;
+    m_export_error.clear();
+    if (export_for_game(o, &rep, &m_export_error)) {
+      m_export_report = std::move(rep);
+    } else {
+      m_export_report.reset();
+      LOG_ERROR(tr("log.export_failed"), m_export_error.c_str());
+    }
+  }
+  ImGui::EndDisabled();
+
+  if (!m_export_error.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0.6f, 0.3f, 1));
+    ImGui::TextWrapped("%s", m_export_error.c_str());
+    ImGui::PopStyleColor();
+  }
+  if (m_export_report) {
+    const LevelExportReport& r = *m_export_report;
+    ImGui::SeparatorText(tr("export.done"));
+    ImGui::TextWrapped(tr("export.written"), r.dir.c_str());
+    ImGui::TextWrapped(tr("export.counts"), r.meshes, r.triangles, r.collision_triangles, r.actors, r.art_groups);
+    if (r.navmeshes) ImGui::TextWrapped(tr("export.counts.navmeshes"), r.navmeshes);
+    for (const auto& note : r.notes) {
+      ImGui::Bullet();
+      ImGui::SameLine();
+      ImGui::TextWrapped("%s", strf(tr(note.key.c_str()), note.count, note.detail.c_str()).c_str());
+    }
+    ImGui::TextWrapped("%s", tr("export.install"));
+    if (ImGui::Button(tr_id("export.open_folder").c_str())) SDL_OpenURL(("file:///" + r.dir).c_str());
+  }
+  ImGui::End();
+}
+
 void App::ui_windows() {
   ui_navmesh_window();
+  ui_export_window();
   if (show_help) {
     ImGui::SetNextWindowSize(ImVec2(600, 560), ImGuiCond_FirstUseEver);
     if (ImGui::Begin(tr_id("help.title").c_str(), &show_help)) {
@@ -1210,7 +1450,7 @@ void App::ui_windows() {
       for (const char* k : {"help.story.1", "help.story.2", "help.story.3"}) bullet(tr(k));
       ImGui::SeparatorText(tr("help.editing"));
       for (const char* k : {"help.editing.1", "help.editing.2", "help.editing.3", "help.editing.4", "help.editing.5",
-                            "help.editing.6"})
+                            "help.editing.6", "help.editing.7", "help.editing.8"})
         bullet(tr(k));
     }
     ImGui::End();

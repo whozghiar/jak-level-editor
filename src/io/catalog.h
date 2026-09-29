@@ -23,12 +23,14 @@
 namespace ogle {
 
 struct CatalogObject {
+  std::string game;        // "jak1", "jak2", "jak3": every extracted game contributes its own
   std::string etype;
   std::string name;        // shown: the type, or the model of a variant (look, art-name)
   std::string family;      // crate, platform, door, water... (GameData::object_family)
   std::string model;       // the model drawn for it, "" for an object the game draws without one
   std::string model_path;  // its file
   json lump;               // the data of a new one: an actor of the game's, without what binds it to its level
+  json lump_types;         // the type of each tag of the data of its type's actors (export for the game)
   int count = 0;           // actors of this type in the extracted levels
   std::vector<std::string> levels;  // the first levels they are in
 };
@@ -39,6 +41,9 @@ class LibraryIndex;
 // art-names of every actor of the levels: all the variants and particle effects, and their counts.
 std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const GameData* data,
                                          const LibraryIndex* index = nullptr);
+// By family (the order build_catalog uses), then name: for a catalog merged from several games,
+// whose per-game slices are each already in this order but not the whole.
+void sort_catalog(std::vector<CatalogObject>& objects);
 
 // The model the game draws for an actor, as far as the editor can tell: the model of its look for
 // a water actor, the skeleton its art-name names, the first model its type loads, else a model
@@ -47,6 +52,7 @@ const ModelAsset* resolve_actor_model(const AssetLibrary& library, const GameDat
                                       const json& lump, const std::string& group);
 
 struct CatalogModel {
+  std::string game;   // the game it comes from
   std::string name;   // without "-lodN"
   std::string path;   // its lowest lod
   std::string group;  // the level folder it comes from ("common" for the shared ones)

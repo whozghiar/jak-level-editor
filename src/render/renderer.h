@@ -25,6 +25,19 @@ struct RenderSettings {
   bool shade_uncolored = true;     // simple lighting for meshes without vertex colors
   bool frustum_culling = true;
   float clear_color[3] = {0.16f, 0.18f, 0.21f};
+  // the far ocean: the sea to the horizon at that height, drawn behind everything (the game draws
+  // it with the sky)
+  bool far_ocean = false;
+  float far_ocean_y = 0;
+  float far_ocean_color[3] = {0.02f, 0.24f, 0.29f};
+  // distance fog: what the low-detail backdrop meshes (mesh extras og_backdrop: the distant
+  // mountains beyond a level's playable area, "-tfrag-lowres") fade into, by how far the camera
+  // is from them. They are made to be seen through the game's fog, which the editor has none of
+  // otherwise, and look wrong (a harsh, dithered pattern) without it; nothing else fogs.
+  bool fog = true;
+  float fog_color[3] = {0.60f, 0.68f, 0.72f};
+  float fog_start = 50.f;   // meters
+  float fog_end = 400.f;
 };
 
 struct DrawStats {
@@ -133,6 +146,11 @@ class Renderer {
     int mesh_use_vcol = -1;
     int mesh_vcol_scale = -1;
     int mesh_viewproj = -1;
+    int mesh_fog = -1;
+    int mesh_fog_color = -1;
+    int mesh_fog_start = -1;
+    int mesh_fog_end = -1;
+    int mesh_cam_pos = -1;
     int solid_color = -1;
     int solid_mvp = -1;
   } m_u;

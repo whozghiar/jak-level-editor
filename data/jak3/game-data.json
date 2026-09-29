@@ -1213,6 +1213,14 @@
    "viewer",
    "water-vol"
   ],
+  "placeholders": [
+   "city-window-a",
+   "cty-fruit-stand",
+   "cty-guard-turret",
+   "cty-window-a",
+   "sail-boat-a",
+   "torn"
+  ],
   "models": {
    "a-bb-freeze": [
     "terraformer-leg-a",
@@ -1512,12 +1520,6 @@
    "city-des-burning-bush": [
     "des-burning-bush"
    ],
-   "city-window-a": [
-    "terraformer-leg-a",
-    "terraformer-leg-b",
-    "terraformer-leg-c",
-    "terraformer-spike"
-   ],
    "civilian": [
     "terraformer-leg-a",
     "terraformer-leg-b",
@@ -1627,18 +1629,6 @@
    "cty-elevator": [
     "cty-elevator"
    ],
-   "cty-fruit-stand": [
-    "terraformer-leg-a",
-    "terraformer-leg-b",
-    "terraformer-leg-c",
-    "terraformer-spike"
-   ],
-   "cty-guard-turret": [
-    "terraformer-leg-a",
-    "terraformer-leg-b",
-    "terraformer-leg-c",
-    "terraformer-spike"
-   ],
    "cty-hijack-missile": [
     "cty-homing-missile"
    ],
@@ -1663,12 +1653,6 @@
     "cty-sniper-turret-explode"
    ],
    "cty-sniper-turret-shot": [
-    "terraformer-leg-a",
-    "terraformer-leg-b",
-    "terraformer-leg-c",
-    "terraformer-spike"
-   ],
-   "cty-window-a": [
     "terraformer-leg-a",
     "terraformer-leg-b",
     "terraformer-leg-c",
@@ -2588,13 +2572,6 @@
     "terraformer-leg-c",
     "terraformer-spike"
    ],
-   "hj2-farm-crop": [
-    "farm-marrow",
-    "farm-beetree",
-    "farm-cabbage",
-    "farm-small-cabbage",
-    "farm-chilirots"
-   ],
    "hover-enemy": [
     "terraformer-leg-a",
     "terraformer-leg-b",
@@ -2606,12 +2583,6 @@
    ],
    "hud-ring-cell": [
     "hud-ring-part"
-   ],
-   "hud-skill": [
-    "collectables-skill"
-   ],
-   "hud-skullgem": [
-    "collectables-gem"
    ],
    "hvehicle": [
     "terraformer-leg-a",
@@ -3570,12 +3541,6 @@
     "terraformer-leg-c",
     "terraformer-spike"
    ],
-   "sail-boat-a": [
-    "terraformer-leg-a",
-    "terraformer-leg-b",
-    "terraformer-leg-c",
-    "terraformer-spike"
-   ],
    "samos-npc": [
     "samos-highres"
    ],
@@ -3965,9 +3930,6 @@
    "test-bike": [
     "bikec"
    ],
-   "title-control": [
-    "jakthreelogo"
-   ],
    "tizard": [
     "tizard"
    ],
@@ -3979,12 +3941,6 @@
    ],
    "tomb-baby-spider": [
     "tomb-baby-spider"
-   ],
-   "torn": [
-    "terraformer-leg-a",
-    "terraformer-leg-b",
-    "terraformer-leg-c",
-    "terraformer-spike"
    ],
    "torn-npc": [
     "torn-highres"
@@ -4636,9 +4592,6 @@
     "water-anim-waspala-frontthrone",
     "water-anim-waspala-frontwindowwall"
    ],
-   "water-control": [
-    "collectables-generic-ripples"
-   ],
    "wcar-base": [
     "terraformer-leg-a",
     "terraformer-leg-b",
@@ -5093,6 +5046,11 @@
     0.083,
     0.277,
     0.311
+   ],
+   "far_color": [
+    0.02,
+    0.239,
+    0.286
    ]
   },
   "*ocean-map-desert*": {
@@ -5156,6 +5114,11 @@
     0.198,
     0.36,
     0.373
+   ],
+   "far_color": [
+    0.157,
+    0.369,
+    0.412
    ]
   },
   "*ocean-map-mine*": {
@@ -5219,6 +5182,11 @@
     0.092,
     0.276,
     0.302
+   ],
+   "far_color": [
+    0.02,
+    0.239,
+    0.286
    ]
   },
   "*ocean-map-wascity*": {
@@ -5282,6 +5250,11 @@
     0.08,
     0.282,
     0.315
+   ],
+   "far_color": [
+    0.02,
+    0.239,
+    0.286
    ]
   },
   "*ocean-map-wasstad*": {
@@ -5345,7 +5318,67 @@
     0.076,
     0.278,
     0.314
+   ],
+   "far_color": [
+    0.02,
+    0.239,
+    0.286
    ]
+  }
+ },
+ "enums": {
+  "pickup-type": {
+   "none": 0,
+   "eco-yellow": 1,
+   "eco-red": 2,
+   "eco-blue": 3,
+   "eco-dark": 4,
+   "eco-green": 5,
+   "eco-pill-green": 6,
+   "eco-pill-dark": 7,
+   "eco-pill-light": 8,
+   "eco-pill-random": 9,
+   "money": 10,
+   "fuel-cell": 11,
+   "buzzer": 12,
+   "darkjak": 13,
+   "lightjak": 14,
+   "ammo-yellow": 15,
+   "ammo-red": 16,
+   "ammo-blue": 17,
+   "ammo-dark": 18,
+   "shield": 19,
+   "health": 20,
+   "trick-point": 21,
+   "trick-judge": 22,
+   "gem": 23,
+   "skill": 24,
+   "karma": 25,
+   "gun-red-1": 26,
+   "gun-red-2": 27,
+   "gun-red-3": 28,
+   "gun-yellow-1": 29,
+   "gun-yellow-2": 30,
+   "gun-yellow-3": 31,
+   "gun-blue-1": 32,
+   "gun-blue-2": 33,
+   "gun-blue-3": 34,
+   "gun-dark-1": 35,
+   "gun-dark-2": 36,
+   "gun-dark-3": 37,
+   "board": 38,
+   "pass-red": 39,
+   "pass-green": 40,
+   "pass-yellow": 41,
+   "pass-blue": 42,
+   "ammo-random": 43,
+   "health-max": 44,
+   "light-eco-crystal": 45,
+   "dark-eco-crystal": 46,
+   "pass-slumb-genb": 47,
+   "ammo-light-random": 48,
+   "ammo-dark-light-random": 49,
+   "light-random": 50
   }
  },
  "levels": {
@@ -5353,2388 +5386,10740 @@
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "jump test",
+     "position": [
+      4.57,
+      0.02,
+      20.16
+     ],
+     "shows": [
+      "4amy",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall"
+   ]
   },
   "arenacst": {
    "taskname": "arena",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall",
+    "wasstada",
+    "waswide"
+   ]
   },
   "bikearena": {
    "taskname": "default",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "bikearena-start",
+     "position": [
+      35.19,
+      -0.0,
+      -2.25
+     ],
+     "shows": [
+      "bikearena",
+      "ctywide"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": true,
+   "neighbors": [
+    "ctywide"
+   ]
   },
   "bsbs": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "chartest": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "chartest-1",
+     "position": [
+      7.84,
+      0.0,
+      1.15
+     ],
+     "shows": [
+      "chartest"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "citycast": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyport",
+    "ctywide-ff"
+   ]
   },
   "citylow": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "comba": {
    "taskname": "comb",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "comba-start",
+     "position": [
+      8.04,
+      0.32,
+      6.74
+     ],
+     "shows": [
+      "comba",
+      "combb",
+      "combx"
+     ]
+    },
+    {
+     "name": "comba-elevator",
+     "position": [
+      7.89,
+      2.09,
+      103.96
+     ],
+     "shows": [
+      "comba",
+      "combb",
+      "combx"
+     ]
+    },
+    {
+     "name": "comba-movie-end",
+     "position": [
+      7.04,
+      0.32,
+      17.55
+     ],
+     "shows": [
+      "comba",
+      "combb",
+      "combx"
+     ]
+    },
+    {
+     "name": "comba-sled",
+     "position": [
+      200.34,
+      -14.11,
+      11.51
+     ],
+     "shows": [
+      "comba",
+      "combb",
+      "combx"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "combb",
+    "combc",
+    "combd",
+    "combe",
+    "combn",
+    "combx",
+    "minea"
+   ]
   },
   "combb": {
    "taskname": "comb",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "combb-start",
+     "position": [
+      -10.1,
+      4.0,
+      5.5
+     ],
+     "shows": [
+      "comba",
+      "combb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "comba",
+    "combx"
+   ]
   },
   "combc": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "combc",
+     "position": [
+      1067.46,
+      -155.76,
+      179.87
+     ],
+     "shows": [
+      "comba",
+      "combc"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "comba",
+    "combd"
+   ]
   },
   "combd": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "combd",
+     "position": [
+      1773.55,
+      -77.63,
+      -206.74
+     ],
+     "shows": [
+      "comba",
+      "combc",
+      "combd"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "comba",
+    "combc",
+    "combe"
+   ]
   },
   "combe": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "combe",
+     "position": [
+      2339.16,
+      -29.84,
+      147.48
+     ],
+     "shows": [
+      "comba",
+      "combd",
+      "combe"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "comba",
+    "combd"
+   ]
   },
   "combm": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "combn": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "combn-start",
+     "position": [
+      3569.25,
+      -38.36,
+      226.65
+     ],
+     "shows": [
+      "comba",
+      "combn",
+      "minea"
+     ]
+    },
+    {
+     "name": "combn-lightjak",
+     "position": [
+      3566.5,
+      -40.04,
+      148.66
+     ],
+     "shows": [
+      "comba",
+      "combn",
+      "minea"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "comba",
+    "minea"
+   ]
   },
   "combx": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "comba",
+    "combb",
+    "templea",
+    "templed"
+   ]
   },
   "ctycara": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctycarb": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctycarc": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctycarkg": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctyfarma": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctyfarmb": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctyfence": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctygenb": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ctygenb-start",
+     "position": [
+      167.61,
+      9.83,
+      -247.85
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctygenb-bbush-1",
+     "position": [
+      192.89,
+      8.09,
+      -145.49
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctygenb-bbush-2",
+     "position": [
+      378.5,
+      8.0,
+      -331.48
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "stadium"
+     ]
+    },
+    {
+     "name": "ctygenb-bbush-3",
+     "position": [
+      317.16,
+      8.0,
+      -209.18
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "stadium"
+     ]
+    },
+    {
+     "name": "ctygenb-bbush-4",
+     "position": [
+      121.94,
+      8.0,
+      -42.31
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "stadium"
+     ]
+    },
+    {
+     "name": "ctygenb-sewer",
+     "position": [
+      188.73,
+      8.0,
+      -299.23
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "sewa"
+     ]
+    },
+    {
+     "name": "ctygenb-sewer-exit",
+     "position": [
+      189.83,
+      8.59,
+      -329.25
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "sewa"
+     ]
+    },
+    {
+     "name": "ctygenb-stadium",
+     "position": [
+      12.56,
+      8.0,
+      -321.76
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "stadium"
+     ]
+    },
+    {
+     "name": "ctygenb-mine",
+     "position": [
+      200.43,
+      14.0,
+      -173.33
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctygenb-slumb",
+     "position": [
+      373.69,
+      9.23,
+      -59.07
+     ],
+     "shows": [
+      "ctygenb",
+      "ctyslumb",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctygenb-samos",
+     "position": [
+      383.07,
+      8.14,
+      -44.7
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "slumbset"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyslumb",
+    "ctywide-ff",
+    "minee",
+    "sewa",
+    "slumbset",
+    "stadium",
+    "stadiuma"
+   ]
   },
   "ctyinda": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ctyinda-start",
+     "position": [
+      963.16,
+      27.0,
+      908.65
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-vinroom",
+     "position": [
+      1092.67,
+      24.83,
+      1093.54
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-bbush-1",
+     "position": [
+      971.72,
+      7.99,
+      984.84
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyport",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-bbush-2",
+     "position": [
+      906.45,
+      7.99,
+      864.96
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-bbush-3",
+     "position": [
+      1024.9,
+      7.99,
+      1108.26
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-bbush-4",
+     "position": [
+      1137.53,
+      7.99,
+      1049.32
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-bbush-5",
+     "position": [
+      895.42,
+      7.99,
+      1148.58
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-sewer",
+     "position": [
+      1041.44,
+      -8.48,
+      1022.11
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg",
+      "sewa"
+     ]
+    },
+    {
+     "name": "ctyinda-wasall",
+     "position": [
+      963.16,
+      27.0,
+      908.65
+     ],
+     "shows": [
+      "ctyinda",
+      "wasall",
+      "waswide"
+     ]
+    },
+    {
+     "name": "ctyinda-kg-start",
+     "position": [
+      743.52,
+      4.34,
+      1304.34
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyport",
+      "ctywide-ff-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-grid-res-a",
+     "position": [
+      1131.08,
+      7.99,
+      1004.7
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg",
+      "gridcst"
+     ]
+    },
+    {
+     "name": "ctyinda-grid-res-b",
+     "position": [
+      1131.08,
+      7.99,
+      1004.7
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyinda-sniper-start",
+     "position": [
+      827.6,
+      18.13,
+      1078.85
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyport",
+      "ctywide-ff-kg"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyindb",
+    "ctyport",
+    "ctywide-ff",
+    "ctywide-ff-kg",
+    "ctywide-kg",
+    "gridcst",
+    "ljakc",
+    "sewa",
+    "sewe",
+    "vinroom",
+    "wasall",
+    "waswide"
+   ]
   },
   "ctyindb": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ctyindb-start",
+     "position": [
+      971.42,
+      8.0,
+      546.11
+     ],
+     "shows": [
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyindb-bbush-1",
+     "position": [
+      987.96,
+      7.99,
+      494.43
+     ],
+     "shows": [
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyindb-bbush-2",
+     "position": [
+      955.65,
+      7.99,
+      459.99
+     ],
+     "shows": [
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyindb-bbush-3",
+     "position": [
+      1075.26,
+      8.13,
+      592.47
+     ],
+     "shows": [
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    },
+    {
+     "name": "ctyindb-hijack-vehicle",
+     "position": [
+      969.86,
+      8.39,
+      569.49
+     ],
+     "shows": [
+      "ctyindb",
+      "ctywide-kg"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyinda",
+    "ctysluma",
+    "ctywide-ff",
+    "ctywide-kg"
+   ]
   },
   "ctypepa": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctypepb": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctypepc": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctypesa": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctypesb": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctypesc": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctyport": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ctyport-start",
+     "position": [
+      193.02,
+      17.29,
+      1753.98
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-attack-start",
+     "position": [
+      -3.85,
+      7.71,
+      1327.0
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff",
+      "hiphog"
+     ]
+    },
+    {
+     "name": "ctyport-attack-get-on-movie",
+     "position": [
+      -6.89,
+      7.73,
+      1306.18
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-attack-res",
+     "position": [
+      747.18,
+      4.28,
+      1315.51
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-hijack-decoy",
+     "position": [
+      738.6,
+      14.58,
+      1330.57
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyport",
+      "ctywide-ff-kg"
+     ]
+    },
+    {
+     "name": "ctyport-blow-tower",
+     "position": [
+      575.22,
+      8.83,
+      1472.4
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-hiphog",
+     "position": [
+      -57.9,
+      7.72,
+      1346.93
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff",
+      "hiphog"
+     ]
+    },
+    {
+     "name": "ctyport-hiphog-no-hiphog",
+     "position": [
+      -64.29,
+      7.73,
+      1337.56
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-gungame",
+     "position": [
+      424.87,
+      7.73,
+      1322.43
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-warp",
+     "position": [
+      372.63,
+      7.68,
+      1799.35
+     ],
+     "shows": [
+      "citycast",
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyhijack-res",
+     "position": [
+      193.02,
+      17.29,
+      1753.98
+     ],
+     "shows": [
+      "citycast",
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-air-train",
+     "position": [
+      372.63,
+      7.68,
+      1799.35
+     ],
+     "shows": [
+      "citycast",
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-burning-bush-3",
+     "position": [
+      627.2,
+      7.72,
+      1579.51
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-burning-bush",
+     "position": [
+      -99.87,
+      7.75,
+      1361.74
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff",
+      "hiphog"
+     ]
+    },
+    {
+     "name": "ctyport-warzone",
+     "position": [
+      741.38,
+      4.68,
+      1348.57
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyport",
+      "ctywide-ff-kg"
+     ]
+    },
+    {
+     "name": "ctyport-bombbot",
+     "position": [
+      619.8,
+      7.17,
+      1476.66
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-assault",
+     "position": [
+      -57.9,
+      7.72,
+      1346.93
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-kg-mh",
+      "hiphog"
+     ]
+    },
+    {
+     "name": "ctyport-jak",
+     "position": [
+      193.02,
+      17.29,
+      1753.98
+     ],
+     "shows": [
+      "ctyinda",
+      "ctyport",
+      "ljakc"
+     ]
+    },
+    {
+     "name": "ctyport-bbush-1",
+     "position": [
+      15.01,
+      7.7,
+      1749.97
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-bbush-port-4",
+     "position": [
+      631.14,
+      7.73,
+      1601.22
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-bbush-port-4-missile",
+     "position": [
+      608.49,
+      8.45,
+      1606.19
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-bbush-5",
+     "position": [
+      337.77,
+      7.7,
+      1714.77
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-bbush-6",
+     "position": [
+      -248.88,
+      7.71,
+      1603.94
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-bbush-7",
+     "position": [
+      -3.08,
+      7.73,
+      1303.98
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyport-bbush-8",
+     "position": [
+      303.18,
+      7.73,
+      1326.62
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "citycast",
+    "ctyinda",
+    "ctywide-ff",
+    "ctywide-ff-kg",
+    "ctywide-kg",
+    "ctywide-mh",
+    "hiphog",
+    "ljakc",
+    "mhcitya",
+    "sewa"
+   ]
   },
   "ctysluma": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ctysluma-start",
+     "position": [
+      1062.23,
+      8.14,
+      221.91
+     ],
+     "shows": [
+      "ctyindb",
+      "ctysluma",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctysluma-alley",
+     "position": [
+      1152.79,
+      8.0,
+      178.23
+     ],
+     "shows": [
+      "ctysluma",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctysluma-bbush-1",
+     "position": [
+      1022.09,
+      8.0,
+      201.9
+     ],
+     "shows": [
+      "ctysluma",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctysluma-bbush-2",
+     "position": [
+      1009.05,
+      8.13,
+      271.72
+     ],
+     "shows": [
+      "ctysluma",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctysluma-bbush-3",
+     "position": [
+      871.38,
+      8.0,
+      341.42
+     ],
+     "shows": [
+      "ctysluma",
+      "ctywide-ff"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyindb",
+    "ctywide-ff",
+    "onintent"
+   ]
   },
   "ctyslumb": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ctyslumb-start",
+     "position": [
+      565.34,
+      1.87,
+      -259.11
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumb-sewer",
+     "position": [
+      759.87,
+      1.87,
+      -293.93
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctywide-ff",
+      "sewa"
+     ]
+    },
+    {
+     "name": "ctyslumb-sewer-exit",
+     "position": [
+      782.42,
+      2.1,
+      -293.29
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctywide-ff",
+      "sewa"
+     ]
+    },
+    {
+     "name": "ctyslumb-sewer-movie",
+     "position": [
+      759.87,
+      1.87,
+      -293.93
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctywide-ff",
+      "sewa"
+     ]
+    },
+    {
+     "name": "ctyslumb-bbush-1",
+     "position": [
+      418.76,
+      1.88,
+      -381.99
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumb-bbush-3",
+     "position": [
+      525.89,
+      1.87,
+      -224.81
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumb-bbush-4",
+     "position": [
+      424.52,
+      1.88,
+      -187.14
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctywide-ff"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctygenb",
+    "ctyslumc",
+    "ctywide-ff",
+    "sewa"
+   ]
   },
   "ctyslumc": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ctyslumc-start",
+     "position": [
+      598.9,
+      1.87,
+      -553.93
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "cty-blow-tower-mission",
+     "position": [
+      598.9,
+      7.94,
+      -553.93
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumc-freehq-exit",
+     "position": [
+      624.65,
+      1.87,
+      -556.72
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumc-freehq",
+     "position": [
+      629.26,
+      1.87,
+      -555.65
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumc-factorya",
+     "position": [
+      711.57,
+      1.88,
+      -530.71
+     ],
+     "shows": [
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumc-burning-bush",
+     "position": [
+      537.49,
+      8.0,
+      -580.57
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumc-bbush-1",
+     "position": [
+      521.75,
+      1.88,
+      -482.01
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    },
+    {
+     "name": "ctyslumc-bbush-2",
+     "position": [
+      590.5,
+      1.88,
+      -712.15
+     ],
+     "shows": [
+      "ctyslumb",
+      "ctyslumc",
+      "ctywide-ff"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyslumb",
+    "ctywide-ff"
+   ]
   },
   "ctywide": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": true
+   "traffic": true,
+   "neighbors": [
+    "bikearena"
+   ]
   },
   "ctywide-ff": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "citycast",
+    "ctygenb",
+    "ctyinda",
+    "ctyindb",
+    "ctyport",
+    "ctysluma",
+    "ctyslumb",
+    "ctyslumc",
+    "gungame",
+    "hiphog",
+    "minee",
+    "onintent",
+    "sewa",
+    "slumbset",
+    "stadium"
+   ]
   },
   "ctywide-ff-kg": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyinda",
+    "ctyport"
+   ]
   },
   "ctywide-ff-mh": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ctywide-kg": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyinda",
+    "ctyindb",
+    "ctyport",
+    "gridcst",
+    "sewa",
+    "vinroom"
+   ]
   },
   "ctywide-mh": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyport",
+    "forestx",
+    "mhcitya",
+    "mhcityb",
+    "mhctycst",
+    "sewa",
+    "towera",
+    "towercst"
+   ]
   },
   "ctywide-mh-kg": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "default-level": {
    "taskname": "default",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desbattl": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desbcst": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "desertb",
+    "wasall"
+   ]
   },
   "desboss1": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desboss2": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "deschase": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "deserrol": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "desertb",
+    "wasall"
+   ]
   },
   "desert": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": "*ocean-map-desert*",
    "ocean_height": 9.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "desert-start",
+     "position": [
+      2266.45,
+      30.86,
+      258.13
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-facing-wasdoors",
+     "position": [
+      2265.56,
+      32.63,
+      249.24
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-scorpion-gun",
+     "position": [
+      2280.46,
+      30.4,
+      271.89
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-scorpion-gun-1",
+     "position": [
+      3605.45,
+      33.05,
+      2474.67
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-scorpion-gun-2",
+     "position": [
+      1651.27,
+      20.79,
+      1948.98
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-scorpion-gun-3",
+     "position": [
+      1509.05,
+      43.16,
+      614.59
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-start-any",
+     "position": [
+      2262.39,
+      30.13,
+      263.79
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-start-turtle",
+     "position": [
+      2262.39,
+      30.13,
+      263.79
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-start-snake",
+     "position": [
+      2262.39,
+      30.13,
+      263.79
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-start-scorpion",
+     "position": [
+      2262.39,
+      30.13,
+      263.79
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-start-toad",
+     "position": [
+      2262.39,
+      30.13,
+      263.79
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-lizard-corral",
+     "position": [
+      3025.95,
+      21.71,
+      2797.13
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-lizard-corral-snake-1",
+     "position": [
+      3022.7,
+      21.36,
+      2800.11
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-lizard-corral-snake-2",
+     "position": [
+      3012.97,
+      21.38,
+      2796.75
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-lizard-corral-post",
+     "position": [
+      3036.78,
+      20.05,
+      2803.71
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-nest-exit",
+     "position": [
+      2210.05,
+      20.33,
+      2218.19
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desd",
+     "position": [
+      3821.26,
+      34.9,
+      725.03
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desc",
+     "position": [
+      862.9,
+      79.21,
+      1358.15
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desa",
+     "position": [
+      1372.56,
+      94.67,
+      814.3
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desg",
+     "position": [
+      3151.79,
+      40.46,
+      2513.44
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desh",
+     "position": [
+      3118.81,
+      20.18,
+      3533.73
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "deserth",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desc-2",
+     "position": [
+      1538.97,
+      76.48,
+      1780.22
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-dese",
+     "position": [
+      648.21,
+      17.72,
+      2592.78
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desb",
+     "position": [
+      2860.66,
+      29.75,
+      160.85
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desa-2",
+     "position": [
+      1703.54,
+      14.55,
+      102.52
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desc-3",
+     "position": [
+      196.82,
+      44.64,
+      1597.81
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desg-2",
+     "position": [
+      3026.83,
+      51.62,
+      3086.96
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "deserth",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desd-2",
+     "position": [
+      2128.06,
+      34.98,
+      1423.06
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desg-3",
+     "position": [
+      2696.76,
+      26.75,
+      2859.43
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-dese-2",
+     "position": [
+      218.62,
+      60.27,
+      2969.08
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-dese-3",
+     "position": [
+      127.28,
+      44.94,
+      3839.97
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desd-3",
+     "position": [
+      3939.96,
+      13.22,
+      1413.23
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desb-2",
+     "position": [
+      3897.74,
+      33.21,
+      410.83
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-deswalk",
+     "position": [
+      2508.59,
+      60.0,
+      591.3
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-deswalk-top",
+     "position": [
+      2457.98,
+      107.99,
+      566.19
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desg-4",
+     "position": [
+      3102.13,
+      26.57,
+      2585.12
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desa-3",
+     "position": [
+      602.58,
+      92.6,
+      522.19
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-boss-res-a",
+     "position": [
+      2266.45,
+      30.86,
+      258.13
+     ],
+     "shows": [
+      "desert-game",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-boss-res-b",
+     "position": [
+      2266.45,
+      30.86,
+      258.13
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "deswalk",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desd-4",
+     "position": [
+      2862.65,
+      56.82,
+      983.76
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desc-4",
+     "position": [
+      1030.77,
+      101.51,
+      1747.27
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desc-5",
+     "position": [
+      1552.06,
+      25.0,
+      1896.67
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desb-3",
+     "position": [
+      2716.46,
+      25.91,
+      292.27
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-dese-1",
+     "position": [
+      582.74,
+      97.33,
+      2340.58
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desf",
+     "position": [
+      1224.57,
+      24.15,
+      3320.69
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-dese-5",
+     "position": [
+      738.52,
+      70.83,
+      3406.43
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desd-5",
+     "position": [
+      2472.15,
+      63.38,
+      923.22
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bbush-desb-4",
+     "position": [
+      2223.33,
+      24.59,
+      745.25
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ba-start",
+     "position": [
+      2239.8,
+      30.09,
+      512.58
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-bd-start",
+     "position": [
+      2640.39,
+      25.04,
+      609.84
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ab-start",
+     "position": [
+      1730.25,
+      21.52,
+      645.68
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ac-start",
+     "position": [
+      1286.06,
+      51.42,
+      665.96
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ca-start",
+     "position": [
+      1041.21,
+      27.96,
+      1261.48
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ce-start",
+     "position": [
+      468.85,
+      21.79,
+      1867.18
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-cf-start",
+     "position": [
+      1347.11,
+      19.81,
+      1796.72
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-fc-start",
+     "position": [
+      1399.22,
+      24.86,
+      2572.84
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-fe-start",
+     "position": [
+      1310.88,
+      16.43,
+      3377.95
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ef-start",
+     "position": [
+      748.53,
+      26.18,
+      2789.67
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ec-start",
+     "position": [
+      484.05,
+      25.61,
+      2564.59
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-fh-start",
+     "position": [
+      1622.74,
+      25.87,
+      3451.26
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-fg-start",
+     "position": [
+      1831.31,
+      31.65,
+      2650.25
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-gf-start",
+     "position": [
+      2556.38,
+      24.56,
+      2577.95
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-gh-start",
+     "position": [
+      3026.72,
+      21.57,
+      2904.93
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-hg-start",
+     "position": [
+      2668.61,
+      23.56,
+      3369.16
+     ],
+     "shows": [
+      "desert-game",
+      "deserth",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-hf-start",
+     "position": [
+      2430.65,
+      21.96,
+      3630.52
+     ],
+     "shows": [
+      "desert-game",
+      "deserth",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-htemple-start",
+     "position": [
+      2565.06,
+      23.82,
+      3362.54
+     ],
+     "shows": [
+      "desert-game",
+      "deserth",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-gd-start",
+     "position": [
+      2456.82,
+      21.72,
+      2378.37
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-dg-start",
+     "position": [
+      2630.52,
+      37.74,
+      1842.5
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-db-start",
+     "position": [
+      2534.52,
+      11.47,
+      1484.06
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-tunnelc-exit",
+     "position": [
+      1676.3,
+      22.3,
+      1953.21
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-tunnelf-exit",
+     "position": [
+      1946.9,
+      22.27,
+      2260.46
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-tunneld-exit",
+     "position": [
+      2066.48,
+      23.12,
+      1782.01
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
-   "companions": [],
-   "traffic": false
+   "companions": [
+    "desert-game",
+    "deserta",
+    "desertb",
+    "desertc",
+    "desertd",
+    "deserte",
+    "desertf",
+    "desertg",
+    "deserth",
+    "deswalk"
+   ],
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "deserta",
+    "desertb",
+    "desertc",
+    "desertd",
+    "deserte",
+    "desertf",
+    "desertg",
+    "deserth",
+    "deswalk",
+    "wasall",
+    "wasdoors"
+   ]
   },
   "desert-game": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desbcst",
+    "deserrol",
+    "desert",
+    "deserta",
+    "desertb",
+    "desertc",
+    "desertd",
+    "deserte",
+    "desertf",
+    "desertg",
+    "deserth",
+    "deshover",
+    "desoasis",
+    "desrally",
+    "desresc",
+    "deswalk",
+    "lnstcst",
+    "oasiscst",
+    "templex",
+    "warpcast",
+    "wasall",
+    "wasdoors"
+   ]
   },
   "deserta": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "deserta-start",
+     "position": [
+      1346.15,
+      59.05,
+      723.27
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertb",
+    "desertc",
+    "deshover",
+    "wasall"
+   ]
   },
   "desertb": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desertb-start",
+     "position": [
+      2842.9,
+      29.51,
+      725.19
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "desertd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertb-race-start",
+     "position": [
+      2803.59,
+      22.7,
+      243.97
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertb-race-pre-start",
+     "position": [
+      2776.36,
+      22.99,
+      234.94
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertb-race-test-start",
+     "position": [
+      2660.09,
+      28.12,
+      249.9
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertb-race-record",
+     "position": [
+      2806.15,
+      26.58,
+      510.1
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertb-time-trial-start",
+     "position": [
+      2838.24,
+      22.09,
+      241.26
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertb-final-boss-start",
+     "position": [
+      2262.39,
+      30.13,
+      263.79
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "desert-warp",
+     "position": [
+      2606.92,
+      28.02,
+      127.77
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "warpcast",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-final-boss-res-movie",
+     "position": [
+      2606.92,
+      28.02,
+      127.77
+     ],
+     "shows": [
+      "desbcst",
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-final-boss-res-movie-scene-player",
+     "position": [
+      2606.92,
+      28.02,
+      127.77
+     ],
+     "shows": [
+      "desbcst",
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-final-boss-res-movie-a",
+     "position": [
+      2606.92,
+      28.02,
+      127.77
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "deswalk",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desbcst",
+    "deserrol",
+    "desert",
+    "desert-game",
+    "deserta",
+    "desertd",
+    "deswalk",
+    "warpcast",
+    "wasall",
+    "wasdoors"
+   ]
   },
   "desertc": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desertc-start",
+     "position": [
+      824.16,
+      79.22,
+      1411.91
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "deserta",
+    "deserte",
+    "desertf",
+    "desrally",
+    "desresc",
+    "wasall"
+   ]
   },
   "desertd": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desertd-start",
+     "position": [
+      2605.81,
+      55.66,
+      1163.47
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertb",
+    "desertg",
+    "wasall"
+   ]
   },
   "deserte": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "deserte-start",
+     "position": [
+      503.11,
+      21.05,
+      3496.01
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "desertf",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertc",
+    "desertf",
+    "desoasis",
+    "desresc",
+    "oasiscst",
+    "wasall"
+   ]
   },
   "desertf": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desertf-start",
+     "position": [
+      1855.91,
+      89.13,
+      3656.56
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "deserth",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertf-toad",
+     "position": [
+      1431.4,
+      26.84,
+      3070.31
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertf-stronghold-start",
+     "position": [
+      1562.62,
+      25.46,
+      2949.69
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertf-toad-chase",
+     "position": [
+      1524.88,
+      24.2,
+      2970.3
+     ],
+     "shows": [
+      "desert-game",
+      "desertf",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertc",
+    "deserte",
+    "deserth",
+    "desrally",
+    "wasall"
+   ]
   },
   "desertg": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desertg-start",
+     "position": [
+      3080.82,
+      57.21,
+      2393.78
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertg-egg-wall-scene",
+     "position": [
+      3080.82,
+      57.21,
+      2393.78
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "lnstcst",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-hunt-intro",
+     "position": [
+      2279.48,
+      17.57,
+      2325.59
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertg-hunt-res-start",
+     "position": [
+      2074.2,
+      -22.48,
+      1971.82
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desertg-hunt-res-end",
+     "position": [
+      3213.44,
+      35.43,
+      1866.57
+     ],
+     "shows": [
+      "desert-game",
+      "desertd",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-nest-entrance",
+     "position": [
+      2251.89,
+      17.6,
+      2243.08
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-nest-exit",
+     "position": [
+      2188.86,
+      17.46,
+      2200.93
+     ],
+     "shows": [
+      "desert-game",
+      "desertg",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertd",
+    "deserth",
+    "lnstcst",
+    "nsta",
+    "wasall"
+   ]
   },
   "deserth": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "deserth-start",
+     "position": [
+      2783.13,
+      42.12,
+      3228.89
+     ],
+     "shows": [
+      "desert-game",
+      "deserth",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertf",
+    "desertg",
+    "templex",
+    "wasall"
+   ]
   },
   "deshover": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desert-hover-movie",
+     "position": [
+      1348.23,
+      41.82,
+      540.14
+     ],
+     "shows": [
+      "desert-game",
+      "deserta",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "deserta",
+    "wasall"
+   ]
   },
   "deshunt": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desinter": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desjump": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desliz": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desoasis": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desert-ashelin-pre-start",
+     "position": [
+      569.27,
+      21.94,
+      2534.55
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ashelin",
+     "position": [
+      611.34,
+      18.81,
+      2521.12
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ashelin-movie",
+     "position": [
+      569.27,
+      21.94,
+      2534.55
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "oasiscst",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-ashelin-end",
+     "position": [
+      613.09,
+      18.61,
+      2521.09
+     ],
+     "shows": [
+      "desert-game",
+      "deserte",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "deserte",
+    "oasiscst",
+    "wasall"
+   ]
   },
   "desrace1": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desrally": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desrally-race-start",
+     "position": [
+      1535.53,
+      22.56,
+      1960.72
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "desertf",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desrally-record",
+     "position": [
+      1432.14,
+      50.94,
+      1654.6
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "desertc",
+    "desertf",
+    "wasall"
+   ]
   },
   "desresc": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "desert-rescue-movie",
+     "position": [
+      779.0,
+      82.23,
+      3383.54
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-rescue-movie-finish",
+     "position": [
+      561.52,
+      21.48,
+      2508.47
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "deserte",
+      "wasall"
+     ]
+    },
+    {
+     "name": "desert-rescue-post-satellite",
+     "position": [
+      559.93,
+      21.56,
+      2508.12
+     ],
+     "shows": [
+      "desert-game",
+      "desertc",
+      "deserte",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "desertc",
+    "deserte",
+    "wasall"
+   ]
   },
   "desrescc": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "desrescg": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "destrack": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "deswalk": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "deswalk-start",
+     "position": [
+      2470.25,
+      60.44,
+      640.43
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "deswalk",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertb",
+    "wasall"
+   ]
   },
   "factorya": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "factorya-intro-b",
+     "position": [
+      275.83,
+      496.59,
+      -49.76
+     ],
+     "shows": [
+      "factorya"
+     ]
+    },
+    {
+     "name": "factorya-movie",
+     "position": [
+      275.83,
+      496.59,
+      -49.76
+     ],
+     "shows": [
+      "factorya",
+      "factoryb"
+     ]
+    },
+    {
+     "name": "factorya-landing",
+     "position": [
+      377.33,
+      333.5,
+      394.63
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "factoryb",
+    "factoryc",
+    "factoryd"
+   ]
   },
   "factoryb": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "factoryb-start",
+     "position": [
+      589.05,
+      408.33,
+      281.36
+     ],
+     "shows": [
+      "factorya",
+      "factoryb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "factorya"
+   ]
   },
   "factoryc": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "factoryc-start",
+     "position": [
+      248.24,
+      483.64,
+      58.67
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-pre-indax-1",
+     "position": [
+      229.47,
+      422.14,
+      22.75
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-indax-1",
+     "position": [
+      256.25,
+      440.32,
+      39.8
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-pre-indax-2",
+     "position": [
+      294.14,
+      436.12,
+      -158.48
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-indax-2",
+     "position": [
+      279.71,
+      454.32,
+      -191.53
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-mid-indax-2",
+     "position": [
+      240.74,
+      438.18,
+      -216.59
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-pre-indax-3",
+     "position": [
+      59.43,
+      442.12,
+      -135.39
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-post-indax-3",
+     "position": [
+      31.68,
+      444.0,
+      -82.57
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-indax-3",
+     "position": [
+      24.32,
+      472.34,
+      -130.24
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-pre-indax-4",
+     "position": [
+      75.66,
+      430.12,
+      -1.69
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-indax-4",
+     "position": [
+      98.58,
+      448.32,
+      28.97
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factory-post-indax-4",
+     "position": [
+      62.21,
+      430.16,
+      20.56
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factoryc-ultimate-fence",
+     "position": [
+      169.52,
+      434.12,
+      7.63
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    },
+    {
+     "name": "factoryc-pre-vehicle",
+     "position": [
+      85.21,
+      428.12,
+      53.68
+     ],
+     "shows": [
+      "factorya",
+      "factoryc"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "factorya"
+   ]
   },
   "factoryd": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "factoryd-pre",
+     "position": [
+      198.99,
+      523.68,
+      -39.77
+     ],
+     "shows": [
+      "factorya",
+      "factoryd"
+     ]
+    },
+    {
+     "name": "factoryd-start",
+     "position": [
+      250.7,
+      523.71,
+      -92.28
+     ],
+     "shows": [
+      "factorya",
+      "factoryd"
+     ]
+    },
+    {
+     "name": "factoryd-res-fma",
+     "position": [
+      250.7,
+      523.71,
+      -92.28
+     ],
+     "shows": [
+      "factorya",
+      "factoryd"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "factorya"
+   ]
   },
   "foresta": {
    "taskname": "forest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "foresta-start",
+     "position": [
+      -514.04,
+      29.04,
+      924.91
+     ],
+     "shows": [
+      "foresta",
+      "forestx"
+     ]
+    },
+    {
+     "name": "foresta-ring-chase",
+     "position": [
+      -634.66,
+      21.93,
+      963.4
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "foresta-statue-2",
+     "position": [
+      -689.31,
+      24.01,
+      1097.33
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "foresta-statue-3",
+     "position": [
+      -785.11,
+      32.28,
+      947.58
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "foresta-statue-4",
+     "position": [
+      -828.94,
+      24.58,
+      1035.18
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "foresta-statue-5",
+     "position": [
+      -703.56,
+      50.56,
+      1154.23
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "forest-post-turn-on-machine",
+     "position": [
+      -519.54,
+      22.82,
+      1162.89
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "forest-pillar-start",
+     "position": [
+      -698.85,
+      24.92,
+      1047.99
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "foresta-pillar-top",
+     "position": [
+      -704.99,
+      59.16,
+      1020.16
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "foresta-pillar-center",
+     "position": [
+      -718.53,
+      60.89,
+      1016.32
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    },
+    {
+     "name": "foresta-pillar-bottom",
+     "position": [
+      -718.32,
+      22.4,
+      1014.52
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "forestb",
+    "forestx",
+    "precura"
+   ]
   },
   "forestb": {
    "taskname": "forest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "forestb-start",
+     "position": [
+      -849.22,
+      32.86,
+      1200.86
+     ],
+     "shows": [
+      "foresta",
+      "forestb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "foresta"
+   ]
   },
   "forestx": {
    "taskname": "forest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "forestx-airlock",
+     "position": [
+      -480.54,
+      30.34,
+      927.43
+     ],
+     "shows": [
+      "forestx"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctywide-mh",
+    "foresta",
+    "mhcitya"
+   ]
   },
   "freecast": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "freehq"
+   ]
   },
   "freehq": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "freehq-start",
+     "position": [
+      682.24,
+      80.34,
+      -552.19
+     ],
+     "shows": [
+      "freecast",
+      "freehq"
+     ]
+    },
+    {
+     "name": "freehq-intro",
+     "position": [
+      682.24,
+      80.34,
+      -552.19
+     ],
+     "shows": [
+      "freehq",
+      "introcst"
+     ]
+    },
+    {
+     "name": "freehq-movie",
+     "position": [
+      703.06,
+      80.34,
+      -561.46
+     ],
+     "shows": [
+      "freecast",
+      "freehq"
+     ]
+    },
+    {
+     "name": "freehq-movie-pre",
+     "position": [
+      695.0,
+      80.34,
+      -561.51
+     ],
+     "shows": [
+      "freecast",
+      "freehq"
+     ]
+    },
+    {
+     "name": "freehq-post-boss",
+     "position": [
+      713.55,
+      80.34,
+      -564.34
+     ],
+     "shows": [
+      "freecast",
+      "freehq"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "freecast",
+    "introcst"
+   ]
   },
   "gregtest": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": "*ocean-map-desert*",
    "ocean_height": 9.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "gregtest-start",
+     "position": [
+      3244.99,
+      30.74,
+      1301.87
+     ],
+     "shows": [
+      "gregtest",
+      "wasall"
+     ]
+    },
+    {
+     "name": "gregtest-wascity",
+     "position": [
+      2258.35,
+      30.86,
+      136.88
+     ],
+     "shows": [
+      "gregtest",
+      "wascitya"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall",
+    "wascitya"
+   ]
   },
   "gridcst": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyinda",
+    "ctywide-kg"
+   ]
   },
   "gungame": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "gungame-start",
+     "position": [
+      367.9,
+      8.48,
+      1255.05
+     ],
+     "shows": [
+      "gungame"
+     ]
+    },
+    {
+     "name": "gungame-movie",
+     "position": [
+      367.9,
+      8.48,
+      1255.05
+     ],
+     "shows": [
+      "ctywide-ff",
+      "gungame"
+     ]
+    },
+    {
+     "name": "gungame-1-start",
+     "position": [
+      362.12,
+      8.48,
+      1247.24
+     ],
+     "shows": [
+      "gungame"
+     ]
+    },
+    {
+     "name": "gungame-2-start",
+     "position": [
+      371.72,
+      8.48,
+      1248.57
+     ],
+     "shows": [
+      "gungame"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctywide-ff"
+   ]
   },
   "gungame1": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "gungame2": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "halfpipe": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "halfpipe",
+     "position": [
+      -0.26,
+      -42.0,
+      -51.89
+     ],
+     "shows": [
+      "halfpipe"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "hanga": {
    "taskname": "volcano",
    "base_mask": 1,
    "ocean": "*ocean-map-desert*",
    "ocean_height": 9.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "hanga-start",
+     "position": [
+      4106.22,
+      286.79,
+      4062.3
+     ],
+     "shows": [
+      "hanga",
+      "hangb",
+      "templex"
+     ]
+    },
+    {
+     "name": "hanga-halfway",
+     "position": [
+      1453.76,
+      276.35,
+      2214.93
+     ],
+     "shows": [
+      "hanga",
+      "hangb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "hangb",
+    "templea",
+    "templex"
+   ]
   },
   "hangb": {
    "taskname": "volcano",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "hanga",
+    "templex"
+   ]
   },
   "hermtest": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "hiphog": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "hiphog-start",
+     "position": [
+      -82.67,
+      9.15,
+      1312.39
+     ],
+     "shows": [
+      "ctywide-ff",
+      "hiphog"
+     ]
+    },
+    {
+     "name": "hiphog-movie-nocity",
+     "position": [
+      -82.67,
+      9.15,
+      1312.39
+     ],
+     "shows": [
+      "hiphog"
+     ]
+    },
+    {
+     "name": "hiphog-movie",
+     "position": [
+      -82.67,
+      9.15,
+      1312.39
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff",
+      "hiphog"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyport",
+    "ctywide-ff"
+   ]
   },
   "intpalrf": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "intpfall": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": true,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "introcst",
+    "wasintro"
+   ]
   },
   "intro": {
    "taskname": "default",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "introcst": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "freehq",
+    "intpfall",
+    "wasintro"
+   ]
   },
   "inttitle": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lashelin": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbring1": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbring2": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbring3": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbring4": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbring5": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbring6": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbring7": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbsdrp1": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbsdrp2": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbsdrp3": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbspid": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbspirt": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbsprt2": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbsprt3": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbtcha1": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbtcha2": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbtcha3": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbbush": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbiped": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lblowcst": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lblowtkg": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lblowtmh": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lbombbot": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lcitysml": {
    "taskname": "precursor",
    "base_mask": 1,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": true,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctyass": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctyblow": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctydest": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctyhijk": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctypalt": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctypatk": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctyprot": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lctysnpr": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ldamklev": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ldampeck": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ldampksm": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ldamsig": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ldesgcst": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ldmpckgn": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lerrol": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfaccar": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfaccity": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": true,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfacctyb": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": true,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfacout": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfacrm1": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "lfacrm1-start",
+     "position": [
+      680.04,
+      2.78,
+      -506.34
+     ],
+     "shows": [
+      "towerc"
+     ]
+    }
+   ],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfacrm2": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "factoryc-start-lfacrm2",
+     "position": [
+      248.24,
+      483.64,
+      58.67
+     ],
+     "shows": [
+      "factorya"
+     ]
+    }
+   ],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfactory": {
    "taskname": "factory",
    "base_mask": 8193,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lformach": {
    "taskname": "forest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lforplnt": {
    "taskname": "forest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lforring": {
    "taskname": "forest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lfreeout": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lgunnorm": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lgunrnc": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljak": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljakc": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyinda",
+    "ctyport"
+   ]
   },
   "ljakcklv": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljakklev": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljakndax": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljaksig": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljinx": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljkcdmkl": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljkdmpk": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljkdxvin": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljkfeet": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ljndklev": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lkleever": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lmech": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lmhcitya": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lmhcityb": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lnstcst": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "desertg",
+    "nsta",
+    "wasall"
+   ]
   },
   "lnstoba": {
    "taskname": "nest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lnstobb": {
    "taskname": "nest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lnstobc": {
    "taskname": "nest",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "loninsim": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "loutro": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "loutro2": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "loutro3": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lpatkcs": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lpattack": {
    "taskname": "palace",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lpeckfly": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lppatrol": {
    "taskname": "palace",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lprecurc": {
    "taskname": "precursor",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lprenme": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lsamos": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lseemwca": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lsig": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lsigjakc": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lsigklv": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lsnkwhls": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltnfxhip": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltnjxhip": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltorn": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltornjnx": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltornsam": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltowcity": {
    "taskname": "tower",
    "base_mask": 1,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": true,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltowera": {
    "taskname": "tower",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltowerb": {
    "taskname": "tower",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ltowerb-fma",
+     "position": [
+      -99.23,
+      432.04,
+      462.61
+     ],
+     "shows": [
+      "towera",
+      "towerb",
+      "towerc"
+     ]
+    }
+   ],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "ltrtwhls": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lvincst": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lwasbbv": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lwassig": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lwlandm": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "lwstdpck": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "mhcitya": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "mhcitya-near-ctyport",
+     "position": [
+      -379.41,
+      9.79,
+      1182.85
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-fma",
+     "position": [
+      -379.31,
+      9.52,
+      1182.85
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya",
+      "mhctycst"
+     ]
+    },
+    {
+     "name": "mhcitya-forestx",
+     "position": [
+      -449.72,
+      28.87,
+      927.39
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-leaving-forestx",
+     "position": [
+      -446.96,
+      27.85,
+      926.29
+     ],
+     "shows": [
+      "ctywide-mh",
+      "forestx",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-tower1",
+     "position": [
+      -345.12,
+      10.17,
+      1100.08
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-tower2",
+     "position": [
+      -255.96,
+      12.57,
+      1174.59
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-tower3",
+     "position": [
+      22.92,
+      6.5,
+      1016.35
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya",
+      "mhcityb"
+     ]
+    },
+    {
+     "name": "mhcitya-grid",
+     "position": [
+      -438.45,
+      10.1,
+      918.97
+     ],
+     "shows": [
+      "ctywide-mh",
+      "forestx",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-third-checkpoint",
+     "position": [
+      -26.23,
+      29.25,
+      926.29
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-fourth-checkpoint",
+     "position": [
+      -166.02,
+      29.28,
+      1156.09
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-fifth-checkpoint",
+     "position": [
+      -318.76,
+      28.0,
+      1065.32
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-end-darkeco",
+     "position": [
+      -380.99,
+      9.56,
+      1182.28
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-mh",
+      "mhcitya"
+     ]
+    },
+    {
+     "name": "mhcitya-in-forestx",
+     "position": [
+      -464.17,
+      30.03,
+      927.27
+     ],
+     "shows": [
+      "ctywide-mh",
+      "forestx",
+      "mhcitya"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyport",
+    "ctywide-mh",
+    "forestx",
+    "mhcityb",
+    "mhctycst"
+   ]
   },
   "mhcityb": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "mhcityb-near-mhcitya",
+     "position": [
+      -66.1,
+      8.36,
+      707.87
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya",
+      "mhcityb"
+     ]
+    },
+    {
+     "name": "mhcityb-near-final-towers",
+     "position": [
+      -334.64,
+      9.56,
+      767.58
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya",
+      "mhcityb"
+     ]
+    },
+    {
+     "name": "mhcityb-tower-fma",
+     "position": [
+      -311.59,
+      -0.74,
+      582.58
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcityb",
+      "towercst"
+     ]
+    },
+    {
+     "name": "mhcityb-tower-fma-end",
+     "position": [
+      -311.59,
+      -0.74,
+      582.58
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcityb",
+      "towera"
+     ]
+    },
+    {
+     "name": "mhcityb-sewer",
+     "position": [
+      -287.8,
+      9.23,
+      677.44
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcityb"
+     ]
+    },
+    {
+     "name": "mhcityb-first-checkpoint",
+     "position": [
+      -351.05,
+      15.21,
+      659.99
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya",
+      "mhcityb"
+     ]
+    },
+    {
+     "name": "mhcityb-second-checkpoint",
+     "position": [
+      -102.02,
+      27.01,
+      751.59
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcitya",
+      "mhcityb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctywide-mh",
+    "mhcitya",
+    "sewa",
+    "towera",
+    "towercst"
+   ]
   },
   "mhctycst": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctywide-mh",
+    "mhcitya"
+   ]
   },
   "minea": {
    "taskname": "mine",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "minea-start",
+     "position": [
+      -89.94,
+      84.0,
+      -98.54
+     ],
+     "shows": [
+      "minea",
+      "minec"
+     ]
+    },
+    {
+     "name": "minea-boss",
+     "position": [
+      314.03,
+      61.75,
+      -171.74
+     ],
+     "shows": [
+      "minea",
+      "mined"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "comba",
+    "combn",
+    "mineb",
+    "minec",
+    "mined"
+   ]
   },
   "mineb": {
    "taskname": "mine",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "mineb-start",
+     "position": [
+      -108.49,
+      24.14,
+      -66.93
+     ],
+     "shows": [
+      "minea",
+      "mineb"
+     ]
+    },
+    {
+     "name": "mineb-halfway",
+     "position": [
+      -101.01,
+      30.0,
+      171.56
+     ],
+     "shows": [
+      "minea",
+      "mineb"
+     ]
+    },
+    {
+     "name": "mineb-elevator-room",
+     "position": [
+      -246.35,
+      65.94,
+      6.62
+     ],
+     "shows": [
+      "minea",
+      "mineb"
+     ]
+    },
+    {
+     "name": "mineb-on-elevator",
+     "position": [
+      -180.15,
+      64.89,
+      -62.65
+     ],
+     "shows": [
+      "minea",
+      "mineb"
+     ]
+    },
+    {
+     "name": "mineb-after-armor",
+     "position": [
+      -255.41,
+      68.16,
+      -8.51
+     ],
+     "shows": [
+      "minea",
+      "mineb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "minea"
+   ]
   },
   "minec": {
    "taskname": "mine",
    "base_mask": 1,
    "ocean": "*ocean-map-mine*",
    "ocean_height": 0.0,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "minec-start",
+     "position": [
+      257.28,
+      81.12,
+      55.12
+     ],
+     "shows": [
+      "minea",
+      "minec"
+     ]
+    },
+    {
+     "name": "minec-intro",
+     "position": [
+      172.75,
+      98.3,
+      32.01
+     ],
+     "shows": [
+      "minea",
+      "minec"
+     ]
+    },
+    {
+     "name": "minec-halfway",
+     "position": [
+      36.87,
+      120.0,
+      -15.67
+     ],
+     "shows": [
+      "minea",
+      "minec"
+     ]
+    },
+    {
+     "name": "minec-train",
+     "position": [
+      -201.64,
+      160.03,
+      -79.68
+     ],
+     "shows": [
+      "minea",
+      "minec"
+     ]
+    },
+    {
+     "name": "minec-resolution",
+     "position": [
+      222.21,
+      97.98,
+      -15.77
+     ],
+     "shows": [
+      "minea",
+      "minec"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "minea"
+   ]
   },
   "mined": {
    "taskname": "mine",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "prebot-intro",
+     "position": [
+      312.36,
+      61.89,
+      -203.76
+     ],
+     "shows": [
+      "minea",
+      "mined"
+     ]
+    },
+    {
+     "name": "prebot-fight",
+     "position": [
+      312.36,
+      61.89,
+      -203.76
+     ],
+     "shows": [
+      "mined"
+     ]
+    },
+    {
+     "name": "prebot-beaten",
+     "position": [
+      313.8,
+      61.73,
+      -277.61
+     ],
+     "shows": [
+      "mined",
+      "minee"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "minea",
+    "minee"
+   ]
   },
   "minee": {
    "taskname": "mine",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "minee-exit",
+     "position": [
+      314.13,
+      61.82,
+      -309.13
+     ],
+     "shows": [
+      "mined",
+      "minee"
+     ]
+    },
+    {
+     "name": "minee-genb",
+     "position": [
+      221.41,
+      14.22,
+      -173.33
+     ],
+     "shows": [
+      "ctygenb",
+      "ctywide-ff",
+      "minee"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctygenb",
+    "ctywide-ff",
+    "mined"
+   ]
   },
   "museum": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "museum2",
+    "title"
+   ]
   },
   "museum2": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "museum",
+    "title"
+   ]
   },
   "museum3": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "museum3b",
+    "title"
+   ]
   },
   "museum3b": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "museum3",
+    "title"
+   ]
   },
   "museum4": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "museum4b",
+    "title"
+   ]
   },
   "museum4b": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "museum4",
+    "title"
+   ]
   },
   "nsta": {
    "taskname": "nest",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "nsta-start",
+     "position": [
+      1914.87,
+      -32.88,
+      1904.11
+     ],
+     "shows": [
+      "desertg",
+      "nsta",
+      "wasall"
+     ]
+    },
+    {
+     "name": "nsta-eggs",
+     "position": [
+      1914.87,
+      -32.88,
+      1904.11
+     ],
+     "shows": [
+      "desertg",
+      "nsta",
+      "wasall"
+     ]
+    },
+    {
+     "name": "nsta-cave",
+     "position": [
+      1646.72,
+      -95.89,
+      639.86
+     ],
+     "shows": [
+      "nsta",
+      "nstb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "nsta-fma",
+     "position": [
+      1655.78,
+      -83.48,
+      760.17
+     ],
+     "shows": [
+      "lnstcst",
+      "nsta",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desertg",
+    "lnstcst",
+    "nstb",
+    "wasall"
+   ]
   },
   "nstb": {
    "taskname": "nest",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "nstb-start",
+     "position": [
+      1646.72,
+      -95.89,
+      639.86
+     ],
+     "shows": [
+      "nsta",
+      "nstb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "nstb-hunt",
+     "position": [
+      1646.72,
+      -95.89,
+      639.86
+     ],
+     "shows": [
+      "nsta",
+      "nstb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "nstb-crystal",
+     "position": [
+      1646.72,
+      -95.89,
+      639.86
+     ],
+     "shows": [
+      "nsta",
+      "nstb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "nstb-race",
+     "position": [
+      1646.72,
+      -95.89,
+      639.86
+     ],
+     "shows": [
+      "nsta",
+      "nstb",
+      "wasall"
+     ]
+    },
+    {
+     "name": "nstb-escape",
+     "position": [
+      1615.54,
+      -90.67,
+      596.14
+     ],
+     "shows": [
+      "nsta",
+      "nstb",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "nsta",
+    "wasall"
+   ]
   },
   "oasiscst": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "deserte",
+    "desoasis",
+    "wasall"
+   ]
   },
   "onintent": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "onintent-start",
+     "position": [
+      782.72,
+      8.0,
+      192.28
+     ],
+     "shows": [
+      "ctysluma",
+      "ctywide-ff",
+      "onintent"
+     ]
+    },
+    {
+     "name": "onintent-end",
+     "position": [
+      777.81,
+      8.14,
+      181.26
+     ],
+     "shows": [
+      "ctysluma",
+      "ctywide-ff",
+      "onintent"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctysluma",
+    "ctywide-ff"
+   ]
   },
   "outcast3": {
    "taskname": "arena",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "outrocst",
+    "wasall",
+    "wasstada"
+   ]
   },
   "outrocst": {
    "taskname": "arena",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "outcast3",
+    "wasall",
+    "wasstada"
+   ]
   },
   "powergd": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "precura": {
    "taskname": "precursor",
    "base_mask": 8193,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "precura-mech",
+     "position": [
+      8.75,
+      551.32,
+      -108.85
+     ],
+     "shows": [
+      "precura"
+     ]
+    },
+    {
+     "name": "precura-mech-end",
+     "position": [
+      -206.27,
+      534.14,
+      -72.5
+     ],
+     "shows": [
+      "precura"
+     ]
+    },
+    {
+     "name": "precura-start",
+     "position": [
+      8.75,
+      551.32,
+      -108.85
+     ],
+     "shows": [
+      "precura"
+     ]
+    },
+    {
+     "name": "precura-foresta",
+     "position": [
+      -206.84,
+      534.16,
+      -70.99
+     ],
+     "shows": [
+      "foresta",
+      "precura"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "foresta",
+    "precurc"
+   ]
   },
   "precurb": {
    "taskname": "precursor",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "precurc": {
    "taskname": "precursor",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "precurc-end",
+     "position": [
+      202.44,
+      501.1,
+      284.72
+     ],
+     "shows": [
+      "precura",
+      "precurc"
+     ]
+    },
+    {
+     "name": "precurc-precurd",
+     "position": [
+      207.81,
+      500.84,
+      286.2
+     ],
+     "shows": [
+      "precura",
+      "precurc"
+     ]
+    },
+    {
+     "name": "precurc-checkpoint",
+     "position": [
+      154.01,
+      547.55,
+      -81.45
+     ],
+     "shows": [
+      "precura",
+      "precurc"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "precura",
+    "precurd"
+   ]
   },
   "precurd": {
    "taskname": "precursor",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "precurd-start",
+     "position": [
+      158.59,
+      202.27,
+      266.13
+     ],
+     "shows": [
+      "precurd",
+      "railx"
+     ]
+    },
+    {
+     "name": "precurd-escape",
+     "position": [
+      9.42,
+      200.23,
+      126.69
+     ],
+     "shows": [
+      "precurd",
+      "wasall"
+     ]
+    },
+    {
+     "name": "precurd-warp",
+     "position": [
+      7.59,
+      201.49,
+      572.69
+     ],
+     "shows": [
+      "precurc",
+      "precurd"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "precurc",
+    "railx",
+    "wasall"
+   ]
   },
   "raila": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "railb",
+    "railb2",
+    "railc",
+    "raild",
+    "raile"
+   ]
   },
   "railb": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "railb-start",
+     "position": [
+      -169.5,
+      -31.29,
+      980.55
+     ],
+     "shows": [
+      "raila",
+      "railb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "raila",
+    "railb2"
+   ]
   },
   "railb2": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "railb2-start",
+     "position": [
+      285.19,
+      -435.43,
+      668.66
+     ],
+     "shows": [
+      "raila",
+      "railb",
+      "railb2"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "raila",
+    "railb",
+    "railc"
+   ]
   },
   "railc": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "railc-start",
+     "position": [
+      170.28,
+      -934.06,
+      715.12
+     ],
+     "shows": [
+      "raila",
+      "railb2",
+      "railc"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "raila",
+    "railb2",
+    "raild"
+   ]
   },
   "railcst": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "railx"
+   ]
   },
   "raild": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "raild-start",
+     "position": [
+      193.21,
+      -1338.3,
+      715.68
+     ],
+     "shows": [
+      "raila",
+      "railc",
+      "raild"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "raila",
+    "railc"
+   ]
   },
   "raile": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "raile-start",
+     "position": [
+      -47.86,
+      -2221.74,
+      254.7
+     ],
+     "shows": [
+      "raila",
+      "raile"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "raila"
+   ]
   },
   "railf": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "railx": {
    "taskname": "comb",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "railx-start",
+     "position": [
+      31.83,
+      -3559.86,
+      -1336.84
+     ],
+     "shows": [
+      "railcst",
+      "railx"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "precurd",
+    "railcst"
+   ]
   },
   "rubblea": {
    "taskname": "palace",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "rubblea-start",
+     "position": [
+      -144.28,
+      4.0,
+      -354.44
+     ],
+     "shows": [
+      "rubblea",
+      "stadiuma",
+      "stadiumb"
+     ]
+    },
+    {
+     "name": "rubblea-rhino",
+     "position": [
+      -142.87,
+      21.78,
+      -285.62
+     ],
+     "shows": [
+      "rubblea",
+      "stadiuma",
+      "stadiumb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "stadiuma",
+    "stadiumb"
+   ]
   },
   "rubblea2": {
    "taskname": "palace",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "rubblea2-start",
+     "position": [
+      -382.8,
+      21.05,
+      -16.16
+     ],
+     "shows": [
+      "rubblea2",
+      "rubbleb",
+      "stadiuma"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "rubbleb",
+    "stadiuma"
+   ]
   },
   "rubbleb": {
    "taskname": "palace",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "rubbleb-start",
+     "position": [
+      -292.06,
+      16.83,
+      300.99
+     ],
+     "shows": [
+      "rubbleb",
+      "rubblec",
+      "stadiuma"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "rubblea2",
+    "rubblec",
+    "stadiuma"
+   ]
   },
   "rubblec": {
    "taskname": "palace",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "rubblec-fma",
+     "position": [
+      194.35,
+      13.75,
+      383.98
+     ],
+     "shows": [
+      "rubblec",
+      "rublcst",
+      "stadiuma"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "rubbleb",
+    "rublcst",
+    "stadiuma"
+   ]
   },
   "rublcst": {
    "taskname": "palace",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "rubblec",
+    "stadiuma"
+   ]
   },
   "sewa": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewer-start",
+     "position": [
+      402.79,
+      -130.67,
+      -2.94
+     ],
+     "shows": [
+      "sewa",
+      "sewb"
+     ]
+    },
+    {
+     "name": "sewa-inda",
+     "position": [
+      1005.93,
+      -8.42,
+      1021.94
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg",
+      "sewa"
+     ]
+    },
+    {
+     "name": "sewa-port",
+     "position": [
+      135.19,
+      4.32,
+      1274.67
+     ],
+     "shows": [
+      "ctyport",
+      "ctywide-ff",
+      "sewa"
+     ]
+    },
+    {
+     "name": "sewa-mhcity",
+     "position": [
+      -233.31,
+      11.77,
+      639.1
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcityb",
+      "sewa"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctygenb",
+    "ctyinda",
+    "ctyport",
+    "ctyslumb",
+    "ctywide-ff",
+    "ctywide-kg",
+    "ctywide-mh",
+    "mhcityb",
+    "sewb",
+    "sewc",
+    "sewd",
+    "sewe",
+    "sewf",
+    "sewg",
+    "sewh",
+    "sewi",
+    "sewj",
+    "sewk",
+    "sewl",
+    "sewm",
+    "sewn",
+    "sewo"
+   ]
   },
   "sewb": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewb",
+     "position": [
+      299.93,
+      -140.01,
+      43.38
+     ],
+     "shows": [
+      "sewa",
+      "sewb"
+     ]
+    },
+    {
+     "name": "sewb-hall",
+     "position": [
+      402.79,
+      -130.67,
+      -2.94
+     ],
+     "shows": [
+      "sewa",
+      "sewb"
+     ]
+    },
+    {
+     "name": "sewb-elevator",
+     "position": [
+      424.83,
+      -128.0,
+      -2.91
+     ],
+     "shows": [
+      "sewa",
+      "sewb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewc"
+   ]
   },
   "sewc": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewc-start",
+     "position": [
+      250.81,
+      -141.73,
+      80.37
+     ],
+     "shows": [
+      "sewa",
+      "sewb",
+      "sewc"
+     ]
+    },
+    {
+     "name": "sewc-checkpoint",
+     "position": [
+      117.33,
+      -141.93,
+      -28.74
+     ],
+     "shows": [
+      "sewa",
+      "sewb",
+      "sewc"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewb",
+    "sewd"
+   ]
   },
   "sewd": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewd-start",
+     "position": [
+      -66.24,
+      -133.63,
+      23.67
+     ],
+     "shows": [
+      "sewa",
+      "sewc",
+      "sewd"
+     ]
+    },
+    {
+     "name": "sewd-waterslide-end",
+     "position": [
+      -129.9,
+      -180.0,
+      9.49
+     ],
+     "shows": [
+      "sewa",
+      "sewd"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewc",
+    "sewe"
+   ]
   },
   "sewe": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewe",
+     "position": [
+      -300.5,
+      -154.0,
+      -15.86
+     ],
+     "shows": [
+      "sewa",
+      "sewd",
+      "sewe"
+     ]
+    },
+    {
+     "name": "sewe-switch",
+     "position": [
+      -361.8,
+      -138.0,
+      48.26
+     ],
+     "shows": [
+      "sewa",
+      "sewe"
+     ]
+    },
+    {
+     "name": "sewe-inda",
+     "position": [
+      -361.17,
+      -138.03,
+      49.28
+     ],
+     "shows": [
+      "ctyinda",
+      "sewa",
+      "sewe"
+     ]
+    },
+    {
+     "name": "sewe-switch-off",
+     "position": [
+      -361.8,
+      -138.0,
+      48.26
+     ],
+     "shows": [
+      "sewa",
+      "sewe"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyinda",
+    "sewa",
+    "sewd",
+    "sewf"
+   ]
   },
   "sewf": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewf-start",
+     "position": [
+      -473.05,
+      -128.9,
+      54.17
+     ],
+     "shows": [
+      "sewa",
+      "sewf"
+     ]
+    },
+    {
+     "name": "sewf-restart",
+     "position": [
+      -419.34,
+      -138.15,
+      32.47
+     ],
+     "shows": [
+      "sewa",
+      "sewe",
+      "sewf"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewe"
+   ]
   },
   "sewg": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewg-start",
+     "position": [
+      347.6,
+      -121.57,
+      253.64
+     ],
+     "shows": [
+      "sewa",
+      "sewg"
+     ]
+    },
+    {
+     "name": "sewg-checkpoint",
+     "position": [
+      255.11,
+      -116.0,
+      184.81
+     ],
+     "shows": [
+      "sewa",
+      "sewg"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewh",
+    "sewk"
+   ]
   },
   "sewh": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewh-start",
+     "position": [
+      128.94,
+      -120.0,
+      210.05
+     ],
+     "shows": [
+      "sewa",
+      "sewg",
+      "sewh"
+     ]
+    },
+    {
+     "name": "sewh-checkpoint",
+     "position": [
+      6.08,
+      -120.0,
+      192.02
+     ],
+     "shows": [
+      "sewa",
+      "sewh"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewg",
+    "sewi"
+   ]
   },
   "sewi": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewi-start",
+     "position": [
+      -136.18,
+      -119.85,
+      228.3
+     ],
+     "shows": [
+      "sewa",
+      "sewh",
+      "sewi"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewh"
+   ]
   },
   "sewj": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewj-start",
+     "position": [
+      -437.36,
+      -126.0,
+      212.53
+     ],
+     "shows": [
+      "sewa",
+      "sewj"
+     ]
+    },
+    {
+     "name": "sewj-exit",
+     "position": [
+      -464.86,
+      -126.0,
+      207.13
+     ],
+     "shows": [
+      "sewa",
+      "sewj"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa"
+   ]
   },
   "sewk": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewk",
+     "position": [
+      465.13,
+      -129.06,
+      192.24
+     ],
+     "shows": [
+      "sewa",
+      "sewg",
+      "sewk"
+     ]
+    },
+    {
+     "name": "sewk-elevator",
+     "position": [
+      431.64,
+      -126.53,
+      205.47
+     ],
+     "shows": [
+      "sewa",
+      "sewg",
+      "sewk"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewg"
+   ]
   },
   "sewl": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewl",
+     "position": [
+      491.91,
+      -126.0,
+      -234.51
+     ],
+     "shows": [
+      "sewa",
+      "sewl"
+     ]
+    },
+    {
+     "name": "sewl-elevator",
+     "position": [
+      533.46,
+      -119.45,
+      -322.17
+     ],
+     "shows": [
+      "sewa",
+      "sewl"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa"
+   ]
   },
   "sewm": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewm",
+     "position": [
+      353.66,
+      -138.54,
+      -289.98
+     ],
+     "shows": [
+      "sewa",
+      "sewm"
+     ]
+    },
+    {
+     "name": "sewa-sound-test",
+     "position": [
+      110.56,
+      -141.87,
+      -336.58
+     ],
+     "shows": [
+      "sewa",
+      "sewm",
+      "sewn"
+     ]
+    },
+    {
+     "name": "sewm-checkpoint",
+     "position": [
+      140.61,
+      -145.87,
+      -238.21
+     ],
+     "shows": [
+      "sewa",
+      "sewm"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewn"
+   ]
   },
   "sewn": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewn",
+     "position": [
+      -337.74,
+      -137.0,
+      -291.3
+     ],
+     "shows": [
+      "sewa",
+      "sewn"
+     ]
+    },
+    {
+     "name": "sewn-checkpoint",
+     "position": [
+      -204.04,
+      -174.0,
+      -236.4
+     ],
+     "shows": [
+      "sewa",
+      "sewn"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa",
+    "sewm"
+   ]
   },
   "sewo": {
    "taskname": "sewer",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sewo",
+     "position": [
+      -443.55,
+      -140.01,
+      -282.2
+     ],
+     "shows": [
+      "sewa",
+      "sewo"
+     ]
+    },
+    {
+     "name": "sewo-exit",
+     "position": [
+      -531.68,
+      -130.67,
+      -195.57
+     ],
+     "shows": [
+      "sewa",
+      "sewo"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sewa"
+   ]
   },
   "slumbset": {
    "taskname": "city",
    "base_mask": 0,
    "ocean": "*ocean-map-city*",
    "ocean_height": 0.0,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctygenb",
+    "ctywide-ff"
+   ]
   },
   "sndtest": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "sndtest",
+     "position": [
+      -135.81,
+      0.0,
+      208.15
+     ],
+     "shows": [
+      "sndtest",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall"
+   ]
   },
   "stadium": {
    "taskname": "palace",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "stadium-tunnel",
+     "position": [
+      362.72,
+      15.9,
+      -420.18
+     ],
+     "shows": [
+      "ctygenb",
+      "stadium",
+      "stadiuma"
+     ]
+    },
+    {
+     "name": "stadium-steps",
+     "position": [
+      347.23,
+      5.13,
+      -460.51
+     ],
+     "shows": [
+      "ctygenb",
+      "stadium",
+      "stadiuma"
+     ]
+    },
+    {
+     "name": "stadium-plaza",
+     "position": [
+      361.09,
+      8.0,
+      -433.86
+     ],
+     "shows": [
+      "stadium",
+      "stadiuma",
+      "stadiumb"
+     ]
+    },
+    {
+     "name": "stadium-checkpoint",
+     "position": [
+      168.82,
+      12.52,
+      -598.79
+     ],
+     "shows": [
+      "stadium",
+      "stadiuma"
+     ]
+    },
+    {
+     "name": "stadium-start",
+     "position": [
+      355.96,
+      8.0,
+      -458.49
+     ],
+     "shows": [
+      "ctygenb",
+      "stadium",
+      "stadiuma"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctygenb",
+    "ctywide-ff",
+    "stadiuma",
+    "stadiumb"
+   ]
   },
   "stadiuma": {
    "taskname": "palace",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctygenb",
+    "rubblea",
+    "rubblea2",
+    "rubbleb",
+    "rubblec",
+    "rublcst",
+    "stadium",
+    "stadiumb"
+   ]
   },
   "stadiumb": {
    "taskname": "palace",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "stadiumb-start",
+     "position": [
+      -17.36,
+      -11.23,
+      -492.81
+     ],
+     "shows": [
+      "stadiuma",
+      "stadiumb"
+     ]
+    },
+    {
+     "name": "stadiumb-checkpoint",
+     "position": [
+      67.12,
+      -8.0,
+      -646.68
+     ],
+     "shows": [
+      "stadiuma",
+      "stadiumb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "rubblea",
+    "stadium",
+    "stadiuma"
+   ]
   },
   "temp": {
    "taskname": "arena",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "templea": {
    "taskname": "temple",
    "base_mask": 8193,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "templea-start",
+     "position": [
+      4244.56,
+      119.26,
+      4083.17
+     ],
+     "shows": [
+      "templea",
+      "templex"
+     ]
+    },
+    {
+     "name": "templea-watchers",
+     "position": [
+      4153.68,
+      44.41,
+      4320.82
+     ],
+     "shows": [
+      "templea",
+      "templeb"
+     ]
+    },
+    {
+     "name": "templea-spiders",
+     "position": [
+      4124.56,
+      44.85,
+      4337.24
+     ],
+     "shows": [
+      "templea",
+      "templeb"
+     ]
+    },
+    {
+     "name": "templea-watchers-tests",
+     "position": [
+      4153.68,
+      44.41,
+      4320.82
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templec"
+     ]
+    },
+    {
+     "name": "templea-mardoor",
+     "position": [
+      4097.17,
+      44.42,
+      4320.9
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templec"
+     ]
+    },
+    {
+     "name": "templea-hover-test",
+     "position": [
+      4222.44,
+      44.44,
+      4265.94
+     ],
+     "shows": [
+      "templea"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "combx",
+    "hanga",
+    "templeb",
+    "templec",
+    "templed",
+    "templee",
+    "templex",
+    "wasall"
+   ]
   },
   "templeb": {
    "taskname": "temple",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "templeb-start",
+     "position": [
+      4157.08,
+      44.12,
+      4646.79
+     ],
+     "shows": [
+      "templea",
+      "templeb"
+     ]
+    },
+    {
+     "name": "templeb-oracle-movie",
+     "position": [
+      4157.08,
+      44.12,
+      4646.79
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templee"
+     ]
+    },
+    {
+     "name": "templeb-after-intro",
+     "position": [
+      4176.95,
+      44.12,
+      4653.59
+     ],
+     "shows": [
+      "templea",
+      "templeb"
+     ]
+    },
+    {
+     "name": "templeb-regen",
+     "position": [
+      4157.62,
+      46.37,
+      4676.99
+     ],
+     "shows": [
+      "templea",
+      "templeb"
+     ]
+    },
+    {
+     "name": "templeb-flash-freeze",
+     "position": [
+      4109.65,
+      46.34,
+      4762.83
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templec"
+     ]
+    },
+    {
+     "name": "templeb-glide",
+     "position": [
+      4208.66,
+      46.37,
+      4763.1
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templeb-warp",
+     "position": [
+      4147.51,
+      44.12,
+      4651.62
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templeb-pole-room",
+     "position": [
+      4165.85,
+      44.5,
+      4445.01
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templee"
+     ]
+    },
+    {
+     "name": "templeb-pole-half",
+     "position": [
+      4166.65,
+      44.5,
+      4480.9
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templee"
+     ]
+    },
+    {
+     "name": "templeb-swingpoles",
+     "position": [
+      4125.13,
+      44.5,
+      4426.13
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templee"
+     ]
+    },
+    {
+     "name": "templeb-pole-complete",
+     "position": [
+      4157.9,
+      44.5,
+      4517.79
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templee"
+     ]
+    },
+    {
+     "name": "templeb-defend",
+     "position": [
+      4125.13,
+      44.5,
+      4426.13
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templeb-fans",
+     "position": [
+      4097.09,
+      76.5,
+      4435.74
+     ],
+     "shows": [
+      "templea",
+      "templeb"
+     ]
+    },
+    {
+     "name": "templeb-fans-mid",
+     "position": [
+      4184.41,
+      76.5,
+      4471.93
+     ],
+     "shows": [
+      "templea",
+      "templeb"
+     ]
+    },
+    {
+     "name": "templeb-fans-end",
+     "position": [
+      4098.68,
+      76.5,
+      4507.77
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templeb-break-door",
+     "position": [
+      4124.33,
+      44.55,
+      4383.26
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templeb-break-alcove",
+     "position": [
+      4178.95,
+      48.7,
+      4464.04
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templeb-before-glide",
+     "position": [
+      4248.52,
+      44.32,
+      4784.79
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "temple-after-pole-spiders",
+     "position": [
+      4157.92,
+      44.59,
+      4617.2
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templee"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "templea",
+    "templec",
+    "templed",
+    "templee"
+   ]
   },
   "templec": {
    "taskname": "temple",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "templec-start",
+     "position": [
+      3941.87,
+      51.36,
+      4355.08
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templec"
+     ]
+    },
+    {
+     "name": "templec-grind-test",
+     "position": [
+      4083.63,
+      57.65,
+      4689.02
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templec"
+     ]
+    },
+    {
+     "name": "templec-end",
+     "position": [
+      3940.28,
+      55.28,
+      4740.26
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templec"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "templea",
+    "templeb"
+   ]
   },
   "templed": {
    "taskname": "temple",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "templed-start",
+     "position": [
+      4289.76,
+      70.3,
+      4652.88
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "temple-comb-entrance",
+     "position": [
+      4320.64,
+      76.7,
+      4508.91
+     ],
+     "shows": [
+      "combx",
+      "templea",
+      "templed"
+     ]
+    },
+    {
+     "name": "templed-warp",
+     "position": [
+      4275.44,
+      95.0,
+      4449.01
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templed-after-res",
+     "position": [
+      4287.51,
+      95.0,
+      4449.87
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    },
+    {
+     "name": "templed-before-comb",
+     "position": [
+      4252.96,
+      77.24,
+      4508.19
+     ],
+     "shows": [
+      "combx",
+      "templea",
+      "templed"
+     ]
+    },
+    {
+     "name": "templed-bridge",
+     "position": [
+      4253.7,
+      77.23,
+      4508.06
+     ],
+     "shows": [
+      "templea",
+      "templed"
+     ]
+    },
+    {
+     "name": "templed-break-door",
+     "position": [
+      4289.79,
+      44.0,
+      4652.75
+     ],
+     "shows": [
+      "templea",
+      "templeb",
+      "templed"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "combx",
+    "templea",
+    "templeb"
+   ]
   },
   "templee": {
    "taskname": "temple",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "templea",
+    "templeb"
+   ]
   },
   "templex": {
    "taskname": "temple",
    "base_mask": 1,
    "ocean": "*ocean-map-city*",
    "ocean_height": 9.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "templex-start",
+     "position": [
+      4161.4,
+      119.65,
+      4144.05
+     ],
+     "shows": [
+      "templea",
+      "templex",
+      "wasall"
+     ]
+    },
+    {
+     "name": "templex-after-intro",
+     "position": [
+      4198.65,
+      120.44,
+      4135.24
+     ],
+     "shows": [
+      "templea",
+      "templex",
+      "wasall"
+     ]
+    },
+    {
+     "name": "templex-ravine",
+     "position": [
+      4330.79,
+      53.1,
+      4138.91
+     ],
+     "shows": [
+      "desert-game",
+      "deserth",
+      "templex",
+      "wasall"
+     ]
+    },
+    {
+     "name": "templex-ravine-exit",
+     "position": [
+      4118.09,
+      118.6,
+      4294.37
+     ],
+     "shows": [
+      "desert-game",
+      "deserth",
+      "templex",
+      "wasall"
+     ]
+    },
+    {
+     "name": "templex-top",
+     "position": [
+      4225.77,
+      264.68,
+      3963.74
+     ],
+     "shows": [
+      "hanga",
+      "templea",
+      "templex"
+     ]
+    },
+    {
+     "name": "hanga-preplay",
+     "position": [
+      4144.14,
+      284.43,
+      4093.68
+     ],
+     "shows": [
+      "hanga",
+      "templex"
+     ]
+    },
+    {
+     "name": "templex-halfway",
+     "position": [
+      4216.26,
+      207.39,
+      4113.43
+     ],
+     "shows": [
+      "templea",
+      "templex"
+     ]
+    },
+    {
+     "name": "templex-warp",
+     "position": [
+      4206.68,
+      119.27,
+      4168.67
+     ],
+     "shows": [
+      "templea",
+      "templex",
+      "wasall"
+     ]
+    },
+    {
+     "name": "templex-pre-oracle",
+     "position": [
+      4192.09,
+      119.84,
+      4158.12
+     ],
+     "shows": [
+      "templea",
+      "templex",
+      "wasall"
+     ]
+    },
+    {
+     "name": "templex-pre-hang",
+     "position": [
+      4143.95,
+      283.74,
+      4106.16
+     ],
+     "shows": [
+      "hanga",
+      "templea",
+      "templex"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "deserth",
+    "hanga",
+    "hangb",
+    "templea",
+    "wasall"
+   ]
   },
   "test-zone": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "test-zone-start",
+     "position": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "shows": [
+      "test-zone",
+      "wasall",
+      "waswide"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall",
+    "waswide"
+   ]
   },
   "testisle": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "testisle-start",
+     "position": [
+      -15.87,
+      62.41,
+      -3.05
+     ],
+     "shows": [
+      "testisle",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall"
+   ]
   },
   "title": {
    "taskname": "default",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "title-start",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "title"
+     ]
+    },
+    {
+     "name": "title-restart",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "title",
+      "wasintro"
+     ]
+    },
+    {
+     "name": "title-from-intro",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "title",
+      "wasintro"
+     ]
+    },
+    {
+     "name": "title-scrapbook",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "title",
+      "wasintro"
+     ]
+    },
+    {
+     "name": "title-credits",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "museum",
+      "museum2",
+      "title"
+     ]
+    },
+    {
+     "name": "title-museum1",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "museum4",
+      "museum4b",
+      "title"
+     ]
+    },
+    {
+     "name": "title-museum2",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "museum3",
+      "museum3b",
+      "title"
+     ]
+    },
+    {
+     "name": "title-museum3",
+     "position": [
+      980.0,
+      85.0,
+      346.0
+     ],
+     "shows": [
+      "museum",
+      "museum2",
+      "title"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "museum",
+    "museum2",
+    "museum3",
+    "museum3b",
+    "museum4",
+    "museum4b",
+    "wasintro"
+   ]
   },
   "tobytest": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "towera": {
    "taskname": "tower",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "towera-start",
+     "position": [
+      -298.12,
+      8.0,
+      500.09
+     ],
+     "shows": [
+      "ctywide-mh",
+      "mhcityb",
+      "towera"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctywide-mh",
+    "mhcityb",
+    "towerb",
+    "towerc"
+   ]
   },
   "towerb": {
    "taskname": "tower",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "towerb-start",
+     "position": [
+      -173.69,
+      39.6,
+      503.5
+     ],
+     "shows": [
+      "towera",
+      "towerb"
+     ]
+    },
+    {
+     "name": "towerb-test-1",
+     "position": [
+      -168.66,
+      40.03,
+      497.27
+     ],
+     "shows": [
+      "towera",
+      "towerb"
+     ]
+    },
+    {
+     "name": "towerb-top",
+     "position": [
+      -128.38,
+      167.93,
+      452.84
+     ],
+     "shows": [
+      "towera",
+      "towerb",
+      "towerc"
+     ]
+    },
+    {
+     "name": "towerb-checkpoint",
+     "position": [
+      -73.42,
+      117.3,
+      436.28
+     ],
+     "shows": [
+      "towera",
+      "towerb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "towera",
+    "towerc"
+   ]
   },
   "towerc": {
    "taskname": "tower",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "towera",
+    "towerb"
+   ]
   },
   "towercst": {
    "taskname": "tower",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctywide-mh",
+    "mhcityb"
+   ]
   },
   "vinroom": {
    "taskname": "city",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "vinroom-start",
+     "position": [
+      1109.6,
+      25.5,
+      1110.16
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg",
+      "vinroom"
+     ]
+    },
+    {
+     "name": "vinroom-face-warp",
+     "position": [
+      1120.45,
+      25.5,
+      1134.96
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg",
+      "vinroom"
+     ]
+    },
+    {
+     "name": "vinroom-face-door",
+     "position": [
+      1108.22,
+      25.5,
+      1108.51
+     ],
+     "shows": [
+      "ctyinda",
+      "ctywide-kg",
+      "vinroom"
+     ]
+    },
+    {
+     "name": "vinroom-movie",
+     "position": [
+      1109.6,
+      25.5,
+      1110.16
+     ],
+     "shows": [
+      "vinroom"
+     ]
+    },
+    {
+     "name": "vinroom-movie-exit",
+     "position": [
+      1105.36,
+      25.5,
+      1105.83
+     ],
+     "shows": [
+      "vinroom"
+     ]
+    },
+    {
+     "name": "vinroom-warp",
+     "position": [
+      1120.1,
+      25.5,
+      1140.94
+     ],
+     "shows": [
+      "vinroom"
+     ]
+    },
+    {
+     "name": "vinroom-game",
+     "position": [
+      1127.58,
+      25.5,
+      1124.81
+     ],
+     "shows": [
+      "vinroom"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "ctyinda",
+    "ctywide-kg"
+   ]
   },
   "vistest": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "volcanoa": {
    "taskname": "volcano",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "volcanoa-start",
+     "position": [
+      -46.12,
+      20.06,
+      -354.87
+     ],
+     "shows": [
+      "volcanoa",
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcano-pre-indax-1",
+     "position": [
+      50.05,
+      13.9,
+      45.85
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-flut-1",
+     "position": [
+      -2.15,
+      19.96,
+      -307.55
+     ],
+     "shows": [
+      "volcanoa",
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcano-flut-2",
+     "position": [
+      -36.93,
+      12.0,
+      -249.1
+     ],
+     "shows": [
+      "volcanoa",
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcano-indax-1",
+     "position": [
+      24.07,
+      27.73,
+      12.72
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-post-indax-1",
+     "position": [
+      48.1,
+      14.01,
+      45.43
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-post-rock-collapse",
+     "position": [
+      75.27,
+      18.36,
+      88.39
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-pre-indax-2",
+     "position": [
+      -71.01,
+      6.0,
+      102.32
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-indax-2",
+     "position": [
+      -86.73,
+      12.65,
+      137.27
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-post-indax-2",
+     "position": [
+      -70.89,
+      6.0,
+      105.76
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-post-rock-fall",
+     "position": [
+      -75.71,
+      6.0,
+      106.4
+     ],
+     "shows": [
+      "volcanoa"
+     ]
+    },
+    {
+     "name": "volcano-movie",
+     "position": [
+      29.53,
+      38.86,
+      16.81
+     ],
+     "shows": [
+      "volcanoa",
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcanoa-ladder",
+     "position": [
+      73.82,
+      2.24,
+      -29.89
+     ],
+     "shows": [
+      "volcanoa",
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcano-lava-ladder",
+     "position": [
+      -191.18,
+      94.65,
+      -94.0
+     ],
+     "shows": [
+      "volcanoa",
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcanoa-resolution",
+     "position": [
+      -208.88,
+      109.94,
+      -135.11
+     ],
+     "shows": [
+      "volcanoa",
+      "volcanox"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "volcanox"
+   ]
   },
   "volcanox": {
    "taskname": "volcano",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "volcanox-start",
+     "position": [
+      -93.59,
+      -0.02,
+      -428.97
+     ],
+     "shows": [
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcanox-vola-start",
+     "position": [
+      -93.59,
+      -0.02,
+      -428.98
+     ],
+     "shows": [
+      "volcanox"
+     ]
+    },
+    {
+     "name": "volcanox-warp",
+     "position": [
+      -134.84,
+      0.47,
+      -448.57
+     ],
+     "shows": [
+      "volcanox"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "volcanoa"
+   ]
   },
   "warinta": {
    "taskname": "factory",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "warinta",
+     "position": [
+      107.97,
+      -0.0,
+      54.72
+     ],
+     "shows": [
+      "warinta",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall"
+   ]
   },
   "warpcast": {
    "taskname": "desert",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert-game",
+    "desertb",
+    "wasall"
+   ]
   },
   "wasall": {
    "taskname": "wascity",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "wasall-start",
+     "position": [
+      2266.45,
+      30.86,
+      258.13
+     ],
+     "shows": [
+      "desert-game",
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasall-final-boss-intro-movie",
+     "position": [
+      2606.92,
+      28.02,
+      127.77
+     ],
+     "shows": [
+      "deserrol",
+      "desert-game",
+      "desertb",
+      "wasall"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "4amy",
+    "arenacst",
+    "ctyinda",
+    "desbcst",
+    "deserrol",
+    "desert",
+    "desert-game",
+    "deserta",
+    "desertb",
+    "desertc",
+    "desertd",
+    "deserte",
+    "desertf",
+    "desertg",
+    "deserth",
+    "deshover",
+    "desoasis",
+    "desrally",
+    "desresc",
+    "deswalk",
+    "gregtest",
+    "lnstcst",
+    "nsta",
+    "nstb",
+    "oasiscst",
+    "outcast3",
+    "outrocst",
+    "precurd",
+    "sndtest",
+    "templea",
+    "templex",
+    "test-zone",
+    "testisle",
+    "warinta",
+    "warpcast",
+    "wascast",
+    "wascitya",
+    "wascityb",
+    "wasdoors",
+    "waspala",
+    "wasseem",
+    "wasstada",
+    "waswide"
+   ]
   },
   "wascast": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall",
+    "wascitya",
+    "wascityb",
+    "waswide"
+   ]
   },
   "waschase": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "wascitya": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "wascitya-start",
+     "position": [
+      2254.48,
+      6.6,
+      -68.82
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-top-of-stairs",
+     "position": [
+      2327.19,
+      50.44,
+      -344.53
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascity-start",
+     "position": [
+      2254.48,
+      6.6,
+      -68.82
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-outside-waspala",
+     "position": [
+      1992.08,
+      36.25,
+      -401.99
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-seem",
+     "position": [
+      2240.28,
+      7.1,
+      -40.76
+     ],
+     "shows": [
+      "wasall",
+      "wascast",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-start-flut",
+     "position": [
+      2254.48,
+      6.6,
+      -68.82
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-flut-racer",
+     "position": [
+      2239.93,
+      7.02,
+      -60.81
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-bbush-wasa-1",
+     "position": [
+      2287.16,
+      21.52,
+      29.57
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-bbush-wasa-2",
+     "position": [
+      2432.16,
+      19.64,
+      18.54
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-bbush-wasa-3",
+     "position": [
+      2514.58,
+      30.51,
+      -204.9
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-bbush-wasa-4",
+     "position": [
+      2352.05,
+      19.4,
+      -328.72
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-bbush-wasa-5",
+     "position": [
+      2109.91,
+      26.54,
+      -227.27
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascitya-bbush-wasa-6",
+     "position": [
+      2240.96,
+      27.8,
+      85.5
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waswide"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "gregtest",
+    "wasall",
+    "wascast",
+    "wascityb",
+    "wasdoors",
+    "waspala",
+    "wasstada",
+    "waswide"
+   ]
   },
   "wascityb": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": "*ocean-map-wascity*",
    "ocean_height": 9.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "wascityb-start",
+     "position": [
+      1776.38,
+      31.32,
+      -375.49
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-gungame",
+     "position": [
+      1594.34,
+      25.82,
+      -397.84
+     ],
+     "shows": [
+      "wasall",
+      "wascast",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-gungame-done",
+     "position": [
+      1606.62,
+      33.72,
+      -460.28
+     ],
+     "shows": [
+      "wasall",
+      "wascast",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-gungame-reset",
+     "position": [
+      1606.97,
+      63.98,
+      -473.25
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-defend",
+     "position": [
+      1594.34,
+      25.82,
+      -397.84
+     ],
+     "shows": [
+      "wasall",
+      "wascast",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-defend-reset",
+     "position": [
+      1606.97,
+      63.98,
+      -473.25
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-seem",
+     "position": [
+      1501.82,
+      29.0,
+      -328.27
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "wasseem",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-flut",
+     "position": [
+      1760.14,
+      31.35,
+      -311.2
+     ],
+     "shows": [
+      "wasall",
+      "wascast",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-flut-res",
+     "position": [
+      1760.14,
+      31.35,
+      -311.2
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-game",
+     "position": [
+      1472.4,
+      26.86,
+      -364.55
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "wasseem",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-bbush-wasb-1",
+     "position": [
+      1772.62,
+      86.39,
+      -105.2
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-bbush-wasb-2",
+     "position": [
+      1852.24,
+      26.78,
+      -350.24
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-bbush-wasb-3",
+     "position": [
+      1685.42,
+      92.46,
+      -108.42
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "wasseem",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-bbush-wasb-4",
+     "position": [
+      1430.06,
+      27.01,
+      -415.11
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "wasseem",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-bbush-wasb-5",
+     "position": [
+      1559.45,
+      82.99,
+      -99.17
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "wasseem",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-bbush-wasb-6",
+     "position": [
+      1556.16,
+      33.03,
+      -288.69
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "wasseem",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-bbush-wasb-7",
+     "position": [
+      1510.16,
+      48.94,
+      -252.0
+     ],
+     "shows": [
+      "wasall",
+      "wascityb",
+      "wasseem",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wascityb-gungame-end",
+     "position": [
+      1598.04,
+      19.85,
+      -419.28
+     ],
+     "shows": [
+      "wasall",
+      "wascast",
+      "wascityb",
+      "waswide"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall",
+    "wascast",
+    "wascitya",
+    "wasseem",
+    "waswide"
+   ]
   },
   "wasdefen": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "wasdoors": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "wasdoors-city",
+     "position": [
+      2266.78,
+      31.3,
+      167.03
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "wasdoors",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasdoors-desert",
+     "position": [
+      2266.78,
+      31.3,
+      167.03
+     ],
+     "shows": [
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-desert-any",
+     "position": [
+      2266.78,
+      31.3,
+      167.03
+     ],
+     "shows": [
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-desert-turtle",
+     "position": [
+      2264.15,
+      31.01,
+      211.65
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-desert-snake",
+     "position": [
+      2264.15,
+      31.01,
+      211.65
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-desert-scorpion",
+     "position": [
+      2264.15,
+      31.01,
+      211.65
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-desert-toad",
+     "position": [
+      2264.15,
+      31.01,
+      211.65
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-artifact-race-1-intro-end",
+     "position": [
+      2285.31,
+      30.94,
+      175.37
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-artifact-pre",
+     "position": [
+      2258.13,
+      32.46,
+      214.07
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-desert-near-city",
+     "position": [
+      2268.77,
+      30.73,
+      155.8
+     ],
+     "shows": [
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-facing-city",
+     "position": [
+      2270.44,
+      30.53,
+      164.43
+     ],
+     "shows": [
+      "desertb",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-turtle-training-intro-end",
+     "position": [
+      2282.56,
+      31.11,
+      159.0
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-desert-hover-intro-end",
+     "position": [
+      2255.77,
+      30.65,
+      190.31
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    },
+    {
+     "name": "wasdoors-catch-lizards-intro-end",
+     "position": [
+      2259.67,
+      30.46,
+      163.97
+     ],
+     "shows": [
+      "desert-game",
+      "wasall",
+      "wasdoors"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "desert",
+    "desert-game",
+    "desertb",
+    "wasall",
+    "wascitya",
+    "waswide"
+   ]
   },
   "wasintro": {
    "taskname": "default",
    "base_mask": 1,
    "ocean": "*ocean-map-desert*",
    "ocean_height": 9.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "pre-intro-start",
+     "position": [
+      2.52,
+      0.0,
+      -13.05
+     ],
+     "shows": [
+      "introcst",
+      "wasintro"
+     ]
+    },
+    {
+     "name": "wasintro-start",
+     "position": [
+      2.52,
+      0.0,
+      -13.05
+     ],
+     "shows": [
+      "introcst",
+      "wasintro"
+     ]
+    },
+    {
+     "name": "wasintro-tired",
+     "position": [
+      2.52,
+      0.0,
+      -13.05
+     ],
+     "shows": [
+      "introcst",
+      "wasintro"
+     ]
+    },
+    {
+     "name": "wasintro-palace",
+     "position": [
+      2.52,
+      0.0,
+      -13.05
+     ],
+     "shows": [
+      "intpfall",
+      "introcst",
+      "wasintro"
+     ]
+    },
+    {
+     "name": "wasintro-rescue",
+     "position": [
+      2.52,
+      0.0,
+      -13.05
+     ],
+     "shows": [
+      "introcst",
+      "wasintro"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "intpfall",
+    "introcst",
+    "title"
+   ]
   },
   "wasleapr": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "waspala": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": "*ocean-map-wascity*",
    "ocean_height": 0.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "intro-start",
+     "position": [
+      1999.89,
+      243.69,
+      -432.32
+     ],
+     "shows": [
+      "wasall",
+      "waspala",
+      "waswide"
+     ]
+    },
+    {
+     "name": "intro-start-hero",
+     "position": [
+      1999.89,
+      243.69,
+      -432.32
+     ],
+     "shows": [
+      "wasall",
+      "waspala",
+      "waswide"
+     ]
+    },
+    {
+     "name": "waspala-intro-training",
+     "position": [
+      1999.89,
+      243.69,
+      -432.32
+     ],
+     "shows": [
+      "wasall",
+      "waspala",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "waspala-start",
+     "position": [
+      1999.89,
+      243.69,
+      -432.32
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waspala",
+      "waswide"
+     ]
+    },
+    {
+     "name": "waspala-gun-training",
+     "position": [
+      2000.52,
+      243.67,
+      -432.26
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waspala",
+      "waswide"
+     ]
+    },
+    {
+     "name": "waspala-nest",
+     "position": [
+      1999.89,
+      243.69,
+      -432.32
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "waspala",
+      "waswide"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall",
+    "wascitya",
+    "wasstada",
+    "waswide"
+   ]
   },
   "waspgame": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": true,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "wasseem": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": true,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "wasall",
+    "wascityb",
+    "waswide"
+   ]
   },
   "wasstada": {
    "taskname": "arena",
    "base_mask": 1,
    "ocean": "*ocean-map-wasstad*",
    "ocean_height": 0.0,
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "wasstada-start",
+     "position": [
+      2357.51,
+      47.33,
+      -403.52
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-wascity-chase",
+     "position": [
+      2357.51,
+      47.33,
+      -403.52
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-jump-training",
+     "position": [
+      2270.87,
+      16.15,
+      -446.97
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "game-start",
+     "position": [
+      2272.48,
+      16.06,
+      -442.41
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-pre-fight-1",
+     "position": [
+      2325.46,
+      48.11,
+      -414.73
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-fight",
+     "position": [
+      2326.9,
+      11.97,
+      -449.82
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-win",
+     "position": [
+      2326.91,
+      48.04,
+      -413.63
+     ],
+     "shows": [
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-kleever",
+     "position": [
+      2359.33,
+      50.86,
+      -376.4
+     ],
+     "shows": [
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-fight-2",
+     "position": [
+      2324.73,
+      12.28,
+      -443.34
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-fight-3",
+     "position": [
+      2313.89,
+      11.69,
+      -448.84
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-checkpoint-1",
+     "position": [
+      2318.7,
+      40.08,
+      -491.32
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-checkpoint-2",
+     "position": [
+      2360.08,
+      49.16,
+      -503.0
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-entrance",
+     "position": [
+      2344.5,
+      50.74,
+      -353.67
+     ],
+     "shows": [
+      "wasall",
+      "wascitya",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-checkpoint-3",
+     "position": [
+      2323.69,
+      32.07,
+      -417.27
+     ],
+     "shows": [
+      "arenacst",
+      "wasall",
+      "wasstada",
+      "waswide"
+     ]
+    },
+    {
+     "name": "wasstada-outro",
+     "position": [
+      2357.51,
+      47.33,
+      -403.52
+     ],
+     "shows": [
+      "outcast3",
+      "outrocst",
+      "wasall",
+      "wasstada"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "arenacst",
+    "outcast3",
+    "outrocst",
+    "wasall",
+    "wascitya",
+    "waspala",
+    "waswide"
+   ]
   },
   "wasstadb": {
    "taskname": "arena",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": true,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "wasstadc": {
    "taskname": "arena",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": true,
+   "continues": [],
    "layer": true,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "waswide": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "arenacst",
+    "ctyinda",
+    "test-zone",
+    "wasall",
+    "wascast",
+    "wascitya",
+    "wascityb",
+    "wasdoors",
+    "waspala",
+    "wasseem",
+    "wasstada"
+   ]
   },
   "wcaseem": {
    "taskname": "wascity",
    "base_mask": 1,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   }
  },
  "story": {

@@ -1,0 +1,5 @@
+# Put your own disc images or disc folders here for File > Extract game assets to read
+# (jak1/, jak2/, jak3/, or straight in this folder: any name works). None of it is shared: the
+# games belong to Sony Interactive Entertainment and were developed by Naughty Dog.
+*
+!.gitignore

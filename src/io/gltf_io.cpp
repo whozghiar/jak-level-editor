@@ -722,6 +722,33 @@ bool export_glb(const Scene& scene, const std::string& path, const ExportOptions
   ExportContext ctx(scene);
   json scene_roots = json::array();
 
+  if (opts.mode == ExportMode::Builder) {
+    // flat: every node at its world matrix, the builder's extras only
+    for (auto id : opts.only) {
+      const Node* n = scene.find(id);
+      if (!n) continue;
+      json jn;
+      jn["name"] = n->name;
+      trs_json(jn, Transform::from_matrix(scene.world(*n)));
+      if (n->mesh) jn["mesh"] = ctx.mesh(n->mesh, false);
+      auto e = opts.node_extras.find(id);
+      if (e != opts.node_extras.end() && !e->second.empty()) jn["extras"] = e->second;
+      scene_roots.push_back(ctx.add_node(jn));
+    }
+    for (const auto& [mesh, extras] : opts.extra_meshes) {
+      if (!mesh) continue;
+      json jn;
+      jn["name"] = mesh->name;
+      jn["mesh"] = ctx.mesh(mesh, false);
+      if (!extras.empty()) jn["extras"] = extras;
+      scene_roots.push_back(ctx.add_node(jn));
+    }
+    ctx.w.doc["scenes"] = json::array({json{{"nodes", scene_roots}}});
+    ctx.w.doc["scene"] = 0;
+    if (ctx.w.doc["meshes"].empty()) ctx.w.doc.erase("meshes");
+    return ctx.w.write(path, error);
+  }
+
   // hierarchy with local transforms and the editor's extras
   std::set<uint32_t> included;
   const Mat4 pivot_inv = opts.pivot.inverse();

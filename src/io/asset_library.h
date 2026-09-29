@@ -34,8 +34,14 @@ std::vector<GameFolder> list_games(const std::string& library_root);
 // The library folder of a path the user chose: the parent of a game folder, else the path itself.
 std::string library_root_of(const std::string& folder);
 // The library folder when none holds an extracted game: library/ in the editor's own tree (the
-// source tree it was built from, else the folder of the executable).
+// source tree it was built from, else the folder of the executable). This editor is independent
+// of jak-project (it neither builds against it nor runs it): nothing here ever points there.
 std::string default_library_root();
+// Where the user's own disc images and disc folders go, so File > Extract has a folder of its own
+// to suggest: iso_data/ next to library/ (its .gitignore keeps them out of this repository).
+std::string default_iso_data_dir();
+// Where a new project is saved by default: library/projects/ (created on first use).
+std::string default_projects_dir();
 
 struct LevelEntry {
   std::string name;        // "atoll" (the folder)

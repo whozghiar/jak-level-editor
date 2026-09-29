@@ -102,7 +102,12 @@ std::string extract_actors_to_json(const level_tools::DrawableInlineArrayActor& 
     // vis ID?
     json_actor["quat"] = vector_json(actor.quat);
     auto& json_lump = json_actor["lump"];
+    // the type of each tag (ogle-extract): the level builders need it to write the tag again
+    auto& json_types = json_actor["lump_types"];
     for (const auto& res : actor.res_list) {
+      if (res.elt_type != "actor-group") {
+        json_types[res.name] = res.elt_type;
+      }
       if (res.elt_type == "string") {
         json_lump[res.name] = strings_json(res.strings, false);
       } else if (res.elt_type == "symbol") {

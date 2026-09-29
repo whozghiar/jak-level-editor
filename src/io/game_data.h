@@ -8,8 +8,11 @@
 //   water        the model of each "look" of the water actors (water, dark eco and lava pools)
 //   oceans       where the ocean of a level is, and its height
 //   levels       per level: its task level and mask, its ocean, whether it is a layer (the actors
-//                a mission adds to another level), its companions (levels the game shows with it)
+//                a mission adds to another level), its companions (levels the game shows with it),
+//                its neighbors (the levels the game displays together with it somewhere) and its
+//                continue points (where the game starts the player, and the levels shown there)
 //   story        the task nodes in the order of the game, and what they change in the levels
+//   enums        enums whose values differ between the games (pickup-type), mapped by name
 //
 // The story of Jak II and Jak 3: each level has a task mask, changed by the task nodes of its
 // task level as they close; an actor exists while its kill mask and that mask share no bit.
@@ -57,15 +60,27 @@ struct StoryNode {
   std::vector<StoryBorrow> borrow;
 };
 
+// A place where the game starts the player (a continue point), in the editor's space.
+struct ContinuePoint {
+  std::string name;
+  Vec3 position;                    // meters
+  std::vector<std::string> shows;   // the levels the game displays there
+};
+
 struct LevelInfo {
   std::string taskname;  // the task level of its task mask
   uint32_t base_mask = 0;
   std::string ocean;     // its ocean map, "" without one
   std::optional<float> ocean_height;  // set by the level (Jak 3), else the map's
+  bool ocean_far = false;  // the far ocean is drawn while it is shown (the sea to the horizon)
   bool layer = false;    // borrowed by the story: its actors appear in other levels
   bool traffic = false;  // part of the city: the actors of the city traffic are there
   std::vector<std::string> companions;
   std::vector<StoryBorrow> borrow;  // what its slots show before the story changes them
+  // the levels the game displays together with it at a continue point (layers left out): the
+  // levels around it in the game's world
+  std::vector<std::string> neighbors;
+  std::vector<ContinuePoint> continues;
 };
 
 struct OceanMap {
@@ -74,6 +89,7 @@ struct OceanMap {
   int size = 48;
   std::vector<uint8_t> cells;  // size x size, rows along z: 1 where the ocean is
   Vec3 color{0.1f, 0.3f, 0.35f};
+  Vec3 far_color{0.02f, 0.24f, 0.29f};  // the far ocean's
 };
 
 struct PrototypeRule {
@@ -116,6 +132,13 @@ class GameData {
   std::string skeleton_model(const std::string& name) const;
   std::string skeleton_of_model(const std::string& model) const;  // the reverse, "" when none
   const std::unordered_map<std::string, std::vector<std::string>>& all_type_models() const { return m_type_models; }
+  // whether the game has an actor type of that name (known by its role, family, models...), not a
+  // placeholder its type table keeps for an older game's entities
+  bool has_type(const std::string& etype) const;
+  // a value of one of the game's enums (enums: "pickup-type") by its name, -1 when none; the name
+  // of a value, "" when none
+  int enum_value(const std::string& en, const std::string& name) const;
+  std::string enum_name(const std::string& en, int value) const;
 
   const LevelInfo* level(const std::string& name) const;
   const OceanMap* ocean(const std::string& name) const;
@@ -148,11 +171,12 @@ class GameData {
   std::unordered_map<std::string, ActorRole> m_roles;
   std::vector<std::string> m_creature_suffixes;
   std::unordered_map<std::string, bool> m_water_types;
-  std::set<std::string> m_effects, m_unlisted;
+  std::set<std::string> m_effects, m_unlisted, m_placeholders;
   std::vector<std::string> m_water_looks;
   std::unordered_map<std::string, std::string> m_objects;
   std::unordered_map<std::string, std::vector<std::string>> m_type_models;
   std::unordered_map<std::string, std::string> m_skeletons;
+  std::map<std::string, std::map<std::string, int>> m_enums;
   std::map<std::string, LevelInfo> m_levels;
   std::map<std::string, OceanMap> m_oceans;
   std::vector<StoryNode> m_nodes;

@@ -67,16 +67,25 @@ std::string library_root_of(const std::string& folder) {
   return from_path(fs::exists(p / "library.json", ec) ? p.parent_path() : p);
 }
 
-std::string default_library_root() {
+namespace {
+// This editor's own tree (the source tree it was built from), else the folder of the executable:
+// never jak-project's, which this editor neither builds against nor runs.
+fs::path editor_tree() {
   std::error_code ec;
 #ifdef OGLE_PROJECT_DIR
   const fs::path project = to_path(OGLE_PROJECT_DIR);
-  if (fs::exists(project / "CMakeLists.txt", ec) && fs::is_directory(project / "src", ec))
-    return from_path(project / "library");
+  if (fs::exists(project / "CMakeLists.txt", ec) && fs::is_directory(project / "src", ec)) return project;
 #endif
   const char* base = SDL_GetBasePath();
-  return from_path(to_path(base ? base : "") / "library");
+  return to_path(base ? base : "");
 }
+}  // namespace
+
+std::string default_library_root() { return from_path(editor_tree() / "library"); }
+
+std::string default_iso_data_dir() { return from_path(editor_tree() / "iso_data"); }
+
+std::string default_projects_dir() { return from_path(editor_tree() / "library" / "projects"); }
 
 std::vector<GameFolder> list_games(const std::string& library_root) {
   std::vector<GameFolder> out;

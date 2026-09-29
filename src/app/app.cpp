@@ -148,7 +148,7 @@ void App::apply_options(const AppOptions& opts) {
   // library/ in the editor's own tree
   std::string root = opts.library;
   if (root.empty()) root = list_games(prefs.library_root).empty() ? default_library_root() : prefs.library_root;
-  set_library(root, prefs.library_game);
+  set_library(root, opts.game.empty() ? prefs.library_game : opts.game);
 }
 
 void App::new_document() {
@@ -262,8 +262,9 @@ void App::frame(float dt) {
   if (history.revision() != m_story_revision) apply_story_view();
   process_dialog_results();
   store.update();
-  if (!m_index_applied && library_index.ready()) apply_library_index();
+  if (m_index_merged.size() < games.size() || !m_index_applied) apply_library_index();
   poll_level_opening();
+  poll_level_adding();
   poll_navmesh_generation();
   remote_poll();
   extract_poll();
@@ -291,6 +292,7 @@ void App::frame(float dt) {
   // what the tools changed this frame is drawn now
   if (history.revision() != m_frame_revision || gizmo.active() || ImGui::IsAnyItemActive()) scene.begin_frame();
   m_frame_revision = history.revision();
+  set_ocean_backdrop();
   renderer.begin(camera, px, py, pw, ph, rs, m_vp_w, m_vp_h);
   renderer.draw_scene(scene, rs, selection, hovered);
   if (rs.show_ocean && m_ocean && !scene.nodes.empty())
@@ -642,6 +644,8 @@ void App::handle_shortcuts() {
     paste();
   } else if (ctrl && pressed(ImGuiKey_D)) {
     duplicate_selection();
+  } else if (ctrl && pressed(ImGuiKey_L)) {
+    if (!selection.empty()) select_level(level_of_node(primary));
   } else if (pressed(ImGuiKey_Escape)) {
     if (tool == ToolMode::Place) stop_placement();
     else select_only(0);
@@ -706,7 +710,8 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         (project_in && (setup == "select" || setup == "scale" || setup == "prefab" || setup == "navmesh"));
     const bool with_level = !with_project && (setup == "levels" || setup == "select" || setup == "scale" ||
                                               setup == "prefab" || setup == "catalog" || setup == "models" ||
-                                              setup == "decor" || setup == "decor-all" || setup == "navmesh");
+                                              setup == "decor" || setup == "decor-all" || setup == "navmesh" ||
+                                              setup == "export");
     if (with_project) open_project_file(in);  // the preferences are not written in this mode
     if (setup == "project") left_tab_request = 1;
     if (with_level) {
@@ -736,6 +741,12 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
     if (target.create(fbw, fbh)) {
       bool prepared = false, extraction_started = false;
       int settled = 0;
+      std::vector<std::string> to_add;
+      for (size_t a = 0, b; a < opts.add.size(); a = b + 1) {
+        b = opts.add.find(',', a);
+        if (b == std::string::npos) b = opts.add.size();
+        if (b > a) to_add.push_back(opts.add.substr(a, b - a));
+      }
       auto start = std::chrono::steady_clock::now();
       for (int frame_index = 0;; frame_index++) {
         SDL_Delay(2);  // frames are not paced by vsync here: let the loading threads work
@@ -745,7 +756,16 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         frame(1.f / 60.f);
         // loading, or the catalog not complete yet (the index of the library)
         bool loading = m_level_future.valid() || store.pending() > 0 || thumbs.pending() > 0 || extract.process ||
-                       !m_index_applied || navmesh_busy();
+                       !m_index_applied || m_index_merged.size() < games.size() || navmesh_busy() ||
+                       level_adding() || !to_add.empty();
+        // the levels added to it (--add), one after the other once it is loaded
+        if (!to_add.empty() && !m_level_future.valid() && !level_adding() && frame_index > 1) {
+          std::string err;
+          const LevelEntry* next = library.level(to_add.front());
+          if (!next) LOG_ERROR("capture: no level %s in the library", to_add.front().c_str());
+          else if (!add_level_to_document(*next, &err)) LOG_ERROR("%s", err.c_str());
+          to_add.erase(to_add.begin());
+        }
         if (setup == "extract" && !extraction_started && !extract.process && extract.detected_source == in &&
             extract.detect_error.empty()) {
           extraction_started = true;
@@ -753,7 +773,7 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
           start_extraction();
           loading = true;
         }
-        if (!prepared && !m_level_future.valid() && frame_index > 1) {
+        if (!prepared && !m_level_future.valid() && !level_adding() && to_add.empty() && frame_index > 1) {
           prepared = true;
           // an instance of a decor prototype with copies, near the middle of the level (a catwalk
           // to stretch for `scale`): selected, then a prefab of it and its neighbours
@@ -786,7 +806,15 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
               }
             }
           }
-          if (setup == "select" || setup == "scale" || setup == "prefab") {
+          if (setup == "select" && target_node && target_node->kind == NodeKind::Group &&
+              target_node->extras.contains("og_level")) {
+            // a level added, named: selected whole, as Select its level does
+            const uint32_t group = target_node->id;
+            select_level(group);
+            camera.yaw = 0.7f;
+            camera.pitch = -0.5f;
+            camera.frame(document_level_bounds(group));
+          } else if (setup == "select" || setup == "scale" || setup == "prefab") {
             if (target_node) {
               select_only(target_node->id);
               for (auto id : named) selection.insert(id);
@@ -841,6 +869,17 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
             }
           } else if (setup != "extract") {
             frame_all();
+          }
+          if (setup == "export") {
+            // exported for another game (Jak 3 for Jak II's levels, else Jak II), in the capture's
+            // folder: the window and its report
+            open_export_window();
+            export_options = default_export_options(scene.settings.game == Game::Jak2 ? Game::Jak3 : Game::Jak2);
+            export_options.folder = (tmp / "exports").generic_string();
+            LevelExportReport rep;
+            std::string err;
+            if (export_for_game(export_options, &rep, &err)) m_export_report = std::move(rep);
+            else LOG_ERROR(tr("log.export_failed"), err.c_str());
           }
           if (setup == "navmesh") {
             // the document's nav meshes, or new ones (selected when they are applied)

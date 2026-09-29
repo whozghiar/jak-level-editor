@@ -6,7 +6,6 @@
   "roles": {
    "anim-tester": "logic",
    "aphid": "creature",
-   "arcing-shot": "creature",
    "assistant": "creature",
    "assistant-bluehut": "creature",
    "assistant-firecanyon": "creature",
@@ -18,10 +17,8 @@
    "babak": "creature",
    "babak-with-cannon": "creature",
    "baby-spider": "creature",
-   "baseplat": "creature",
    "battlecontroller": "logic",
    "beach-part": "logic",
-   "beach-rock": "creature",
    "beachcam": "logic",
    "billy": "creature",
    "billy-rat": "creature",
@@ -30,7 +27,6 @@
    "bird-lady-beach": "creature",
    "blue-sagecage": "creature",
    "bonelurker": "creature",
-   "breakaway": "creature",
    "bully": "creature",
    "cam-layout": "logic",
    "camera-combiner": "logic",
@@ -39,39 +35,21 @@
    "camera-start": "logic",
    "camera-tracker": "logic",
    "camera-voicebox": "logic",
-   "cave-trap": "creature",
    "cave-water": "logic",
-   "caveflamepots": "creature",
-   "cavegeyserrock": "creature",
-   "citb-arm": "creature",
-   "citb-arm-section": "creature",
-   "citb-arm-shoulder": "creature",
    "citb-battlecontroller": "logic",
    "citb-bunny": "creature",
    "citb-chains": "logic",
-   "citb-disc": "creature",
-   "citb-drop-plat": "creature",
    "citb-part": "logic",
    "citb-sage": "creature",
-   "collectable": "creature",
    "dark-eco-pool": "logic",
    "darkcave-part": "logic",
    "double-lurker": "creature",
    "double-lurker-top": "creature",
-   "eco": "creature",
-   "eco-blue": "creature",
-   "eco-collectable": "creature",
-   "eco-door": "creature",
-   "eco-pill": "creature",
-   "eco-red": "creature",
-   "eco-yellow": "creature",
-   "ecovent": "creature",
    "evilbro": "creature",
    "evilsis": "creature",
    "explorer": "creature",
    "farmer": "creature",
    "fin-door": "logic",
-   "final-door": "creature",
    "finalbosscam": "creature",
    "fireboulder": "creature",
    "firecanyon-part": "logic",
@@ -86,16 +64,9 @@
    "fuel-cell": "creature",
    "gambler": "creature",
    "geologist": "creature",
-   "gorge": "creature",
-   "gorge-abort": "creature",
-   "gorge-finish": "creature",
-   "gorge-start": "creature",
    "green-eco-lurker": "creature",
-   "green-eco-lurker-gen": "creature",
    "green-sagecage": "creature",
-   "health": "creature",
    "helix-dark-eco": "logic",
-   "helix-water": "creature",
    "hopper": "creature",
    "hud": "logic",
    "hud-bike-heat": "logic",
@@ -108,21 +79,17 @@
    "hud-pickups": "logic",
    "hud-power": "logic",
    "ice-cube": "creature",
-   "joint-exploder": "creature",
    "jungle-part": "logic",
    "jungle-water": "logic",
    "junglecam": "logic",
    "junglefish": "creature",
    "kermit": "creature",
-   "kermit-pulse": "creature",
-   "launcher": "creature",
    "lava": "logic",
    "lavatube-lava": "logic",
    "lavatube-part": "logic",
    "level-hint": "logic",
    "lightning-mole": "creature",
    "list-keeper": "logic",
-   "logo-slave": "creature",
    "lurkercrab": "creature",
    "lurkerpuppy": "creature",
    "lurkerworm": "creature",
@@ -130,7 +97,6 @@
    "maincavecam": "logic",
    "manipy": "logic",
    "mayor": "creature",
-   "med-res-level": "creature",
    "minershort": "creature",
    "minertall": "creature",
    "misty-battlecontroller": "logic",
@@ -138,15 +104,11 @@
    "mistycam": "logic",
    "mother-spider": "creature",
    "mother-spider-egg": "creature",
-   "mother-spider-proj": "creature",
    "mud": "logic",
    "muse": "creature",
    "nav-enemy": "creature",
-   "ogre-isle": "creature",
    "ogre-lava": "logic",
    "ogre-part": "logic",
-   "ogre-plat": "creature",
-   "ogre-step": "creature",
    "ogreboss": "creature",
    "ogreboss-village2": "creature",
    "oracle": "creature",
@@ -157,36 +119,23 @@
    "peeper": "creature",
    "pelican": "creature",
    "plant-boss": "creature",
-   "pontoon": "creature",
    "pov-camera": "logic",
    "precurbridgecam": "logic",
    "process": "logic",
-   "process-drawable": "creature",
    "process-drawable-reserved": "logic",
    "process-hidden": "logic",
    "process-taskable": "creature",
    "progress": "logic",
-   "projectile": "creature",
-   "projectile-blue": "creature",
-   "projectile-yellow": "creature",
    "puffer": "creature",
-   "pusher-base": "creature",
-   "qbert-plat-on": "creature",
-   "quicksandlurker-missile": "creature",
    "racer": "creature",
    "ram-boss": "creature",
-   "ram-boss-proj": "creature",
    "red-sagecage": "creature",
    "redshot": "creature",
-   "reflector-end": "creature",
-   "reflector-origin": "creature",
-   "rigid-body-platform": "creature",
    "robocave-part": "logic",
    "robotboss": "creature",
    "rolling-part": "logic",
    "rolling-water": "logic",
    "rollingcam": "logic",
-   "ropebridge": "creature",
    "sage": "creature",
    "sage-bluehut": "creature",
    "sage-finalboss": "creature",
@@ -201,19 +150,16 @@
    "sharkey": "creature",
    "sidekick": "creature",
    "silodoor": "creature",
-   "slide-control": "creature",
    "snow-ball": "logic",
    "snow-bunny": "creature",
    "snow-part": "logic",
    "snowcam": "logic",
    "spider-egg": "creature",
-   "spider-vent": "creature",
    "starfish": "creature",
    "static-screen": "logic",
    "sunken-part": "logic",
    "sunken-water": "logic",
    "sunkencam": "logic",
-   "swamp-bat": "creature",
    "swamp-battlecontroller": "logic",
    "swamp-part": "logic",
    "swamp-rat": "creature",
@@ -231,14 +177,9 @@
    "training-cam": "logic",
    "training-part": "logic",
    "training-water": "logic",
-   "vent": "creature",
-   "ventblue": "creature",
-   "ventred": "creature",
-   "ventyellow": "creature",
    "viewer": "logic",
    "villa-fisha": "creature",
    "villa-fishb": "creature",
-   "villa-starfish": "creature",
    "village-cam": "logic",
    "village-fish": "creature",
    "village2cam": "logic",
@@ -250,7 +191,6 @@
    "villagec-lava": "logic",
    "villagec-part": "logic",
    "voicebox": "logic",
-   "warp-gate": "creature",
    "warpgate": "logic",
    "warrior": "creature",
    "water-anim": "logic",
@@ -285,12 +225,15 @@
   "objects": {
    "accordian": "other",
    "allpontoons": "other",
+   "arcing-shot": "other",
    "balance-plat": "platform",
    "balloon": "other",
    "balloonlurker": "platform",
    "balloonlurker-pilot": "other",
    "barrel": "crate",
    "basebutton": "button",
+   "baseplat": "platform",
+   "beach-rock": "other",
    "bladeassm": "other",
    "blocking-plane": "other",
    "blue-eco-charger": "other",
@@ -298,37 +241,46 @@
    "boat-fuelcell": "other",
    "boatpaddle": "other",
    "bone-platform": "platform",
+   "breakaway": "breakable",
    "breakaway-left": "breakable",
    "breakaway-mid": "breakable",
    "breakaway-right": "breakable",
    "bucket": "crate",
    "bully-broken-cage": "other",
    "buzzer": "collectable",
+   "cave-trap": "other",
    "cavecrusher": "other",
    "cavecrystal": "other",
    "caveelevator": "platform",
+   "caveflamepots": "other",
    "cavegem": "other",
+   "cavegeyserrock": "other",
    "cavespatula": "other",
    "cavespatulatwo": "other",
    "cavetrapdoor": "door",
    "ceilingflag": "other",
    "chainmine": "other",
    "citadelcam": "other",
+   "citb-arm": "other",
    "citb-arm-a": "other",
    "citb-arm-b": "other",
    "citb-arm-c": "other",
    "citb-arm-d": "other",
+   "citb-arm-section": "other",
+   "citb-arm-shoulder": "other",
    "citb-arm-shoulder-a": "other",
    "citb-arm-shoulder-b": "other",
    "citb-base-plat": "platform",
    "citb-button": "button",
    "citb-chain-plat": "platform",
    "citb-coil": "other",
+   "citb-disc": "other",
    "citb-disc-a": "other",
    "citb-disc-b": "other",
    "citb-disc-c": "other",
    "citb-disc-d": "other",
    "citb-donut": "other",
+   "citb-drop-plat": "platform",
    "citb-exit-plat": "platform",
    "citb-firehose": "other",
    "citb-generator": "other",
@@ -342,6 +294,7 @@
    "citb-sagecage": "other",
    "citb-stair-plat": "platform",
    "citb-stopbox": "platform",
+   "collectable": "collectable",
    "crate": "crate",
    "crate-buzzer": "crate",
    "crate-darkeco-cluster": "crate",
@@ -354,8 +307,16 @@
    "darkvine": "other",
    "driller-lurker": "other",
    "drop-plat": "platform",
+   "eco": "collectable",
+   "eco-blue": "collectable",
+   "eco-collectable": "collectable",
+   "eco-door": "door",
+   "eco-pill": "collectable",
+   "eco-red": "collectable",
+   "eco-yellow": "collectable",
    "ecoclaw": "other",
    "ecovalve": "other",
+   "ecovent": "other",
    "ecoventrock": "other",
    "eggtop": "other",
    "energyarm": "other",
@@ -368,6 +329,7 @@
    "exit-chamber": "other",
    "exit-chamber-button": "button",
    "exit-chamber-dummy": "other",
+   "final-door": "door",
    "fisher-fish": "other",
    "floating-launcher": "platform",
    "flutflut-plat": "platform",
@@ -379,20 +341,30 @@
    "gnawer-falling-segment": "other",
    "gondola": "other",
    "gondolacables": "other",
+   "gorge": "other",
+   "gorge-abort": "other",
+   "gorge-finish": "other",
    "gorge-pusher": "other",
+   "gorge-start": "other",
+   "green-eco-lurker-gen": "other",
    "greenshot": "other",
    "grottopole": "other",
    "happy-plant": "other",
    "harvester": "other",
+   "health": "collectable",
    "helix-button": "button",
    "helix-slide-door": "door",
+   "helix-water": "water",
    "hutlamp": "light",
    "jngpusher": "other",
+   "joint-exploder": "other",
    "jungle-elevator": "platform",
    "junglesnake": "other",
    "keg": "other",
    "keg-conveyor": "other",
    "keg-conveyor-paddle": "other",
+   "kermit-pulse": "other",
+   "launcher": "movement",
    "launcherdoor": "door",
    "lavaballoon": "water",
    "lavabase": "water",
@@ -404,6 +376,7 @@
    "light-eco-child": "light",
    "light-eco-mother": "light",
    "logo": "other",
+   "logo-slave": "other",
    "logtrap": "other",
    "lrocklrg": "other",
    "lurkerm-piston": "other",
@@ -411,17 +384,22 @@
    "lurkerm-tall-sail": "other",
    "maindoor": "door",
    "mayorgears": "other",
+   "med-res-level": "other",
    "minecartsteel": "other",
    "mis-bone-bridge": "platform",
    "mistycannon": "other",
    "mistycannon-missile": "other",
    "money": "collectable",
    "mother-spider-leg": "other",
+   "mother-spider-proj": "other",
    "ogre-bridge": "platform",
    "ogre-bridgeend": "platform",
+   "ogre-isle": "platform",
    "ogre-isle-b": "platform",
    "ogre-isle-c": "platform",
    "ogre-isle-d": "platform",
+   "ogre-plat": "platform",
+   "ogre-step": "platform",
    "ogre-step-a": "platform",
    "ogre-step-b": "platform",
    "ogre-step-c": "platform",
@@ -443,6 +421,7 @@
    "plat-eco-finalboss": "platform",
    "plat-flip": "platform",
    "plunger-lurker": "other",
+   "pontoon": "platform",
    "pontoonfive": "platform",
    "pontoonten": "platform",
    "power-left": "other",
@@ -450,19 +429,30 @@
    "powercellalt": "other",
    "precurbridge": "platform",
    "precursor-arm": "other",
+   "projectile": "other",
+   "projectile-blue": "other",
+   "projectile-yellow": "other",
    "pusher": "other",
+   "pusher-base": "other",
    "qbert-plat": "platform",
    "qbert-plat-master": "platform",
+   "qbert-plat-on": "platform",
    "quicksandlurker": "other",
+   "quicksandlurker-missile": "other",
    "race-ring": "other",
    "ram": "other",
+   "ram-boss-proj": "other",
    "reflector": "other",
+   "reflector-end": "other",
    "reflector-middle": "other",
    "reflector-mirror": "other",
+   "reflector-origin": "other",
    "revcycle": "other",
    "revcycleprop": "other",
+   "rigid-body-platform": "platform",
    "robber": "other",
    "rolling-start": "other",
+   "ropebridge": "platform",
    "rounddoor": "door",
    "sagesail": "other",
    "scarecrow-a": "other",
@@ -473,6 +463,7 @@
    "side-to-side-plat": "platform",
    "sidedoor": "door",
    "silostep": "other",
+   "slide-control": "other",
    "snow-ball-roller": "other",
    "snow-ball-shadow": "other",
    "snow-bumper": "other",
@@ -485,6 +476,7 @@
    "snow-spatula": "platform",
    "snow-switch": "button",
    "snowpusher": "other",
+   "spider-vent": "other",
    "spiderwebs": "other",
    "spike": "other",
    "springbox": "other",
@@ -498,6 +490,7 @@
    "sunken-pipegame-button": "button",
    "sunkenfisha": "other",
    "swamp-barrel": "crate",
+   "swamp-bat": "other",
    "swamp-bat-slave": "other",
    "swamp-blimp": "other",
    "swamp-rock": "other",
@@ -511,7 +504,13 @@
    "towertop": "other",
    "tra-iris-door": "door",
    "tra-pontoon": "platform",
+   "vent": "other",
+   "ventblue": "other",
+   "ventred": "other",
+   "ventyellow": "other",
+   "villa-starfish": "other",
    "wall-plat": "platform",
+   "warp-gate": "movement",
    "warp-gate-switch": "button",
    "wedge-plat": "platform",
    "wedge-plat-outer": "platform",
@@ -562,6 +561,7 @@
    "village2cam",
    "water-vol"
   ],
+  "placeholders": [],
   "models": {
    "accordian": [
     "accordian"
@@ -569,14 +569,8 @@
    "allpontoons": [
     "allpontoons"
    ],
-   "anim-tester": [
-    "junglecam"
-   ],
    "aphid": [
     "aphid-lurker"
-   ],
-   "arcing-shot": [
-    "junglecam"
    ],
    "assistant": [
     "assistant"
@@ -599,9 +593,6 @@
    ],
    "assistant-villagec": [
     "assistant-village3"
-   ],
-   "auto-save": [
-    "junglecam"
    ],
    "babak": [
     "babak"
@@ -634,21 +625,6 @@
    ],
    "basebutton": [
     "generic-button"
-   ],
-   "baseplat": [
-    "junglecam"
-   ],
-   "battlecontroller": [
-    "junglecam"
-   ],
-   "beach-part": [
-    "junglecam"
-   ],
-   "beach-rock": [
-    "junglecam"
-   ],
-   "beachcam": [
-    "junglecam"
    ],
    "billy": [
     "billy",
@@ -696,9 +672,6 @@
    "bonelurker": [
     "bonelurker"
    ],
-   "breakaway": [
-    "junglecam"
-   ],
    "breakaway-left": [
     "breakaway-left"
    ],
@@ -725,33 +698,6 @@
    "buzzer": [
     "buzzer"
    ],
-   "cam-layout": [
-    "junglecam"
-   ],
-   "camera-combiner": [
-    "junglecam"
-   ],
-   "camera-master": [
-    "junglecam"
-   ],
-   "camera-slave": [
-    "junglecam"
-   ],
-   "camera-start": [
-    "junglecam"
-   ],
-   "camera-tracker": [
-    "junglecam"
-   ],
-   "camera-voicebox": [
-    "junglecam"
-   ],
-   "cave-trap": [
-    "junglecam"
-   ],
-   "cave-water": [
-    "junglecam"
-   ],
    "cavecrusher": [
     "cavecrusher"
    ],
@@ -761,14 +707,8 @@
    "caveelevator": [
     "caveelevator"
    ],
-   "caveflamepots": [
-    "junglecam"
-   ],
    "cavegem": [
     "cavegem"
-   ],
-   "cavegeyserrock": [
-    "junglecam"
    ],
    "cavespatula": [
     "cavespatula-darkcave",
@@ -789,9 +729,6 @@
    "citadelcam": [
     "citadelcam"
    ],
-   "citb-arm": [
-    "junglecam"
-   ],
    "citb-arm-a": [
     "citb-arm-a"
    ],
@@ -803,12 +740,6 @@
    ],
    "citb-arm-d": [
     "citb-arm-d"
-   ],
-   "citb-arm-section": [
-    "junglecam"
-   ],
-   "citb-arm-shoulder": [
-    "junglecam"
    ],
    "citb-arm-shoulder-a": [
     "citb-arm-shoulder-a"
@@ -831,14 +762,8 @@
    "citb-chain-plat": [
     "citb-chain-plat"
    ],
-   "citb-chains": [
-    "junglecam"
-   ],
    "citb-coil": [
     "citb-coil"
-   ],
-   "citb-disc": [
-    "junglecam"
    ],
    "citb-disc-a": [
     "citb-disc-a"
@@ -854,9 +779,6 @@
    ],
    "citb-donut": [
     "citb-donut"
-   ],
-   "citb-drop-plat": [
-    "junglecam"
    ],
    "citb-exit-plat": [
     "citb-exit-plat"
@@ -876,9 +798,6 @@
    ],
    "citb-launcher": [
     "citb-launcher"
-   ],
-   "citb-part": [
-    "junglecam"
    ],
    "citb-plat": [
     "plat-citb"
@@ -901,9 +820,6 @@
    "citb-rotatebox": [
     "citb-rotatebox"
    ],
-   "citb-sage": [
-    "junglecam"
-   ],
    "citb-sagecage": [
     "citb-sagecage"
    ],
@@ -912,9 +828,6 @@
    ],
    "citb-stopbox": [
     "citb-stopbox"
-   ],
-   "collectable": [
-    "junglecam"
    ],
    "crate": [
     "crate-iron",
@@ -939,14 +852,8 @@
     "dark-crystal",
     "dark-crystal-explode"
    ],
-   "dark-eco-pool": [
-    "junglecam"
-   ],
    "dark-plant": [
     "dark-plant"
-   ],
-   "darkcave-part": [
-    "junglecam"
    ],
    "darkecobarrel": [
     "darkecobarrel"
@@ -979,35 +886,11 @@
     "citb-drop-plat-yellow",
     "citb-drop-plat"
    ],
-   "eco": [
-    "junglecam"
-   ],
-   "eco-blue": [
-    "junglecam"
-   ],
-   "eco-collectable": [
-    "junglecam"
-   ],
-   "eco-door": [
-    "junglecam"
-   ],
-   "eco-pill": [
-    "junglecam"
-   ],
-   "eco-red": [
-    "junglecam"
-   ],
-   "eco-yellow": [
-    "junglecam"
-   ],
    "ecoclaw": [
     "ecoclaw"
    ],
    "ecovalve": [
     "ecovalve-geo"
-   ],
-   "ecovent": [
-    "junglecam"
    ],
    "ecoventrock": [
     "ecoventrock",
@@ -1059,24 +942,12 @@
    "farmer": [
     "farmer"
    ],
-   "fin-door": [
-    "junglecam"
-   ],
-   "final-door": [
-    "junglecam"
-   ],
    "finalbosscam": [
     "finalbosscam",
     "robotboss-basic"
    ],
    "fireboulder": [
     "fireboulder"
-   ],
-   "firecanyon-part": [
-    "junglecam"
-   ],
-   "first-person-hud": [
-    "junglecam"
    ],
    "fisher": [
     "fisher"
@@ -1090,9 +961,6 @@
     "fishermans-boat",
     "evilbro",
     "evilsis"
-   ],
-   "fleeing-nav-enemy": [
-    "junglecam"
    ],
    "floating-launcher": [
     "floating-launcher"
@@ -1149,26 +1017,11 @@
    "gondolacables": [
     "gondolacables"
    ],
-   "gorge": [
-    "junglecam"
-   ],
-   "gorge-abort": [
-    "junglecam"
-   ],
-   "gorge-finish": [
-    "junglecam"
-   ],
    "gorge-pusher": [
     "pusher"
    ],
-   "gorge-start": [
-    "junglecam"
-   ],
    "green-eco-lurker": [
     "green-eco-lurker"
-   ],
-   "green-eco-lurker-gen": [
-    "junglecam"
    ],
    "green-sagecage": [
     "green-sagecage",
@@ -1189,63 +1042,15 @@
    "harvester": [
     "harvester"
    ],
-   "health": [
-    "junglecam"
-   ],
    "helix-button": [
     "helix-button",
     "sunkencam"
    ],
-   "helix-dark-eco": [
-    "junglecam"
-   ],
    "helix-slide-door": [
     "helix-slide-door"
    ],
-   "helix-water": [
-    "junglecam"
-   ],
    "hopper": [
     "hopper"
-   ],
-   "hud": [
-    "junglecam"
-   ],
-   "hud-battle-enemy": [
-    "fuelcell-naked",
-    "swamp-rat",
-    "citb-bunny",
-    "gnawer",
-    "flying-lurker",
-    "babak",
-    "bonelurker"
-   ],
-   "hud-bike-heat": [
-    "junglecam"
-   ],
-   "hud-bike-speed": [
-    "junglecam"
-   ],
-   "hud-buzzers": [
-    "junglecam"
-   ],
-   "hud-fuel-cell": [
-    "fuelcell-naked"
-   ],
-   "hud-health": [
-    "junglecam"
-   ],
-   "hud-money": [
-    "money"
-   ],
-   "hud-money-all": [
-    "money"
-   ],
-   "hud-pickups": [
-    "junglecam"
-   ],
-   "hud-power": [
-    "junglecam"
    ],
    "hutlamp": [
     "hutlamp"
@@ -1254,26 +1059,11 @@
     "ice-cube",
     "ice-cube-break"
    ],
-   "jng-iris-door": [
-    "jng-iris-door"
-   ],
    "jngpusher": [
     "jngpusher"
    ],
-   "joint-exploder": [
-    "junglecam"
-   ],
    "jungle-elevator": [
     "plat-button-geo"
-   ],
-   "jungle-part": [
-    "junglecam"
-   ],
-   "jungle-water": [
-    "junglecam"
-   ],
-   "junglecam": [
-    "junglecam"
    ],
    "junglefish": [
     "junglefish"
@@ -1293,18 +1083,9 @@
    "kermit": [
     "kermit"
    ],
-   "kermit-pulse": [
-    "junglecam"
-   ],
-   "launcher": [
-    "junglecam"
-   ],
    "launcherdoor": [
     "launcherdoor-maincave-geo",
     "launcherdoor-geo"
-   ],
-   "lava": [
-    "junglecam"
    ],
    "lavaballoon": [
     "lavaballoon"
@@ -1324,17 +1105,8 @@
    "lavashortcut": [
     "lavashortcut"
    ],
-   "lavatube-lava": [
-    "junglecam"
-   ],
-   "lavatube-part": [
-    "junglecam"
-   ],
    "lavayellowtarp": [
     "lavayellowtarp"
-   ],
-   "level-hint": [
-    "junglecam"
    ],
    "light-eco-child": [
     "light-eco-small"
@@ -1344,9 +1116,6 @@
    ],
    "lightning-mole": [
     "lightning-mole"
-   ],
-   "list-keeper": [
-    "junglecam"
    ],
    "logo": [
     "logo-japan",
@@ -1360,9 +1129,6 @@
     "ndi-volumes",
     "eichar",
     "sidekick"
-   ],
-   "logo-slave": [
-    "junglecam"
    ],
    "logtrap": [
     "logtrap"
@@ -1388,26 +1154,14 @@
    "lurkerworm": [
     "lurkerworm"
    ],
-   "maincave-part": [
-    "junglecam"
-   ],
-   "maincavecam": [
-    "junglecam"
-   ],
    "maindoor": [
     "maindoor"
-   ],
-   "manipy": [
-    "junglecam"
    ],
    "mayor": [
     "mayor"
    ],
    "mayorgears": [
     "mayorgears-geo"
-   ],
-   "med-res-level": [
-    "junglecam"
    ],
    "minecartsteel": [
     "minecartsteel"
@@ -1423,12 +1177,6 @@
    ],
    "misty-battlecontroller": [
     "mistycam"
-   ],
-   "misty-part": [
-    "junglecam"
-   ],
-   "mistycam": [
-    "junglecam"
    ],
    "mistycannon": [
     "mistycannon"
@@ -1449,26 +1197,14 @@
    "mother-spider-leg": [
     "mother-spider-leg"
    ],
-   "mother-spider-proj": [
-    "junglecam"
-   ],
-   "mud": [
-    "junglecam"
-   ],
    "muse": [
     "muse"
-   ],
-   "nav-enemy": [
-    "junglecam"
    ],
    "ogre-bridge": [
     "ogre-bridge"
    ],
    "ogre-bridgeend": [
     "ogre-bridgeend"
-   ],
-   "ogre-isle": [
-    "junglecam"
    ],
    "ogre-isle-b": [
     "ogre-isle-b"
@@ -1478,18 +1214,6 @@
    ],
    "ogre-isle-d": [
     "ogre-isle-d"
-   ],
-   "ogre-lava": [
-    "junglecam"
-   ],
-   "ogre-part": [
-    "junglecam"
-   ],
-   "ogre-plat": [
-    "junglecam"
-   ],
-   "ogre-step": [
-    "junglecam"
    ],
    "ogre-step-a": [
     "ogre-step-a"
@@ -1533,18 +1257,6 @@
    ],
    "orbit-plat-bottom": [
     "orbit-plat-bottom"
-   ],
-   "othercam": [
-    "junglecam"
-   ],
-   "part-spawner": [
-    "junglecam"
-   ],
-   "part-tester": [
-    "junglecam"
-   ],
-   "part-tracker": [
-    "junglecam"
    ],
    "peeper": [
     "lightning-mole"
@@ -1603,17 +1315,11 @@
     "plunger-lurker",
     "ogrecam"
    ],
-   "pontoon": [
-    "junglecam"
-   ],
    "pontoonfive": [
     "pontoonfive"
    ],
    "pontoonten": [
     "pontoonten"
-   ],
-   "pov-camera": [
-    "junglecam"
    ],
    "power-left": [
     "power-left"
@@ -1628,39 +1334,8 @@
     "precurbridge-geo",
     "junglecam"
    ],
-   "precurbridgecam": [
-    "junglecam"
-   ],
    "precursor-arm": [
     "precursor-arm"
-   ],
-   "process": [
-    "junglecam"
-   ],
-   "process-drawable": [
-    "junglecam"
-   ],
-   "process-drawable-reserved": [
-    "junglecam"
-   ],
-   "process-hidden": [
-    "junglecam"
-   ],
-   "process-taskable": [
-    "junglecam"
-   ],
-   "progress": [
-    "fuelcell-naked",
-    "money"
-   ],
-   "projectile": [
-    "junglecam"
-   ],
-   "projectile-blue": [
-    "junglecam"
-   ],
-   "projectile-yellow": [
-    "junglecam"
    ],
    "puffer": [
     "puffer-main",
@@ -1669,9 +1344,6 @@
    "pusher": [
     "pusher"
    ],
-   "pusher-base": [
-    "junglecam"
-   ],
    "qbert-plat": [
     "qbert-plat-on",
     "qbert-plat"
@@ -1679,14 +1351,8 @@
    "qbert-plat-master": [
     "sunkencam"
    ],
-   "qbert-plat-on": [
-    "junglecam"
-   ],
    "quicksandlurker": [
     "quicksandlurker"
-   ],
-   "quicksandlurker-missile": [
-    "junglecam"
    ],
    "race-ring": [
     "race-ring"
@@ -1701,9 +1367,6 @@
    "ram-boss": [
     "ram-boss"
    ],
-   "ram-boss-proj": [
-    "junglecam"
-   ],
    "red-sagecage": [
     "redsage"
    ],
@@ -1713,9 +1376,6 @@
    "reflector": [
     "periscope-mirror"
    ],
-   "reflector-end": [
-    "junglecam"
-   ],
    "reflector-middle": [
     "reflector-middle-geo"
    ],
@@ -1723,23 +1383,14 @@
     "reflector-mirror",
     "reflector-mirror-break"
    ],
-   "reflector-origin": [
-    "junglecam"
-   ],
    "revcycle": [
     "revcycle-geo"
    ],
    "revcycleprop": [
     "revcycleprop"
    ],
-   "rigid-body-platform": [
-    "junglecam"
-   ],
    "robber": [
     "robber"
-   ],
-   "robocave-part": [
-    "junglecam"
    ],
    "robotboss": [
     "robotboss-basic",
@@ -1748,21 +1399,9 @@
     "robotboss-redeco",
     "robotboss-blueeco"
    ],
-   "rolling-part": [
-    "junglecam"
-   ],
    "rolling-start": [
     "rolling-start-whole",
     "rolling-start-broken"
-   ],
-   "rolling-water": [
-    "junglecam"
-   ],
-   "rollingcam": [
-    "junglecam"
-   ],
-   "ropebridge": [
-    "junglecam"
    ],
    "rounddoor": [
     "rounddoor"
@@ -1808,14 +1447,8 @@
    "seagull": [
     "seagull"
    ],
-   "seagullflock": [
-    "junglecam"
-   ],
    "seaweed": [
     "seaweed"
-   ],
-   "sequenceA": [
-    "junglecam"
    ],
    "sequenceA-village1": [
     "sage",
@@ -1860,12 +1493,6 @@
    "silostep": [
     "silostep"
    ],
-   "slide-control": [
-    "junglecam"
-   ],
-   "snow-ball": [
-    "junglecam"
-   ],
    "snow-ball-roller": [
     "snow-ball"
    ],
@@ -1897,9 +1524,6 @@
    "snow-log-button": [
     "snow-switch"
    ],
-   "snow-part": [
-    "junglecam"
-   ],
    "snow-spatula": [
     "snow-spatula"
    ],
@@ -1907,18 +1531,12 @@
     "snow-switch",
     "snowcam"
    ],
-   "snowcam": [
-    "junglecam"
-   ],
    "snowpusher": [
     "snowpusher"
    ],
    "spider-egg": [
     "spider-egg-unbroken",
     "spider-egg-broken"
-   ],
-   "spider-vent": [
-    "junglecam"
    ],
    "spiderwebs": [
     "spiderwebs-good"
@@ -1941,9 +1559,6 @@
    "starfish": [
     "villa-starfish"
    ],
-   "static-screen": [
-    "junglecam"
-   ],
    "steam-cap": [
     "steam-cap"
    ],
@@ -1954,20 +1569,11 @@
     "village2cam",
     "sunken-elevator"
    ],
-   "sunken-part": [
-    "junglecam"
-   ],
    "sunken-pipegame": [
     "sunkencam"
    ],
    "sunken-pipegame-button": [
     "generic-button"
-   ],
-   "sunken-water": [
-    "junglecam"
-   ],
-   "sunkencam": [
-    "junglecam"
    ],
    "sunkenfisha": [
     "sunkenfisha-red-yellow",
@@ -1982,9 +1588,6 @@
     "crate-bucket",
     "crate-wood"
    ],
-   "swamp-bat": [
-    "junglecam"
-   ],
    "swamp-bat-slave": [
     "swamp-bat"
    ],
@@ -1994,17 +1597,8 @@
    "swamp-blimp": [
     "swamp-blimp"
    ],
-   "swamp-part": [
-    "junglecam"
-   ],
    "swamp-rat": [
     "swamp-rat"
-   ],
-   "swamp-rat-nest": [
-    "junglecam"
-   ],
-   "swamp-rat-nest-dummy": [
-    "junglecam"
    ],
    "swamp-rat-nest-dummy-a": [
     "swamp-rat-nest-a"
@@ -2028,14 +1622,8 @@
     "swamp-tetherrock",
     "swamp-tetherrock-explode"
    ],
-   "swampcam": [
-    "junglecam"
-   ],
    "swampgate": [
     "swamp-spike"
-   ],
-   "swingpole": [
-    "junglecam"
    ],
    "tar-plat": [
     "tar-plat"
@@ -2048,20 +1636,11 @@
     "racer-geo",
     "racer-explode"
    ],
-   "target-start": [
-    "junglecam"
-   ],
    "teetertotter": [
     "teetertotter"
    ],
-   "time-of-day-proc": [
-    "junglecam"
-   ],
    "tntbarrel": [
     "tntbarrel"
-   ],
-   "touch-tracker": [
-    "junglecam"
    ],
    "towertop": [
     "towertop"
@@ -2072,69 +1651,9 @@
    "tra-pontoon": [
     "pontoonfive"
    ],
-   "training-cam": [
-    "trainingcam"
-   ],
-   "training-part": [
-    "junglecam"
-   ],
-   "training-water": [
-    "junglecam"
-   ],
-   "vent": [
-    "junglecam"
-   ],
-   "ventblue": [
-    "junglecam"
-   ],
-   "ventred": [
-    "junglecam"
-   ],
-   "ventyellow": [
-    "junglecam"
-   ],
-   "viewer": [
-    "junglecam"
-   ],
-   "villa-fisha": [
-    "junglecam"
-   ],
-   "villa-fishb": [
-    "junglecam"
-   ],
-   "villa-starfish": [
-    "junglecam"
-   ],
-   "village-cam": [
-    "village-cam"
-   ],
-   "village-fish": [
-    "junglecam"
-   ],
-   "village2cam": [
-    "junglecam"
-   ],
-   "villagea-part": [
-    "junglecam"
-   ],
-   "villagea-water": [
-    "junglecam"
-   ],
    "villageb-ogreboss": [
     "ogreboss-village2",
     "fireboulder"
-   ],
-   "villageb-part": [
-    "junglecam"
-   ],
-   "villageb-water": [
-    "junglecam"
-   ],
-   "villagec-lava": [
-    "junglecam"
-   ],
-   "villagec-part": [
-    "junglecam"
    ],
    "voicebox": [
     "speaker"
@@ -2142,32 +1661,14 @@
    "wall-plat": [
     "wall-plat"
    ],
-   "warp-gate": [
-    "junglecam"
-   ],
    "warp-gate-switch": [
     "warp-gate-switch"
-   ],
-   "warpgate": [
-    "junglecam"
    ],
    "warrior": [
     "warrior"
    ],
-   "water-anim": [
-    "junglecam"
-   ],
-   "water-vol": [
-    "junglecam"
-   ],
-   "water-vol-deadly": [
-    "junglecam"
-   ],
    "wedge-plat": [
     "wedge-plat"
-   ],
-   "wedge-plat-master": [
-    "junglecam"
    ],
    "wedge-plat-outer": [
     "wedge-plat"
@@ -2195,9 +1696,6 @@
    ],
    "yellowshot": [
     "redring"
-   ],
-   "yeti": [
-    "junglecam"
    ],
    "yeti-slave": [
     "yeti"
@@ -2317,6 +1815,11 @@
     0.224,
     0.493,
     0.518
+   ],
+   "far_color": [
+    0.247,
+    0.392,
+    0.522
    ]
   },
   "*ocean-map-village1*": {
@@ -2380,6 +1883,11 @@
     0.097,
     0.431,
     0.5
+   ],
+   "far_color": [
+    0.012,
+    0.357,
+    0.443
    ]
   },
   "*ocean-map-village2*": {
@@ -2443,7 +1951,26 @@
     0.224,
     0.493,
     0.518
+   ],
+   "far_color": [
+    0.247,
+    0.392,
+    0.522
    ]
+  }
+ },
+ "enums": {
+  "pickup-type": {
+   "none": 0,
+   "eco-yellow": 1,
+   "eco-red": 2,
+   "eco-blue": 3,
+   "eco-green": 4,
+   "money": 5,
+   "fuel-cell": 6,
+   "eco-pill": 7,
+   "buzzer": 8,
+   "eco-pill-random": 9
   }
  },
  "levels": {
@@ -2451,217 +1978,1259 @@
    "taskname": "beach",
    "base_mask": 0,
    "ocean": "*ocean-map-village1*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "beach-start",
+     "position": [
+      -123.28,
+      2.31,
+      -54.57
+     ],
+     "shows": [
+      "beach",
+      "village1"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village1"
+   ]
   },
   "citadel": {
    "taskname": "citadel",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "citadel-start",
+     "position": [
+      2793.63,
+      -34.85,
+      -4606.7
+     ],
+     "shows": [
+      "citadel"
+     ]
+    },
+    {
+     "name": "citadel-entrance",
+     "position": [
+      2793.94,
+      -37.65,
+      -4509.96
+     ],
+     "shows": [
+      "citadel",
+      "lavatube"
+     ]
+    },
+    {
+     "name": "citadel-warp",
+     "position": [
+      2796.61,
+      -39.5,
+      -4444.5
+     ],
+     "shows": [
+      "citadel",
+      "lavatube"
+     ]
+    },
+    {
+     "name": "citadel-launch-start",
+     "position": [
+      2643.45,
+      -22.96,
+      -4625.66
+     ],
+     "shows": [
+      "citadel"
+     ]
+    },
+    {
+     "name": "citadel-launch-end",
+     "position": [
+      2697.15,
+      -19.9,
+      -4759.76
+     ],
+     "shows": [
+      "citadel"
+     ]
+    },
+    {
+     "name": "citadel-plat-start",
+     "position": [
+      2793.82,
+      -29.34,
+      -4845.12
+     ],
+     "shows": [
+      "citadel"
+     ]
+    },
+    {
+     "name": "citadel-plat-end",
+     "position": [
+      2751.4,
+      -2.96,
+      -4788.75
+     ],
+     "shows": [
+      "citadel"
+     ]
+    },
+    {
+     "name": "citadel-generator-start",
+     "position": [
+      2963.39,
+      -9.01,
+      -4622.39
+     ],
+     "shows": [
+      "citadel"
+     ]
+    },
+    {
+     "name": "citadel-generator-end",
+     "position": [
+      2890.01,
+      -4.93,
+      -4762.41
+     ],
+     "shows": [
+      "citadel"
+     ]
+    },
+    {
+     "name": "citadel-elevator",
+     "position": [
+      2794.91,
+      57.14,
+      -4679.93
+     ],
+     "shows": [
+      "citadel"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "finalboss",
+    "lavatube"
+   ]
   },
   "darkcave": {
    "taskname": "darkcave",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "darkcave-start",
+     "position": [
+      930.97,
+      31.61,
+      -2957.59
+     ],
+     "shows": [
+      "darkcave",
+      "maincave"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "maincave"
+   ]
   },
   "default-level": {
    "taskname": "default-level",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "demo": {
    "taskname": "demo",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "demo-start",
+     "position": [
+      16.21,
+      7.27,
+      -224.6
+     ],
+     "shows": [
+      "demo"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "finalboss": {
    "taskname": "finalboss",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "finalboss-start",
+     "position": [
+      2819.45,
+      540.98,
+      -4738.65
+     ],
+     "shows": [
+      "citadel",
+      "finalboss"
+     ]
+    },
+    {
+     "name": "finalboss-fight",
+     "position": [
+      3000.08,
+      481.07,
+      -4845.83
+     ],
+     "shows": [
+      "citadel",
+      "finalboss"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "citadel"
+   ]
   },
   "firecanyon": {
    "taskname": "firecanyon",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "firecanyon-start",
+     "position": [
+      -21.33,
+      30.87,
+      -166.43
+     ],
+     "shows": [
+      "firecanyon",
+      "village1"
+     ]
+    },
+    {
+     "name": "firecanyon-end",
+     "position": [
+      332.17,
+      31.0,
+      -1425.67
+     ],
+     "shows": [
+      "firecanyon",
+      "village2"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village1",
+    "village2"
+   ]
   },
   "halfpipe": {
    "taskname": "halfpipe",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "halfpipe",
+     "position": [
+      -0.26,
+      -42.0,
+      -51.89
+     ],
+     "shows": [
+      "halfpipe"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "intro": {
    "taskname": "intro",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "jungle": {
    "taskname": "jungle",
    "base_mask": 0,
    "ocean": "*ocean-map-village1*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "jungle-start",
+     "position": [
+      258.21,
+      21.09,
+      -157.99
+     ],
+     "shows": [
+      "jungle",
+      "village1"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "jungleb",
+    "village1"
+   ]
   },
   "jungleb": {
    "taskname": "jungleb",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "jungle-tower",
+     "position": [
+      358.77,
+      -49.99,
+      -234.15
+     ],
+     "shows": [
+      "jungle",
+      "jungleb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "jungle"
+   ]
   },
   "lavatube": {
    "taskname": "lavatube",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "lavatube-start",
+     "position": [
+      1345.54,
+      39.03,
+      -3569.64
+     ],
+     "shows": [
+      "lavatube",
+      "village3"
+     ]
+    },
+    {
+     "name": "lavatube-middle",
+     "position": [
+      2217.15,
+      -0.96,
+      -3431.71
+     ],
+     "shows": [
+      "lavatube"
+     ]
+    },
+    {
+     "name": "lavatube-after-ribbon",
+     "position": [
+      2430.39,
+      95.34,
+      -4040.19
+     ],
+     "shows": [
+      "lavatube"
+     ]
+    },
+    {
+     "name": "lavatube-end",
+     "position": [
+      2802.71,
+      -39.96,
+      -4459.59
+     ],
+     "shows": [
+      "citadel",
+      "lavatube"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "citadel",
+    "village3"
+   ]
   },
   "maincave": {
    "taskname": "maincave",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "maincave-start",
+     "position": [
+      1079.34,
+      8.06,
+      -3211.48
+     ],
+     "shows": [
+      "maincave",
+      "village3"
+     ]
+    },
+    {
+     "name": "maincave-to-darkcave",
+     "position": [
+      1018.6,
+      37.65,
+      -3038.37
+     ],
+     "shows": [
+      "maincave"
+     ]
+    },
+    {
+     "name": "maincave-to-robocave",
+     "position": [
+      1162.33,
+      10.8,
+      -3029.76
+     ],
+     "shows": [
+      "maincave"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "darkcave",
+    "robocave",
+    "village3"
+   ]
   },
   "misty": {
    "taskname": "misty",
    "base_mask": 0,
    "ocean": "*ocean-map-village1*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "misty-start",
+     "position": [
+      40.12,
+      3.69,
+      827.78
+     ],
+     "shows": [
+      "misty",
+      "village1"
+     ]
+    },
+    {
+     "name": "misty-silo",
+     "position": [
+      -164.19,
+      20.05,
+      891.47
+     ],
+     "shows": [
+      "misty",
+      "village1"
+     ]
+    },
+    {
+     "name": "misty-bike",
+     "position": [
+      73.86,
+      8.77,
+      1010.49
+     ],
+     "shows": [
+      "misty",
+      "village1"
+     ]
+    },
+    {
+     "name": "misty-backside",
+     "position": [
+      -74.27,
+      8.12,
+      1134.41
+     ],
+     "shows": [
+      "misty",
+      "village1"
+     ]
+    },
+    {
+     "name": "misty-silo2",
+     "position": [
+      -219.24,
+      23.94,
+      1016.14
+     ],
+     "shows": [
+      "misty",
+      "village1"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village1"
+   ]
   },
   "ogre": {
    "taskname": "ogre",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "ogre-start",
+     "position": [
+      207.46,
+      40.03,
+      -1782.51
+     ],
+     "shows": [
+      "ogre",
+      "village2"
+     ]
+    },
+    {
+     "name": "ogre-race",
+     "position": [
+      205.43,
+      39.99,
+      -2003.28
+     ],
+     "shows": [
+      "ogre"
+     ]
+    },
+    {
+     "name": "ogre-end",
+     "position": [
+      969.54,
+      34.48,
+      -3402.28
+     ],
+     "shows": [
+      "ogre",
+      "village3"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village2",
+    "village3"
+   ]
   },
   "robocave": {
    "taskname": "robocave",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "robocave-start",
+     "position": [
+      1271.54,
+      17.02,
+      -2876.34
+     ],
+     "shows": [
+      "maincave",
+      "robocave"
+     ]
+    },
+    {
+     "name": "robocave-bottom",
+     "position": [
+      1327.02,
+      -23.71,
+      -2829.19
+     ],
+     "shows": [
+      "maincave",
+      "robocave"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "maincave"
+   ]
   },
   "rolling": {
    "taskname": "rolling",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "rolling-start",
+     "position": [
+      105.54,
+      10.45,
+      -1644.9
+     ],
+     "shows": [
+      "rolling",
+      "village2"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village2"
+   ]
   },
   "snow": {
    "taskname": "snow",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "snow-start",
+     "position": [
+      1039.13,
+      240.16,
+      -3462.59
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-fort",
+     "position": [
+      837.62,
+      219.03,
+      -3270.89
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-flut-flut",
+     "position": [
+      605.92,
+      257.5,
+      -3399.03
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-pass-to-fort",
+     "position": [
+      915.78,
+      224.03,
+      -3376.15
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-by-ice-lake",
+     "position": [
+      769.33,
+      256.26,
+      -3478.14
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-by-ice-lake-alt",
+     "position": [
+      745.44,
+      256.09,
+      -3432.36
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-outside-fort",
+     "position": [
+      837.65,
+      220.09,
+      -3320.36
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-outside-cave",
+     "position": [
+      781.46,
+      221.53,
+      -3339.03
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    },
+    {
+     "name": "snow-across-from-flut",
+     "position": [
+      664.53,
+      256.31,
+      -3355.33
+     ],
+     "shows": [
+      "snow",
+      "village3"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village3"
+   ]
   },
   "sunken": {
    "taskname": "sunken",
    "base_mask": 0,
    "ocean": "*ocean-map-sunken*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "sunken-start",
+     "position": [
+      530.3,
+      -144.47,
+      -1641.0
+     ],
+     "shows": [
+      "sunken",
+      "village2"
+     ]
+    },
+    {
+     "name": "sunken1",
+     "position": [
+      747.8,
+      -131.0,
+      -1593.62
+     ],
+     "shows": [
+      "sunken"
+     ]
+    },
+    {
+     "name": "sunken2",
+     "position": [
+      765.05,
+      -139.0,
+      -1686.91
+     ],
+     "shows": [
+      "sunken"
+     ]
+    },
+    {
+     "name": "sunken-tube1",
+     "position": [
+      646.88,
+      -139.0,
+      -1741.45
+     ],
+     "shows": [
+      "sunken"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sunkenb",
+    "village2"
+   ]
   },
   "sunkenb": {
    "taskname": "sunkenb",
    "base_mask": 0,
    "ocean": "*ocean-map-sunken*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "sunkenb-start",
+     "position": [
+      544.25,
+      -249.0,
+      -1657.41
+     ],
+     "shows": [
+      "sunken",
+      "sunkenb"
+     ]
+    },
+    {
+     "name": "sunkenb-helix",
+     "position": [
+      602.19,
+      -448.97,
+      -1782.12
+     ],
+     "shows": [
+      "sunken",
+      "sunkenb"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "sunken"
+   ]
   },
   "swamp": {
    "taskname": "swamp",
    "base_mask": 0,
    "ocean": "*ocean-map-village2*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "swamp-start",
+     "position": [
+      449.84,
+      5.13,
+      -1790.36
+     ],
+     "shows": [
+      "swamp",
+      "village2"
+     ]
+    },
+    {
+     "name": "swamp-dock1",
+     "position": [
+      332.13,
+      1.42,
+      -2006.56
+     ],
+     "shows": [
+      "swamp"
+     ]
+    },
+    {
+     "name": "swamp-cave1",
+     "position": [
+      379.32,
+      0.45,
+      -2016.22
+     ],
+     "shows": [
+      "swamp"
+     ]
+    },
+    {
+     "name": "swamp-dock2",
+     "position": [
+      401.82,
+      8.91,
+      -2057.45
+     ],
+     "shows": [
+      "swamp"
+     ]
+    },
+    {
+     "name": "swamp-cave2",
+     "position": [
+      497.45,
+      0.27,
+      -2089.85
+     ],
+     "shows": [
+      "swamp"
+     ]
+    },
+    {
+     "name": "swamp-game",
+     "position": [
+      637.77,
+      -0.5,
+      -2030.25
+     ],
+     "shows": [
+      "swamp"
+     ]
+    },
+    {
+     "name": "swamp-cave3",
+     "position": [
+      491.16,
+      0.91,
+      -1934.33
+     ],
+     "shows": [
+      "swamp"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village2"
+   ]
   },
   "test-zone": {
    "taskname": "test-zone",
    "base_mask": 0,
    "ocean": "*ocean-map-village1*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "test-zone-start",
+     "position": [
+      0.0,
+      10.0,
+      10.0
+     ],
+     "shows": [
+      "test-zone"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "title": {
    "taskname": "title",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "title-start",
+     "position": [
+      -155.18,
+      54.33,
+      173.46
+     ],
+     "shows": [
+      "title"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": []
   },
   "training": {
    "taskname": "training",
    "base_mask": 0,
    "ocean": "*ocean-map-village1*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "training-start",
+     "position": [
+      -1316.8,
+      6.85,
+      1057.73
+     ],
+     "shows": [
+      "training",
+      "village1"
+     ]
+    },
+    {
+     "name": "training-warp",
+     "position": [
+      -1314.34,
+      6.84,
+      1064.53
+     ],
+     "shows": [
+      "training",
+      "village1"
+     ]
+    },
+    {
+     "name": "game-start",
+     "position": [
+      -1316.83,
+      6.9,
+      1064.68
+     ],
+     "shows": [
+      "training",
+      "village1"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "village1"
+   ]
   },
   "village1": {
    "taskname": "village1",
    "base_mask": 0,
    "ocean": "*ocean-map-village1*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "village1-hut",
+     "position": [
+      -155.97,
+      34.01,
+      187.99
+     ],
+     "shows": [
+      "village1"
+     ]
+    },
+    {
+     "name": "village1-intro",
+     "position": [
+      -126.58,
+      46.25,
+      212.05
+     ],
+     "shows": [
+      "village1"
+     ]
+    },
+    {
+     "name": "village1-warp",
+     "position": [
+      -126.58,
+      46.25,
+      212.05
+     ],
+     "shows": [
+      "village1"
+     ]
+    },
+    {
+     "name": "village1-demo-convo",
+     "position": [
+      -132.45,
+      46.25,
+      206.81
+     ],
+     "shows": [
+      "village1"
+     ]
+    },
+    {
+     "name": "intro-start",
+     "position": [
+      40.12,
+      3.69,
+      827.78
+     ],
+     "shows": [
+      "village1"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "beach",
+    "firecanyon",
+    "jungle",
+    "misty",
+    "training"
+   ]
   },
   "village2": {
    "taskname": "village2",
    "base_mask": 0,
    "ocean": "*ocean-map-village2*",
+   "ocean_far": true,
+   "continues": [
+    {
+     "name": "village2-start",
+     "position": [
+      356.68,
+      26.5,
+      -1504.25
+     ],
+     "shows": [
+      "village2"
+     ]
+    },
+    {
+     "name": "village2-warp",
+     "position": [
+      388.79,
+      22.38,
+      -1545.09
+     ],
+     "shows": [
+      "village2"
+     ]
+    },
+    {
+     "name": "village2-dock",
+     "position": [
+      308.68,
+      4.75,
+      -1668.35
+     ],
+     "shows": [
+      "village2"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "firecanyon",
+    "ogre",
+    "rolling",
+    "sunken",
+    "swamp"
+   ]
   },
   "village3": {
    "taskname": "village3",
    "base_mask": 0,
    "ocean": null,
+   "ocean_far": false,
+   "continues": [
+    {
+     "name": "village3-start",
+     "position": [
+      1090.83,
+      45.56,
+      -3431.22
+     ],
+     "shows": [
+      "village3"
+     ]
+    },
+    {
+     "name": "village3-warp",
+     "position": [
+      1110.79,
+      52.58,
+      -3487.77
+     ],
+     "shows": [
+      "village3"
+     ]
+    },
+    {
+     "name": "village3-farside",
+     "position": [
+      1080.02,
+      48.52,
+      -3547.52
+     ],
+     "shows": [
+      "village3"
+     ]
+    }
+   ],
    "layer": false,
    "companions": [],
-   "traffic": false
+   "traffic": false,
+   "neighbors": [
+    "lavatube",
+    "maincave",
+    "ogre",
+    "snow"
+   ]
   }
  },
  "story": null
