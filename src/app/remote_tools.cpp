@@ -9,6 +9,7 @@
 #include <unordered_set>
 
 #include "app/app.h"
+#include "io/behaviors.h"
 #include "core/i18n.h"
 #include "core/log.h"
 #include "core/prefs.h"
@@ -138,31 +139,14 @@ std::string App::capture_view_png(int w, int h) {
   return base64_encode(png.data(), png.size());
 }
 
-// args.game: the extracted game the library shows from then on (as the Levels panel's choice)
-std::string App::remote_use_game(const json& args) {
-  if (!args.contains("game")) return {};
-  const std::string game = args.value("game", std::string());
-  if (game == library.game()) return {};
-  for (const auto& g : games)
-    if (g.game == game) {
-      browse_game(game);
-      return library.game() == game ? std::string() : "the game " + game + " could not be read";
-    }
-  return "game: not extracted (get_status: games)";
-}
-
 json App::remote_status() {
-  json games = json::array();
-  for (const auto& g : this->games) games.push_back({{"game", g.game}, {"name", g.name}, {"levels", g.levels}});
   size_t actors = 0;
   for (const auto& n : scene.nodes) actors += n.kind == NodeKind::Actor;
   json j = {{"library", library_root},
-            {"games", games},
-            {"game", library.game()},
+            {"levels", library.levels().size()},
             {"document",
              {{"open", document_open()},
               {"level", scene.settings.level},
-              {"game", game_name(scene.settings.game)},
               {"project", project_path},
               {"elements", scene.nodes.size()},
               {"actors", actors},
@@ -216,17 +200,9 @@ json App::remote_status() {
   return j;
 }
 
-json App::remote_level_json(const std::string& name, const std::string& game) {
+json App::remote_level_json(const std::string& name) {
   json j = {{"name", name}};
-  AssetLibrary* lib = game.empty() ? nullptr : library_for(game);
-  if (!lib)
-    for (auto& [g, l] : all_libraries)
-      if (l.level(name)) {
-        lib = &l;
-        break;
-      }
-  if (!lib) lib = &library;
-  const LevelEntry* entry = lib->level(name);
+  const LevelEntry* entry = library.level(name);
   j["in_library"] = entry != nullptr;
   if (entry) j["dgo"] = entry->dgo;
   for (const auto& l : document_levels()) {
@@ -241,7 +217,7 @@ json App::remote_level_json(const std::string& name, const std::string& game) {
   // what moves it whole (transform_nodes): its group, or the roots of the level opened
   if (j["in_document"] == "opened" || j["in_document"] == "added")
     j["roots"] = document_level_roots(j.value("group", 0u));
-  const GameData* data = game_data_for(lib->game()).get();
+  const GameData* data = game_data().get();
   if (const LevelInfo* info = data ? data->level(name) : nullptr) {
     j["neighbors"] = info->neighbors;
     j["companions"] = info->companions;
@@ -262,11 +238,10 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     reply(ok(remote_status()));
 
   } else if (tool == "list_levels") {
-    if (const std::string err = remote_use_game(args); !err.empty()) return reply(fail(err));
     const std::string f = lower(args.value("filter", std::string()));
     // near: only the levels the game displays together with that one
     const std::string near = args.value("near", std::string());
-    const GameData* data = game_data_for(library.game()).get();
+    const GameData* data = game_data().get();
     const LevelInfo* around = data && !near.empty() ? data->level(near) : nullptr;
     if (!near.empty() && !around) return reply(fail("near: no game data for the level '" + near + "'"));
     std::set<std::string> in_document;
@@ -282,15 +257,14 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       if (in_document.count(l.name)) e["in_document"] = true;
       levels.push_back(e);
     }
-    reply(ok({{"game", library.game()}, {"levels", levels}}));
+    reply(ok({{"levels", levels}}));
 
   } else if (tool == "get_level_info") {
     const std::string name = args.value("name", scene.settings.level);
     if (name.empty()) return reply(fail("name: a level (see list_levels)"));
-    reply(ok(remote_level_json(name, args.value("game", std::string()))));
+    reply(ok(remote_level_json(name)));
 
   } else if (tool == "add_level") {
-    if (const std::string err = remote_use_game(args); !err.empty()) return reply(fail(err));
     const std::string name = args.value("name", std::string());
     const LevelEntry* level = library.level(name);
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
@@ -318,6 +292,71 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (!remove_document_level(group, &err)) return reply(fail(err));
     reply(ok(remote_status()));
 
+  } else if (tool == "set_actor") {
+    // an actor's behavior (merged into og_behavior) and parameters (its lumps, typed by its type's code)
+    Node* n = scene.find(args.value("id", 0u));
+    if (!n || n->kind != NodeKind::Actor) return reply(fail("id: an actor (find_nodes kind 'actor')"));
+    const GameData* data = game_data().get();
+    const std::string etype = n->extras.value("etype", std::string());
+    const auto* ps = data ? data->params(etype) : nullptr;
+    NodeChange c(scene);
+    c.save(n->id);
+    json b = n->extras.value("og_behavior", json::object());
+    if (!b.is_object()) b = json::object();
+    if (args.contains("behavior")) {
+      if (!args["behavior"].is_object()) return reply(fail("behavior: an object (see the tool's description)"));
+      for (const auto& [k, v] : args["behavior"].items()) {
+        if (v.is_null()) b.erase(k);
+        else b[k] = v;
+      }
+    }
+    json lump = n->extras.value("lump", json::object()), types = n->extras.value("lump_types", json::object());
+    if (!lump.is_object()) lump = json::object();
+    if (!types.is_object()) types = json::object();
+    json unknown = json::array();
+    if (args.contains("params")) {
+      if (!args["params"].is_object()) return reply(fail("params: an object, tag -> value (get_node: params)"));
+      for (const auto& [tag, v] : args["params"].items()) {
+        const GameData::Param* p = nullptr;
+        if (ps)
+          for (const auto& q : *ps)
+            if (q.tag == tag) p = &q;
+        if (!p) {
+          unknown.push_back(tag);
+          continue;
+        }
+        if (v.is_null()) {
+          lump.erase(tag);
+          types.erase(tag);
+          continue;
+        }
+        std::string type = "float";
+        json value = v;
+        if (p->kind == "ints" || p->kind == "eco-info" || p->kind == "int") type = "int32";
+        else if (p->kind.rfind("enum:", 0) == 0) type = "uint32";
+        else if (p->kind == "vector") type = "vector";
+        else if (p->kind == "string") type = "string";
+        else if (p->kind == "actor") type = "actor-name";
+        else if (p->kind == "symbol") {
+          type = "symbol";
+          if (v.is_string() && v.get<std::string>().rfind('\'', 0) != 0) value = "'" + v.get<std::string>();
+        } else if (p->kind != "float" && p->kind != "floats") {
+          unknown.push_back(tag + " (" + p->kind + ": not settable)");
+          continue;
+        }
+        lump[tag] = value;
+        types[tag] = type;
+      }
+    }
+    if (b.empty()) n->extras.erase("og_behavior");
+    else n->extras["og_behavior"] = b;
+    n->extras["lump"] = lump;
+    n->extras["lump_types"] = types;
+    history.push(c.commit(tr("undo.behavior")));
+    json out = {{"behavior", b}, {"lump", lump}};
+    if (!unknown.empty()) out["not_set"] = unknown;
+    reply(ok(out));
+
   } else if (tool == "set_visibility") {
     const auto ids = ids_arg(args);
     if (ids.empty() || !args.contains("visible") || !args["visible"].is_boolean())
@@ -338,7 +377,6 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const std::string name = args.value("name", std::string());
     if (m_level_future.valid()) return reply(fail("a level is already loading"));
     if (remote_unsaved(args)) return reply(fail("the document has unsaved changes: save_project first, or discard_changes: true"));
-    if (const std::string err = remote_use_game(args); !err.empty()) return reply(fail(err));
     const LevelEntry* level = library.level(name);
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
     const bool before = load_actors;
@@ -367,7 +405,6 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "list_catalog") {
     const std::string family = args.value("family", std::string());
-    const std::string game_f = args.value("game", std::string());
     const std::string f = lower(args.value("filter", std::string()));
     const int offset = std::max(0, args.value("offset", 0));
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
@@ -375,10 +412,9 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     int matching = 0;
     for (const auto& o : catalog) {
       if (!family.empty() && o.family != family) continue;
-      if (!game_f.empty() && o.game != game_f) continue;
       if (!f.empty() && o.name.find(f) == std::string::npos && o.etype.find(f) == std::string::npos) continue;
       if (matching++ < offset || (int)objects.size() >= limit) continue;
-      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family}, {"game", o.game}};
+      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family}};
       if (!o.model.empty()) j["model"] = o.model;
       else j["drawn_without_model"] = true;
       if (o.count) j["in_game"] = o.count;
@@ -390,17 +426,15 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     reply(ok({{"total", matching}, {"offset", offset}, {"objects", objects}, {"families", families}}));
 
   } else if (tool == "list_models") {
-    const std::string game_f = args.value("game", std::string());
     const std::string f = lower(args.value("filter", std::string()));
     const int offset = std::max(0, args.value("offset", 0));
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
     json models = json::array();
     int matching = 0;
     for (const auto& m : catalog_models) {
-      if (!game_f.empty() && m.game != game_f) continue;
       if (!f.empty() && m.name.find(f) == std::string::npos && m.group.find(f) == std::string::npos) continue;
       if (matching++ < offset || (int)models.size() >= limit) continue;
-      models.push_back({{"name", m.name}, {"from", m.group}, {"game", m.game}});
+      models.push_back({{"name", m.name}, {"from", m.group}});
     }
     reply(ok({{"total", matching}, {"offset", offset}, {"models", models}}));
 
@@ -420,7 +454,6 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
           if (matching++ < offset || (int)parts.size() >= limit) continue;
           json j = {{"name", e.part.name},
                     {"level", e.level},
-                    {"game", e.game},
                     {"kind", e.part.kind == CatalogPart::Kind::Prototype ? "prototype" : "piece"},
                     {"triangles", e.part.triangles}};
           if (e.levels > 1) j["in_levels"] = e.levels;
@@ -431,16 +464,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       });
       return;
     }
-    // any extracted game: the one given, else whichever has that level
-    const std::string game_f = args.value("game", std::string());
-    AssetLibrary* lib = game_f.empty() ? nullptr : library_for(game_f);
-    if (!lib)
-      for (auto& [g, l] : all_libraries)
-        if (l.level(name)) {
-          lib = &l;
-          break;
-        }
-    const LevelEntry* level = lib ? lib->level(name) : nullptr;
+    const LevelEntry* level = library.level(name);
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
     const std::string background = level->background;
     m_remote_waits.push_back([this, reply, background, f, offset, limit, name]() {
@@ -557,13 +581,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "export_level") {
     if (!document_open()) return reply(fail("no level open: open_level or open_project first"));
-    Game game = scene.settings.game;
-    if (args.contains("game")) {
-      const std::string g = args.value("game", std::string());
-      if (g != "jak1" && g != "jak2" && g != "jak3") return reply(fail("game: jak1, jak2 or jak3"));
-      game = game_from_name(g);
-    }
-    LevelExportOptions o = default_export_options(game);
+    LevelExportOptions o = default_export_options();
     o.name = args.value("name", std::string());
     o.nickname = args.value("nickname", default_nickname(o.name));
     o.iso_name = args.value("iso_name", default_iso_name(o.name));
@@ -584,7 +602,6 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
                        {"text", strf(tr_en(n.key.c_str()), n.count, n.detail.c_str())}});
     reply(ok({{"folder", r.dir},
               {"files", r.files},
-              {"game", game_name(game)},
               {"meshes", r.meshes},
               {"triangles", r.triangles},
               {"collision_triangles", r.collision_triangles},
@@ -640,6 +657,16 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (n->mesh) j["mesh"] = {{"name", n->mesh->name}, {"triangles", n->mesh->tri_count()}};
     if (n->kind == NodeKind::Actor) {
       j["game_data"] = n->extras;
+      // what configures it: the lumps its type's code reads (set_actor), and its behavior
+      const GameData* data = game_data().get();
+      const std::string etype = n->extras.value("etype", std::string());
+      if (const auto* ps = data ? data->params(etype) : nullptr) {
+        json params = json::array();
+        for (const auto& p : *ps) params.push_back({{"tag", p.tag}, {"kind", p.kind}, {"default", p.def}});
+        j["params"] = params;
+      }
+      static const char* kinds[] = {"other", "door", "bouncer", "elevator"};
+      j["behavior_kind"] = kinds[(int)behavior_kind(data, etype)];
       for (auto c : scene.children(n->id))
         if (const Node* cn = scene.find(c); cn && cn->extras.contains("og_actor_visual")) j["model"] = cn->name;
     }
@@ -810,7 +837,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "set_story") {
     const GameData* data = document_game_data();
-    if (!data || !data->has_story()) return reply(fail("no story view for this document (Jak II and Jak 3 levels only)"));
+    if (!data || !data->has_story()) return reply(fail("no story view for this document (a new level has none)"));
     StoryView v = story;
     // which level: the one opened (the default), or a level added, at its own point of the story
     std::string level = args.value("level", std::string());
@@ -916,22 +943,20 @@ void App::remote_place(const json& args, RemoteReply reply) {
   }
   scale = {std::max(scale.x, 0.01f), std::max(scale.y, 0.01f), std::max(scale.z, 0.01f)};
 
-  // what to place: by name (and, when several extracted games have one, its own game)
-  const std::string game_f = args.value("game", std::string());
-  auto matches_game = [&](const std::string& g) { return game_f.empty() || g == game_f; };
+  // what to place: by name
   if (kind == "model") {
     const CatalogModel* found = nullptr;
     for (const auto& m : catalog_models)
-      if (m.name == name && matches_game(m.game)) found = &m;
+      if (m.name == name) found = &m;
     if (!found) return reply(fail("no model '" + name + "' in the catalog (see list_models)"));
     start_model_placement(*found, false);
   } else if (kind == "object") {
     const CatalogObject* found = nullptr;
     for (const auto& o : catalog)
-      if (o.name == name && matches_game(o.game)) found = &o;
+      if (o.name == name) found = &o;
     if (!found)
       for (const auto& o : catalog)
-        if (o.etype == name && matches_game(o.game) && !found) found = &o;
+        if (o.etype == name && !found) found = &o;
     if (!found) return reply(fail("no object '" + name + "' in the catalog (see list_catalog)"));
     start_object_placement(*found, false);
   } else if (kind == "prefab") {
@@ -943,9 +968,8 @@ void App::remote_place(const json& args, RemoteReply reply) {
     start_placement(found->path, found->name, false);
   } else if (kind == "decor") {
     std::string level_name = args.value("level", std::string());
-    std::string level_game = args.value("game", std::string());
     if (level_name.empty()) {
-      // the first level with a part of that name, of any extracted game
+      // the first level with a part of that name
       if (!m_index_applied) {
         m_remote_waits.push_back([this, args, reply]() {
           if (!m_index_applied) return false;
@@ -957,27 +981,18 @@ void App::remote_place(const json& args, RemoteReply reply) {
       for (const auto& e : all_parts)
         if (e.part.name == name || e.part.name == name + ".mb") {
           level_name = e.level;
-          level_game = e.game;
           break;
         }
       if (level_name.empty()) return reply(fail("no decor part '" + name + "' in the levels (see list_decor)"));
     }
-    // its own library: the game given, else whichever extracted game has that level (captured by
-    // value: used again next frame, after this call returns, while its own model loads)
-    auto level_library = [this, level_game, level_name]() -> AssetLibrary* {
-      if (AssetLibrary* lib = level_game.empty() ? nullptr : library_for(level_game)) return lib;
-      for (auto& [g, lib] : all_libraries)
-        if (lib.level(level_name)) return &lib;
-      return &library;
-    };
-    const LevelEntry* level = level_library()->level(level_name);
+    const LevelEntry* level = library.level(level_name);
     if (!level) return reply(fail("level: the level the decor part comes from (see list_decor)"));
     auto source = store.level(level->background, true);
     if (!source) {
       if (store.failed_level(level->background)) return reply(fail("the decor of that level cannot be read"));
       // loading: try again next frame
-      m_remote_waits.push_back([this, args, reply, level_name, level_library]() {
-        const LevelEntry* level = level_library()->level(level_name);
+      m_remote_waits.push_back([this, args, reply, level_name]() {
+        const LevelEntry* level = library.level(level_name);
         if (level && !store.level(level->background, true) && !store.failed_level(level->background)) return false;
         remote_place(args, reply);
         return true;

@@ -24,6 +24,7 @@
 #include "core/i18n.h"
 #include "core/log.h"
 #include "io/asset_library.h"
+#include "io/behaviors.h"
 #include "io/catalog.h"
 #include "io/game_data.h"
 #include "io/game_export.h"
@@ -117,6 +118,11 @@ json read_json_file(const fs::path& path) {
 }
 
 // a .jsonc of the level builder: its comment lines left out
+std::string read_text_file(const fs::path& path) {
+  std::ifstream f(path, std::ios::binary);
+  return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
 json read_jsonc_file(const fs::path& path) {
   std::ifstream f(path, std::ios::binary);
   std::string text, line;
@@ -143,8 +149,8 @@ json read_glb_json(const fs::path& path) {
 // models every level shares.
 bool write_library(const fs::path& root) {
   std::string err;
-  const fs::path game = root / "jak2";
-  write_text(game / "library.json", R"({"game": "jak2", "name": "Jak II", "levels": ["LEV.DGO"]})");
+  const fs::path game = root / "jak3";
+  write_text(game / "library.json", R"({"game": "jak3", "name": "Jak 3", "levels": ["LEV.DGO"]})");
   write_text(game / "lev" / "level.json", R"({"level": "lev", "dgo": "LEV.DGO", "actors": 1})");
   fs::create_directories(game / "_disc" / "DGO");
   write_text(game / "_disc" / "DGO" / "stray.glb", "not a level");
@@ -205,7 +211,7 @@ bool write_library(const fs::path& root) {
                             {"bsphere", {1.0, 2.0, 3.0, 5.0}},
                             {"lump", {{"name", "crate-9"}}}}}});
     j["scenes"][0]["nodes"].push_back((int)j["nodes"].size() - 1);
-    j["asset"]["extras"] = {{"opengoal", {{"game", "jak2"}, {"level", "lev"}}}};
+    j["asset"]["extras"] = {{"opengoal", {{"game", "jak3"}, {"level", "lev"}}}};
   });
   // the models: one for the actor, one shared by every level
   for (auto [folder, name] : {std::pair<const char*, const char*>{"lev", "crate-krimson-lod0"},
@@ -239,7 +245,7 @@ bool write_rip_level(const fs::path& game, const std::string& name, const Scene&
       j["nodes"].push_back(a);
       j["scenes"][0]["nodes"].push_back((int)j["nodes"].size() - 1);
     }
-    j["asset"]["extras"] = {{"opengoal", {{"game", "jak2"}, {"level", name}}}};
+    j["asset"]["extras"] = {{"opengoal", {{"game", "jak3"}, {"level", name}}}};
   });
   fs::remove(tmp);
   write_text(game / name / "level.json", json{{"level", name},
@@ -264,7 +270,7 @@ json rip_actor(const std::string& name, const std::string& etype, const json& lu
 // a water pool), the hut the game shows with it, the layer of the mission's actors, and "port",
 // the level next to it (100 m away along x).
 const char* kStoryGameData = R"({
- "format": 1, "game": "jak2",
+ "format": 1, "game": "jak3",
  "actors": {"roles": {"grunt": "creature", "part-spawner": "logic"}, "creature_suffixes": ["-highres"],
             "effects": ["part-spawner"],
             "water_types": ["water-anim"], "water_looks": ["water-anim-test-pool"],
@@ -301,8 +307,8 @@ const char* kStoryGameData = R"({
 })";
 
 bool write_story_library(const fs::path& root) {
-  const fs::path game = root / "jak2";
-  write_text(game / "library.json", R"({"game": "jak2", "name": "Jak II", "levels": ["X.DGO"]})");
+  const fs::path game = root / "jak3";
+  write_text(game / "library.json", R"({"game": "jak3", "name": "Jak 3", "levels": ["X.DGO"]})");
   bool ok = true;
   auto decor = [](const std::string& level, std::vector<std::string> protos) {
     Scene bg;
@@ -394,6 +400,18 @@ int run_selftest() {
     Vec3 e = q.to_euler_deg();
     check(std::fabs(e.x - 10) < 0.01f && std::fabs(e.y - 35) < 0.01f && std::fabs(e.z + 20) < 0.01f,
           "euler <-> quaternion");
+    // the angles read back give the same rotation, also turned a quarter around y and tilted (a
+    // ramp turned 90 degrees): what the inspector writes back when a field is edited
+    bool same = true;
+    const Vec3 axes[] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    for (float yaw : {90.f, -90.f, 89.99f})
+      for (const Quat& tilt : {Quat::axis_angle({1, 0, 0}, 0.4f), Quat::axis_angle({0, 0, 1}, -0.3f),
+                               Quat::axis_angle(normalize(Vec3{1, 0, 1}), 0.5f)}) {
+        const Quat r = (Quat::axis_angle({0, 1, 0}, radians(yaw)) * tilt).normalized();
+        const Quat back = Quat::from_euler_deg(r.to_euler_deg());
+        for (const Vec3& a : axes) same = same && length(back.rotate(a) - r.rotate(a)) < 1e-3f;
+      }
+    check(same, "euler: a quarter turn around y with a tilt reads back as the same rotation");
     Transform t{{1, 2, 3}, q, {2, 3, 4}};
     Transform back = Transform::from_matrix(t.matrix());
     check(length(back.t - t.t) < 1e-4f && length(back.s - t.s) < 1e-4f &&
@@ -407,16 +425,14 @@ int run_selftest() {
   // the library
   const fs::path lib_root = tmp / "library";
   check(write_library(lib_root), "library written in ogle-extract's layout");
-  auto games = list_games(lib_root.string());
-  check(games.size() == 1 && games[0].game == "jak2" && games[0].name == "Jak II" && games[0].levels == 1,
-        "library: its games (library.json)");
-  check(fs::path(library_root_of((lib_root / "jak2").string())) == fs::absolute(lib_root),
-        "library: a game folder chosen means its parent");
+  const std::string folder = game_folder(lib_root.string());
+  check(fs::path(folder) == fs::absolute(lib_root / "jak3") && game_folder(folder) == folder &&
+            game_folder((tmp / "nothing").string()).empty(),
+        "library: the game's folder (library.json), a game folder chosen means its parent");
   AssetLibrary library;
-  bool scanned = !games.empty() && library.scan(games[0].path, &err);
+  bool scanned = !folder.empty() && library.scan(folder, &err);
   const LevelEntry* level = library.level("lev");
-  check(scanned && library.levels().size() == 1 && level && level->dgo == "LEV.DGO" && level->actors == 1 &&
-            library.game() == "jak2",
+  check(scanned && library.levels().size() == 1 && level && level->dgo == "LEV.DGO" && level->actors == 1,
         "library: one level with its level.json, _disc skipped");
   auto model = [&](const char* etype) {
     const ModelAsset* m = library.model_for_etype(etype, "lev");
@@ -437,7 +453,7 @@ int run_selftest() {
     if (n.name == "floor-0") floor = n.id;
     if (n.name.rfind("rock.mb-", 0) == 0) instances.push_back(n.id);
   }
-  check(opened && scene.settings.level == "lev" && scene.settings.game == Game::Jak2, "level opened: name and game");
+  check(opened && scene.settings.level == "lev", "level opened: its name");
   check(floor && scene.find(floor)->locked && instances.size() == 2 && !scene.find(instances[0])->locked &&
             scene.find(instances[0])->mesh == scene.find(instances[1])->mesh,
         "level: terrain locked, decor instances selectable and sharing their mesh");
@@ -538,7 +554,7 @@ int run_selftest() {
     for (const auto& x : scene.nodes) kinds[(int)x.kind]++;
     for (const auto& x : back.nodes) kinds_back[(int)x.kind]++;
     check(ok && std::equal(std::begin(kinds), std::end(kinds), std::begin(kinds_back)) &&
-              back.settings.level == "lev" && back.settings.game == Game::Jak2,
+              back.settings.level == "lev",
           "project: saved and opened again, same nodes and level");
     std::set<const Mesh*> rocks;
     bool locked = false, pats = false, blend = false, aid = false, stretched = false;
@@ -578,7 +594,7 @@ int run_selftest() {
               data.water_model(0) == "water-anim-test-pool" && data.step_count() == 5,
           "game data: roles, water looks, story nodes");
     AssetLibrary story_lib;
-    const bool scanned_story = story_lib.scan((story_root / "jak2").string(), &err);
+    const bool scanned_story = story_lib.scan((story_root / "jak3").string(), &err);
     std::string listed_levels;
     for (const auto& l : story_lib.levels())
       if (level_listed(l, &data)) listed_levels += l.name + " ";
@@ -842,7 +858,7 @@ int run_selftest() {
 
   // nav meshes: a floor around a block, in the game's limits; a floor too big for one mesh cut in
   // several; the route table reaches every polygon; a node and a project keep them; the blob for
-  // the game reads back; the game's own mesh (OGLE_NAV_REFERENCE: a decompiler_out/jak2/entities/
+  // the game reads back; the game's own mesh (OGLE_NAV_REFERENCE: a decompiler_out/jak3/entities/
   // <level>-nav.json) passes the checks and gets the same polygon grid
   {
     auto floor_with_blocks = [](float half, int blocks, std::vector<Vec3>* v, std::vector<uint32_t>* t) {
@@ -1002,16 +1018,36 @@ int run_selftest() {
       NavBlobView game;
       std::vector<NavMeshData> game_meshes;
       bool same_grid = !j.is_discarded() && read_navmesh_blob(j, &game) && navmeshes_of_blob(game, &game_meshes) &&
-                       !game_meshes.empty() && navmesh_problem(game_meshes[0]).empty() && route_reaches_all(game_meshes[0]);
-      if (same_grid) {
-        const NavGrid g = navmesh_grid(game_meshes[0]);
-        const int mesh_ptr = game.ptr(game.roots.at(0).second + 48);
-        const int hash = game.ptr(mesh_ptr + 16);
-        const int buckets = game.ptr(hash - 4 + 32);
-        for (int k = 0; k < 3; k++) same_grid = same_grid && game.u8(hash - 4 + 28 + k) == g.dims[k];
-        for (size_t i = 0; same_grid && i < g.buckets.size(); i++) same_grid = game.u8(buckets + (int)i) == g.buckets[i];
+                       !game_meshes.empty();
+      // every mesh of the level (the roots are in the order navmeshes_of_blob reads them); what
+      // differs is said
+      std::vector<int> roots;
+      for (const auto& [name, ent] : game.roots)
+        if (name.rfind("nav-mesh-", 0) == 0) roots.push_back(ent);
+      for (size_t m = 0; same_grid && m < game_meshes.size(); m++) {
+        // what the editor asks of its own meshes, the game's do not always have (a polygon facing
+        // down, a mesh in several pieces): said, not a failure
+        std::string note = navmesh_problem(game_meshes[m]);
+        if (note.empty() && !route_reaches_all(game_meshes[m])) note = "its route does not lead everywhere";
+        if (!note.empty()) std::printf("    nav mesh %zu of %zu, the game's own: %s\n", m, game_meshes.size(), note.c_str());
+        std::string why;
+        {
+          const NavGrid g = navmesh_grid(game_meshes[m]);
+          const int hash = game.ptr(game.ptr(roots[m] + 48) + 16);
+          const int buckets = game.ptr(hash - 4 + 32);
+          const int dims[3] = {game.u8(hash - 4 + 28), game.u8(hash - 4 + 29), game.u8(hash - 4 + 30)};
+          if (dims[0] != g.dims[0] || dims[1] != g.dims[1] || dims[2] != g.dims[2])
+            why = strf("grid %dx%dx%d, the game's %dx%dx%d", g.dims[0], g.dims[1], g.dims[2], dims[0], dims[1], dims[2]);
+          for (size_t i = 0; why.empty() && i < g.buckets.size(); i++)
+            if (game.u8(buckets + (int)i) != g.buckets[i]) why = strf("grid byte %zu differs", i);
+        }
+        if (!why.empty()) {
+          std::printf("    nav mesh %zu of %zu (%zu polygons): %s\n", m, game_meshes.size(),
+                      game_meshes[m].polys.size(), why.c_str());
+          same_grid = false;
+        }
       }
-      check(same_grid, "nav mesh: the game's own mesh passes the checks, its route leads everywhere, same grid-hash");
+      check(same_grid, "nav mesh: the game's own meshes read back, the same grid-hash for each");
     }
   }
 
@@ -1093,21 +1129,18 @@ int run_selftest() {
           "remote control: a request and its answer over the local connection");
   }
 
-  // the export for the game: surfaces, data of actors, types, and a level of Jak II for Jak 3 and II
+  // the export for the game: surfaces, data of actors, types, and a small level
   {
     std::string loss;
-    const BuilderSurface wall = builder_surface(0x5cc8, Game::Jak2, Game::Jak3, &loss);  // stone wall, nopilot
+    const BuilderSurface wall = builder_surface(0x5cc8, &loss);  // stone wall, nopilot
     const bool wall_ok = wall.material == 0 && wall.mode == 1 && wall.event == 0 && loss == "nopilot";
-    const BuilderSurface wall1 = builder_surface(0x5cc8, Game::Jak2, Game::Jak1, &loss);
-    const bool wall1_ok = wall1.material == 0 && loss.empty();
-    builder_surface((28u << 10) | (13u << 18), Game::Jak2, Game::Jak3, &loss);  // hdwood, rail
+    builder_surface((28u << 10) | (13u << 18), &loss);  // hdwood, rail
     const bool rail_lost = loss == "rail";
-    const BuilderSurface hdwood = builder_surface(28u << 10, Game::Jak2, Game::Jak3, &loss);
+    const BuilderSurface hdwood = builder_surface(28u << 10, &loss);
     const bool hdwood_ok = hdwood.material == 6 && loss == "hdwood";
-    const uint32_t jak1_pat = (1u << 3) | (6u << 6) | (1u << 12) | (1u << 14) | 4u;  // wall, wood, nolos, deadly, noedge
-    const BuilderSurface j1 = builder_surface(jak1_pat, Game::Jak1, Game::Jak2, &loss);
-    const bool jak1_ok = j1.mode == 1 && j1.material == 6 && j1.nolineofsight && j1.event == 1 && j1.noedge && loss.empty();
-    check(wall_ok && wall1_ok && rail_lost && hdwood_ok && jak1_ok,
+    const BuilderSurface wood = builder_surface((6u << 10) | (1u << 16) | 4u, &loss);  // wood, nolos, noedge
+    const bool wood_ok = wood.material == 6 && wood.nolineofsight && wood.noedge && loss.empty();
+    check(wall_ok && rail_lost && hdwood_ok && wood_ok,
           "export: collision surfaces as the builder takes them (Jak 1's fields), what is lost said");
 
     const bool lumps_ok =
@@ -1121,18 +1154,69 @@ int run_selftest() {
         builder_lump_value(3, "") == json::array({"int32", 3}) && builder_lump_value(json::array({1}), "actor-group").is_null();
     check(lumps_ok, "export: the data of actors as the builder reads them (typed, symbols, vectors, scripts)");
 
-    GameData jak2d, jak3d;
-    const bool datas = jak2d.load(game_data_path("jak2"), &err) && jak3d.load(game_data_path("jak3"), &err);
-    check(datas && export_actor_type("hide-door-a", Game::Jak2, Game::Jak3, &jak3d) == "cty-door" &&
-              export_actor_type("crate", Game::Jak2, Game::Jak3, &jak3d) == "crate" &&
-              export_actor_type("cty-fruit-stand", Game::Jak2, Game::Jak3, &jak3d).empty() &&
-              jak3d.enum_value("pickup-type", "money") == 10 && jak2d.enum_value("pickup-type", "money") == 9 &&
-              jak2d.enum_name("pickup-type", 22) == "skill",
-          "export: actor types of the destination (a door changed, a placeholder left out), pickups by name");
+    GameData data;
+    const bool read = data.load(game_data_path(), &err);
+    check(read && data.has_type("crate") && data.has_type("cty-door") && !data.has_type("cty-fruit-stand"),
+          "export: the game's actor types (a placeholder is not one)");
 
-    // a small level of Jak II: its shell with the game's collision, a box placed, three actors
+    // what configures the objects: the lumps their code reads, what they are, where their code is
+    {
+      const auto* vent = read ? data.params("industrial-board-vent") : nullptr;
+      bool height = false;
+      if (vent)
+        for (const auto& p : *vent) height |= p.tag == "spring-height" && p.kind == "float" && p.def == 45056.0;
+      const auto* door = read ? data.params("cty-door") : nullptr;
+      bool notice = false, options = false;
+      if (door)
+        for (const auto& p : *door) {
+          notice |= p.tag == "on-notice" && p.kind == "script";
+          options |= p.tag == "options" && p.kind == "enum:airlock-options";
+        }
+      const auto* opts = read ? data.enumeration("airlock-options") : nullptr;
+      check(read && height && notice && options && opts && opts->bitfield &&
+                data.derives_from("industrial-board-vent", "bouncer") && data.derives_from("cty-door", "com-airlock") &&
+                !data.derives_from("crate", "com-airlock") &&
+                data.code_files("industrial-board-vent") ==
+                    std::vector<std::string>{"elec-gate", "ctyinda-part", "ctyinda-obs"} &&
+                data.code_files("cty-door").empty() && behavior_kind(&data, "wascity-awning-a") == BehaviorKind::Bouncer,
+            "game data: the parameters of a type (lumps its code reads), what it derives from, the code it needs");
+    }
+
+    // the behaviors as the game's code
+    {
+      const Condition task = condition_of(json{{"when", "task"}, {"arg", "arena-fight-1-resolution"}});
+      const Condition none = condition_of(json{{"when", "pressed"}, {"arg", "\"; (evil)"}});
+      auto has = [](const std::string& code, std::initializer_list<const char*> parts) {
+        for (const char* p : parts)
+          if (code.find(p) == std::string::npos) return false;
+        return true;
+      };
+      const std::string door = behavior_code(&data, "cty-door", json{{"open", "approach"}}, "lv-door", "");
+      const std::string locked = behavior_code(&data, "cty-door", json{{"open", "locked"}}, "lv-door", "");
+      const std::string always = behavior_code(&data, "cty-door", json{{"open", "always"}}, "lv-door", "");
+      const std::string when = behavior_code(&data, "cty-door", json{{"open", "when"}, {"when", condition_json(task)}, {"distance", 8}},
+                                             "lv-door", "the door");
+      const std::string vent = behavior_code(&data, "industrial-board-vent", json{{"active", {{"when", "never"}}}}, "lv-vent", "");
+      const std::string elev = behavior_code(&data, "elevator", json{{"leave", condition_json(task)}}, "lv-elev", "");
+      const std::string there = behavior_code(&data, "crate", json{{"present", {{"when", "gone"}, {"arg", "crate-9"}}}}, "lv-crate", "");
+      const std::string plain = behavior_code(&data, "crate", json::object(), "lv-crate", "");
+      check(task.kind == Condition::Task && condition_script(task) == "(task-closed? \"arena-fight-1-resolution\")" &&
+                condition_script(none) == "(entity-status? \"evil\" subtask-complete)" &&
+                condition_name(condition_of(condition_json(task)).kind) == std::string("task") &&
+                has(door, {"(deftype lv-door (cty-door) ())", "(defmethod destination-loaded? ((this lv-door) (arg0 symbol))"}) &&
+                locked.empty() && has(always, {"(set! (-> this open-test) '(not #f))", "(meters 1000.00)"}) &&
+                has(when, {";; the door", "(task-closed? \"arena-fight-1-resolution\")", "(meters 8.00)", "(meters 43.00)",
+                           "(call-parent-method this)"}) &&
+                has(vent, {"(defstate idle (lv-vent)", "(when #f", "call-parent-state-handler event"}) &&
+                has(elev, {"(defstate waiting (lv-elev)", "(set! (-> self activate-test) '(task-closed?", "call-parent-state-handler enter"}) &&
+                has(there, {"(defmethod init-from-entity! ((this lv-crate) (arg0 entity-actor))", "(entity-status? \"crate-9\" dead)",
+                            "(deactivate this)"}) &&
+                plain.empty() && behavior_type_name("my-level", "Cty Door_1") == "my-level-cty-door-1",
+            "behaviors: doors, bouncers, elevators and presence as the game's code, conditions safe in a script");
+    }
+
+    // a small level: its shell with the game's collision, a box placed, actors
     Scene s;
-    s.settings.game = Game::Jak2;
     s.settings.level = "testlvl";
     Material m;
     m.name = "stone";
@@ -1179,43 +1263,83 @@ int run_selftest() {
            {"visvol", {{0, 0, 0, 1}, {1, 1, 1, 1}}}},
           {{"eco-info", "int32"}, {"kill-mask", "uint32"}, {"task-actor", "uint8"}, {"next-actor", "uint32"},
            {"visvol", "vector"}, {"name", "string"}});
-    actor("hide-door-a-1", "hide-door-a", 102, {{"on-activate", "(want-load 'x)"}}, {{"on-activate", "pair"}});
-    actor("fort-entry-gate-1", "fort-entry-gate", 103, json::object(), json::object());
+    actor("cty-door-1", "cty-door", 102, {{"on-activate", "(want-load 'x)"}}, {{"on-activate", "pair"}});
+    actor("cty-fruit-stand-1", "cty-fruit-stand", 103, json::object(), json::object());
     actor("crate-2", "crate", 104, json::object(), json::object(), false);
+    actor("switch-a", "sew-floor-switch", 105, json::object(), json::object());
+    actor("vent-1", "industrial-board-vent", 106, {{"spring-height", 40960.0}}, {{"spring-height", "float"}});
+    actor("ghost-1", "crate", 107, json::object(), json::object());
+    actor("plat-1", "plat", 108, {{"path", {{0, 0, 0, 1}, {40960, 0, 0, 1}}}}, {{"path", "vector"}});
+    for (auto& a : s.nodes) {
+      if (a.name == "cty-door-1")
+        a.extras["og_behavior"] = {{"open", "when"}, {"when", {{"when", "pressed"}, {"arg", "switch-a"}}}, {"distance", 12}};
+      if (a.name == "vent-1")
+        a.extras["og_behavior"] = {{"active", {{"when", "task"}, {"arg", "arena-fight-1-resolution"}}}};
+      if (a.name == "ghost-1") a.extras["og_behavior"] = {{"present", {{"when", "never"}}}};
+      if (a.name == "crate-1") {
+        a.extras["lump"]["alt-actor"] = "switch-a";
+        a.extras["lump_types"]["alt-actor"] = "actor-name";
+      }
+      if (a.name == "plat-1") {
+        // found at (5, 1, 5) in the game, moved 10 m along x since
+        a.extras["og_origin"] = {5, 1, 5, 0, 0, 0, 1};
+        a.local.t = {15, 1, 5};
+      }
+    }
     s.begin_frame();
 
     const fs::path out = tmp / "export";
     LevelExportOptions o;
-    o.game = Game::Jak3;
     o.name = "my-test";
     o.nickname = default_nickname(o.name);
     o.iso_name = default_iso_name(o.name);
     o.folder = out.generic_string();
     o.start = {1, 2, 3};
     LevelExportReport r;
-    const bool exported = datas && check_export_names(o).empty() && export_level_for_game(s, &jak2d, &jak3d, o, &r, &err);
+    const bool exported = read && check_export_names(o).empty() && export_level_for_game(s, &data, o, &r, &err);
     const fs::path dir = out / "my-test";
-    bool files = exported && r.files.size() == 5;
-    for (const char* f : {"my-test.glb", "my-test.jsonc", "my-test.gd", "level-info.gc", "INSTALL.md"})
+    bool files = exported && r.files.size() == 6 && r.behaviors == 2;
+    for (const char* f : {"my-test.glb", "my-test.jsonc", "my-test.gd", "level-info.gc", "INSTALL.md", "my-test-obs.gc"})
       files &= fs::is_regular_file(dir / f, ec);
     const json level = read_jsonc_file(dir / "my-test.jsonc");
-    const json* crate_j = nullptr;
-    const json* door_j = nullptr;
+    std::map<std::string, const json*> by_name;
     if (level.is_object() && level.contains("actors"))
-      for (const auto& a : level["actors"]) {
-        if (a.value("etype", std::string()) == "crate") crate_j = &a;
-        if (a.value("etype", std::string()) == "cty-door") door_j = &a;
-      }
+      for (const auto& a : level["actors"]) by_name[a["lump"].value("name", std::string())] = &a;
+    const json* crate_j = by_name.count("crate-1") ? by_name["crate-1"] : nullptr;
+    const json* door_j = by_name.count("cty-door-1") ? by_name["cty-door-1"] : nullptr;
+    const json* vent_j = by_name.count("vent-1") ? by_name["vent-1"] : nullptr;
+    const json* plat_j = by_name.count("plat-1") ? by_name["plat-1"] : nullptr;
     const bool actors_ok =
-        level.is_object() && level["actors"].size() == 2 && crate_j && door_j &&
-        (*crate_j)["lump"]["eco-info"] == json::array({"int32", 10, 5}) &&
-        (*crate_j)["lump"]["next-actor"] == json::array({"string", "hide-door-a-1"}) &&
+        level.is_object() && level["actors"].size() == 5 && crate_j && door_j && vent_j && plat_j &&
+        !by_name.count("ghost-1") && (*crate_j)["etype"] == "crate" &&
+        (*crate_j)["lump"]["eco-info"] == json::array({"int32", 9, 5}) &&
+        (*crate_j)["lump"]["next-actor"] == json::array({"string", "cty-door-1"}) &&
+        (*crate_j)["lump"]["alt-actor"] == json::array({"string", "switch-a"}) &&
+        (*crate_j)["lump"]["task-actor"] == json::array({"uint32", 3}) && (*crate_j).value("game_task", -1) == 7 &&
         !(*crate_j)["lump"].contains("kill-mask") && !(*crate_j)["lump"].contains("visvol") &&
-        !(*crate_j)["lump"].contains("task-actor") && (*crate_j).value("game_task", -1) == 0 &&
-        !(*door_j)["lump"].contains("on-activate") && level.value("automatic_wall_detection", false) &&
-        level.value("nickname", std::string()) == "mte" && level.value("base_id", 0) == (int)default_base_id(Game::Jak3);
+        (*door_j)["etype"] == "my-test-cty-door-1" && !(*door_j)["lump"].contains("on-activate") &&
+        (*vent_j)["etype"] == "my-test-vent-1" && (*vent_j)["lump"]["spring-height"] == json::array({"float", 40960.0}) &&
+        (*plat_j)["etype"] == "plat" &&
+        (*plat_j)["lump"]["path"] == json::array({"vector", {40960.0, 0.0, 0.0, 1.0}, {81920.0, 0.0, 0.0, 1.0}}) &&
+        level.value("automatic_wall_detection", false) && level.value("nickname", std::string()) == "mte" &&
+        level.value("base_id", 0) == (int)kDefaultBaseId;
     check(files && actors_ok,
-          "export for Jak 3: the files, a pickup renumbered, a link by name, the story's data left out, a door changed");
+          "export: the files, links by name, a path moved with its actor, the data kept, the scripts, the kill "
+          "mask and visibility box left out, an object never there left out");
+    // the level's code and the code of the game it needs, in its DGO
+    const std::string gc = read_text_file(dir / "my-test-obs.gc"), gd = read_text_file(dir / "my-test.gd"),
+                      install = read_text_file(dir / "INSTALL.md");
+    const size_t at_part = gd.find("\"ctyinda-part.o\""), at_obs = gd.find("\"ctyinda-obs.o\""),
+                 at_own = gd.find("\"my-test-obs.o\""), at_level = gd.find("\"my-test.go\"");
+    check(gc.find("(in-package goal)") != std::string::npos &&
+              gc.find("(deftype my-test-cty-door-1 (cty-door) ())") != std::string::npos &&
+              gc.find("(entity-status? \"switch-a\" subtask-complete)") != std::string::npos &&
+              gc.find("(deftype my-test-vent-1 (industrial-board-vent) ())") != std::string::npos &&
+              gd.find("\"sewer-obs.o\"") != std::string::npos && at_part != std::string::npos &&
+              at_part < at_obs && at_obs < at_own && at_own < at_level &&
+              install.find("(goal-src \"levels/my-test/my-test-obs.gc\" \"entity-debug\"") != std::string::npos &&
+              install.find("(bg 'my-test-vis)") != std::string::npos,
+          "export: the behaviors as the level's code, its DGO with the game's code its objects need");
     const json glb = read_glb_json(dir / "my-test.glb");
     size_t surfaces = 0;
     bool floor_ignored = false, box_collides = false;
@@ -1228,24 +1352,13 @@ int run_selftest() {
       }
     std::set<std::string> keys;
     for (const auto& note : r.notes) keys.insert(note.key);
-    const bool notes_ok = keys.count("export.note.types_missing") && keys.count("export.note.types_mapped") &&
-                          keys.count("export.note.story_data") && keys.count("export.note.surfaces") &&
+    const bool notes_ok = keys.count("export.note.types_missing") && keys.count("export.note.surfaces") &&
                           keys.count("export.note.kill_masks") && keys.count("export.note.hidden") &&
-                          keys.count("export.note.pickups_mapped") && r.collision_triangles == 2 &&
-                          r.collision_from_decor == 1;
+                          keys.count("export.note.scripts_dropped") && keys.count("export.note.lumps_widened") &&
+                          keys.count("export.note.absent") &&
+                          r.collision_triangles == 2 && r.collision_from_decor == 1;
     check(surfaces == 2 && floor_ignored && box_collides && notes_ok,
           "export: the game's collision one node per surface, the shell not colliding twice, the box by its shape");
-    // the same level for its own game: its door, its scripts and its pickups as they are
-    o.game = Game::Jak2;
-    const bool same = datas && export_level_for_game(s, &jak2d, &jak2d, o, &r, &err);
-    const json level2 = read_jsonc_file(dir / "my-test.jsonc");
-    bool kept = false;
-    if (same && level2.is_object())
-      for (const auto& a : level2["actors"]) {
-        if (a.value("etype", std::string()) == "hide-door-a")
-          kept = a["lump"]["on-activate"] == json::array({"pair", "(want-load 'x)"});
-      }
-    check(same && kept && level2["actors"].size() == 3, "export for its own game: its types and scripts kept");
     (void)floor_id;
     (void)box_id;
   }
@@ -1267,23 +1380,23 @@ int run_selftest() {
 
   // the game data shipped with the editor
   {
-    GameData jak2;
-    const bool read = jak2.load(game_data_path("jak2"), &err);
-    const StoryCond* statue = read ? jak2.type_rule("ctypal-baron-statue-broken") : nullptr;
-    const LevelInfo* ruins = read ? jak2.level("ruins") : nullptr;
-    bool statue_late = false;
-    if (statue) {
+    GameData data;
+    const bool read = data.load(game_data_path(), &err);
+    const StoryCond* bridge = read ? data.type_rule("cav-break-bridge") : nullptr;
+    const LevelInfo* desert = read ? data.level("desert") : nullptr;
+    bool bridge_gone = false;
+    if (bridge) {
       int closed_at = 0;
-      for (int i = 0; i < jak2.step_count(); i++)
-        if (jak2.node(i).name == "canyon-insert-items-resolution") closed_at = i + 1;
-      statue_late = closed_at > 1 && !jak2.eval(*statue, jak2.moment(closed_at - 1)) &&
-                    jak2.eval(*statue, jak2.moment(closed_at));
+      for (int i = 0; i < data.step_count(); i++)
+        if (data.node(i).name == "mine-boss-introduction") closed_at = i + 1;
+      bridge_gone = closed_at > 1 && data.eval(*bridge, data.moment(closed_at - 1)) &&
+                    !data.eval(*bridge, data.moment(closed_at));
     }
-    check(read && jak2.role("mech") == ActorRole::Creature && jak2.role("crimson-guard-level") == ActorRole::Creature &&
-              jak2.role("part-spawner") == ActorRole::Logic && jak2.role("crate") == ActorRole::Object &&
-              jak2.is_water("dark-eco-pool") && statue_late && ruins && !ruins->ocean.empty() &&
-              ruins->companions == std::vector<std::string>{"sagehut"},
-          "game data of Jak II: roles, water, the broken statue of the palace, Dead Town's ocean and hut");
+    check(read && data.role("mech") == ActorRole::Creature && data.role("marauder") == ActorRole::Creature &&
+              data.role("part-spawner") == ActorRole::Logic && data.role("crate") == ActorRole::Object &&
+              data.is_water("water-anim") && bridge_gone && desert && !desert->ocean.empty() &&
+              std::count(desert->companions.begin(), desert->companions.end(), "deserta") == 1,
+          "game data: roles, water, the mine's bridge broken by the story, the desert's ocean and companions");
   }
 
   // translations: every language has every key of English, with the same printf arguments

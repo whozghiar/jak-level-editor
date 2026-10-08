@@ -49,13 +49,13 @@ StoryBorrow read_borrow(const json& b, const std::string& host, int slot) {
 
 }  // namespace
 
-std::string game_data_path(const std::string& game) {
+std::string game_data_path() {
   std::error_code ec;
   const char* base = SDL_GetBasePath();
-  const fs::path next_to_exe = to_path(base ? base : "") / "data" / game / "game-data.json";
+  const fs::path next_to_exe = to_path(base ? base : "") / "data" / "jak3" / "game-data.json";
   if (fs::is_regular_file(next_to_exe, ec)) return from_path(next_to_exe);
 #ifdef OGLE_PROJECT_DIR
-  const fs::path in_tree = to_path(OGLE_PROJECT_DIR) / "data" / game / "game-data.json";
+  const fs::path in_tree = to_path(OGLE_PROJECT_DIR) / "data" / "jak3" / "game-data.json";
   if (fs::is_regular_file(in_tree, ec)) return from_path(in_tree);
 #endif
   return from_path(next_to_exe);
@@ -74,7 +74,6 @@ bool GameData::load(const std::string& path, std::string* error) {
     if (error) *error = "not a game data file: " + path;
     return false;
   }
-  m_game = j.value("game", std::string());
 
   // actors
   const json& actors = at(j, "actors");
@@ -90,9 +89,20 @@ bool GameData::load(const std::string& path, std::string* error) {
   for (const auto& [type, models] : at(actors, "models").items())
     for (const auto& m : models) m_type_models[type].push_back(str(m));
   for (const auto& [name, model] : at(actors, "skeletons").items()) m_skeletons[name] = str(model);
-  for (const auto& [en, values] : at(j, "enums").items())
-    for (const auto& [name, v] : values.items())
-      if (v.is_number_integer()) m_enums[en][name] = v.get<int>();
+  for (const auto& [type, up] : at(actors, "parents").items()) m_parents[type] = str(up);
+  for (const auto& [type, stem] : at(actors, "code").items()) m_code[type] = str(stem);
+  for (const auto& [stem, files] : at(j, "code_needs").items())
+    for (const auto& f : files) m_code_needs[stem].push_back(str(f));
+  for (const auto& [type, ps] : at(actors, "params").items())
+    for (const auto& [tag, p] : ps.items())
+      if (p.is_array() && p.size() == 2) m_params[type].push_back({tag, str(p[0]), p[1]});
+  for (const auto& [name, e] : at(j, "enums").items()) {
+    Enum en;
+    en.bitfield = e.value("bitfield", false);
+    for (const auto& v : at(e, "values"))
+      if (v.is_array() && v.size() == 2 && v[1].is_number()) en.values.push_back({str(v[0]), v[1].get<int64_t>()});
+    m_enums[name] = std::move(en);
+  }
 
   // oceans
   for (const auto& [name, o] : at(j, "oceans").items()) {
@@ -280,19 +290,34 @@ bool GameData::has_type(const std::string& etype) const {
          m_unlisted.count(etype) || m_water_types.count(etype);
 }
 
-int GameData::enum_value(const std::string& en, const std::string& name) const {
-  auto e = m_enums.find(en);
-  if (e == m_enums.end()) return -1;
-  auto it = e->second.find(name);
-  return it == e->second.end() ? -1 : it->second;
+bool GameData::derives_from(const std::string& etype, const std::string& base) const {
+  std::string t = etype;
+  for (int i = 0; i < 64 && !t.empty(); i++) {
+    if (t == base) return true;
+    auto it = m_parents.find(t);
+    if (it == m_parents.end()) return false;
+    t = it->second;
+  }
+  return false;
 }
 
-std::string GameData::enum_name(const std::string& en, int value) const {
-  auto e = m_enums.find(en);
-  if (e != m_enums.end())
-    for (const auto& [name, v] : e->second)
-      if (v == value) return name;
-  return {};
+const std::vector<GameData::Param>* GameData::params(const std::string& etype) const {
+  auto it = m_params.find(etype);
+  return it == m_params.end() ? nullptr : &it->second;
+}
+
+const GameData::Enum* GameData::enumeration(const std::string& name) const {
+  auto it = m_enums.find(name);
+  return it == m_enums.end() ? nullptr : &it->second;
+}
+
+std::vector<std::string> GameData::code_files(const std::string& etype) const {
+  auto it = m_code.find(etype);
+  if (it == m_code.end()) return {};
+  std::vector<std::string> out;
+  if (auto n = m_code_needs.find(it->second); n != m_code_needs.end()) out = n->second;
+  out.push_back(it->second);
+  return out;
 }
 
 std::string GameData::object_family(const std::string& etype) const {

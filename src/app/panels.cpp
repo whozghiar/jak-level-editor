@@ -55,14 +55,6 @@ const char* kind_label(NodeKind k) {
   }
 }
 
-const char* game_label(Game g) {
-  switch (g) {
-    case Game::Jak1: return tr("game.jak1");
-    case Game::Jak2: return tr("game.jak2");
-    default: return tr("game.jak3");
-  }
-}
-
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -274,7 +266,7 @@ void App::ui_left_panel(float x, float y, float w, float h) {
 // ------------------------------------------------------------------------------------------------
 
 void App::ui_levels_panel() {
-  if (games.empty()) {
+  if (library.empty()) {
     ImGui::Spacing();
     ImGui::TextWrapped("%s", tr("levels.no_library"));
     ImGui::Spacing();
@@ -286,22 +278,6 @@ void App::ui_levels_panel() {
     }
     return;
   }
-  // the game
-  const GameFolder* current = nullptr;
-  for (const auto& g : games)
-    if (g.path == library.root()) current = &g;
-  // set_library reassigns `games` (freshly listed): deferred until this loop over it is done,
-  // else the range-based for below would iterate a vector replaced under it mid-click
-  std::string switch_to;
-  ImGui::SetNextItemWidth(-1);
-  if (ImGui::BeginCombo("##game", current ? current->name.c_str() : "?")) {
-    for (const auto& g : games) {
-      std::string label = g.name + "##" + g.game;
-      if (ImGui::Selectable(label.c_str(), current == &g) && current != &g) switch_to = g.game;
-    }
-    ImGui::EndCombo();
-  }
-  if (!switch_to.empty()) browse_game(switch_to);
   ImGui::SetNextItemWidth(-1);
   ImGui::InputTextWithHint("##filter", tr("levels.filter"), &m_levels_filter);
   const std::string f = lower(m_levels_filter);
@@ -495,7 +471,7 @@ void App::ui_catalog_objects() {
     if (placing) ImGui::PopStyleColor();
     if (ImGui::BeginItemTooltip()) {
       ImGui::TextUnformatted(o.name.c_str());
-      ImGui::TextDisabled("%s - %s", tr(("family." + o.family).c_str()), tr(("game." + o.game).c_str()));
+      ImGui::TextDisabled("%s", tr(("family." + o.family).c_str()));
       ImGui::Text(tr("inspector.type"), o.etype.c_str());
       if (o.family == "effect") {
         ImGui::Text(tr("catalog.particles"), o.lump.value("art-name", std::string()).c_str());
@@ -556,7 +532,7 @@ void App::ui_catalog_models() {
     if (placing) ImGui::PopStyleColor();
     if (ImGui::BeginItemTooltip()) {
       ImGui::TextUnformatted(m.name.c_str());
-      ImGui::TextDisabled(tr("catalog.from"), (m.group + " - " + tr(("game." + m.game).c_str())).c_str());
+      ImGui::TextDisabled(tr("catalog.from"), m.group.c_str());
       ImGui::TextDisabled("%s", tr("catalog.model_tip"));
       ImGui::TextDisabled("%s", tr("catalog.place_tip"));
       ImGui::EndTooltip();
@@ -671,15 +647,9 @@ void App::ui_catalog_decor() {
 }
 
 void App::ui_catalog_decor_all() {
-  // every extracted game's levels are read once (then from each game's own cache)
-  int done = 0, total = 0;
-  bool all_ready = true;
-  for (const auto& [g, idx] : library_indexes) {
-    done += idx.done();
-    total += idx.total();
-    all_ready = all_ready && idx.ready();
-  }
-  if (!all_ready) {
+  // the levels are read once (then from the cache)
+  if (!library_index.ready()) {
+    const int done = library_index.done(), total = library_index.total();
     ImGui::TextDisabled(tr("catalog.indexing"), done, total);
     ImGui::ProgressBar(total > 0 ? (float)done / total : 0.f, ImVec2(-1, 0), "");
     return;
@@ -807,8 +777,7 @@ void App::ui_inspector(float x, float y, float w, float h) {
     if (!document_open()) {
       ImGui::TextWrapped("%s", tr("inspector.no_level"));
     } else {
-      ImGui::Text("%s  (%s)", scene.settings.level.empty() ? tr("title.untitled") : scene.settings.level.c_str(),
-                  game_label(scene.settings.game));
+      ImGui::TextUnformatted(scene.settings.level.empty() ? tr("title.untitled") : scene.settings.level.c_str());
       // counted again only when the document changes (a city is 150 000 nodes)
       static uint64_t counted_rev = ~0ull;
       static size_t counted_nodes = ~(size_t)0;
@@ -1002,6 +971,10 @@ void App::ui_node_inspector(Node& n) {
     }
   }
   if (n.kind == NodeKind::NavMesh) ui_navmesh_inspector(n);
+  if (n.kind == NodeKind::Actor) {
+    ui_actor_behavior(n);
+    ui_actor_params(n);
+  }
   ImGui::Spacing();
   if (ImGui::Button(tr_id("inspector.copy").c_str())) copy_selection();
   ImGui::SameLine();
@@ -1153,7 +1126,7 @@ void App::ui_story_bar() {
 void App::ui_viewport_hint() {
   if (document_open() || tool == ToolMode::Place) return;
   ImDrawList* dl = ImGui::GetBackgroundDrawList();
-  const char* lines[] = {tr(games.empty() ? "viewport.hint.extract" : "viewport.hint.load"),
+  const char* lines[] = {tr(library.empty() ? "viewport.hint.extract" : "viewport.hint.load"),
                          tr("viewport.hint.camera")};
   float y = m_vp_y + m_vp_h * 0.44f;
   for (const char* l : lines) {
@@ -1338,22 +1311,6 @@ void App::ui_export_window() {
   LevelExportOptions& o = export_options;
   ImGui::TextWrapped("%s", tr("export.help"));
   ImGui::PushItemWidth(-200);
-  // the destination: its own defaults (ids, folder) when they were the other game's
-  static const Game games[] = {Game::Jak1, Game::Jak2, Game::Jak3};
-  auto game_label = [](Game g) { return tr((std::string("game.") + game_name(g)).c_str()); };
-  if (ImGui::BeginCombo(tr_id("export.game").c_str(), game_label(o.game))) {
-    for (Game g : games) {
-      if (ImGui::Selectable(game_label(g), g == o.game) && g != o.game) {
-        const LevelExportOptions fresh = default_export_options(g);
-        if (o.base_id == default_base_id(o.game)) o.base_id = fresh.base_id;
-        o.folder = fresh.folder;
-        o.game = g;
-      }
-    }
-    ImGui::EndCombo();
-  }
-  tooltip(tr("export.game.tip"));
-  if (o.game != scene.settings.game) ImGui::TextWrapped(tr("export.adapted"), game_label(o.game));
 
   ImGui::SeparatorText(tr("export.names"));
   auto text_field = [](const char* key, std::string& value, size_t max) {
@@ -1388,7 +1345,7 @@ void App::ui_export_window() {
   text_field("export.folder_path", o.folder, 250);
   ImGui::SameLine();
   if (ImGui::SmallButton(tr_id("export.browse").c_str())) open_dialog(DialogAction::ExportFolder);
-  ImGui::TextDisabled(tr("export.folder.hint"), game_name(o.game));
+  ImGui::TextDisabled("%s", tr("export.folder.hint"));
   ImGui::PopItemWidth();
 
   ImGui::Spacing();
@@ -1450,7 +1407,7 @@ void App::ui_windows() {
       for (const char* k : {"help.story.1", "help.story.2", "help.story.3"}) bullet(tr(k));
       ImGui::SeparatorText(tr("help.editing"));
       for (const char* k : {"help.editing.1", "help.editing.2", "help.editing.3", "help.editing.4", "help.editing.5",
-                            "help.editing.6", "help.editing.7", "help.editing.8"})
+                            "help.editing.6", "help.editing.7", "help.editing.8", "help.editing.9"})
         bullet(tr(k));
     }
     ImGui::End();

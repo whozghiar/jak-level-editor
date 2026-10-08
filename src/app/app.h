@@ -70,13 +70,12 @@ struct Placement {
   std::string key() const;  // of its preview and of the meshes merged into the document
 };
 
-// The extraction window (extract.cpp): ogle-extract, next to the editor, reads the user's disc and
-// writes the levels of one game to <library>/<game>/.
+// The extraction window (extract.cpp): ogle-extract, next to the editor, reads the user's disc of
+// Jak 3 and writes its levels to <library>/jak3/.
 struct ExtractState {
   bool show = false;
-  Game game = Game::Jak2;  // the game the user wants
-  std::string source;      // the user's .iso or disc folder for that game
-  std::string output;      // the library folder
+  std::string source;  // the user's .iso or disc folder
+  std::string output;  // the library folder
   // what ogle-extract --detect said about `detected_source`
   std::string detected_source;
   std::string detected_game, detected_name, detected_version, detected_serial;
@@ -116,8 +115,6 @@ struct AppOptions {
   std::string select;
   // --add a,b,...: the levels captures add to the one loaded (its neighbors)
   std::string add;
-  // --game jak1|jak2|jak3: the game of the library shown (for this session)
-  std::string game;
   int remote_port = kRemotePort;  // the MCP server's connection (0: none)
   bool hidden = false;            // --hidden: no window shown (tests)
 };
@@ -194,10 +191,10 @@ class App {
   void world_navmeshes(std::vector<NavMeshData>* meshes, std::vector<std::string>* names) const;
 
   // File > Export for the game (actions.cpp, io/game_export.h): what the view shows, as a custom
-  // level of OpenGOAL for Jak 1, Jak II or Jak 3, adapted to that game
+  // level of OpenGOAL for Jak 3
   bool export_for_game(const LevelExportOptions& opts, LevelExportReport* report, std::string* error);
-  // the export's options for the document and a destination (names, folder, where the player starts)
-  LevelExportOptions default_export_options(Game destination);
+  // the export's options for the document (names, folder, where the player starts)
+  LevelExportOptions default_export_options();
   // where the player starts: a continue point of the level opened (moved with it), else the ground
   // at the middle of the document
   Vec3 export_start_point();
@@ -213,7 +210,6 @@ class App {
     Role role = Main;
     uint32_t group = 0;  // its group; 0 for the level opened
     uint32_t host = 0;   // companions and layers: the group of the level they come with, 0 the one opened
-    std::string game;    // its own game: "jak1", "jak2", "jak3" (may differ from the level opened's)
   };
   std::vector<DocumentLevel> document_levels() const;
   bool level_in_document(const std::string& name) const;
@@ -242,10 +238,10 @@ class App {
   std::vector<std::string> document_neighbors();
 
   // document (actions.cpp)
-  void set_library(const std::string& library_root, const std::string& game);
-  // the data of a game ("jak2"), read once; null when missing
-  std::shared_ptr<const GameData> game_data_for(const std::string& game);
-  const GameData* document_game_data();  // of the document's game
+  void set_library(const std::string& library_root);
+  // the game's data, read once; null when missing
+  std::shared_ptr<const GameData> game_data();
+  const GameData* document_game_data();  // null without a document
   // the story view: after a new document, after the view or the document changed
   void story_document_changed();
   void set_story_view(const StoryView& view);
@@ -300,18 +296,14 @@ class App {
   void remote_place(const json& args, RemoteReply reply);
   void remote_place_many(const json& items, size_t next, json placed, RemoteReply reply);
   json remote_status();
-  std::string remote_use_game(const json& args);  // "" or what is wrong
   json remote_node_json(const Node& n);
-  // what get_level_info says of a level; game: which extracted one (else whichever has it, or
-  // the browsed one when none does)
-  json remote_level_json(const std::string& name, const std::string& game = std::string());
+  json remote_level_json(const std::string& name);  // what get_level_info says of a level
   bool remote_unsaved(const json& args) const;
   std::string capture_view_png(int w, int h);  // the 3D view from the camera, PNG in base64
 
   // extraction (extract.cpp)
   static std::string extractor_path();  // ogle-extract next to the editor, "" when missing
   void open_extract_window();
-  void extract_select_game(Game g);
   void extract_detect(const std::string& source);
   void start_extraction();
   bool run_extractor(const std::vector<std::string>& args, bool detecting);
@@ -341,6 +333,10 @@ class App {
   void ui_prefabs_panel();
   void ui_inspector(float x, float y, float w, float h);
   void ui_node_inspector(Node& n);
+  // an actor's behavior and parameters (behavior_panel.cpp); a condition's widgets (true: changed)
+  void ui_actor_behavior(Node& n);
+  void ui_actor_params(Node& n);
+  bool ui_condition(const char* id, json& value, bool with_always);
   void ui_statusbar(float y, float h);
   void ui_windows();
   void ui_navmesh_window();
@@ -367,32 +363,20 @@ class App {
   std::string project_path;
   uint64_t saved_revision = 0;
 
-  // the library: the extracted games, the levels of the one shown, loading and thumbnails.
-  // Every extracted game is always scanned and available (all_libraries), so that the catalog
-  // and the document never distinguish games: `library` only picks what the Levels panel and
-  // File > New level show by default (their own convenience, not a restriction on what can be
-  // placed or added). A document freely mixes levels and actors of any extracted game; each
-  // keeps its own game as its extras "og_game" (a level's group, or an actor placed apart), and
-  // only the export to a game cares which is which.
+  // the library: the extracted game, its levels, loading and thumbnails
   std::string library_root;
-  std::vector<GameFolder> games;
-  std::map<std::string, AssetLibrary> all_libraries;  // every extracted game, by "jak1"/"jak2"/"jak3"
-  AssetLibrary library;                               // the one the Levels panel browses
-  AssetLibrary* library_for(const std::string& game);  // an entry of all_libraries, else null
-  // switches the browsed game without rescanning (all_libraries already has every extracted one)
-  bool browse_game(const std::string& game);
+  AssetLibrary library;  // empty when the game was not extracted
   AssetStore store;
   Thumbnails thumbs{store};
   std::vector<PrefabInfo> prefabs;
-  std::vector<CatalogObject> catalog;        // the objects of every extracted game
-  std::vector<CatalogModel> catalog_models;  // their other models (props)
-  // what the catalog reads of every level of every game on a worker thread (one per game): their
-  // decor, the art-names of their actors (all the variants and effects); merged into the catalog
-  // as each game's becomes ready
-  std::map<std::string, LibraryIndex> library_indexes;
-  std::vector<DecorEntry> all_parts;  // the decor of every level of every game
-  void apply_library_index();   // any game's index that just became ready
-  void rebuild_catalog();       // catalog, catalog_models and all_parts, from every extracted game
+  std::vector<CatalogObject> catalog;        // the objects of the game
+  std::vector<CatalogModel> catalog_models;  // its other models (props)
+  // what the catalog reads of every level on a worker thread: their decor, the art-names of their
+  // actors (all the variants and effects); merged into the catalog once ready
+  LibraryIndex library_index;
+  std::vector<DecorEntry> all_parts;  // the decor of every level
+  void apply_library_index();  // the index, once it just became ready
+  void rebuild_catalog();      // catalog, catalog_models and all_parts
   Placement placement;
   Clipboard clipboard;
   ExtractState extract;
@@ -468,8 +452,7 @@ class App {
   std::string m_decor_level;     // the level whose decor is shown, "" for every level
   std::shared_ptr<Scene> m_decor_scene;
   std::vector<CatalogPart> m_decor_parts;
-  bool m_index_applied = false;  // the browsed game's index (the Levels panel's progress bar)
-  std::set<std::string> m_index_merged;  // every game whose index is already folded into the catalog
+  bool m_index_applied = false;  // the library's index is in the catalog
   size_t m_all_prototypes = 0, m_all_pieces = 0;
   std::string m_all_parts_filter = "";  // the filter m_all_parts_shown was made for
   std::vector<size_t> m_all_parts_shown;
@@ -513,8 +496,9 @@ class App {
   double m_time = 0;
   uint64_t m_frame_revision = ~0ull;  // history revision the scene cache was computed at
   uint64_t m_story_revision = ~0ull;  // history revision the story view was applied at
-  // game data by game
-  std::map<std::string, std::shared_ptr<const GameData>> m_game_data;
+  // the game's data, once read
+  std::shared_ptr<const GameData> m_game_data;
+  bool m_game_data_read = false;
   // remote control: the connection, the requests waiting for something (checked each frame)
   RemoteServer m_remote;
   std::vector<std::function<bool()>> m_remote_waits;

@@ -3,8 +3,8 @@
 // The editor runs ogle-extract, built with it and installed next to its executable, and reads the
 // lines it prints (see extractor/main.cpp):
 //   ogle-extract --detect <iso or folder>      the game, version and serial of the disc
-//   ogle-extract <iso or folder> <library>     every level of the game, to <library>/<game>/
-// When it is done, the Levels panel shows that game.
+//   ogle-extract <iso or folder> <library>     every level of Jak 3, to <library>/jak3/
+// When it is done, the Levels panel shows its levels.
 
 #include <SDL3/SDL.h>
 
@@ -40,14 +40,6 @@ std::string time_text(double seconds) {
 }
 
 double now_seconds() { return SDL_GetTicks() / 1000.0; }
-
-const char* game_label(Game g) {
-  switch (g) {
-    case Game::Jak1: return tr("game.jak1");
-    case Game::Jak2: return tr("game.jak2");
-    default: return tr("game.jak3");
-  }
-}
 
 // "levels 147" -> the translation of extract.step.levels with its number
 std::string step_text(const std::string& step) {
@@ -137,20 +129,11 @@ void App::extract_stop() {
 void App::open_extract_window() {
   extract.show = true;
   if (extract.output.empty()) extract.output = library_root.empty() ? default_library_root() : library_root;
-  if (extract.source.empty()) {
-    // the game shown by the Levels panel, else the one of the disc chosen last
-    Game g = !library.game().empty() ? game_from_name(library.game()) : extract.game;
-    extract_select_game(g);
+  if (extract.source.empty() && !(extract.process && !extract.detecting)) {
+    // the disc chosen last
+    extract.source = Prefs::get().extract_source;
+    extract_detect(extract.source);
   }
-}
-
-void App::extract_select_game(Game g) {
-  if (extract.process && !extract.detecting) return;  // an extraction is running
-  extract.game = g;
-  const auto& sources = Prefs::get().extract_sources;
-  auto it = sources.find(game_name(g));
-  extract.source = it != sources.end() ? it->second : std::string();
-  extract_detect(extract.source);
 }
 
 void App::extract_detect(const std::string& source) {
@@ -171,10 +154,9 @@ void App::extract_detect(const std::string& source) {
 
 void App::start_extraction() {
   Prefs& prefs = Prefs::get();
-  prefs.extract_sources[game_name(extract.game)] = extract.source;
+  prefs.extract_source = extract.source;
   prefs.save();
-  if (run_extractor({extract.source, extract.output}, false))
-    LOG_INFO(tr("log.extracting"), game_label(extract.game), extract.output.c_str());
+  if (run_extractor({extract.source, extract.output}, false)) LOG_INFO(tr("log.extracting"), extract.output.c_str());
 }
 
 void App::extract_line(const std::string& line) {
@@ -245,9 +227,9 @@ void App::extract_poll() {
     LOG_ERROR("%s", extract.error.c_str());
     return;
   }
-  // the Levels panel shows what was written (<library>/<game>)
-  LOG_INFO(tr("log.extracted"), game_label(extract.game), time_text(extract.ended - extract.started).c_str());
-  set_library(extract.output, game_name(extract.game));
+  // the Levels panel shows what was written (<library>/jak3)
+  LOG_INFO(tr("log.extracted"), time_text(extract.ended - extract.started).c_str());
+  set_library(extract.output);
   left_tab_request = 0;
 }
 
@@ -274,19 +256,9 @@ void App::ui_extract_window() {
   const bool extracting = running && !extract.detecting;
   ImGui::TextWrapped("%s", tr("extract.intro"));
 
-  // 1. the game
-  ImGui::SeparatorText(tr("extract.game"));
-  ImGui::BeginDisabled(extracting);
-  for (Game g : {Game::Jak1, Game::Jak2, Game::Jak3}) {
-    if (g != Game::Jak1) ImGui::SameLine();
-    if (ImGui::RadioButton(game_label(g), extract.game == g) && extract.game != g) extract_select_game(g);
-  }
-  ImGui::EndDisabled();
-  for (const auto& gf : games)
-    if (gf.game == game_name(extract.game))
-      ImGui::TextDisabled(tr("extract.already"), gf.levels, gf.path.c_str());
+  if (!library.empty()) ImGui::TextDisabled(tr("extract.already"), library.levels().size(), library.root().c_str());
 
-  // 2. the disc
+  // 1. the disc
   ImGui::SeparatorText(tr("extract.disc"));
   ImGui::BeginDisabled(extracting);
   const float buttons = ImGui::CalcTextSize(tr("extract.iso_file")).x + ImGui::CalcTextSize(tr("extract.folder")).x +
@@ -299,23 +271,22 @@ void App::ui_extract_window() {
   ImGui::SameLine();
   if (ImGui::Button(tr_id("extract.folder").c_str())) open_dialog(DialogAction::ExtractSourceFolder);
   ImGui::EndDisabled();
-  const Game detected = game_from_name(extract.detected_game, Game::Jak1);
   const bool recognized = !extract.detected_game.empty() && extract.detected_source == extract.source;
-  const bool matches = recognized && detected == extract.game;
+  const bool matches = recognized && extract.detected_game == "jak3";
   if (running && extract.detecting) {
     ImGui::TextDisabled("%s", tr("extract.detecting"));
   } else if (recognized) {
     ImGui::TextColored(matches ? kGood : kBad, "%s", extract.detected_name.c_str());
     ImGui::SameLine();
     ImGui::TextDisabled("%s  -  %s", extract.detected_version.c_str(), extract.detected_serial.c_str());
-    if (!matches) ImGui::TextColored(kBad, tr("extract.wrong_game"), game_label(detected), game_label(extract.game));
+    if (!matches) ImGui::TextColored(kBad, "%s", tr("extract.wrong_game"));
   } else if (!extract.detect_error.empty() && extract.detected_source == extract.source) {
     ImGui::TextColored(kBad, "%s", extract.detect_error.c_str());
   } else if (extract.source.empty()) {
-    ImGui::TextDisabled(tr("extract.disc.choose"), game_label(extract.game));
+    ImGui::TextDisabled("%s", tr("extract.disc.choose"));
   }
 
-  // 3. where
+  // 2. where
   ImGui::SeparatorText(tr("extract.destination"));
   ImGui::BeginDisabled(extracting);
   ImGui::SetNextItemWidth(-ImGui::CalcTextSize(tr("extract.choose")).x - ImGui::GetStyle().FramePadding.x * 2 -
@@ -325,7 +296,7 @@ void App::ui_extract_window() {
   if (ImGui::Button(tr_id("extract.choose").c_str())) open_dialog(DialogAction::ExtractOutput);
   ImGui::EndDisabled();
   if (!extract.output.empty())
-    ImGui::TextDisabled(tr("extract.destination.where"), extract.output.c_str(), game_name(extract.game));
+    ImGui::TextDisabled(tr("extract.destination.where"), extract.output.c_str());
 
   ImGui::Spacing();
   ImGui::BeginDisabled(running || !matches || extract.output.empty());

@@ -115,12 +115,11 @@ size_t Mesh::tri_count() const {
 // ------------------------------------------------------------------------------------------------
 
 json LevelSettings::to_json() const {
-  return json{{"game", game_name(game)}, {"level", level}, {"source_group", source_group}};
+  return json{{"level", level}, {"source_group", source_group}};
 }
 
 LevelSettings LevelSettings::from_json(const json& j) {
   LevelSettings s;
-  s.game = game_from_name(j.value("game", std::string("jak2")));
   s.level = j.value("level", std::string());
   s.source_group = j.value("source_group", std::string());
   return s;

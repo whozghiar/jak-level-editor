@@ -1,5 +1,5 @@
-// ogle-extract: extracts the levels of a Jak and Daxter game (Jak 1, 2 or 3) from the user's own
-// disc into the .glb files the level editor reads. Each level gets a folder:
+// ogle-extract: extracts the levels of Jak 3 from the user's own disc into the .glb files the level
+// editor reads. Each level gets a folder:
 //
 //   <output>/<game>/<level>/decor/<level>-background.glb   decor (one node per decor instance),
 //                                                          collision (exact surfaces) and actors
@@ -9,8 +9,9 @@
 //   <output>/<game>/common/models/                         models every level can use
 //
 // It is built from the parts of OpenGOAL's decompiler that read game data (extractor/opengoal,
-// ISC license), without the decompiler's code analysis, and reads its game tables from
-// extractor/data/<game>/ (copied next to the executable as ogle-extract-data/).
+// ISC license), without the decompiler's code analysis, and reads the game's tables from
+// extractor/data/jak3/ (copied next to the executable as ogle-extract-data/). A disc of another
+// game is detected (--detect says which) but not extracted.
 //
 //   ogle-extract <game.iso | extracted disc folder> <output folder> [--levels ATO,CIB] [--textures]
 //   ogle-extract --detect <game.iso | folder>     game and version, as json
@@ -88,11 +89,11 @@ std::string upper(std::string s) {
 
 void usage() {
   std::printf(
-      "ogle-extract: extracts the levels of a Jak and Daxter game (1, 2, 3) to .glb files\n"
+      "ogle-extract: extracts the levels of Jak 3 to .glb files\n"
       "  ogle-extract <game.iso | disc folder> <output folder> [--levels ATO,CIB] [--textures]\n"
       "  ogle-extract --detect <game.iso | folder>   game and version (json)\n"
       "  ogle-extract --list <game.iso | folder>     levels of the disc (json)\n"
-      "  options: --data <folder> (the games' tables), --work <folder> (files copied from the .iso)\n");
+      "  options: --data <folder> (the game's tables), --work <folder> (files copied from the .iso)\n");
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -312,8 +313,9 @@ int main(int argc, char** argv) {
   emit("OGLE_GAME " + json{{"game", info.game}, {"version", info.version}, {"name", info.name},
                            {"serial", info.serial}, {"iso", disc.is_iso()}}.dump());
   if (mode == "--detect") return 0;
+  if (info.game != "jak3") return fail("not_jak3", info.name);
 
-  const fs::path tables = data / info.game;
+  const fs::path tables = data / "jak3";
   std::error_code ec;
   if (!fs::exists(tables / "all-types.gc", ec)) return fail("tables_missing", tables.string());
   json inputs, names;
@@ -342,14 +344,6 @@ int main(int argc, char** argv) {
   config.game_version = game_name_to_version(info.game);
   config.game_name = info.game;
   config.all_types_file = (tables / "all-types.gc").string();
-  // like jak-project's configs: only Jak 1 names its object files from a map, Jak 2 and 3 use
-  // the names found in the DGOs
-  if (info.game == "jak1") {
-    std::string objs = "all_objs.json";
-    if (info.version == "pal") objs = "all_objs_jak1_pal.json";
-    if (info.version == "jp") objs = "all_objs_jak1_jp.json";
-    config.obj_file_name_map_file = (tables / objs).string();
-  }
   for (const auto& d : inputs.at("dgo_names")) {
     std::string name = d.get<std::string>();
     // every level (their textures complete each other) and the common file (textures and shared

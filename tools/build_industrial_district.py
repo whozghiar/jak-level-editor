@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
-"""Builds "Ironworks", a district of Haven City in the style of Jak II's industrial zone (ctyinda,
+"""Builds "Ironworks", a district of Haven City in the style of Jak 3's industrial zone (ctyinda,
 ctyindb), about as large (448 x 448 m), through the editor's MCP server: the tools an assistant
 gets, called by a small MCP client.
 
 The district is made of the zone's own modules, placed as the game places them:
 
 - 15 closed blocks, each a ring of four "facade columns": a ground facade, the upper facade on it
-  and everything the game hangs on them (pipes, lamps, windows, stains, red lights and their glow),
-  taken from the zone's facades of the same kind; flat roofs, and the game's corner joints on the
-  orange blocks;
+  and everything the game hangs on them (pipes, lamps, doors, windows, stains, red lights and
+  their glow), taken from the zone's facades of the same kind; flat roofs, and the game's corner
+  joints on the orange blocks;
 - the ends of the streets closed by two wall buildings back to back, roofed;
 - catwalks along two streets with a T junction, and the zone's ramp down into a yard;
-- the yard: floor vents with their red glow, steam stacks, warning lights, a pipe bridge on
-  pillars, barrels; big pipes over the streets; neon signs;
+- the yard: floor vents with their red glow, bent vent pipes (from Haven's ctygenb), warning
+  lights, a pipe bridge on pillars, crates; big pipes over the streets; neon signs of the slums;
 - the ground, and the same ground facing down under it.
 
 It then generates the nav meshes of the streets, the yard and the catwalks (the ground connected to
 a few street points: not the roofs, ledges or the insides of the blocks) and saves the project.
 
 Where each piece goes is read from the extracted levels of the library (the matrices of the zone's
-instances), so it needs a Jak II library extracted with the editor. It holds no data of the game:
+instances), so it needs a Jak 3 library extracted with the editor. It holds no data of the game:
 only names, indices and positions.
 
 Usage (from the repository root, after building the editor):
 
   python tools/build_industrial_district.py [--out build/demo/ironworks.glb] [--views <folder>]
-                                            [--nav <file.json>] [--library library/jak2]
+                                            [--nav <file.json>] [--library library/jak3]
                                             [--port 47891]
 
 It starts a hidden editor on `--port` (the preferences are left unchanged) and its MCP server
@@ -101,23 +101,14 @@ def yaw_of(m):
 
 
 def euler_deg(r):
-    """A rotation matrix as the editor's rotation_deg (x, y, z: q = qz * qy * qx)."""
-    t = r[0][0] + r[1][1] + r[2][2]
-    if t > 0:
-        s = math.sqrt(t + 1.0) * 2
-        w, x, y, z = 0.25 * s, (r[2][1] - r[1][2]) / s, (r[0][2] - r[2][0]) / s, (r[1][0] - r[0][1]) / s
-    elif r[0][0] > r[1][1] and r[0][0] > r[2][2]:
-        s = math.sqrt(1.0 + r[0][0] - r[1][1] - r[2][2]) * 2
-        w, x, y, z = (r[2][1] - r[1][2]) / s, 0.25 * s, (r[0][1] + r[1][0]) / s, (r[0][2] + r[2][0]) / s
-    elif r[1][1] > r[2][2]:
-        s = math.sqrt(1.0 + r[1][1] - r[0][0] - r[2][2]) * 2
-        w, x, y, z = (r[0][2] - r[2][0]) / s, (r[0][1] + r[1][0]) / s, 0.25 * s, (r[1][2] + r[2][1]) / s
+    """A rotation matrix as the editor's rotation_deg (x, y, z: r = rz * ry * rx)."""
+    y = math.asin(max(-1.0, min(1.0, -r[2][0])))
+    if abs(r[2][0]) < 1 - 1e-6:
+        x, z = math.atan2(r[2][1], r[2][2]), math.atan2(r[1][0], r[0][0])
     else:
-        s = math.sqrt(1.0 + r[2][2] - r[0][0] - r[1][1]) * 2
-        w, x, y, z = (r[1][0] - r[0][1]) / s, (r[0][2] + r[2][0]) / s, (r[1][2] + r[2][1]) / s, 0.25 * s
-    return [math.degrees(math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))),
-            math.degrees(math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))),
-            math.degrees(math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)))]
+        # turned a quarter around y (a ramp along x): x and z turn about the same axis, all on x
+        x, z = math.atan2(-r[2][0] * r[0][1], r[1][1]), 0.0
+    return [math.degrees(x), math.degrees(y), math.degrees(z)]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -149,7 +140,7 @@ class Zone:
         for nd in nodes:
             ex = nd.get('extras', {})
             lump = ex.get('lump')
-            if str(ex.get('etype', '')).endswith('-part') and isinstance(lump, dict):
+            if ex.get('etype') == 'part-spawner' and isinstance(lump, dict):
                 art = str(lump.get('art-name', ''))
                 if art.startswith('group-'):
                     self.inst.append(('fx:' + art[len('group-'):], self.matrix(nd)))
@@ -204,9 +195,10 @@ class Zone:
 # ------------------------------------------------------------------------------------------------
 # modules of the zone
 
-# what does not belong to a facade column: the other facades, the ground, the catwalks, the vents
-NOT_IN_COLUMNS = ('facade-BOT', 'facade-TOP', 'ground-64x64', 'ground-seamcover', 'catwalk', 'ground-panels',
-                  'ground-bigvent', 'ground-bent-vent', 'squarevent', 'floor-vent')
+# what does not belong to a facade column: the other facades, the ground and its craters, the
+# catwalks and the steaming vents on them, the floor vents
+NOT_IN_COLUMNS = ('facade-BOT', 'facade-TOP', 'ground-64x64', 'ground-seamcover', 'ground-crater', 'catwalk',
+                  'ground-panels', 'ground-bigvent', 'ground-vent-small', 'rising-steam', 'floor-vent')
 
 
 class Column:
@@ -283,18 +275,16 @@ LAYOUT = {
 }
 # the facade columns of each kind (level, index of the ground facade): zone facades of that kind
 # at their own length (the game stretches some along the street to fit a place; four of those
-# would not meet at the corners)
+# would not meet at the corners). The zone has two mansard columns at their own length: each
+# block of them shows both twice
 COLUMNS = {
-    'A': [('ctyinda', 1), ('ctyinda', 3), ('ctyinda', 6), ('ctyinda', 9), ('ctyinda', 8), ('ctyindb', 32),
-          ('ctyinda', 4), ('ctyinda', 7)],
-    'B': [('ctyinda', 13), ('ctyinda', 15), ('ctyinda', 17), ('ctyindb', 23), ('ctyinda', 16), ('ctyindb', 27),
-          ('ctyindb', 28), ('ctyinda', 12)],
-    'D': [('ctyinda', 50), ('ctyinda', 51), ('ctyindb', 36), ('ctyindb', 38), ('ctyindb', 40), ('ctyindb', 43),
-          ('ctyindb', 44)],
+    'A': [('ctyinda', 0), ('ctyinda', 1), ('ctyinda', 2), ('ctyinda', 4), ('ctyindb', 16), ('ctyindb', 17)],
+    'B': [('ctyinda', 39), ('ctyindb', 13), ('ctyindb', 14), ('ctyindb', 15)],
+    'D': [('ctyindb', 20), ('ctyindb', 22)] * 2,
 }
-# the 60 m wall buildings closing the streets
-WALLS = [('ctyinda', 57), ('ctyinda', 58), ('ctyinda', 55), ('ctyinda', 56), ('ctyinda', 59), ('ctyindb', 49),
-         ('ctyindb', 50), ('ctyindb', 51), ('ctyindb', 52), ('ctyindb', 54), ('ctyindb', 55), ('ctyindb', 57)]
+# the 60 m wall buildings closing the streets (BOT-60w-01 under TOP-60w-04)
+WALLS = [('ctyinda', 27), ('ctyinda', 29), ('ctyinda', 32), ('ctyinda', 26), ('ctyinda', 28), ('ctyindb', 24),
+         ('ctyindb', 25), ('ctyindb', 26), ('ctyindb', 27), ('ctyindb', 28), ('ctyindb', 30)]
 # the roofs: their height, just under the top of the walls, measured on each kind of block
 ROOF_Y = {'A': 50.6, 'B': 49.0, 'D': 50.4}
 
@@ -306,19 +296,23 @@ class District:
         self.b = self.zones['ctyindb']
         self.columns = {}
         # a warning light: its base (the 4th of the zone stands upright), its bulb, the red glow
-        self.redlight = Assembly(self.a, 'city-ind-redlight-base-01.mb', ('redlight-bulb', 'fx:ctyinda-red-lights'),
+        self.redlight = Assembly(self.a, 'city-ind-redlight-base-01.mb', ('redlight-bulb', 'fx:ctyinda-bulb-red-glow'),
                                  1.5, 3)
-        # a steam stack and its steam; a floor vent and its red glow
-        self.stack = Assembly(self.a, 'city-ind-ground-bent-vent-02.mb', ('bent-vent', 'fx:ctyinda-squarevent'), 14)
+        # a floor vent and its red glow
         self.vent = Assembly(self.b, 'city-ind-ground-bigvent2.mb', ('bigvent-bars', 'fx:ctyindb-red-floor-vent'), 9)
-        # neon signs: the sign and the effect that draws it
-        signs = [Assembly(self.a, 'city-ind-stickout-sign-01.mb', ('fx:ctyinda-sign-fashion',), 1, i) for i in range(7)]
-        onin = [Assembly(self.a, 'city-ind-stickout-sign-01.mb', ('fx:ctyinda-sign-onin',), 1, i) for i in range(7)]
-        self.signs = [[s for s in signs if len(s.members) > 1][0], [s for s in onin if len(s.members) > 1][0],
-                      Assembly(self.a, 'city-port-stickout-sign-01.mb', ('fx:ctyinda-sign-praxis',), 1)]
-        # the ramp of a catwalk of ctyinda, from its foot to its joint with the flat catwalk
-        self.ramp = Assembly(self.a, None, None, 0, where=lambda n, m: 'catwalk' in n and 770 < m[0][3] < 782 and
-                             860 < m[2][3] < 930.5 and abs(m[1][3] - 23.84) >= 0.05)
+        # the zone has no stacks of its own: a bent vent pipe of Haven (ctygenb), its vents, lights and
+        # glow, lifted so that its foot stands where it is put
+        genb = Zone(library, 'ctygenb')
+        self.stack = Assembly(genb, 'city-bent-vent-01.mb', ('bent-vent', 'fx:ctygenb-blue-vents-pipe-bent'), 5)
+        self.stack_foot = tr(0, -genb.protos['city-bent-vent-01.mb'][0][1], 0)
+        # neon signs of the slums: the sign and the effect that draws it
+        self.signs = [Assembly(Zone(library, level), sign, (fx,), 1, index) for level, sign, fx, index in [
+            ('ctyslumb', 'city-ind-stickout-sign-01.mb', 'fx:sign-ctyslumb-tall-a', 3),
+            ('ctyslumc', 'city-ind-stickout-sign-01.mb', 'fx:sign-ctyslumc-tall-b', 2),
+            ('ctysluma', 'city-slum-stickout-sign-01.mb', 'fx:ctysluma-sign-crimson-4x8', 8)]]
+        # the ramp of a catwalk of ctyinda, from its foot to its joint with the flat catwalk (at x 1071.6)
+        self.ramp = Assembly(self.a, None, None, 0, where=lambda n, m: 'catwalk' in n and 1010 < m[0][3] < 1070 and
+                             abs(m[2][3] - 1144.3) < 1 and abs(m[1][3] - 23.84) >= 0.05)
 
     def column(self, level, index):
         if (level, index) not in self.columns:
@@ -384,8 +378,8 @@ class District:
         if rnd.random() < 0.6:
             for _ in range(rnd.choice((1, 2))):
                 a = rnd.uniform(0, 2 * math.pi)
-                items += self.stack.items(at(cx + 14 * math.cos(a), y, cz + 14 * math.sin(a),
-                                             rnd.choice((0, 90, 180, -90))))
+                items += self.stack.items(mmul(at(cx + 14 * math.cos(a), y, cz + 14 * math.sin(a),
+                                                  rnd.choice((0, 90, 180, -90))), self.stack_foot))
         else:
             items += self.vent.items(at(cx + rnd.uniform(-6, 6), y + 0.1, cz + rnd.uniform(-6, 6), rnd.choice((0, 90))))
         return items
@@ -424,14 +418,11 @@ class District:
                 items.append(self.part('city-ind-catwalk-main-01.mb', x, 23.84, z, 0 if axis == 'z' else 90, 0.997))
             else:
                 items.append(self.part('city-ind-catwalk-T-01.mb', x, 23.87, z, 90 if kind == 'T90' else 0))
-        seam = 'city-ind-catwalk-seam-01.mb'
-        items += [self.part(seam, 0.0, 24.39, 120 - step * (k + 0.5), 0, 1.009) for k in range(20)]
-        items += [self.part(seam, step * (k + 0.5), 24.39, 120.0, 90, 1.009) for k in range(-13, 13)]
-        items.append(self.part(seam, step * 0.5, 24.39, 120 - step * 11, 90, 1.009))
         support = 'city-ind-catwalk-support-02.mb'
         items += [self.part(support, 0.0, 8.0, 120 - step * k, 0, 0.922) for k in range(2, 20, 3) if k != 11]
         items += [self.part(support, step * k, 8.0, 120.0, 90, 0.922) for k in list(range(-12, 0, 3)) + list(range(3, 13, 3))]
-        items += self.ramp.items(mmul(mmul(tr(step * 1.5, 0, 120 - step * 11), ry(-90)), tr(-776.2, 0, -929.0)))
+        # the ramp goes down towards -x in the zone: turned to go down towards +x, into the yard
+        items += self.ramp.items(mmul(mmul(tr(step * 1.5, 0, 120 - step * 11), ry(180)), tr(-1071.6, 0, -1144.3)))
         return items
 
     def pipes(self):
@@ -455,7 +446,7 @@ class District:
             items += self.vent.items(at(x0 + dx, G + 0.02, z0 + dz, yaw))
         for dx, dz, yaw in [(66, -32, 180), (66, 28, 180), (8, -70, 90), (-60, 42, 0), (-40, 40, 0), (50, 50, 90),
                             (-20, -65, 180)]:
-            items += self.stack.items(at(x0 + dx, 8.01, z0 + dz, yaw))
+            items += self.stack.items(mmul(at(x0 + dx, 8.01, z0 + dz, yaw), self.stack_foot))
         for dx, dz in [(34, -14), (34, 14), (-8, -14), (-8, 14), (70, -60), (70, 70)]:
             items += self.redlight.items(at(x0 + dx, 8.01, z0 + dz, 0, 2.5))
         # a pipe bridge across the yard, a big pipe and a small one on cross beams and pillars
@@ -473,11 +464,11 @@ class District:
                 items.append(self.a.item(beam, mmul(tr(x, 8.0 + 23.15 / 2, z), scl(1.2, 23.15 / 18.25, 1.2))))
             items.append(self.a.item(beam, mmul(mmul(tr(x, 31.75, zb - 1.25), rx(90)), scl(1.2, 8.7 / 18.25, 1.2))))
             items += self.redlight.items(at(x, 34.0 + 0.9 * 1.83, zb, 90, 2.0))
-        # barrels, raised floor panels
+        # crates of the city, raised floor panels
         for x, z, yaw in [(125, -122, 0), (129, -70, 90), (26, -8, 30), (96, -131, 0), (129, 8, 90)]:
-            items.append({'kind': 'model', 'name': 'tanker-barrels', 'position': [x, 8.0, z], 'yaw_deg': yaw})
+            items.append({'kind': 'model', 'name': 'ctycrate-metal', 'position': [x, 8.0, z], 'yaw_deg': yaw})
         for x, z in [(118, -128), (132, -60), (32, -2), (104, -134), (121, -112), (134, 16)]:
-            items.append({'kind': 'model', 'name': 'tanker-one-barrel', 'position': [x, 8.0, z], 'yaw_deg': (x * 37) % 360})
+            items.append({'kind': 'model', 'name': 'ctycrate-blue', 'position': [x, 8.0, z], 'yaw_deg': (x * 37) % 360})
         items.append(self.part('city-ind-ground-panels-02.mb', 104, G, -40, 0, 0.456))
         items.append(self.part('city-ind-ground-panels-02.mb', 18, G, -128, 90, 0.456))
         return items
@@ -569,7 +560,7 @@ def main():
     ap.add_argument('--out', default=os.path.join(REPO, 'build', 'demo', 'ironworks.glb'))
     ap.add_argument('--views', help='a folder for district-aerial.png and district-yard.png')
     ap.add_argument('--nav', help='writes the nav meshes for the game to this .json file')
-    ap.add_argument('--library', default=os.path.join(REPO, 'library', 'jak2'))
+    ap.add_argument('--library', default=os.path.join(REPO, 'library', 'jak3'))
     ap.add_argument('--port', type=int, default=47891)
     args = ap.parse_args()
 

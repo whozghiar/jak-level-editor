@@ -58,7 +58,7 @@ std::string strip_lod(const std::string& name, int* lod) {
 }
 
 // ------------------------------------------------------------------------------------------------
-// games of a library folder
+// the game's folder of a library folder
 // ------------------------------------------------------------------------------------------------
 
 std::string library_root_of(const std::string& folder) {
@@ -87,30 +87,18 @@ std::string default_iso_data_dir() { return from_path(editor_tree() / "iso_data"
 
 std::string default_projects_dir() { return from_path(editor_tree() / "library" / "projects"); }
 
-std::vector<GameFolder> list_games(const std::string& library_root) {
-  std::vector<GameFolder> out;
-  if (library_root.empty()) return out;
-  const fs::path root = to_path(library_root_of(library_root));
-  for (const char* game : {"jak1", "jak2", "jak3"}) {
-    const json lib = read_json(root / game / "library.json");
-    if (!lib.is_object()) continue;
-    GameFolder g;
-    g.game = game;
-    g.name = lib.value("name", std::string(game));
-    g.path = from_path(root / game);
-    g.levels = lib.value("levels", json::array()).size();
-    out.push_back(std::move(g));
-  }
-  return out;
+std::string game_folder(const std::string& library_root) {
+  if (library_root.empty()) return {};
+  const fs::path folder = to_path(library_root_of(library_root)) / "jak3";
+  return read_json(folder / "library.json").is_object() ? from_path(folder) : std::string();
 }
 
 // ------------------------------------------------------------------------------------------------
-// the folder of one game
+// the game's folder
 // ------------------------------------------------------------------------------------------------
 
 void AssetLibrary::clear() {
   m_root.clear();
-  m_game.clear();
   m_levels.clear();
   m_models.clear();
 }
@@ -124,8 +112,6 @@ bool AssetLibrary::scan(const std::string& game_folder, std::string* error) {
     return false;
   }
   m_root = from_path(base);
-  const json lib = read_json(base / "library.json");
-  m_game = lib.is_object() ? lib.value("game", std::string()) : std::string();
   for (const auto& dir : fs::directory_iterator(base, ec)) {
     if (!dir.is_directory(ec)) continue;
     const std::string name = from_path(dir.path().filename());

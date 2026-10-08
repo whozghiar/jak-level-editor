@@ -13,6 +13,7 @@
 
 #include "core/i18n.h"
 #include "core/log.h"
+#include "io/behaviors.h"
 #include "io/game_data.h"
 #include "io/gltf_io.h"
 #include "io/nav_export.h"
@@ -27,15 +28,6 @@ fs::path to_path(const std::string& s) { return fs::path(std::u8string((const ch
 std::string from_path(const fs::path& p) {
   const std::u8string u = p.generic_u8string();
   return std::string((const char*)u.data(), u.size());
-}
-
-const char* game_title(Game g) {
-  switch (g) {
-    case Game::Jak1: return "Jak and Daxter";
-    case Game::Jak2: return "Jak II";
-    case Game::Jak3: return "Jak 3";
-  }
-  return "?";
 }
 
 bool write_text(const fs::path& p, const std::string& text, std::string* error) {
@@ -90,48 +82,24 @@ struct Notes {
 
 // --- collision surfaces --------------------------------------------------------------------------
 
-const char* kJak2Materials[] = {"none",   "ice",     "quicksand", "waterbottom", "tar",     "sand",   "wood",
+const char* kMaterials[] = {"none",   "ice",     "quicksand", "waterbottom", "tar",     "sand",   "wood",
                                 "grass",  "pcmetal", "snow",      "deepsnow",    "hotcoals", "lava",  "crwood",
                                 "gravel", "dirt",    "metal",     "straw",       "tube",    "swamp",  "stopproj",
                                 "rotate", "neutral", "stone",     "crmetal",     "carpet",  "grmetal", "shmetal",
                                 "hdwood", "squish",  "mhshroom",  "forest",      "mhswamp", "dmaker"};
-const char* kJak2Events[] = {"none", "deadly", "endlessfall", "burn",   "deadlyup", "burnup",   "melt",
+const char* kEvents[] = {"none", "deadly", "endlessfall", "burn",   "deadlyup", "burnup",   "melt",
                              "slide", "lip",   "lipramp",     "shock",  "shockup",  "hide",     "rail",
                              "slippery", "drag", "waterfloor", "hang",  "fry",      "slime"};
 
 std::string material_name(int m) {
-  return m >= 0 && m < (int)(sizeof(kJak2Materials) / sizeof(*kJak2Materials)) ? kJak2Materials[m]
-                                                                               : "material " + std::to_string(m);
+  return m >= 0 && m < (int)(sizeof(kMaterials) / sizeof(*kMaterials)) ? kMaterials[m]
+                                                                       : "material " + std::to_string(m);
 }
 std::string event_name(int e) {
-  return e >= 0 && e < (int)(sizeof(kJak2Events) / sizeof(*kJak2Events)) ? kJak2Events[e] : "event " + std::to_string(e);
+  return e >= 0 && e < (int)(sizeof(kEvents) / sizeof(*kEvents)) ? kEvents[e] : "event " + std::to_string(e);
 }
 
 // --- actors --------------------------------------------------------------------------------------
-
-// Types of Jak II whose Jak 3 counterpart has another name (the doors: scripts/level_port).
-const std::map<std::string, std::string>& jak2_to_jak3_types() {
-  static const std::map<std::string, std::string> m = {
-      {"hip-door-b", "hip-door-a"},         {"hide-door-a", "cty-door"},
-      {"hide-door-b", "hip-door-a"},        {"oracle-door", "cty-door"},
-      {"vin-door", "vin-door-ctyinda"},     {"gar-door", "com-airlock-outer"},
-      {"pal-throne-door", "com-airlock-outer"}, {"pal-ent-door", "cty-door"},
-      {"cas-front-door", "com-airlock-outer"}};
-  return m;
-}
-
-// The pickup of the destination with the same name, or a close one (-1 when none).
-int map_pickup(const GameData& from, const GameData& to, int value, std::string* name) {
-  *name = from.enum_name("pickup-type", value);
-  if (name->empty()) return -1;
-  int v = to.enum_value("pickup-type", *name);
-  if (v < 0) v = to.enum_value("pickup-type", *name + "-1");  // Jak 3's guns: gun-red-1...
-  if (v < 0 && *name == "eco-pill") v = to.enum_value("pickup-type", "eco-pill-green");
-  if (v < 0 && *name == "eco-pill-green") v = to.enum_value("pickup-type", "eco-pill");
-  if (v < 0 && name->size() > 2 && name->compare(name->size() - 2, 2, "-1") == 0)
-    v = to.enum_value("pickup-type", name->substr(0, name->size() - 2));
-  return v;
-}
 
 std::string strip_quote(const std::string& s) { return !s.empty() && s[0] == '\'' ? s.substr(1) : s; }
 
@@ -161,141 +129,7 @@ std::string guess_type(const json& v) {
 
 std::string meters(float v) { return "(meters " + num(v) + ")"; }
 
-std::string level_info_jak1(const LevelExportOptions& o, float bottom) {
-  const Vec3 s = o.start, c = o.start + Vec3{0, 3, -6};
-  std::ostringstream t;
-  t << "(define " << o.name << "\n"
-    << "  (new 'static 'level-load-info\n"
-    << "       :index 26 ;; the test-zone's: give it a number no other level has\n"
-    << "       :name '" << o.name << "\n"
-    << "       :visname '" << o.name << "-vis\n"
-    << "       :nickname '" << o.nickname << "\n"
-    << "       :packages '()\n"
-    << "       :sound-banks '()\n"
-    << "       :music-bank #f\n"
-    << "       :ambient-sounds '()\n"
-    << "       :mood '*village1-mood*\n"
-    << "       :mood-func 'update-mood-village1\n"
-    << "       :ocean '*ocean-map-village1*\n"
-    << "       :sky #t\n"
-    << "       :sun-fade 1.0\n"
-    << "       :continues\n"
-    << "       '((new 'static 'continue-point\n"
-    << "             :name \"" << o.name << "-start\"\n"
-    << "             :level '" << o.name << "\n"
-    << "             :trans (new 'static 'vector :x " << meters(s.x) << " :y " << meters(s.y) << " :z "
-    << meters(s.z) << " :w 1.0)\n"
-    << "             :quat (new 'static 'quaternion :w 1.0)\n"
-    << "             :camera-trans (new 'static 'vector :x " << meters(c.x) << " :y " << meters(c.y) << " :z "
-    << meters(c.z) << " :w 1.0)\n"
-    << "             :camera-rot (new 'static 'array float 9 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0)\n"
-    << "             :load-commands '()\n"
-    << "             :vis-nick 'none\n"
-    << "             :lev0 '" << o.name << "\n"
-    << "             :disp0 'display\n"
-    << "             :lev1 #f\n"
-    << "             :disp1 #f))\n"
-    << "       :tasks '()\n"
-    << "       :priority 100\n"
-    << "       :load-commands '()\n"
-    << "       :alt-load-commands '()\n"
-    << "       :bsp-mask #xffffffffffffffff\n"
-    << "       :bsphere (new 'static 'sphere :w 167772160000.0)\n"
-    << "       :bottom-height " << meters(bottom) << "\n"
-    << "       :run-packages '()\n"
-    << "       :wait-for-load #t))\n\n"
-    << "(cons! *level-load-list* '" << o.name << ")\n";
-  return t.str();
-}
-
-std::string level_info_jak2(const LevelExportOptions& o, float bottom) {
-  const Vec3 s = o.start, c = o.start + Vec3{0, 3, -6};
-  std::ostringstream t;
-  t << "(define " << o.name << "\n"
-    << "  (new 'static 'level-load-info\n"
-    << "    :index #x9e ;; the test-zone's: give it a number no other level has\n"
-    << "    :name '" << o.name << "\n"
-    << "    :visname '" << o.name << "-vis\n"
-    << "    :nickname '" << o.nickname << "\n"
-    << "    :dbname '" << o.name << "\n"
-    << "    :taskname 'default\n"
-    << "    :packages '()\n"
-    << "    :music-bank #f\n"
-    << "    :ambient-sounds '()\n"
-    << "    :mood-func 'update-mood-default\n"
-    << "    :mood-init #f\n"
-    << "    :ocean #f\n"
-    << "    :sky #t\n"
-    << "    :use-camera-other #f\n"
-    << "    :part-engine-max 16\n"
-    << "    :continues '((new 'static 'continue-point\n"
-    << "        :name \"" << o.name << "-start\"\n"
-    << "        :level '" << o.name << "\n"
-    << "        :trans (new 'static 'vector :x " << meters(s.x) << " :y " << meters(s.y) << " :z " << meters(s.z)
-    << " :w 1.0)\n"
-    << "        :quat (new 'static 'vector :w 1.0)\n"
-    << "        :camera-trans (new 'static 'vector :x " << meters(c.x) << " :y " << meters(c.y) << " :z "
-    << meters(c.z) << " :w 1.0)\n"
-    << "        :camera-rot (new 'static 'inline-array vector3s 3\n"
-    << "          (new 'static 'vector3s :data (new 'static 'array float 3 1.0 0.0 0.0))\n"
-    << "          (new 'static 'vector3s :data (new 'static 'array float 3 0.0 1.0 0.0))\n"
-    << "          (new 'static 'vector3s :data (new 'static 'array float 3 0.0 0.0 1.0))\n"
-    << "          )\n"
-    << "        :on-goto #f\n"
-    << "        :vis-nick #f\n"
-    << "        :want (new 'static 'inline-array level-buffer-state 6\n"
-    << "          (new 'static 'level-buffer-state :name '" << o.name
-    << " :display? 'display :force-vis? #f :force-inside? #f)\n";
-  for (int i = 0; i < 5; i++)
-    t << "          (new 'static 'level-buffer-state :name #f :display? #f :force-vis? #f :force-inside? #f)\n";
-  t << "          )\n"
-    << "        :want-sound (new 'static 'array symbol 3 #f #f #f)\n"
-    << "        )\n"
-    << "      )\n"
-    << "    :tasks '()\n"
-    << "    :priority 100\n"
-    << "    :load-commands '()\n"
-    << "    :alt-load-commands '()\n"
-    << "    :bsp-mask #xffffffffffffffff\n"
-    << "    :buttom-height " << meters(bottom) << "\n"
-    << "    :run-packages '()\n"
-    << "    :wait-for-load #t\n"
-    << "    :login-func #f\n"
-    << "    :activate-func #f\n"
-    << "    :deactivate-func #f\n"
-    << "    :kill-func #f\n"
-    << "    :borrow-level (new 'static 'array symbol 2 #f #f)\n"
-    << "    :borrow-display? (new 'static 'array symbol 2 #f #f)\n"
-    << "    :base-task-mask (task-mask task0)\n"
-    << "    :texture-anim-tfrag #f\n"
-    << "    :texture-anim-pris #f\n"
-    << "    :texture-anim-shrub #f\n"
-    << "    :texture-anim-alpha #f\n"
-    << "    :texture-anim-water #f\n"
-    << "    :texture-anim-twarp #f\n"
-    << "    :texture-anim-pris2 #f\n"
-    << "    :texture-anim-sprite #f\n"
-    << "    :texture-anim-map #f\n"
-    << "    :texture-anim-sky #f\n"
-    << "    :draw-priority 10.0\n"
-    << "    :fog-height 327680.0\n"
-    << "    :bigmap-id (bigmap-id city)\n"
-    << "    :ocean-near-translucent? #t\n"
-    << "    :ocean-far? #t\n"
-    << "    :mood-range (new 'static 'mood-range :data (new 'static 'array float 4 0.0 1.0 0.0 1.0))\n"
-    << "    :max-rain 1.0\n"
-    << "    :fog-mult 1.0\n"
-    << "    :ocean-alpha 1.0\n"
-    << "    :extra-sound-bank #f\n"
-    << "    )\n"
-    << "  )\n\n"
-    << "(#when PC_PORT\n"
-    << "  (cons! *level-load-list* '" << o.name << ")\n"
-    << "  )\n";
-  return t.str();
-}
-
-std::string level_info_jak3(const LevelExportOptions& o, float bottom) {
+std::string level_info(const LevelExportOptions& o, float bottom) {
   const Vec3 s = o.start, c = o.start + Vec3{0, 3, -6};
   std::ostringstream t;
   t << "(define " << o.name << "\n"
@@ -368,16 +202,6 @@ bool see_through(const Scene& scene, const Mesh& mesh) {
 
 // ------------------------------------------------------------------------------------------------
 
-uint32_t default_base_id(Game game) {
-  // above the ids of the game's own actors (Jak 1: 24,576 at most, Jak II: 36,521, Jak 3: 72,851)
-  switch (game) {
-    case Game::Jak1: return 40000;
-    case Game::Jak2: return 50000;
-    case Game::Jak3: return 90000;
-  }
-  return 50000;
-}
-
 std::string default_nickname(const std::string& name) {
   // "m" (mine: apart from the game's levels) and the first letters of the name, after "my-"
   std::string out = "m";
@@ -418,65 +242,53 @@ bool BuilderSurface::operator<(const BuilderSurface& o) const {
   return key(*this) < key(o);
 }
 
-BuilderSurface builder_surface(uint32_t pat, Game source, Game destination, std::string* loss) {
+BuilderSurface builder_surface(uint32_t pat, std::string* loss) {
   BuilderSurface s;
   std::string lost;
   s.noentity = pat & 1;
   s.nocamera = (pat >> 1) & 1;
   s.noedge = (pat >> 2) & 1;
-  if (source == Game::Jak1) {
-    // goal_src/jak1/engine/collide/pat-h.gc: the builder's own fields
-    s.mode = (pat >> 3) & 7;
-    s.material = (pat >> 6) & 63;
-    s.nolineofsight = (pat >> 12) & 1;
-    s.event = (pat >> 14) & 63;
-    if (s.mode > 2) lost = "mode " + std::to_string(s.mode), s.mode = 0;
-    if (s.material > 22) lost = "material " + std::to_string(s.material), s.material = 0;
-    if (s.event > 6) lost = "event " + std::to_string(s.event), s.event = 0;
-  } else {
-    // Jak II and 3 (engine/collide/pat-h.gc): the builder takes Jak 1's fields and converts them,
-    // Jak 1's stone (0) becoming their stone (23); what Jak 1 does not have becomes the nearest
-    const int mode = (pat >> 7) & 7, material = (pat >> 10) & 63, event = (pat >> 18) & 63;
-    s.nolineofsight = (pat >> 16) & 1;
-    s.mode = mode;
-    if (mode > 2) {
-      s.mode = 0;  // the halfpipes of Jak II's boards: ground
-      lost = "halfpipe";
-    }
-    static const int kNearest[] = {
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16,
-        17, 18, 19, 20, 21, 22,
-        0,   // stone
-        16,  // crmetal: metal
-        17,  // carpet: straw
-        16,  // grmetal: metal
-        16,  // shmetal: metal
-        6,   // hdwood: wood
-        19,  // squish: swamp
-        7,   // mhshroom: grass
-        7,   // forest: grass
-        19,  // mhswamp: swamp
-        16,  // dmaker: metal
-    };
-    const int count = (int)(sizeof(kNearest) / sizeof(*kNearest));
-    s.material = material < count ? kNearest[material] : 0;
-    // the level builder's collision fields are always written in Jak 1's own layout, for every
-    // destination game (its own builder converts them: goalc/build_level/collide/common); a
-    // surface without a material (none) becomes stone there, whichever game reads it back
-    const bool kept = material == 23 || (material >= 1 && material <= 22);
-    if (!kept) lost = material_name(material);
-    s.event = event <= 6 ? event : 0;
-    if (event > 6) lost = event_name(event);
-    // the flags of Jak II and 3 only (Jak 1 has no boards, vehicles nor mechs): the builders set
-    // none of them. nogrind is on nearly every surface (the board grinds rails only), and off on
-    // every surface of the levels they build: not said
-    if (destination != Game::Jak1 && lost.empty()) {
-      static const std::pair<int, const char*> kFlags[] = {{4, "nojak"},     {5, "noboard"},       {6, "nopilot"},
-                                                           {24, "probe"},    {25, "nomech"},       {26, "noproj"},
-                                                           {27, "noendlessfall"}, {28, "noprobe"}};
-      for (const auto& [bit, name] : kFlags)
-        if (pat >> bit & 1) lost += (lost.empty() ? "" : "+") + std::string(name);
-    }
+  // goal_src/jak3/engine/collide/pat-h.gc: the builder takes Jak 1's fields and converts them,
+  // Jak 1's stone (0) becoming Jak 3's stone (23); what Jak 1 does not have becomes the nearest
+  const int mode = (pat >> 7) & 7, material = (pat >> 10) & 63, event = (pat >> 18) & 63;
+  s.nolineofsight = (pat >> 16) & 1;
+  s.mode = mode;
+  if (mode > 2) {
+    s.mode = 0;  // the halfpipes of the boards: ground
+    lost = "halfpipe";
+  }
+  static const int kNearest[] = {
+      0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16,
+      17, 18, 19, 20, 21, 22,
+      0,   // stone
+      16,  // crmetal: metal
+      17,  // carpet: straw
+      16,  // grmetal: metal
+      16,  // shmetal: metal
+      6,   // hdwood: wood
+      19,  // squish: swamp
+      7,   // mhshroom: grass
+      7,   // forest: grass
+      19,  // mhswamp: swamp
+      16,  // dmaker: metal
+  };
+  const int count = (int)(sizeof(kNearest) / sizeof(*kNearest));
+  s.material = material < count ? kNearest[material] : 0;
+  // the level builder's collision fields are written in Jak 1's own layout (the builder converts
+  // them: goalc/build_level/collide/common); a surface without a material (none) becomes stone
+  const bool kept = material == 23 || (material >= 1 && material <= 22);
+  if (!kept) lost = material_name(material);
+  s.event = event <= 6 ? event : 0;
+  if (event > 6) lost = event_name(event);
+  // the flags Jak 1's fields do not have (boards, vehicles): the builder sets none of them.
+  // nogrind is on nearly every surface (the board grinds rails only), and off on every surface
+  // of the levels it builds: not said
+  if (lost.empty()) {
+    static const std::pair<int, const char*> kFlags[] = {{4, "nojak"},          {5, "noboard"}, {6, "nopilot"},
+                                                         {24, "probe"},         {25, "nomech"}, {26, "noproj"},
+                                                         {27, "noendlessfall"}, {28, "noprobe"}};
+    for (const auto& [bit, name] : kFlags)
+      if (pat >> bit & 1) lost += (lost.empty() ? "" : "+") + std::string(name);
   }
   if (loss) *loss = lost;
   return s;
@@ -537,26 +349,13 @@ json builder_lump_value(const json& value, const std::string& type_in) {
   return json();
 }
 
-std::string export_actor_type(const std::string& etype, Game source, Game destination, const GameData* to) {
-  std::string t = etype;
-  if (source == Game::Jak2 && destination == Game::Jak3) {
-    auto it = jak2_to_jak3_types().find(etype);
-    if (it != jak2_to_jak3_types().end() && (!to || !to->has_type(etype))) t = it->second;
-  }
-  if (to && !to->has_type(t)) return {};
-  return t;
-}
-
-bool export_level_for_game(const Scene& scene, const GameData* from, const GameData* to,
-                           const LevelExportOptions& o, LevelExportReport* report, std::string* error,
-                           const std::map<std::string, const GameData*>* by_game) {
+bool export_level_for_game(const Scene& scene, const GameData* data, const LevelExportOptions& o,
+                           LevelExportReport* report, std::string* error) {
   LevelExportReport rep;
   if (const std::string bad = check_export_names(o); !bad.empty()) {
     if (error) *error = tr(bad.c_str());
     return false;
   }
-  const Game src = scene.settings.game, dst = o.game;
-  const std::string game = game_name(dst);
   const fs::path dir = to_path(o.folder) / to_path(o.name);
   std::error_code ec;
   fs::create_directories(dir, ec);
@@ -565,8 +364,8 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
     return false;
   }
   rep.dir = from_path(dir);
-  const std::string install_dir = "custom_assets/" + game + "/levels/" + o.name + "/";
-  const uint32_t base_id = o.base_id ? o.base_id : default_base_id(dst);
+  const std::string install_dir = "custom_assets/jak3/levels/" + o.name + "/";
+  const uint32_t base_id = o.base_id ? o.base_id : kDefaultBaseId;
   Notes notes;
 
   const SceneCache& cache = scene.cache();
@@ -576,23 +375,6 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
   auto parent_index = [&](const Node& n) -> int {
     auto it = index.find(n.parent);
     return it == index.end() ? -1 : (int)it->second;
-  };
-  // og_game, on the node itself (a catalog object placed from another game) or the nearest
-  // ancestor (the group of a level added from another game): "" for the document's own
-  auto source_tag_of = [&](size_t i) -> std::string {
-    for (int p = (int)i; p >= 0; p = parent_index(scene.nodes[p])) {
-      const std::string tag = scene.nodes[p].extras.value("og_game", std::string());
-      if (!tag.empty()) return tag;
-    }
-    return {};
-  };
-  auto game_of_tag = [&](const std::string& tag) { return tag.empty() ? src : game_from_name(tag, src); };
-  auto data_of_tag = [&](const std::string& tag) -> const GameData* {
-    if (!tag.empty() && by_game) {
-      auto it = by_game->find(tag);
-      if (it != by_game->end()) return it->second;
-    }
-    return from;
   };
 
   // the levels with the game's collision: the parent of their "<level>-collision" group, and <level>
@@ -659,17 +441,13 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
       if (n.kind != NodeKind::Collision || !n.mesh) continue;
       const int p = parent_index(n);
       if (p >= 0 && !cache.visible[p]) continue;  // its level is hidden
-      // the extractor tags each collision node with the game whose layout its pat bits follow
-      // (collide_game): a level added from another game keeps its own, not the document's
-      const std::string collide_tag = n.extras.value("collide_game", std::string());
-      const Game node_src = collide_tag.empty() ? game_of_tag(source_tag_of(i)) : game_from_name(collide_tag, src);
       const Mat4& w = cache.worlds[i];
       for (const auto& prim : n.mesh->prims) {
         const bool normals = prim.nrm.size() == prim.pos.size();
         for (size_t t = 0; t + 2 < prim.idx.size(); t += 3) {
           const uint32_t pat = t / 3 < prim.tri_pat.size() ? prim.tri_pat[t / 3] : 0;
           std::string loss;
-          const BuilderSurface s = builder_surface(pat, node_src, dst, &loss);
+          const BuilderSurface s = builder_surface(pat, &loss);
           if (!loss.empty()) {
             approximated++;
             notes.add("export.note.surfaces", loss);
@@ -722,49 +500,92 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
   struct Exported {
     size_t index;
     std::string type, name;
-    Game src;
-    const GameData* from;
   };
   std::vector<Exported> exported;
   std::unordered_map<uint32_t, std::string> name_of_aid;
+  std::unordered_map<std::string, std::string> name_of_node;  // the name in the editor -> in the level
+  size_t absent = 0;
   {
     std::set<std::string> names;
     for (size_t i = 0; i < count; i++) {
       const Node& n = scene.nodes[i];
       if (n.kind != NodeKind::Actor) continue;
       const std::string etype = n.extras.value("etype", std::string());
-      // its own game (a level added from another game, or an object placed from one), else the
-      // document's: what checks its type and maps its data
-      const std::string tag = source_tag_of(i);
-      const Game actor_src = game_of_tag(tag);
-      const GameData* actor_from = data_of_tag(tag);
       // without actors: decor alone, but the platforms and bridges needed to get around stay
       // (the same rule the document itself loads a level by)
-      if (!o.actors && !(actor_from && actor_from->object_family(etype) == "platform")) continue;
+      if (!o.actors && !(data && data->object_family(etype) == "platform")) continue;
       if (!cache.visible[i]) {
         hidden++;
         continue;
       }
       if (etype.empty()) continue;
-      const std::string type = export_actor_type(etype, actor_src, dst, to);
-      if (type.empty()) {
+      if (data && !data->has_type(etype)) {
         notes.add("export.note.types_missing", etype);
         continue;
       }
-      if (type != etype) notes.add("export.note.types_mapped", etype + " > " + type);
-      std::string name = n.name.empty() ? type : n.name;
-      for (int k = 2; names.count(name); k++) name = (n.name.empty() ? type : n.name) + "-" + std::to_string(k);
+      // never there (its behavior): not in the level
+      if (condition_of(n.extras.value("og_behavior", json::object()).value("present", json())).kind ==
+          Condition::Never) {
+        absent++;
+        continue;
+      }
+      std::string name = n.name.empty() ? etype : n.name;
+      for (int k = 2; names.count(name); k++) name = (n.name.empty() ? etype : n.name) + "-" + std::to_string(k);
       names.insert(name);
+      if (!n.name.empty()) name_of_node.emplace(n.name, name);
       auto aid = n.extras.find("aid");
       if (aid != n.extras.end() && aid->is_number_integer()) name_of_aid[aid->get<uint32_t>()] = name;
-      exported.push_back({i, type, name, actor_src, actor_from});
+      exported.push_back({i, etype, name});
     }
   }
   std::vector<std::string> actor_lines;
   std::set<std::string> art_groups;
   size_t kill_masks = 0;
-  for (const auto& [i, type, name, actor_src, actor_from] : exported) {
+  std::string generated;                // the code of the level (<name>-obs.gc)
+  std::vector<std::string> code_files;  // the code of the game the level needs, in order
+  auto need_code = [&](const std::string& etype) {
+    if (data)
+      for (const auto& f : data->code_files(etype))
+        if (std::find(code_files.begin(), code_files.end(), f) == code_files.end()) code_files.push_back(f);
+  };
+  for (const auto& [i, type, name] : exported) {
     const Node& n = scene.nodes[i];
+    need_code(type);
+    // its behavior, as a type of the level deriving its own, the actors it names by their names in
+    // the level
+    std::string etype = type;
+    json behavior = n.extras.value("og_behavior", json::object());
+    if (behavior.is_object()) {
+      for (auto& [key, c] : behavior.items())
+        if (c.is_object() && c.contains("arg") && c["arg"].is_string()) {
+          auto it = name_of_node.find(c["arg"].get<std::string>());
+          if (it != name_of_node.end()) c["arg"] = it->second;
+        }
+      const std::string own = behavior_type_name(o.name, name);
+      const std::string code = behavior_code(data, type, behavior, own, name + " (" + type + ")");
+      if (!code.empty()) {
+        generated += code + "\n";
+        etype = own;
+        rep.behaviors++;
+      }
+    }
+    // where it was in the game: the positions inside its data move with it
+    Mat4 moved = Mat4::identity();
+    bool has_origin = false;
+    if (auto og = n.extras.find("og_origin"); og != n.extras.end() && og->is_array() && og->size() == 7) {
+      Transform t0;
+      t0.t = {(*og)[0].get<float>(), (*og)[1].get<float>(), (*og)[2].get<float>()};
+      t0.r = Quat{(*og)[3].get<float>(), (*og)[4].get<float>(), (*og)[5].get<float>(), (*og)[6].get<float>()};
+      Transform t1 = Transform::from_matrix(cache.worlds[i]);
+      t1.s = {1, 1, 1};
+      moved = t1.matrix() * t0.matrix().inverse();
+      has_origin = true;
+    }
+    std::set<std::string> path_tags;
+    if (data)
+      if (const auto* ps = data->params(type))
+        for (const auto& p : *ps)
+          if (p.kind == "path") path_tags.insert(p.tag);
 
     const Mat4& w = cache.worlds[i];
     const Vec3 pos = w.point({0, 0, 0});
@@ -779,7 +600,7 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
       if (radius <= 0) radius = 5.f;
     }
 
-    // its data (res lumps), for the destination
+    // its data (res lumps)
     json lump = json::object();
     lump["name"] = name;
     const json* types = nullptr;
@@ -787,13 +608,22 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
     if (lt != n.extras.end() && lt->is_object()) types = &*lt;
     auto lj = n.extras.find("lump");
     if (lj != n.extras.end() && lj->is_object()) {
-      for (const auto& [tag, v0] : lj->items()) {
+      for (const auto& [tag, v] : lj->items()) {
         if (tag == "name" || tag == "visvol") continue;  // its name is set, its visibility box is the game's
         const std::string ltype = types && types->contains(tag) && (*types)[tag].is_string() ? (*types)[tag].get<std::string>() : "";
-        json v = v0;
         if (tag == "kill-mask") {
           // when the actor is there along the story of its level: the new level has its own
           if (!v.is_number() || v.get<double>() != 0) kill_masks++;
+          continue;
+        }
+        if (ltype == "actor-name") {
+          // a link set in the editor: another actor by its name in the editor, then in the level
+          auto it = v.is_string() ? name_of_node.find(v.get<std::string>()) : name_of_node.end();
+          if (it == name_of_node.end()) {
+            notes.add("export.note.links_dropped", tag);
+            continue;
+          }
+          lump[tag] = json::array({"string", it->second});
           continue;
         }
         if ((ltype == "uint32" || ltype == "int32" || ltype.empty()) && tag.size() > 6 &&
@@ -814,48 +644,23 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
           lump[tag] = linked;
           continue;
         }
-        if (actor_src != dst && (tag == "task-actor" || tag == "task" || ltype == "pair")) {
-          // bound to the story of the source game: its missions, its scripts
-          notes.add("export.note.story_data", tag);
+        if (ltype == "pair") {
+          // a script of the game: the level builder cannot write them (the behavior set in the
+          // editor is the level's code instead)
+          notes.add("export.note.scripts_dropped", tag);
           continue;
         }
-        if ((tag == "eco-info" || tag == "pickup-type") && actor_src != dst && actor_from && to) {
-          // what a crate or a pickup holds (eco-info: the pickup then its amount), what a
-          // security wall asks for: the destination's pickup of the same name
-          std::vector<const json*> ns;
-          numbers(v, ns);
-          const size_t mapped = tag == "eco-info" ? std::min<size_t>(1, ns.size()) : ns.size();
-          json nv = json::array();
-          bool missing = false;
-          for (size_t k = 0; k < ns.size(); k++) {
-            if (k >= mapped) {
-              nv.push_back(*ns[k]);
-              continue;
-            }
-            std::string pname;
-            const int before = (int)ns[k]->get<double>();
-            const int after = map_pickup(*actor_from, *to, before, &pname);
-            if (tag == "eco-info" && (pname == "fuel-cell" || pname == "buzzer")) {
-              // a power cell, a scout fly: its amount is a task of the source game
-              notes.add("export.note.story_data", "eco-info (" + pname + ")");
-              missing = true;
-              break;
-            }
-            if (after < 0) {
-              notes.add("export.note.pickups_missing", pname.empty() ? std::to_string(before) : pname);
-              missing = true;
-              break;
-            }
-            if (after != before) notes.add("export.note.pickups_mapped", pname);
-            nv.push_back(after);
-          }
-          if (missing) continue;
-          if (!ns.empty()) v = nv;
-        }
-        if (ltype == "pair") notes.add("export.note.scripts_kept", tag);
         if (ltype == "int8" || ltype == "int16" || ltype == "uint8" || ltype == "uint16")
           notes.add("export.note.lumps_widened", tag);
         json bv = builder_lump_value(v, ltype);
+        if (has_origin && path_tags.count(tag) && bv.is_array() && bv.size() > 1 && bv[0] == "vector") {
+          // a path, in game units: moved as the actor was
+          for (size_t k = 1; k < bv.size(); k++) {
+            auto& pt = bv[k];
+            const Vec3 p = moved.point(Vec3{pt[0].get<float>(), pt[1].get<float>(), pt[2].get<float>()} / 4096.f) * 4096.f;
+            pt[0] = p.x, pt[1] = p.y, pt[2] = p.z;
+          }
+        }
         if (bv.is_null()) {
           notes.add("export.note.lumps_dropped", tag + (ltype.empty() ? "" : " (" + ltype + ")"));
           continue;
@@ -866,23 +671,20 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
     int game_task = 0;
     auto gt = n.extras.find("game_task");
     if (gt != n.extras.end() && gt->is_number_integer()) game_task = gt->get<int>();
-    if (actor_src != dst && game_task) {
-      notes.add("export.note.story_data", "game_task");
-      game_task = 0;
-    }
     std::ostringstream a;
-    a << "{\"trans\": [" << num(pos.x) << ", " << num(pos.y) << ", " << num(pos.z) << "], \"etype\": \"" << type
+    a << "{\"trans\": [" << num(pos.x) << ", " << num(pos.y) << ", " << num(pos.z) << "], \"etype\": \"" << etype
       << "\", \"game_task\": " << game_task << ", \"quat\": [" << num(q.x) << ", " << num(q.y) << ", " << num(q.z)
       << ", " << num(q.w) << "], \"bsphere\": [" << num(pos.x) << ", " << num(pos.y) << ", " << num(pos.z) << ", "
       << num(radius) << "], \"lump\": " << lump.dump() << "}";
     actor_lines.push_back(a.str());
     rep.actors++;
-    // the models its type draws: their art groups, from the destination's DGOs
-    if (to)
-      if (const auto* models = to->type_models(type))
+    // the models its type draws: their art groups, from the game's DGOs
+    if (data)
+      if (const auto* models = data->type_models(type))
         for (const auto& m : *models) art_groups.insert(m + "-ag");
   }
   if (kill_masks) notes.add("export.note.kill_masks", "", kill_masks);
+  if (absent) notes.add("export.note.absent", "", absent);
   if (hidden) notes.add("export.note.hidden", "", hidden);
   rep.art_groups = art_groups.size();
 
@@ -893,29 +695,24 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
 
   std::string nav_line;
   if (!o.navmeshes.empty()) {
-    if (dst == Game::Jak3) {
-      // their ids after the actors', far from them
-      const uint32_t first = base_id + (uint32_t)rep.actors + 1000;
-      std::vector<NavExportEntry> entries;
-      for (size_t i = 0; i < o.navmeshes.size(); i++)
-        entries.push_back({&o.navmeshes[i], first + (uint32_t)i,
-                           i < o.navmesh_names.size() ? o.navmesh_names[i] : "nav-mesh-" + std::to_string(i)});
-      const fs::path nav = dir / to_path(o.name + "-nav.json");
-      if (!write_navmesh_blob(entries, from_path(nav), error)) return false;
-      rep.files.push_back(from_path(nav));
-      rep.navmeshes = entries.size();
-      nav_line = "  \"nav_data\": \"" + install_dir + o.name + "-nav.json\",\n";
-    } else {
-      notes.add("export.note.navmeshes_left_out", "", o.navmeshes.size());
-    }
+    // their ids after the actors', far from them
+    const uint32_t first = base_id + (uint32_t)rep.actors + 1000;
+    std::vector<NavExportEntry> entries;
+    for (size_t i = 0; i < o.navmeshes.size(); i++)
+      entries.push_back({&o.navmeshes[i], first + (uint32_t)i,
+                         i < o.navmesh_names.size() ? o.navmesh_names[i] : "nav-mesh-" + std::to_string(i)});
+    const fs::path nav = dir / to_path(o.name + "-nav.json");
+    if (!write_navmesh_blob(entries, from_path(nav), error)) return false;
+    rep.files.push_back(from_path(nav));
+    rep.navmeshes = entries.size();
+    nav_line = "  \"nav_data\": \"" + install_dir + o.name + "-nav.json\",\n";
   }
 
   // the level for the builder
   const bool auto_walls = rep.collision_from_decor > 0 || !o.game_collision;
   std::ostringstream j;
-  j << "// " << o.name << ": exported by the OpenGOAL Level Editor for " << game_title(dst) << " from "
-    << (scene.settings.level.empty() ? std::string("a new level") : scene.settings.level) << " ("
-    << game_title(src) << ").\n"
+  j << "// " << o.name << ": exported by the OpenGOAL Level Editor for Jak 3 from "
+    << (scene.settings.level.empty() ? std::string("a new level") : scene.settings.level) << ".\n"
     << "// To add it to the game: INSTALL.md, next to this file.\n"
     << "{\n"
     << "  \"long_name\": \"" << o.name << "\",\n"
@@ -926,15 +723,10 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
     << "  \"automatic_wall_detection\": " << (auto_walls ? "true" : "false") << ",\n"
     << "  \"automatic_wall_angle\": 45.0,\n"
     << "  \"double_sided_collide\": false,\n"
-    << "  \"base_id\": " << base_id << ",\n";
-  if (dst != Game::Jak1) j << "  \"base_region_id\": " << base_id << ",\n";
-  if (dst == Game::Jak1)
-    j << "  \"sky\": \"village1\",\n"
-      << "  \"tex_remap\": \"village1\",\n"
-      << "  \"tpages\": [],\n"
-      << "  \"ambients\": [],\n";
-  if (dst != Game::Jak2) j << "  \"cameras\": [],\n";
-  j << nav_line << "  \"custom_models\": [],\n"
+    << "  \"base_id\": " << base_id << ",\n"
+    << "  \"base_region_id\": " << base_id << ",\n"
+    << "  \"cameras\": [],\n"
+    << nav_line << "  \"custom_models\": [],\n"
     << "  \"textures\": [],\n"
     << "  \"art_groups\": [";
   {
@@ -953,19 +745,31 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
   if (!write_text(jsonc, j.str(), error)) return false;
   rep.files.push_back(from_path(jsonc));
 
+  // the level's code: the behaviors set in the editor
+  const std::string code_stem = o.name + "-obs";
+  if (!generated.empty()) {
+    std::ostringstream gc;
+    gc << ";;-*-Lisp-*-\n"
+       << "(in-package goal)\n\n"
+       << ";; " << o.name << ": the behaviors of its objects, set in the OpenGOAL Level Editor. Each object\n"
+       << ";; whose behavior differs from the game's has a type of its own deriving the game's.\n\n"
+       << generated;
+    const fs::path gc_path = dir / to_path(code_stem + ".gc");
+    if (!write_text(gc_path, gc.str(), error)) return false;
+    rep.files.push_back(from_path(gc_path));
+    rep.code_file = from_path(gc_path);
+  }
+
   // the DGO
   std::string nick_upper = o.nickname;
   for (auto& c : nick_upper) c = (char)std::toupper((unsigned char)c);
   std::ostringstream gd;
-  gd << ";; DGO definition file for " << o.name << ", exported by the OpenGOAL Level Editor for " << game_title(dst)
-     << ".\n"
+  gd << ";; DGO definition file for " << o.name << ", exported by the OpenGOAL Level Editor for Jak 3.\n"
      << "(\"" << nick_upper << ".DGO\"\n"
      << " (\n";
-  if (dst == Game::Jak1) {
-    gd << "  ;; the textures of village1 (its sky: \"sky\" and \"tex_remap\" in " << o.name << ".jsonc)\n";
-    for (const char* t : {"tpage-398.go", "tpage-400.go", "tpage-399.go", "tpage-401.go", "tpage-1470.go"})
-      gd << "  \"" << t << "\"\n";
-  }
+  // the code of the game its objects need beyond the common code, then its own
+  for (const auto& f : code_files) gd << "  \"" << f << ".o\"\n";
+  if (!generated.empty()) gd << "  \"" << code_stem << ".o\"\n";
   for (const auto& ag : art_groups) gd << "  \"" << ag << ".go\"\n";
   gd << "  \"" << o.name << ".go\"\n"
      << "  ))\n";
@@ -975,11 +779,8 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
 
   // the level's definition in the game's code
   const float bottom = (bounds.valid() ? bounds.lo.y : o.start.y) - 20.f;
-  const std::string info = dst == Game::Jak1 ? level_info_jak1(o, bottom)
-                           : dst == Game::Jak2 ? level_info_jak2(o, bottom)
-                                               : level_info_jak3(o, bottom);
   const fs::path info_path = dir / to_path("level-info.gc");
-  if (!write_text(info_path, ";; add this to goal_src/" + game + "/engine/level/level-info.gc\n\n" + info, error))
+  if (!write_text(info_path, ";; add this to goal_src/jak3/engine/level/level-info.gc\n\n" + level_info(o, bottom), error))
     return false;
   rep.files.push_back(from_path(info_path));
 
@@ -987,37 +788,48 @@ bool export_level_for_game(const Scene& scene, const GameData* from, const GameD
 
   // how to add it to the game
   std::ostringstream md;
-  md << "# " << o.name << " for " << game_title(dst) << "\n\n"
+  md << "# " << o.name << " for Jak 3\n\n"
      << "Exported by the OpenGOAL Level Editor from " << (scene.settings.level.empty() ? "a new level" : scene.settings.level)
-     << " (" << game_title(src) << "): " << rep.meshes << " meshes (" << rep.triangles << " triangles), "
+     << ": " << rep.meshes << " meshes (" << rep.triangles << " triangles), "
      << rep.collision_triangles << " collision triangles of the game, " << rep.actors << " actors, "
      << rep.art_groups << " art groups";
   if (rep.navmeshes) md << ", " << rep.navmeshes << " nav meshes";
+  if (rep.behaviors) md << ", " << rep.behaviors << " objects with a behavior of their own (`" << code_stem << ".gc`)";
   md << ".\n\n"
      << "## Adding it to the game\n\n"
-     << "1. Copy this folder to `" << install_dir << "` in the jak-project checkout.\n"
-     << "2. In `goal_src/" << game << "/game.gp`, next to the lines of the test-zone:\n\n"
+     << "1. Copy this folder to `" << install_dir << "` in the jak-project checkout";
+  if (!generated.empty())
+    md << ", and `" << code_stem << ".gc` to `goal_src/jak3/levels/" << o.name << "/" << code_stem << ".gc`";
+  md << ".\n"
+     << "2. In `goal_src/jak3/game.gp`, next to the lines of the test-zone:\n\n"
      << "   ```\n"
-     << "   (build-custom-level \"" << o.name << "\")\n"
-     << "   (custom-level-cgo \"" << nick_upper << ".DGO\" \"" << o.name << "/" << o.name << ".gd\")\n"
+     << "   (build-custom-level \"" << o.name << "\")\n";
+  if (!generated.empty()) {
+    // after the common code and the code of the game it derives from
+    md << "   (goal-src \"levels/" << o.name << "/" << code_stem << ".gc\" \"entity-debug\"";
+    for (const auto& f : code_files) md << " \"" << f << "\"";
+    md << ")\n";
+  }
+  md << "   (custom-level-cgo \"" << nick_upper << ".DGO\" \"" << o.name << "/" << o.name << ".gd\")\n"
      << "   ```\n\n"
-     << "3. In `goal_src/" << game << "/engine/level/level-info.gc`, add the definition of `level-info.gc`\n"
+     << "3. In `goal_src/jak3/engine/level/level-info.gc`, add the definition of `level-info.gc`\n"
      << "   (next to this file) and give it an `:index` no other level has. The player starts at\n"
      << "   (" << num(o.start.x) << ", " << num(o.start.y) << ", " << num(o.start.z) << ") m.\n"
-     << "4. Build the game (`(mi)` in the REPL), then go there: `(bg-custom '" << o.name << "-vis)`.\n\n";
+     << "4. Build the game (`(mi)` in the REPL), then go there: `(bg '" << o.name << "-vis)`.\n\n";
   if (!rep.notes.empty()) {
-    md << "## What the export changed for " << game_title(dst) << "\n\n";
+    md << "## What the export changed\n\n";
     for (const auto& note : rep.notes) md << "- " << strf(tr_en(note.key.c_str()), note.count, note.detail.c_str()) << "\n";
     md << "\n";
   }
   md << "## Good to know\n\n"
      << "- The collision of the levels' own decor is the game's: a piece of it moved or deleted keeps its\n"
      << "  collision where the game had it. Export with the collision made from the decor to change that.\n"
-     << "- The actors whose code is in a level's own files (particle effects, the logic of a level) need\n"
-     << "  that code: add its `.o` files to `" << o.name << ".gd` (see `goal_src/" << game
-     << "/dgos/` for the levels that have them).\n"
-     << "- The positions inside the actors' data (paths, targets) are the game's: an actor moved keeps\n"
-     << "  its path where it was.\n";
+     << "- The code of the game's objects that live in a level's own files is in `" << o.name << ".gd`, with\n"
+     << "  the files before it in that level's DGO (`goal_src/jak3/dgos/`).\n"
+     << "- The paths of the actors move with them; the other positions inside their data (targets) are\n"
+     << "  the game's.\n"
+     << "- The scripts of the game's objects (their `on-...` data) are left out: OpenGOAL's level\n"
+     << "  builder cannot write them. What an object does is its behavior, in `" << code_stem << ".gc`.\n";
   const fs::path md_path = dir / to_path("INSTALL.md");
   if (!write_text(md_path, md.str(), error)) return false;
   rep.files.push_back(from_path(md_path));

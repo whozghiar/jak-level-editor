@@ -57,11 +57,10 @@ void Prefs::load() {
   try {
     json j = json::parse(ss.str());
     library_root = j.value("library_root", std::string());
-    library_game = j.value("library_game", std::string());
-    extract_sources = j.value("extract_sources", std::map<std::string, std::string>());
+    extract_source = j.value("extract_source", std::string());
     language = j.value("language", std::string());
     recent_projects = j.value("recent_projects", std::vector<std::string>());
-    export_folders = j.value("export_folders", std::map<std::string, std::string>());
+    export_folder = j.value("export_folder", std::string());
   } catch (const std::exception& e) {
     LOG_WARN("unreadable preferences (%s): defaults used", e.what());
   }
@@ -70,11 +69,10 @@ void Prefs::load() {
 void Prefs::save() const {
   if (read_only) return;
   json j = {{"library_root", library_root},
-            {"library_game", library_game},
-            {"extract_sources", extract_sources},
+            {"extract_source", extract_source},
             {"language", language},
             {"recent_projects", recent_projects},
-            {"export_folders", export_folders}};
+            {"export_folder", export_folder}};
   std::error_code ec;
   fs::create_directories(to_path(dir()), ec);
   std::ofstream f(to_path(dir() + "prefs.json"));

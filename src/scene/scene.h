@@ -16,7 +16,6 @@
 #include <string>
 #include <vector>
 
-#include "core/games.h"
 #include "core/math.h"
 #include "json.hpp"
 
@@ -110,8 +109,7 @@ struct Node {
 };
 
 struct LevelSettings {
-  Game game = Game::Jak2;
-  std::string level;         // the library level the document comes from ("atoll")
+  std::string level;         // the library level the document comes from ("desert")
   std::string source_group;  // its folder in the library: its models are drawn for its actors
 
   json to_json() const;

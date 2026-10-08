@@ -57,28 +57,24 @@ json tools() {
   const json discard = boolean("true to drop the unsaved changes of the document");
   return json::array({
       tool("get_status",
-           "What the editor shows now: the game and its extracted levels, the document (level or project, number "
+           "What the editor shows now: the library and its number of levels, the document (level or project, number "
            "of elements, bounds, unsaved changes), the story view, the camera and the selection. Call it first."),
       tool("list_levels",
            "The levels of the game that can be opened or added, with their DGO file and whether the document has "
            "them. With near: only the levels the game displays together with that one (its neighbors).",
-           {{"filter", str("part of a level name or DGO (e.g. 'cty' for Haven City)")},
-            {"near", str("a level: its neighbors in the game only")},
-            {"game", str("jak1, jak2 or jak3: another extracted game (get_status: games), shown from then on")}}),
+           {{"filter", str("part of a level name or DGO (e.g. 'des' for the desert)")},
+            {"near", str("a level: its neighbors in the game only")}}),
       tool("get_level_info",
            "What is known of a level: its neighbors in the game (the levels displayed with it), its companions, its "
            "continue points (where the game starts the player: position in meters, levels shown there), and when the "
            "document has it, its role (opened, added, companion), its group and its bounds.",
-           {{"name", str("a level, the one opened by default")},
-            {"game", str("jak1, jak2 or jak3, when the name is a level of more than one extracted game")}}),
+           {{"name", str("a level, the one opened by default")}}),
       tool("add_level",
            "Adds a level of the library to the document, at its place in the game's world: levels side by side in "
            "the game meet in the editor too (to edit the junction between two levels, or to build a level next to "
-           "one of the game's). Its companions and mission layers come with it, under its group. A level of another "
-           "game than the document's can be added too (it keeps its own game: only exporting for a game cares which "
-           "is which). Waits until it is added; returns its group and bounds. Undoable.",
+           "one of the game's). Its companions and mission layers come with it, under its group. Waits until it is "
+           "added; returns its group and bounds. Undoable.",
            {{"name", str("a level from list_levels")},
-            {"game", str("jak1, jak2 or jak3: a level of another extracted game (get_status: games)")},
             {"actors", boolean("false: its decor alone, without any actor (true by default: with its objects)")}},
            {"name"}),
       tool("remove_level", "Removes a level added to the document, and what is under its group. Undoable.",
@@ -87,7 +83,6 @@ json tools() {
            "Opens a level of the game (its decor, its objects and water, without its creatures) and waits until it "
            "is loaded. Refuses when the document has unsaved changes, unless discard_changes is true.",
            {{"name", str("a level name from list_levels")},
-            {"game", str("jak1, jak2 or jak3: a level of another extracted game (get_status: games)")},
             {"actors", boolean("false: its decor alone, without any actor (true by default: with its objects)")},
             {"discard_changes", discard}},
            {"name"}),
@@ -97,30 +92,26 @@ json tools() {
            {{"discard_changes", discard}}),
       tool("list_catalog",
            "The objects that can be placed (crates, collectables, platforms, doors, buttons, water...; the particle "
-           "effects of the levels: lights, neon signs, steam; their other logic), of every extracted game at once, "
-           "by family, with how many the game's levels have. The effects and logic are drawn as markers in the "
-           "editor. Each entry says which game it is from (game): give it to place when a name is in more than one.",
+           "effects of the levels: lights, neon signs, steam; their other logic), by family, with how many the game's "
+           "levels have. The effects and logic are drawn as markers in the editor.",
            {{"family", str("crate, collectable, platform, door, button, movement, hazard, breakable, light, weapon, "
                            "vehicle, water, other, effect or logic")},
-            {"game", str("jak1, jak2 or jak3: only that game's, instead of every extracted game's")},
             {"filter", str("part of a name")},
             {"offset", integer("first result (paging)")},
             {"limit", integer("number of results, 100 by default")}}),
       tool("list_models",
-           "The other models of every extracted game (parts of objects, debris, props: everything but the "
-           "characters), placed as decor with place (kind 'model').",
-           {{"game", str("jak1, jak2 or jak3: only that game's, instead of every extracted game's")},
-            {"filter", str("part of a name or of the level it comes from")},
+           "The other models of the game (parts of objects, debris, props: everything but the characters), placed "
+           "as decor with place (kind 'model').",
+           {{"filter", str("part of a name or of the level it comes from")},
             {"offset", integer("first result (paging)")},
             {"limit", integer("number of results, 100 by default")}}),
       tool("list_decor",
-           "The decor parts of the levels of every extracted game, to reuse anywhere: their prototypes (pillars, "
+           "The decor parts of the levels of the game, to reuse anywhere: their prototypes (pillars, "
            "arches, catwalks, lamp posts, props) and the pieces of their shell (walls, floors, bridges), with their "
-           "triangle count. Without level: searches every level of every game by name (filter), each prototype once "
+           "triangle count. Without level: searches every level by name (filter), each prototype once "
            "with the first level that has it. With a level: its whole decor (the first call reads it, a few "
            "seconds).",
            {{"level", str("a level name from list_levels; omitted: every level")},
-            {"game", str("kind 'decor': with level, the game it is from, when the name is in more than one")},
             {"filter", str("part of a name (e.g. 'catwalk')")},
             {"offset", integer("first result (paging)")},
             {"limit", integer("number of results, 100 by default")}}),
@@ -128,12 +119,10 @@ json tools() {
       tool("place",
            "Puts in the document an object of the catalog (kind 'object', name from list_catalog), a model (kind "
            "'model', from list_models), a decor part (kind 'decor', name and level from list_decor) or a prefab "
-           "(kind 'prefab'), at a position in meters (Y is up). An object or model of any extracted game can be "
-           "placed in a document of any other. Returns the new elements with their id. Undoable in the editor.",
+           "(kind 'prefab'), at a position in meters (Y is up). Returns the new elements with their id. Undoable in the "
+           "editor.",
            {{"kind", {{"type", "string"}, {"enum", {"object", "model", "decor", "prefab"}}}},
             {"name", str("the object, part or prefab")},
-            {"game", str("its own game (list_catalog / list_models / list_decor), when the name is in more than one "
-                         "extracted game")},
             {"level", str("kind 'decor': the level the part comes from (omitted: the first that has it)")},
             {"position", vec3("where, [x, y, z] in meters")},
             {"yaw_deg", num("turn around the vertical axis, in degrees")},
@@ -177,6 +166,22 @@ json tools() {
             {"scale", {{"description", "[x, y, z] or one number: the scale"}}},
             {"scale_by", {{"description", "[x, y, z] or one number: multiplies the scale"}}}},
            {"ids"}),
+      tool("set_actor",
+           "Sets what an object does: its behavior (when a door opens, when a board vent or jump pad throws Jak "
+           "up, when an elevator leaves, whether the object is there at all), written at export as the level's own "
+           "code, and its parameters (the data its type's code reads: get_node lists them with their kind and "
+           "default, e.g. spring-height of a vent, elevator-move-rate, crate-type, eco-info [pickup, amount]). "
+           "Distances in the game's units (4096 per meter). A condition is {\"when\": \"always\"|\"never\"|"
+           "\"task\"|\"pressed\"|\"gone\", \"arg\": a task node of the story (task) or an actor's name (pressed: "
+           "a floor switch was pressed; gone: a crate broken, a pickup taken)}. Undoable.",
+           {{"id", integer("the actor")},
+            {"behavior", {{"type", "object"},
+                          {"description", "merged into its behavior (null removes a key): open (a door): "
+                                          "approach|locked|always|when, with when (a condition) and distance "
+                                          "(meters); active (a bouncer), leave (an elevator), present (any): a "
+                                          "condition"}}},
+            {"params", {{"type", "object"}, {"description", "tag -> value (null: back to the game's)"}}}},
+           {"id"}),
       tool("set_visibility",
            "Shows or hides elements (a level's group: the whole level). Hidden elements are not drawn nor picked. "
            "Undoable.",
@@ -193,7 +198,7 @@ json tools() {
             {"actors", boolean("also the actors' markers")}},
            {"origin"}),
       tool("generate_navmesh",
-           "Generates nav meshes (where the creatures of Jak II and Jak 3 walk) from the walkable surfaces of the decor "
+           "Generates nav meshes (where the creatures of the game walk) from the walkable surfaces of the decor "
            "shown, in the game's limits (convex polygons of 3 or 4 corners, at most 255 per mesh, each mesh in one "
            "piece), replacing the nav meshes of the region. Waits until they are made; returns them (polygons, area, "
            "problem if the game could not use one); with from, only the ground connected to given points. Undoable.",
@@ -216,19 +221,16 @@ json tools() {
             {"first_id", integer("the entity id of the first nav mesh (60000 by default): unique in the game, not an actor's")}},
            {"path"}),
       tool("export_level",
-           "Writes what the view shows as a custom level of OpenGOAL for a game (Jak 1, Jak II or Jak 3), adapted "
-           "to it: <folder>/<name>/ with the .glb, the .jsonc and the .gd its level builder takes, level-info.gc "
-           "and INSTALL.md (the lines to add to the game's code). For another game than the document's, the "
-           "collision surfaces, the actor types and their data are adapted; notes says what changed or was left "
-           "out. Hidden levels and elements are left out.",
-           {{"game", str("the destination: jak1, jak2 or jak3 (the document's game by default)")},
-            {"name", str("the level's name in the game: 3 to 10 lower case letters, digits or '-' (not a level of "
+           "Writes what the view shows as a custom level of OpenGOAL for Jak 3: <folder>/<name>/ with the .glb, "
+           "the .jsonc and the .gd its level builder takes, level-info.gc and INSTALL.md (the lines to add to the "
+           "game's code); notes says what changed or was left out. Hidden levels and elements are left out.",
+           {{"name", str("the level's name in the game: 3 to 10 lower case letters, digits or '-' (not a level of "
                          "the game)")},
             {"nickname", str("3 lower case letters: its DGO's name (made from the name by default)")},
             {"iso_name", str("up to 8 upper case letters or digits (made from the name by default)")},
             {"base_id", integer("the first actor id (above the game's own actors' by default)")},
-            {"folder", str("where <name>/ is written: custom_assets/<game>/levels of a jak-project checkout, "
-                           "or by default the last folder used, else exports/<game> next to the extracted games")},
+            {"folder", str("where <name>/ is written: custom_assets/jak3/levels of a jak-project checkout, "
+                           "or by default the last folder used, else exports/ next to the extracted game")},
             {"actors", boolean("false: the decor alone (true by default)")},
             {"collision", str("'game' (default): the levels' own collision, exact, where they have it, the rest "
                               "made by the builder from the decor; 'decor': all of it made from the decor")},
@@ -251,11 +253,11 @@ json tools() {
            "it with transform_nodes on the selection's ids.",
            {{"ids", ids("the elements")}, {"level", str("the level opened or a level added: all of it")}}),
       tool("set_story",
-           "The story view of Jak II and Jak 3 levels: enabled false shows every state of the level at once; step "
+           "The story view of the game's levels: enabled false shows every state of the level at once; step "
            "(1 = start of the game) or after_node (a task node name) shows it at that point of the story.",
            {{"enabled", boolean("the story view")},
             {"step", integer("1 = the start of the game")},
-            {"after_node", str("a task node, e.g. 'canyon-insert-items-resolution'")}}),
+            {"after_node", str("a task node, e.g. 'arena-fight-1-resolution'")}}),
       tool("create_prefab", "Saves elements as a prefab, to place again with place (kind 'prefab').",
            {{"ids", ids("the elements")}, {"name", str("the prefab's name")}}, {"ids", "name"}),
       tool("save_project",
@@ -270,7 +272,7 @@ json tools() {
 }
 
 const char* kInstructions =
-    "Tools of the OpenGOAL Level Editor (levels of Jak and Daxter, Jak II, Jak 3), acting on the editor window the "
+    "Tools of the OpenGOAL Level Editor (levels of Jak 3), acting on the editor window the "
     "user sees (started when needed). Positions are in meters, Y is up. A typical session: get_status; open_level "
     "(or new_level); find_nodes / raycast to know where things are; list_catalog, list_decor and list_prefabs to "
     "choose what to put; place; capture_view to check; save_project. Every change can be undone.";

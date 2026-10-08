@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(open_goal_level_editor LANGUAGES C CXX)
 
-# A simple level editor for OpenGOAL (Jak 1, 2 and 3). It does not need jak-project to build or to
+# A simple level editor for OpenGOAL (Jak 3). It does not need jak-project to build or to
 # run: ogle-extract (extractor/) reads the user's own game disc and writes .glb files, the editor
 # loads a level from them, moves, rotates, copies and deletes its elements, makes prefabs and nav
 # meshes.
@@ -99,13 +99,16 @@ endif()
 set_target_properties(open-goal-level-editor PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-# the translations of the interface (lang/<code>.json) and what the editor knows of each game
-# (data/<game>/game-data.json, made by tools/gen_game_data.py), next to the executable
-add_custom_command(TARGET open-goal-level-editor POST_BUILD
+# the translations of the interface (lang/<code>.json) and what the editor knows of the game
+# (data/jak3/game-data.json, made by tools/gen_game_data.py), next to the executable: copied again
+# at every build (not only when the editor is linked again), without the files removed since
+add_custom_target(ogle_resources ALL
+  COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_BINARY_DIR}/bin/lang" "${CMAKE_BINARY_DIR}/bin/data"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/lang"
           "${CMAKE_BINARY_DIR}/bin/lang"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data"
           "${CMAKE_BINARY_DIR}/bin/data")
+add_dependencies(open-goal-level-editor ogle_resources)
 
 # ---------------------------------------------------------------------------------------------
 # The level extractor (ogle-extract): reads the user's game disc, writes the .glb files

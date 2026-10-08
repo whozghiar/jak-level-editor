@@ -107,7 +107,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 set_target_properties(ogle-extract PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-# the game tables next to the executable
-add_custom_command(TARGET ogle-extract POST_BUILD
+# the game tables next to the executable, copied again at every build
+add_custom_target(ogle_extract_data ALL
+  COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_BINARY_DIR}/bin/ogle-extract-data"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data"
           "${CMAKE_BINARY_DIR}/bin/ogle-extract-data")
+add_dependencies(ogle-extract ogle_extract_data)

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Builds the demo level of the tutorial (docs/captures/README.md): two decks of the industrial
-zone, a canal bridge stretched to cross the palace's pool between them, lamps, orbs, crates, the
-palace's fountain bowl and a fruit stand. It drives the editor through its remote control, the
+zone, a canal bridge stretched to cross the water of Spargus' palace between them, lamps, orbs,
+crates, barrels of the Hip Hog and a fountain of the slums. It drives the editor through its remote control, the
 connection the MCP server forwards an assistant's tool calls to, with the same tools: this is what
 an assistant does when asked to build a level.
 
-The level is made of the game's parts, so it needs a Jak II library extracted with the editor. It
+The level is made of the game's parts, so it needs Jak 3 extracted with the editor. It
 holds no data of the game itself: only names and positions.
 
 Usage (from the repository root, after building the editor):
@@ -78,27 +78,26 @@ def build(e):
     for x in (-44, -28, 28, 44):
         for z in (-8, 8):
             e.call('place', kind='decor', name='city-ind-catwalk-main-01', position=[x, 0, z])
-    # the pool of the palace between them, and a canal bridge (16 m) stretched to cross it
-    e.call('place', kind='object', name='water-anim-ctypal-lrgsqr-pool', position=[0, -1.5, 0])
+    # the water of Spargus' palace between them, and a canal bridge (16 m) stretched to cross it
+    e.call('place', kind='object', name='water-anim-waspala-thronesec', position=[0, -1.5, 0])
     bridge = e.call('place', kind='decor', name='city-canal-bridge-span', position=[0, 0.83, 0])
     e.call('transform_nodes', ids=[bridge['result']['nodes'][0]['id']], scale_by=[2.5, 1, 1])
     # lamps at the ends of the bridge, orbs along it
     for x in (-22, 22):
         for z in (-5, 5):
-            e.call('place', kind='object', name='ctyn-lamp', position=[x, 10, z], on_ground=True)
+            e.call('place', kind='decor', name='city-groundlamp-01', position=[x, 1.08, z])
     for x in (-12, -6, 0, 6, 12):
         e.call('place', kind='object', name='skill', position=[x, 2, 0])
     # crates, and a corner of barrels and a market crate, on the first deck
     for i, (x, z) in enumerate([(-46, 10), (-43.5, 10), (-46, 12.5)]):
         e.call('place', kind='object', name='crate', position=[x, 10, z], on_ground=True, yaw_deg=12 * i)
-    e.call('place', kind='object', name='market-crate', position=[-43.5, 10, -9.5], on_ground=True, yaw_deg=30)
-    for x, z in [(-48, -12), (-45.5, -12), (-47, -9.5)]:
-        e.call('place', kind='decor', name='cty-tanker-barrel', position=[x, 1.08, z])
-    # the fountain bowl of the palace, a fruit stand and ground lamps on the second deck
-    e.call('place', kind='decor', name='ctyp-fountain-bowl', position=[40, 1.08, 0])
-    e.call('place', kind='object', name='cty-fruit-stand', position=[30, 10, 12.5], on_ground=True, yaw_deg=180)
-    for z in (-13, 13):
-        e.call('place', kind='decor', name='city-groundlamp-01', position=[50, 1.08, z])
+    e.call('place', kind='object', name='wascity-market-crate', position=[-43.5, 10, -9.5], on_ground=True,
+           yaw_deg=30)
+    for x, z in [(-48, -12), (-46.4, -12), (-47.2, -10.6)]:
+        e.call('place', kind='decor', name='hip-barrel-b', position=[x, 1.08, z])
+    # the fountain of the slums, with its water, on the second deck
+    e.call('place', kind='decor', name='ctyslumc-road-fountain', position=[36, 1.08, 0])
+    e.call('place', kind='decor', name='ctyslumc-road-fountain-water', position=[36, 1.08, 0])
     e.call('select', ids=[])
 
 

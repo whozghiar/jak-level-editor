@@ -1,6 +1,6 @@
 #pragma once
 
-// The story view: a level as the game shows it at a point of the story (Jak II, Jak 3). The
+// The story view: a level as the game shows it at a point of the story. The
 // actors, decor prototypes and layers the game does not show at that point are hidden
 // (Node::story_hidden); nothing is removed, the document keeps every state.
 //

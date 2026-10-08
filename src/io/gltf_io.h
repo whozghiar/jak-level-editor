@@ -22,7 +22,6 @@ namespace ogle {
 struct ImportOptions {
   uint32_t parent = 0;  // attach the imported roots under this node
   bool read_settings = false;  // take LevelSettings from the file's asset extras (projects)
-  bool game_from_file = false; // take the game of a decompiler rip (asset extras "opengoal")
 };
 
 struct ImportResult {

@@ -1,0 +1,400 @@
+// The inspector's sections of an actor (panels.cpp shows them): its behavior, set in simple terms
+// for the objects whose behavior is the game's code (doors, bouncers, elevators, whether an object
+// is there at all: io/behaviors.h), and its parameters, every res lump the code of its type reads
+// (game data: params), typed.
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+
+#include "app/app.h"
+#include "core/i18n.h"
+#include "core/log.h"
+#include "imgui.h"
+#include "imgui_stdlib.h"
+#include "io/behaviors.h"
+
+namespace ogle {
+
+namespace {
+
+constexpr float kUnits = 4096.f;  // game units per meter
+
+void tooltip(const char* text) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort) && text && *text) ImGui::SetTooltip("%s", text);
+}
+
+// the parameters given in meters: distances, heights, sizes
+bool in_meters(const std::string& tag) {
+  for (const char* w : {"distance", "height", "radius", "dist", "width", "range", "threshold", "depth", "offset"})
+    if (tag.find(w) != std::string::npos) return true;
+  return false;
+}
+
+// a lump value as numbers (a number, or an array of them)
+std::vector<double> numbers_of(const json& v) {
+  std::vector<double> out;
+  if (v.is_number()) out.push_back(v.get<double>());
+  else if (v.is_array())
+    for (const auto& x : v)
+      if (x.is_number()) out.push_back(x.get<double>());
+  return out;
+}
+
+}  // namespace
+
+// --- a condition: always, never, after a task, once an actor was activated or is gone ----------
+
+bool App::ui_condition(const char* id, json& value, bool with_always) {
+  Condition c = condition_of(value);
+  bool changed = false;
+  static const Condition::Kind kinds[] = {Condition::Always, Condition::Never, Condition::Task, Condition::Pressed,
+                                          Condition::Gone};
+  auto label = [](Condition::Kind k) { return tr((std::string("behavior.when.") + condition_name(k)).c_str()); };
+  ImGui::PushID(id);
+  ImGui::SetNextItemWidth(-1);
+  if (ImGui::BeginCombo("##when", label(c.kind))) {
+    for (auto k : kinds) {
+      if (k == Condition::Always && !with_always) continue;
+      if (ImGui::Selectable(label(k), k == c.kind) && k != c.kind) {
+        c.kind = k;
+        c.arg.clear();
+        changed = true;
+      }
+    }
+    ImGui::EndCombo();
+  }
+  if (c.kind == Condition::Task) {
+    // a task node of the story: closed once the player did that step
+    const GameData* data = game_data().get();
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::BeginCombo("##task", c.arg.empty() ? tr("behavior.choose_task") : c.arg.c_str(),
+                          ImGuiComboFlags_HeightLarge)) {
+      static std::string filter;
+      ImGui::SetNextItemWidth(-1);
+      if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+      ImGui::InputTextWithHint("##filter", tr("behavior.filter"), &filter);
+      for (int i = 1; data && i < data->step_count(); i++) {
+        const std::string& name = data->node(i).name;
+        if (!filter.empty() && name.find(filter) == std::string::npos) continue;
+        if (ImGui::Selectable(name.c_str(), name == c.arg)) {
+          c.arg = name;
+          changed = true;
+        }
+      }
+      ImGui::EndCombo();
+    }
+    tooltip(tr("behavior.task.tip"));
+  } else if (c.kind == Condition::Pressed || c.kind == Condition::Gone) {
+    // another actor of the document, by its name
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::BeginCombo("##actor", c.arg.empty() ? tr("behavior.choose_actor") : c.arg.c_str(),
+                          ImGuiComboFlags_HeightLarge)) {
+      for (const auto& o : scene.nodes) {
+        if (o.kind != NodeKind::Actor || o.name.empty()) continue;
+        if (ImGui::Selectable(o.name.c_str(), o.name == c.arg)) {
+          c.arg = o.name;
+          changed = true;
+        }
+      }
+      ImGui::EndCombo();
+    }
+    tooltip(tr(c.kind == Condition::Pressed ? "behavior.pressed.tip" : "behavior.gone.tip"));
+  }
+  ImGui::PopID();
+  if (changed) value = condition_json(c);
+  return changed;
+}
+
+// --- the behavior of an actor --------------------------------------------------------------------
+
+void App::ui_actor_behavior(Node& n) {
+  const GameData* data = game_data().get();
+  const std::string etype = n.extras.value("etype", std::string());
+  if (!data || etype.empty()) return;
+  const BehaviorKind kind = behavior_kind(data, etype);
+  ImGui::SeparatorText(tr("behavior.title"));
+  json b = n.extras.value("og_behavior", json::object());
+  if (!b.is_object()) b = json::object();
+  const Node before = n;
+  bool changed = false;
+  auto lump_float = [&](const char* tag, float fallback) {
+    auto l = n.extras.find("lump");
+    if (l != n.extras.end() && l->is_object() && l->contains(tag)) {
+      const auto v = numbers_of((*l)[tag]);
+      if (!v.empty()) return (float)v[0];
+    }
+    if (const auto* ps = data->params(etype))
+      for (const auto& p : *ps)
+        if (p.tag == tag && p.def.is_number()) return p.def.get<float>();
+    return fallback;
+  };
+  auto set_lump = [&](const char* tag, const json& v, const char* type) {
+    if (!n.extras.contains("lump") || !n.extras["lump"].is_object()) n.extras["lump"] = json::object();
+    if (!n.extras.contains("lump_types") || !n.extras["lump_types"].is_object()) n.extras["lump_types"] = json::object();
+    n.extras["lump"][tag] = v;
+    n.extras["lump_types"][tag] = type;
+  };
+
+  if (kind == BehaviorKind::Door) {
+    static const char* modes[] = {"approach", "locked", "always", "when"};
+    std::string open = b.value("open", std::string("approach"));
+    ImGui::TextUnformatted(tr("behavior.door.open"));
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::BeginCombo("##door", tr(("behavior.door." + open).c_str()))) {
+      for (const char* m : modes)
+        if (ImGui::Selectable(tr((std::string("behavior.door.") + m).c_str()), open == m) && open != m) {
+          b["open"] = m;
+          open = m;
+          changed = true;
+        }
+      ImGui::EndCombo();
+    }
+    tooltip(tr(("behavior.door." + open + ".tip").c_str()));
+    if (open == "when") {
+      json w = b.value("when", json::object());
+      if (ui_condition("door-when", w, false)) {
+        b["when"] = w;
+        changed = true;
+      }
+    }
+    if (open == "approach" || open == "when") {
+      float d = b.value("distance", 0.0f);
+      ImGui::SetNextItemWidth(-160);
+      ImGui::DragFloat(tr_id("behavior.door.distance").c_str(), &d, 0.1f, 0.f, 200.f, d > 0 ? "%.1f m" : "-");
+      edit_begin(before);
+      if (ImGui::IsItemEdited()) {
+        n.extras["og_behavior"] = b;
+        n.extras["og_behavior"]["distance"] = std::max(0.f, d);
+      }
+      edit_end(tr("undo.behavior"));
+      tooltip(tr("behavior.door.distance.tip"));
+    }
+  } else if (kind == BehaviorKind::Bouncer) {
+    ImGui::TextUnformatted(tr("behavior.bouncer.active"));
+    json a = b.value("active", json::object());
+    if (ui_condition("bouncer", a, true)) {
+      b["active"] = a;
+      changed = true;
+    }
+    float h = lump_float("spring-height", 45056.f) / kUnits;
+    ImGui::SetNextItemWidth(-160);
+    ImGui::DragFloat(tr_id("behavior.bouncer.height").c_str(), &h, 0.1f, 0.f, 200.f, "%.1f m");
+    edit_begin(before);
+    if (ImGui::IsItemEdited()) set_lump("spring-height", std::max(0.f, h) * kUnits, "float");
+    edit_end(tr("undo.behavior"));
+    tooltip(tr("behavior.bouncer.height.tip"));
+  } else if (kind == BehaviorKind::Elevator) {
+    ImGui::TextUnformatted(tr("behavior.elevator.leave"));
+    json l = b.value("leave", json::object());
+    if (ui_condition("elevator", l, true)) {
+      b["leave"] = l;
+      changed = true;
+    }
+    float v = lump_float("elevator-move-rate", 25600.f) / kUnits;
+    ImGui::SetNextItemWidth(-160);
+    ImGui::DragFloat(tr_id("behavior.elevator.speed").c_str(), &v, 0.05f, 0.1f, 100.f, "%.2f m/s");
+    edit_begin(before);
+    if (ImGui::IsItemEdited()) set_lump("elevator-move-rate", std::max(0.1f, v) * kUnits, "float");
+    edit_end(tr("undo.behavior"));
+  }
+
+  if (data->derives_from(etype, "crate")) {
+    // what kind of crate, what it holds
+    static const char* looks[] = {"wood", "iron", "steel", "metal", "blue", "darkeco"};
+    std::string look = "wood";
+    if (auto l = n.extras.find("lump"); l != n.extras.end() && l->is_object() && l->contains("crate-type")) {
+      const json& v = (*l)["crate-type"];
+      if (v.is_string()) look = v.get<std::string>();
+      if (!look.empty() && look[0] == '\'') look = look.substr(1);
+    }
+    ImGui::SetNextItemWidth(-160);
+    if (ImGui::BeginCombo(tr_id("behavior.crate.type").c_str(), look.c_str())) {
+      for (const char* k : looks)
+        if (ImGui::Selectable(k, look == k) && look != k) {
+          set_lump("crate-type", std::string("'") + k, "symbol");
+          commit_node_edit(before, tr("undo.behavior"));
+        }
+      ImGui::EndCombo();
+    }
+  }
+
+  // there or not
+  ImGui::TextUnformatted(tr("behavior.present"));
+  json p = b.value("present", json::object());
+  if (ui_condition("present", p, true)) {
+    b["present"] = p;
+    changed = true;
+  }
+  tooltip(tr("behavior.present.tip"));
+
+  if (changed) {
+    n.extras["og_behavior"] = b;
+    commit_node_edit(before, tr("undo.behavior"));
+  }
+}
+
+// --- the parameters of an actor: the res lumps its type's code reads -----------------------------
+
+void App::ui_actor_params(Node& n) {
+  const GameData* data = game_data().get();
+  const std::string etype = n.extras.value("etype", std::string());
+  const auto* params = data ? data->params(etype) : nullptr;
+  if (!params || params->empty()) return;
+  if (!ImGui::CollapsingHeader(strf(tr("params.title"), params->size()).c_str())) return;
+  ImGui::TextWrapped("%s", tr("params.help"));
+  if (!n.extras.contains("lump") || !n.extras["lump"].is_object()) n.extras["lump"] = json::object();
+  if (!n.extras.contains("lump_types") || !n.extras["lump_types"].is_object()) n.extras["lump_types"] = json::object();
+  const Node before = n;
+  json& lump = n.extras["lump"];
+  json& types = n.extras["lump_types"];
+  bool committed = false;
+  // a change made at once (not dragged): one undo step, after the change
+  auto commit = [&](const std::string& tag, const json& v, const char* type) {
+    lump[tag] = v;
+    types[tag] = type;
+    if (!committed) commit_node_edit(before, tr("undo.param"));
+    committed = true;
+  };
+  ImGui::PushItemWidth(-150);
+  for (const auto& p : *params) {
+    ImGui::PushID(p.tag.c_str());
+    const bool set = lump.contains(p.tag);
+    const json value = set ? lump[p.tag] : p.def;
+    const char* label = p.tag.c_str();
+    if (p.kind == "float") {
+      const auto v = numbers_of(value);
+      const bool meters = in_meters(p.tag);
+      float f = (float)(v.empty() ? 0.0 : v[0]) / (meters ? kUnits : 1.f);
+      ImGui::DragFloat(label, &f, meters ? 0.1f : 0.01f, 0, 0, meters ? "%.2f m" : "%.3f");
+      edit_begin(before);
+      if (ImGui::IsItemEdited()) {
+        lump[p.tag] = f * (meters ? kUnits : 1.f);
+        types[p.tag] = "float";
+      }
+      edit_end(tr("undo.param"));
+    } else if (p.kind == "floats" || p.kind == "ints") {
+      // a list of numbers, separated by spaces
+      std::string text;
+      for (double d : numbers_of(value)) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%g", d);
+        text += (text.empty() ? "" : " ") + std::string(buf);
+      }
+      if (ImGui::InputText(label, &text, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        json arr = json::array();
+        const char* s = text.c_str();
+        char* end = nullptr;
+        for (double d = std::strtod(s, &end); end != s; s = end, d = std::strtod(s, &end))
+          arr.push_back(p.kind == "ints" ? json((int64_t)std::llround(d)) : json(d));
+        commit(p.tag, arr, p.kind == "ints" ? "int32" : "float");
+      }
+      tooltip(tr("params.list.tip"));
+    } else if (p.kind == "int" || p.kind.rfind("enum:", 0) == 0) {
+      const auto v = numbers_of(value);
+      int64_t i = v.empty() ? 0 : (int64_t)std::llround(v[0]);
+      const GameData::Enum* en = p.kind.size() > 5 ? data->enumeration(p.kind.substr(5)) : nullptr;
+      if (en && en->bitfield) {
+        // the bits by their names
+        ImGui::TextUnformatted(label);
+        for (const auto& [name, bit] : en->values) {
+          bool on = (i >> bit) & 1;
+          ImGui::SameLine();
+          if (ImGui::Checkbox(name.c_str(), &on))
+            commit(p.tag, on ? (i | (int64_t(1) << bit)) : (i & ~(int64_t(1) << bit)), "uint32");
+        }
+      } else if (en) {
+        const char* current = "?";
+        for (const auto& [name, val] : en->values)
+          if (val == i) current = name.c_str();
+        if (ImGui::BeginCombo(label, current)) {
+          for (const auto& [name, val] : en->values)
+            if (ImGui::Selectable(name.c_str(), val == i) && val != i) commit(p.tag, val, "uint32");
+          ImGui::EndCombo();
+        }
+      } else {
+        int k = (int)i;
+        if (ImGui::InputInt(label, &k, 1, 10, ImGuiInputTextFlags_EnterReturnsTrue)) commit(p.tag, k, "int32");
+      }
+    } else if (p.kind == "symbol" || p.kind == "string") {
+      std::string s = value.is_string() ? value.get<std::string>() : std::string();
+      if (p.kind == "symbol" && !s.empty() && s[0] == '\'') s = s.substr(1);
+      if (ImGui::InputText(label, &s, ImGuiInputTextFlags_EnterReturnsTrue))
+        commit(p.tag, p.kind == "symbol" ? "'" + s : s, p.kind.c_str());
+    } else if (p.kind == "actor") {
+      // another actor of the level, by its name (the game's own links are its ids)
+      std::string current = value.is_string() ? value.get<std::string>() : std::string();
+      if (current.empty() && !numbers_of(value).empty()) {
+        const double aid = numbers_of(value)[0];
+        for (const auto& o : scene.nodes)
+          if (o.kind == NodeKind::Actor && o.extras.value("aid", -1.0) == aid) current = o.name;
+        if (current.empty()) current = tr("params.actor.missing");
+      }
+      if (ImGui::BeginCombo(label, current.empty() ? "-" : current.c_str(), ImGuiComboFlags_HeightLarge)) {
+        for (const auto& o : scene.nodes)
+          if (o.kind == NodeKind::Actor && o.id != n.id && !o.name.empty() &&
+              ImGui::Selectable(o.name.c_str(), o.name == current))
+            commit(p.tag, o.name, "actor-name");
+        ImGui::EndCombo();
+      }
+    } else if (p.kind == "eco-info") {
+      // what it holds: a pickup and how many
+      const auto v = numbers_of(value);
+      int64_t pick = v.size() > 0 ? (int64_t)v[0] : 0;
+      int amount = v.size() > 1 ? (int)v[1] : 1;
+      const GameData::Enum* en = data->enumeration("pickup-type");
+      const char* current = "?";
+      if (en)
+        for (const auto& [name, val] : en->values)
+          if (val == pick) current = name.c_str();
+      ImGui::SetNextItemWidth(ImGui::CalcItemWidth() * 0.65f);
+      if (ImGui::BeginCombo("##pickup", current, ImGuiComboFlags_HeightLarge)) {
+        if (en)
+          for (const auto& [name, val] : en->values)
+            if (ImGui::Selectable(name.c_str(), val == pick)) commit(p.tag, json::array({val, amount}), "int32");
+        ImGui::EndCombo();
+      }
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(ImGui::CalcItemWidth() * 0.35f - ImGui::GetStyle().ItemSpacing.x);
+      if (ImGui::InputInt("##amount", &amount, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue))
+        commit(p.tag, json::array({pick, std::max(0, amount)}), "int32");
+      ImGui::SameLine();
+      ImGui::TextUnformatted(label);
+    } else if (p.kind == "vector") {
+      auto v = numbers_of(value);
+      v.resize(4, 0.0);
+      float f[4] = {(float)v[0], (float)v[1], (float)v[2], (float)v[3]};
+      ImGui::DragFloat4(label, f, 1.f);
+      edit_begin(before);
+      if (ImGui::IsItemEdited()) {
+        lump[p.tag] = json::array({f[0], f[1], f[2], f[3]});
+        types[p.tag] = "vector";
+      }
+      edit_end(tr("undo.param"));
+    } else {
+      // paths, scripts, groups of actors: shown, not edited here
+      const char* what = p.kind == "path"     ? "params.path"
+                         : p.kind == "script" ? "params.script"
+                                              : "params.other";
+      ImGui::TextDisabled("%s", label);
+      ImGui::SameLine();
+      ImGui::TextDisabled(tr(what), value.is_array() ? value.size() : (size_t)0);
+      if (p.kind == "script" && value.is_string() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", value.get<std::string>().c_str());
+    }
+    // back to the game's value
+    if (set && p.kind != "path" && p.kind != "script" && p.kind != "data" && p.kind != "actor-groups") {
+      ImGui::SameLine();
+      if (ImGui::SmallButton("x")) {
+        lump.erase(p.tag);
+        types.erase(p.tag);
+        if (!committed) commit_node_edit(before, tr("undo.param"));
+        committed = true;
+      }
+      tooltip(tr("params.reset.tip"));
+    }
+    ImGui::PopID();
+  }
+  ImGui::PopItemWidth();
+}
+
+}  // namespace ogle

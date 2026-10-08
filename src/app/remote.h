@@ -3,7 +3,7 @@
 // Remote control of the editor, used by its MCP server (open-goal-level-editor --mcp, see mcp.cpp):
 // the editor listens on a local port (127.0.0.1 only) for requests, one JSON object per line,
 //
-//   {"id": 1, "tool": "open_level", "args": {"name": "ruins"}}
+//   {"id": 1, "tool": "open_level", "args": {"name": "hiphog"}}
 //
 // and answers each on its connection, one line too:
 //

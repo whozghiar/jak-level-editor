@@ -21,8 +21,10 @@ struct NavExportEntry {
   std::string name;   // its res 'name
 };
 
-// The grid-hash of a mesh's polygons (nav-mesh poly-hash), sized like the game's: about one cell
-// per polygon, cells of at least 4 m, one layer; each cell holds the polygons whose box meets it.
+// The grid-hash of a mesh's polygons (nav-mesh poly-hash), made like the game's: a box centered on
+// the mesh's origin, about one cell per polygon (cells of at least 4 m), one layer; each cell holds
+// the polygons whose box meets it, but those whose pat has bit 0. The same as the game's, byte for
+// byte, for every nav mesh of the game's levels.
 struct NavGrid {
   int dims[3] = {1, 1, 1};
   float axis_scale[3] = {0, 0, 0};

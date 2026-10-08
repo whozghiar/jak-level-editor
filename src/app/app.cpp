@@ -147,14 +147,13 @@ void App::apply_options(const AppOptions& opts) {
   // the library: the session's, else the one used last when it holds an extracted game, else
   // library/ in the editor's own tree
   std::string root = opts.library;
-  if (root.empty()) root = list_games(prefs.library_root).empty() ? default_library_root() : prefs.library_root;
-  set_library(root, opts.game.empty() ? prefs.library_game : opts.game);
+  if (root.empty()) root = game_folder(prefs.library_root).empty() ? default_library_root() : prefs.library_root;
+  set_library(root);
 }
 
 void App::new_document() {
   scene.clear();
   scene.settings = LevelSettings{};
-  if (!library.game().empty()) scene.settings.game = game_from_name(library.game(), scene.settings.game);
   history.clear();
   selection.clear();
   primary = hovered = 0;
@@ -262,7 +261,7 @@ void App::frame(float dt) {
   if (history.revision() != m_story_revision) apply_story_view();
   process_dialog_results();
   store.update();
-  if (m_index_merged.size() < games.size() || !m_index_applied) apply_library_index();
+  apply_library_index();
   poll_level_opening();
   poll_level_adding();
   poll_navmesh_generation();
@@ -320,7 +319,7 @@ void App::process_event(const void* ev) {
       if (e.drop.data) {
         std::string path = e.drop.data;
         std::error_code ec;
-        if (fs::is_directory(to_path(path), ec)) set_library(path, "");
+        if (fs::is_directory(to_path(path), ec)) set_library(path);
         else confirm_discard([this, path]() { open_project_file(path); });
       }
       break;
@@ -756,7 +755,7 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         frame(1.f / 60.f);
         // loading, or the catalog not complete yet (the index of the library)
         bool loading = m_level_future.valid() || store.pending() > 0 || thumbs.pending() > 0 || extract.process ||
-                       !m_index_applied || m_index_merged.size() < games.size() || navmesh_busy() ||
+                       !m_index_applied || navmesh_busy() ||
                        level_adding() || !to_add.empty();
         // the levels added to it (--add), one after the other once it is loaded
         if (!to_add.empty() && !m_level_future.valid() && !level_adding() && frame_index > 1) {
@@ -769,7 +768,6 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         if (setup == "extract" && !extraction_started && !extract.process && extract.detected_source == in &&
             extract.detect_error.empty()) {
           extraction_started = true;
-          extract.game = game_from_name(extract.detected_game);
           start_extraction();
           loading = true;
         }
@@ -871,10 +869,8 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
             frame_all();
           }
           if (setup == "export") {
-            // exported for another game (Jak 3 for Jak II's levels, else Jak II), in the capture's
-            // folder: the window and its report
+            // exported in the capture's folder: the window and its report
             open_export_window();
-            export_options = default_export_options(scene.settings.game == Game::Jak2 ? Game::Jak3 : Game::Jak2);
             export_options.folder = (tmp / "exports").generic_string();
             LevelExportReport rep;
             std::string err;

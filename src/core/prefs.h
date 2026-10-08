@@ -2,23 +2,21 @@
 
 // The editor's preferences, kept between sessions in the user's settings folder
 // (%APPDATA%/OpenGOAL/open-goal-level-editor on Windows, ~/.local/share/... on Linux): where the
-// extracted games are, the discs they came from, the language, recent projects. Thumbnails are
+// extracted game is, the disc it came from, the language, recent projects. Thumbnails are
 // cached next to them.
 
-#include <map>
 #include <string>
 #include <vector>
 
 namespace ogle {
 
 struct Prefs {
-  // the folder ogle-extract writes to: one subfolder per extracted game (jak1/, jak2/, jak3/)
+  // the folder ogle-extract writes to: the game in its subfolder jak3/
   std::string library_root;
-  std::string library_game;                            // game shown by the Levels panel ("jak2")
-  std::map<std::string, std::string> extract_sources;  // game -> the user's .iso or disc folder
-  std::string language;                                // "" = the system's
+  std::string extract_source;  // the user's .iso or disc folder
+  std::string language;        // "" = the system's
   std::vector<std::string> recent_projects;
-  std::map<std::string, std::string> export_folders;   // game -> where levels are exported for it
+  std::string export_folder;   // where levels are exported
   // the command line modes (captures, tests) read the preferences, never write them
   static inline bool read_only = false;
 

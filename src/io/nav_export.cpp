@@ -131,7 +131,7 @@ int write_mesh(BlobWriter& w, const NavExportEntry& e, float nearest_y, int max_
       if (k < p.count) lo = std::min(lo, v.y), hi = std::max(hi, v.y);
     }
     w.u8(q + 12, (uint8_t)i);
-    w.u8(q + 13, 0);  // pat
+    w.u8(q + 13, p.pat);
     w.u8(q + 14, (uint8_t)p.count);
     w.u8(q + 15, 255);  // link: none
     for (int k = 0; k < 4; k++) w.u8(q + 28 + k, (uint8_t)(k < p.count && p.adj[k] >= 0 ? p.adj[k] : 255));
@@ -196,19 +196,20 @@ NavGrid navmesh_grid(const NavMeshData& m) {
   AABB vb;
   for (const auto& v : m.verts) vb.add(v * kUnits);
   if (!vb.valid() || n == 0) return g;
-  // the box written is the corners' own; the cells divide it widened by a quarter meter on each
-  // side (as the game's meshes have it)
+  // the box written reaches the farthest corner on each side of the origin (the corners' own box
+  // when the origin is their center); the cells divide it widened by a quarter meter on each side
   float size[3];
   for (int k = 0; k < 3; k++) {
-    g.box_min[k] = vb.lo[k];
-    g.box_max[k] = vb.hi[k];
-    size[k] = std::max(kMinCell, vb.hi[k] - vb.lo[k] + 2 * kGridMargin);
+    const float half = std::max(std::fabs(vb.lo[k]), std::fabs(vb.hi[k]));
+    g.box_min[k] = -half;
+    g.box_max[k] = half;
+    size[k] = std::max(kMinCell, 2 * half + 2 * kGridMargin);
   }
-  // about one cell per polygon, the cells as square as the box allows (the rule that gives every
-  // nav mesh of Jak II its grid)
+  // about one cell per polygon, the cells as square as the box allows (the rule the game's own
+  // nav meshes follow)
   g.bucket_size = (n + 7) / 8;
   const float f = std::sqrt((float)n / (size[0] * size[2]));
-  const int cap = std::min(126, n - 1);
+  const int cap = std::min(126, n);
   g.dims[0] = std::max(1, std::min((int)(f * size[0]), cap));
   g.dims[1] = 1;
   g.dims[2] = std::max(1, std::min((int)(f * size[2]), cap));
@@ -222,6 +223,7 @@ NavGrid navmesh_grid(const NavMeshData& m) {
   };
   for (int i = 0; i < n; i++) {
     const NavPoly& p = m.polys[i];
+    if (p.pat & 1) continue;
     AABB b;
     for (int k = 0; k < p.count; k++) b.add(m.verts[p.v[k]] * kUnits);
     for (int y = cell(b.lo.y, 1); y <= cell(b.hi.y, 1); y++)
@@ -307,6 +309,7 @@ bool navmeshes_of_blob(const NavBlobView& b, std::vector<NavMeshData>* out) {
       const int q = polys + 64 * i;
       NavPoly p;
       p.count = b.u8(q + 14);
+      p.pat = b.u8(q + 13);
       if (p.count < 3 || p.count > 4) return false;
       for (int k = 0; k < p.count; k++) {
         const auto key = std::make_tuple(b.u32(q + 16 * k), b.u32(q + 16 * k + 4), b.u32(q + 16 * k + 8));

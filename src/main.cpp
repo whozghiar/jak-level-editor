@@ -1,6 +1,6 @@
-// open-goal-level-editor: a simple level editor for OpenGOAL (Jak 1, Jak 2, Jak 3).
+// open-goal-level-editor: a simple level editor for OpenGOAL (Jak 3).
 //
-//   open-goal-level-editor [project.glb] [--library <folder>] [--lang en|fr] [--game jak1|jak2|jak3]
+//   open-goal-level-editor [project.glb] [--library <folder>] [--lang en|fr]
 //   open-goal-level-editor --screenshot <level|disc|-> <image.png> [setup] [--size WxH] [--library <folder>]
 //                          [--lang code] [--camera x,y,z,yaw,pitch] [--story off|<step>|<node>]
 //                          [--select a,b,...] [--add a,b,...]
@@ -56,9 +56,8 @@ void usage() {
   std::printf(
       "open-goal-level-editor\n"
       "  [project.glb]                        opens a project\n"
-      "  --library <folder>                   the folder of the extracted games (for this session)\n"
+      "  --library <folder>                   the folder of the extracted game (for this session)\n"
       "  --lang <code>                        the interface language (for this session): en, fr...\n"
-      "  --game <jak1|jak2|jak3>              the game of the library shown (for this session)\n"
       "  --screenshot <in> <image.png> [setup] [--size WxH] [--camera x,y,z,yaw,pitch]\n"
       "               [--story off|<step>|<node>] [--select a,b,...] [--add a,b,...]\n"
       "                                       runs the editor in a hidden window and saves a capture;\n"
@@ -66,7 +65,7 @@ void usage() {
       "                                       decor, decor-all (<in> = a level name of the library),\n"
       "                                       project (<in> = a project .glb; select, scale, prefab and\n"
       "                                       navmesh take one too), navmesh (its nav meshes, made when\n"
-      "                                       there are none), export (exported for another game: the\n"
+      "                                       there are none), export (exported for the game: the    \n"
       "                                       window and its report), extract (<in> = an .iso or a disc\n"
       "                                       folder), help; --story: every state, a step, or just after a task\n"
       "                                       node; --select: the elements select, scale and prefab use;\n"
@@ -112,8 +111,6 @@ int main(int argc, char** argv) {
       opts.select = next();
     } else if (a == "--add") {
       opts.add = next();
-    } else if (a == "--game") {
-      opts.game = next();
     } else if (a == "--size") {
       std::string s = next();
       std::sscanf(s.c_str(), "%dx%d", &width, &height);

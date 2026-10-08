@@ -1,6 +1,6 @@
 #pragma once
 
-// What the editor knows of a game beyond its extracted files: data/<game>/game-data.json, made by
+// What the editor knows of Jak 3 beyond its extracted files: data/jak3/game-data.json, made by
 // tools/gen_game_data.py from the decompiled game code.
 //
 //   actor roles  the actor types that are creatures (enemies, characters, the Titan suit) or logic
@@ -12,9 +12,12 @@
 //                its neighbors (the levels the game displays together with it somewhere) and its
 //                continue points (where the game starts the player, and the levels shown there)
 //   story        the task nodes in the order of the game, and what they change in the levels
-//   enums        enums whose values differ between the games (pickup-type), mapped by name
+//   params       per object type, the res lumps its code reads (what configures an actor of it)
+//   parents      the parent of each such type, up to process (what kind of object it is)
+//   code         the code file of the types outside the common code, and what each file needs
+//   enums        the enums of those lumps (option bits, pickups)
 //
-// The story of Jak II and Jak 3: each level has a task mask, changed by the task nodes of its
+// The story: each level has a task mask, changed by the task nodes of its
 // task level as they close; an actor exists while its kill mask and that mask share no bit.
 // Some decor prototypes and actor types are shown or hidden by conditions on the nodes, and open
 // nodes lend layers to levels.
@@ -27,6 +30,7 @@
 #include <vector>
 
 #include "core/math.h"
+#include "json.hpp"
 
 namespace ogle {
 
@@ -108,7 +112,6 @@ class GameData {
  public:
   bool load(const std::string& path, std::string* error);
   bool loaded() const { return m_loaded; }
-  const std::string& game() const { return m_game; }
 
   // actors
   ActorRole role(const std::string& etype) const;
@@ -135,10 +138,25 @@ class GameData {
   // whether the game has an actor type of that name (known by its role, family, models...), not a
   // placeholder its type table keeps for an older game's entities
   bool has_type(const std::string& etype) const;
-  // a value of one of the game's enums (enums: "pickup-type") by its name, -1 when none; the name
-  // of a value, "" when none
-  int enum_value(const std::string& en, const std::string& name) const;
-  std::string enum_name(const std::string& en, int value) const;
+  // whether `etype` is `base` or derives from it
+  bool derives_from(const std::string& etype, const std::string& base) const;
+  // the res lumps the code of `etype` reads: tag -> kind ("float", "floats", "int", "enum:<name>",
+  // "symbol", "string", "vector", "path", "actor", "actor-groups", "eco-info", "script", "data")
+  // and default (null when none)
+  struct Param {
+    std::string tag, kind;
+    nlohmann::json def;
+  };
+  const std::vector<Param>* params(const std::string& etype) const;
+  // an enum of those lumps: its names and values (bit indices for a bitfield)
+  struct Enum {
+    bool bitfield = false;
+    std::vector<std::pair<std::string, int64_t>> values;
+  };
+  const Enum* enumeration(const std::string& name) const;
+  // the code files (.o stems, in their order) a type needs beyond the common code: the file it
+  // is defined in, after the files before it in its level's DGO; empty for the common code
+  std::vector<std::string> code_files(const std::string& etype) const;
 
   const LevelInfo* level(const std::string& name) const;
   const OceanMap* ocean(const std::string& name) const;
@@ -167,7 +185,6 @@ class GameData {
 
  private:
   bool m_loaded = false;
-  std::string m_game;
   std::unordered_map<std::string, ActorRole> m_roles;
   std::vector<std::string> m_creature_suffixes;
   std::unordered_map<std::string, bool> m_water_types;
@@ -176,7 +193,10 @@ class GameData {
   std::unordered_map<std::string, std::string> m_objects;
   std::unordered_map<std::string, std::vector<std::string>> m_type_models;
   std::unordered_map<std::string, std::string> m_skeletons;
-  std::map<std::string, std::map<std::string, int>> m_enums;
+  std::unordered_map<std::string, std::string> m_parents, m_code;
+  std::unordered_map<std::string, std::vector<std::string>> m_code_needs;
+  std::unordered_map<std::string, std::vector<Param>> m_params;
+  std::unordered_map<std::string, Enum> m_enums;
   std::map<std::string, LevelInfo> m_levels;
   std::map<std::string, OceanMap> m_oceans;
   std::vector<StoryNode> m_nodes;
@@ -194,7 +214,7 @@ class GameData {
   uint32_t m_bit_special = 1u << 12, m_bit_primary = 1u << 13, m_bit_ctywide = 1u << 14, m_bit_never = 1u << 15;
 };
 
-// data/<game>/game-data.json next to the editor, else in the source tree it was built from.
-std::string game_data_path(const std::string& game);
+// data/jak3/game-data.json next to the editor, else in the source tree it was built from.
+std::string game_data_path();
 
 }  // namespace ogle

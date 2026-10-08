@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generates data/<game>/game-data.json: what the editor knows about a game beyond the extracted
-files. It reads the decompiled game code of a jak-project checkout (goal_src/<game>, read only)
-and the extractor's type table (extractor/data/<game>/all-types.gc).
+"""Generates data/jak3/game-data.json: what the editor knows about Jak 3 beyond the extracted
+files. It reads the decompiled game code of a jak-project checkout (goal_src/jak3, read only)
+and the extractor's type table (extractor/data/jak3/all-types.gc).
 
   actors.roles        actor types that are creatures or logic (the others are objects), from
                       their base types
@@ -9,7 +9,7 @@ and the extractor's type table (extractor/data/<game>/all-types.gc).
                       names its particle group)
   actors.unlisted     the logic the catalog does not offer: it does nothing, brings creatures,
                       runs a cutscene or a demo
-  actors.placeholders types the type table keeps for the entities of an older game, that spawn
+  actors.placeholders types the type table keeps for the entities of the older games, that spawn
                       nothing of theirs (process-drawable-reserved)
   actors.water_looks  the model of each "look" of the water-anim actors (water, dark eco, lava)
   oceans              the ocean maps: corner, height, the cells the ocean covers, and the color of
@@ -19,12 +19,11 @@ and the extractor's type table (extractor/data/<game>/all-types.gc).
                       points (where the game starts the player, in meters, and the levels shown)
   story               the task nodes in game order (task masks, borrowed layers) and what the
                       story shows or hides: decor prototypes of a level, actor types
-  enums               enums of the game the export for another game maps by name (pickup-type:
-                      what crates and pickups hold)
 
-Usage: python tools/gen_game_data.py <jak-project>/goal_src [jak1 jak2 jak3]
+Usage: python tools/gen_game_data.py <jak-project>/goal_src
 """
 
+import glob
 import json
 import os
 import re
@@ -38,48 +37,27 @@ REPO = os.path.dirname(HERE)
 # `logic` or is a process that draws nothing (not a process-drawable). Types ending with one of
 # `creature_suffixes` are creatures even when the type table does not know them (the cutscene
 # characters "jak-highres"...).
-GAMES = {
-    'jak1': {
-        'creatures': ['nav-enemy', 'process-taskable', 'pelican', 'seagull', 'lurkerworm', 'village-fish',
-                      'robotboss', 'plant-boss', 'ogreboss', 'ogreboss-village2', 'flying-lurker', 'bully',
-                      'puffer', 'yeti', 'yeti-slave', 'mother-spider', 'spider-egg', 'swamp-rat-nest',
-                      'swamp-rat-nest-dummy', 'lightning-mole', 'junglefish', 'sidekick', 'target'],
-        'objects': [],
-        'logic': ['part-spawner', 'water-vol', 'battlecontroller', 'pov-camera', 'camera-tracker', 'manipy',
-                  'touch-tracker', 'voicebox', 'viewer', 'anim-tester', 'process-drawable-reserved'],
-        # logic not offered by the catalog (the water volumes need the planes of their level)
-        'unlisted': ['water-vol', 'battlecontroller', 'pov-camera', 'camera-tracker', 'manipy', 'touch-tracker',
-                     'viewer', 'anim-tester', 'process-drawable-reserved'],
-    },
-    'jak2': {
-        'creatures': ['enemy', 'process-taskable', 'mech', 'wren', 'sidekick', 'target',
-                      # characters that are neither: Samos at the stadium, a grunt of a cutscene;
-                      # what makes guards talk to each other
-                      'stad-samos', 'stad-youngsamos', 'sig-intro-grunt', 'guard-conversation'],
-        # enemy subtypes that are machines
-        'objects': ['fort-turret', 'sew-gunturret', 'hip-whack-a-metal'],
-        'logic': ['part-spawner', 'process-hidden', 'battle', 'training-path', 'parking-spot', 'manipy',
-                  'touch-tracker', 'viewer', 'process-drawable-reserved'],
-        # process-hidden: the types of Jak 1 the game keeps and kills at once (water-vol, ecovent,
-        # fuel-cell...); the fights, formations and spawners of enemies; cutscenes, demo, training
-        'unlisted': ['process-hidden', 'battle', 'hover-formation', 'flying-formation', 'jellyfish-formation',
-                     'nestb-formation', 'metalhead-spawner', 'predator-manager', 'forest-hover-manager',
-                     'hoverboard-training-manager', 'training-manager', 'training-path', 'demo-control',
-                     'scene-stage', 'manipy', 'touch-tracker', 'viewer', 'process-drawable-reserved'],
-    },
-    'jak3': {
-        'creatures': ['enemy', 'process-taskable', 'mech', 'sidekick', 'target'],
-        'objects': [],
-        'logic': ['part-spawner', 'process-hidden', 'w-parking-spot', 'manipy', 'touch-tracker', 'viewer',
-                  'process-drawable-reserved', 'editable-player', 'nav-mesh-editor'],
-        'unlisted': ['process-hidden', 'manipy', 'touch-tracker', 'viewer', 'process-drawable-reserved',
-                     'editable-player', 'nav-mesh-editor'],
-    },
+GAME = 'jak3'
+ROLES = {
+    'creatures': ['enemy', 'process-taskable', 'mech', 'sidekick', 'target'],
+    'objects': [],
+    'logic': ['part-spawner', 'process-hidden', 'w-parking-spot', 'manipy', 'touch-tracker', 'viewer',
+              'process-drawable-reserved', 'editable-player', 'nav-mesh-editor'],
+    'unlisted': ['process-hidden', 'manipy', 'touch-tracker', 'viewer', 'process-drawable-reserved',
+                 'editable-player', 'nav-mesh-editor'],
 }
 CREATURE_SUFFIXES = ['-highres']
 
 # The families of the objects in the editor's catalog: the first base type of an object's
 # ancestry found here, else the first word of FAMILY_WORDS in its name, else "other".
+# Base types that code of every kind names as its owner (a defbehavior of a one-off process): they
+# own no model, and the parameters read there are not their subtypes'.
+GENERIC_TYPES = {'process', 'process-tree', 'process-drawable', 'process-focusable'}
+
+# The data of an actor the builder or the editor writes itself, or that only places it: not shown
+# as a parameter of its type.
+NOT_PARAMS = {'name', 'trans', 'quat', 'visvol', 'vis-dist', 'kill-mask', 'task-actor', 'art-name', 'lod-dist'}
+
 FAMILY_BASES = [
     ('water-anim', 'water'), ('crate', 'crate'), ('collectable', 'collectable'), ('eco', 'collectable'),
     ('basebutton', 'button'), ('com-airlock', 'door'), ('eco-door', 'door'), ('elevator', 'platform'),
@@ -476,8 +454,148 @@ def visibility_rules(body, states):
     return rules[0] if len(rules) == 1 else ['and'] + rules
 
 
-def game_data(goal_src, game):
-    cfg = GAMES[game]
+# --- the parameters of the actor types: the res lumps their code reads ----------------------------
+
+RX_LUMP = re.compile(r"\((res-lump-float|res-lump-value|res-lump-struct|res-lump-data|entity-actor-lookup)\s+"
+                     r"(?:\([^()]*(?:\([^()]*\)[^()]*)*\)|[^\s()]+)\s+'([a-z0-9?!*+<>=/_-]+)")
+RX_PROPERTY = re.compile(r"\(\(method-of-type res-lump get-property-(struct|value)\)\s+"
+                         r"(?:\([^()]*\)|\S+)\s+'([a-z0-9-]+)")
+RX_TAG_IDX = re.compile(r"\(lookup-tag-idx \S+ '([a-z0-9-]+)")
+RX_PATH = re.compile(r"\(new '\w+ '(?:path-control|curve-control) \S+ '([a-z0-9-]+)")
+RX_NEW = re.compile(r"\(new '\w+ '([a-z0-9-]+)")
+RX_CALL = re.compile(r"\(([a-z][a-z0-9!?*<>=/+-]*)[\s)]")
+RX_OWNER = re.compile(r'^\((?:defmethod ([^\s()]+) \(\((?:this|obj|self) ([^\s()]+)\)|'
+                      r'defmethod ([^\s()]+) ([^\s()]+) \(|defstate [^\s()]+ \(([^\s()]+)\)|'
+                      r'defbehavior ([^\s()]+) ([^\s()]+) |defun ([^\s()]+) )', re.M)
+
+
+def lump_read(kind, rest):
+    """(kind of value, default) of a res-lump-* call, from the text after its tag."""
+    rest = rest.strip()
+    m = re.match(r'(\([^()]*\)|[^\s()]+)', rest)
+    arg = m.group(1) if m else ''
+    default = None
+    d = re.search(r':default\s+(?:\(the-as \S+ )?(-?[0-9.]+)', rest)
+    if d:
+        default = float(d.group(1))
+    if kind == 'res-lump-float':
+        return 'float', default if default is not None else 0.0
+    if kind == 'entity-actor-lookup':
+        return 'actor', None
+    if kind == 'res-lump-value':
+        enum = None if arg in ('uint128', 'uint', 'int', 'int32', 'uint32', 'int64', 'uint64', ':default', ':time') else arg
+        return ('enum:' + enum if enum else 'int'), default if default is not None else 0
+    if kind == 'res-lump-struct':
+        return {'pair': 'script', 'string': 'string', 'symbol': 'symbol', 'vector': 'vector'}.get(arg, 'data'), None
+    return {'(pointer float)': 'floats', '(pointer int32)': 'ints', '(pointer actor-group)': 'actor-groups',
+            'vector': 'vector'}.get(arg, 'data'), None
+
+
+def actor_params(paths, lineage, actor_types):
+    """Per actor type, the res lumps its code reads (its own methods, states and behaviors, its
+    parents', the functions they call and the helpers they make: paths, sync, facts): tag -> [kind,
+    default]."""
+    direct = {}   # owner (a type, or 'fn:<name>', or 'new:<type>') -> tag -> (kind, default)
+    calls = {}    # owner -> names called
+    news = {}     # owner -> types made with (new 'process 'x ...)
+    for path in paths:
+        text = read(path)
+        for m in RX_OWNER.finditer(text):
+            g = m.groups()
+            if g[7]:
+                owner = 'fn:' + g[7]
+            elif g[0] == 'new' or g[2] == 'new':
+                owner = 'new:' + (g[1] or g[3])
+            elif g[6]:
+                owner = g[6] if g[6] not in GENERIC_TYPES else 'fn:' + g[5]
+                calls.setdefault('fn:' + g[5], set())
+            else:
+                owner = g[1] or g[3] or g[4]
+            body = text[m.start():form_end(text, m.start())]
+            reads = direct.setdefault(owner, {})
+            for lm in RX_LUMP.finditer(body):
+                rest = body[lm.end():form_end(body, lm.start())]
+                kind, default = lump_read(lm.group(1), rest[:-1])
+                old = reads.get(lm.group(2))
+                if old is None or old[0] in ('data', 'int') and kind not in ('data', 'int'):
+                    reads[lm.group(2)] = (kind, default)
+            for pm in RX_PROPERTY.finditer(body):
+                call = body[pm.start():form_end(body, pm.start())]
+                sym = re.search(r"\(the-as structure '([a-z0-9-]+)\)", call)
+                if pm.group(1) == 'struct' and sym:
+                    reads.setdefault(pm.group(2), ('symbol', sym.group(1)))
+                else:
+                    reads.setdefault(pm.group(2), ('data' if pm.group(1) == 'struct' else 'int', None))
+            for pm in RX_TAG_IDX.finditer(body):
+                reads.setdefault(pm.group(1), ('eco-info' if pm.group(1) == 'eco-info' else 'data', None))
+            for pm in RX_PATH.finditer(body):
+                reads.setdefault(pm.group(1), ('path', None))
+            if re.search(r'\(initialize! \(-> (?:this|self) sync\)', body):
+                reads.setdefault('sync', ('floats', None))
+            calls.setdefault(owner, set()).update(c for c in RX_CALL.findall(body))
+            news.setdefault(owner, set()).update(RX_NEW.findall(body))
+
+    def gather(owner, out, seen, depth):
+        if owner in seen or depth > 3:
+            return
+        seen.add(owner)
+        for tag, v in direct.get(owner, {}).items():
+            old = out.get(tag)
+            if old is None or old[0] in ('data', 'int') and v[0] not in ('data', 'int'):
+                out[tag] = v
+        for name in calls.get(owner, ()):
+            if 'fn:' + name in direct:
+                gather('fn:' + name, out, seen, depth + 1)
+        for t in news.get(owner, ()):
+            for up in lineage(t):
+                if 'new:' + up in direct:
+                    gather('new:' + up, out, seen, depth + 1)
+
+    out = {}
+    for t in actor_types:
+        reads, seen = {}, set()
+        for up in lineage(t):
+            if up not in GENERIC_TYPES:
+                gather(up, reads, seen, 0)
+        params = {}
+        for tag, (kind, default) in sorted(reads.items()):
+            if tag in NOT_PARAMS:
+                continue
+            # the scripts read as a plain structure (on-activate, open-test...)
+            if kind == 'data' and (tag.startswith('on-') or tag.endswith('-test')):
+                kind = 'script'
+            params[tag] = [kind, default]
+        if params:
+            out[t] = params
+    return out
+
+
+def type_code(root, paths):
+    """The code file (its .o stem) each type of the game's code is defined in, when it is not in
+    the common code (GAME.CGO), and for each such file the code files before it in the first DGO
+    that has it (what it needs)."""
+    dgos = {}
+    for gd in sorted(glob.glob(os.path.join(root, 'dgos', '*.gd'))):
+        dgos[os.path.basename(gd)] = re.findall(r'"([^"]+)\.o"', read(gd))
+    common = set(dgos.get('game.gd', []))
+    defined = {}
+    for path in paths:
+        stem = os.path.splitext(os.path.basename(path))[0]
+        if stem in common:
+            continue
+        for t in re.findall(r'^\(deftype ([^\s()]+) ', read(path), re.M):
+            defined.setdefault(t, stem)
+    needs = {}
+    for stem in sorted(set(defined.values())):
+        for name, files in dgos.items():
+            if name != 'game.gd' and stem in files:
+                needs[stem] = [f for f in files[:files.index(stem)] if f not in common]
+                break
+    return {t: s for t, s in sorted(defined.items()) if s in needs}, dict(sorted(needs.items()))
+
+
+def game_data(goal_src):
+    game, cfg = GAME, ROLES
     root = os.path.join(goal_src, game)
     engine = list(sources(os.path.join(root, 'engine')))
     everything = list(sources(root))
@@ -537,9 +655,9 @@ def game_data(goal_src, game):
                 skel_models[str(form[1])] = re.sub(r'^skel-|^\*|-sg\*$', '', str(form[1]))
 
     # --- the models of each type: the skeleton groups its methods, states and behaviors load
-    # ("skel-x" in Jak II and 3, *x-sg* in Jak 1), in the order of the code (the first one is
-    # usually what init-from-entity! draws). A type without any takes its parent's.
-    rx_skel = re.compile(r'"(skel-[^"\s]+)"|(\*[\w-]+-sg\*)')
+    # ("skel-x"), in the order of the code (the first one is usually what init-from-entity!
+    # draws). A type without any takes its parent's.
+    rx_skel = re.compile(r'"(skel-[^"\s]+)"')
     rx_owner = re.compile(r'^\((?:defmethod ([^\s()]+) \(\((?:this|obj|self) ([^\s()]+)\)|'
                           r'defmethod ([^\s()]+) ([^\s()]+) \(|defstate [^\s()]+ \(([^\s()]+)\)|'
                           r'defbehavior ([^\s()]+) ([^\s()]+) )', re.M)
@@ -557,21 +675,21 @@ def game_data(goal_src, game):
     order = 0
     for path in everything:
         text = read(path)
-        if 'skel-' not in text and '-sg*' not in text:
+        if 'skel-' not in text:
             continue
         for m in rx_owner.finditer(text):
             g = m.groups()
             method, owner = (g[0], g[1]) if g[1] else (g[2], g[3]) if g[3] else ('', g[4]) if g[4] else (g[5], g[6])
-            # a defbehavior can name a bare base type (process, process-tree) as owner: a generic
-            # utility spawned as one-off code on many unrelated processes (a jungle camera trigger
-            # attached to `process` in Jak 1), not a type of its own; it draws nothing on its own
-            # (unlike process-drawable and below), so it never owns a model
-            if 'process-drawable' not in lineage(owner):
+            # a defbehavior can name a base type (process, process-drawable...) as owner: a utility
+            # spawned as one-off code on many unrelated processes (the legs of the terraformer), not
+            # a type of its own: the base types never own a model, else every type below them
+            # without a model of its own would take it
+            if 'process-drawable' not in lineage(owner) or owner in GENERIC_TYPES:
                 continue
             init = 'init' in (method or '')
             body = text[m.start():form_end(text, m.start())]
             for sm in rx_skel.finditer(body):
-                model = skel_models.get(sm.group(1) or sm.group(2))
+                model = skel_models.get(sm.group(1))
                 if model:
                     order += 1
                     note(owner, model, init, order)
@@ -604,9 +722,9 @@ def game_data(goal_src, game):
     out['actors']['effects'] = sorted(t for t in parent if 'part-spawner' in lineage(t))
     out['actors']['unlisted'] = sorted(t for t in parent
                                        if roles.get(t) == 'logic' and any(x in cfg['unlisted'] for x in lineage(t))
-                                       and 'water-anim' not in lineage(t))  # Jak 1's water is a water-vol
+                                       and 'water-anim' not in lineage(t))
     # the types kept in the type table for the entities of older games, that spawn nothing of
-    # theirs (Jak 3's cty-fruit-stand...): not objects of the game
+    # theirs (cty-fruit-stand...): not objects of the game
     placeholders = sorted(t for t in parent if t != 'process-drawable-reserved'
                           and 'process-drawable-reserved' in lineage(t))
     out['actors']['placeholders'] = placeholders
@@ -619,6 +737,26 @@ def game_data(goal_src, game):
     # (art-name: "skel-" + its value)
     out['actors']['skeletons'] = {re.sub(r'^skel-', '', k): v for k, v in sorted(skel_models.items())
                                   if k.startswith('skel-') and re.sub(r'^skel-', '', k) != v}
+    # what configures each object and logic actor: the res lumps its code reads; where its code is
+    actor_types = [t for t in parent if t in out['actors']['objects'] or roles.get(t) == 'logic']
+    out['actors']['params'] = actor_params(everything, lineage, actor_types)
+    # the parent of each of them, up to process: what a type is a kind of (a door, a bouncer...)
+    parents = {}
+    for t in actor_types:
+        for up in lineage(t)[:-1]:
+            if up in parent:
+                parents[up] = parent[up]
+    out['actors']['parents'] = dict(sorted(parents.items()))
+    out['actors']['code'], out['code_needs'] = type_code(root, everything)
+    # the enums of those parameters (option bits, pickups), by name: [[name, value or bit], ...]
+    enum_names = {k[5:] for ps in out['actors']['params'].values() for k, _ in ps.values() if k.startswith('enum:')}
+    enum_names.add('pickup-type')
+    out['enums'] = {}
+    for name in sorted(enum_names):
+        values = enum_values(everything, name)
+        if values:
+            bitfield = bool(re.search(r'\(defenum ' + re.escape(name) + r'\s[^()]*:bitfield #t', types_text))
+            out['enums'][name] = {'bitfield': bitfield, 'values': sorted(values.items(), key=lambda kv: kv[1])}
     looks = []
     for path, form in forms_matching(engine, r'^\(define \*water-anim-look\*', 'water-anim-look'):
         for f in walk(form):
@@ -689,16 +827,11 @@ def game_data(goal_src, game):
                         'cell': 96.0, 'cells': rows, 'color': color, 'far_color': far_color}
     out['oceans'] = dict(sorted(oceans.items()))
 
-    # --- enums: their values differ between the games, their names mostly do not ----------------
-    out['enums'] = {name: enum_values(engine, name) for name in ('pickup-type',)}
-
     # --- levels ----------------------------------------------------------------------------------
     task_bits = enum_values(engine, 'task-mask')
     levels = {}
     info_path = os.path.join(root, 'engine', 'level', 'level-info.gc')
     info_text = read(info_path)
-    # Jak 3 levels set the height of their ocean
-    ocean_height_field = ':ocean-height' in info_text
     for form in parse(info_text):
         if head(form) != 'define' or len(form) != 3 or not is_new(form[2], 'level-load-info'):
             continue
@@ -708,15 +841,13 @@ def game_data(goal_src, game):
         lev = {'taskname': str(unquote(kw['taskname'])) if kw.get('taskname') else name,
                'base_mask': bits_value(kw.get('base-task-mask', 0), task_bits),
                'ocean': str(ocean) if isinstance(ocean, Sym) and str(ocean) in oceans else None}
-        if lev['ocean'] and ocean_height_field:
+        if lev['ocean']:  # the height of its ocean
             lev['ocean_height'] = round(float(kw.get('ocean-height', 0.0)) / 4096.0, 4)
-        # the far ocean (the sea to the horizon): Jak II's ocean-far?, Jak 3's level flag; Jak 1
-        # draws it with its ocean map
+        # the far ocean (the sea to the horizon): the level flag
         flags = kw.get('level-flags')
-        lev['ocean_far'] = (kw.get('ocean-far?') is True or (is_list(flags) and 'ocean-far' in [str(f) for f in flags])
-                            or (game == 'jak1' and lev['ocean'] is not None))
+        lev['ocean_far'] = is_list(flags) and 'ocean-far' in [str(f) for f in flags]
         # its continue points (where the game starts the player): their position, and the levels
-        # the game displays there (Jak II and III: the want list; Jak 1: lev0 and lev1)
+        # the game displays there (the want list)
         continues, wants = [], set()
         for f in walk(unquote(kw.get('continues', []))):
             if not is_new(f, 'continue-point'):
@@ -728,10 +859,6 @@ def game_data(goal_src, game):
                     wk = kwargs(w)
                     if unquote(wk.get('display?')) in ('display', 'special') and unquote(wk.get('name')):
                         shows.append(str(unquote(wk['name'])))
-            for i in (0, 1):
-                lv, disp = unquote(k.get('lev%d' % i)), unquote(k.get('disp%d' % i))
-                if isinstance(lv, Sym) and disp in ('display', 'special'):
-                    shows.append(str(lv))
             trans = kwargs(k['trans']) if is_new(k.get('trans'), 'vector') else {}
             position = [game_units(trans.get(c, 0.0)) for c in 'xyz']
             continues.append({'name': str(k.get('name', '')),
@@ -933,19 +1060,18 @@ def main():
         print(__doc__)
         return 1
     goal_src = sys.argv[1]
-    for game in sys.argv[2:] or ['jak1', 'jak2', 'jak3']:
-        data = game_data(goal_src, game)
-        path = os.path.join(REPO, 'data', game, 'game-data.json')
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            json.dump(data, f, indent=1, sort_keys=False)
-            f.write('\n')
-        story = data['story']
-        print('%s: %d actor roles, %d water looks, %d oceans, %d levels (%d layers), %s' % (
-            game, len(data['actors']['roles']), len(data['actors']['water_looks']), len(data['oceans']),
-            len(data['levels']), sum(1 for l in data['levels'].values() if l['layer']),
-            'no story' if not story else '%d story nodes, %d prototype levels, %d actor types' % (
-                len(story['nodes']), len(story['prototypes']), len(story['types']))))
+    data = game_data(goal_src)
+    path = os.path.join(REPO, 'data', GAME, 'game-data.json')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        json.dump(data, f, indent=1, sort_keys=False)
+        f.write('\n')
+    story = data['story']
+    print('%s: %d actor roles, %d water looks, %d oceans, %d levels (%d layers), %s' % (
+        GAME, len(data['actors']['roles']), len(data['actors']['water_looks']), len(data['oceans']),
+        len(data['levels']), sum(1 for l in data['levels'].values() if l['layer']),
+        'no story' if not story else '%d story nodes, %d prototype levels, %d actor types' % (
+            len(story['nodes']), len(story['prototypes']), len(story['types']))))
     return 0
 
 

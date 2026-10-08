@@ -80,7 +80,6 @@ Node make_catalog_actor(const CatalogObject& object, const std::string& name) {
   lump["name"] = name;
   n.extras = json{{"etype", object.etype}, {"game_task", 0}, {"lump", lump}};
   if (object.lump_types.is_object() && !object.lump_types.empty()) n.extras["lump_types"] = object.lump_types;
-  if (!object.game.empty()) n.extras["og_game"] = object.game;  // its own game (export.h: og_game)
   return n;
 }
 
@@ -293,16 +292,11 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
       out.push_back(std::move(o));
     }
   }
-  sort_catalog(out);
-  return out;
-}
-
-void sort_catalog(std::vector<CatalogObject>& objects) {
-  std::sort(objects.begin(), objects.end(), [](const CatalogObject& a, const CatalogObject& b) {
+  std::sort(out.begin(), out.end(), [](const CatalogObject& a, const CatalogObject& b) {
     const int fa = family_rank(a.family), fb = family_rank(b.family);
-    if (fa != fb) return fa < fb;
-    return a.name != b.name ? a.name < b.name : a.game < b.game;
+    return fa != fb ? fa < fb : a.name < b.name;
   });
+  return out;
 }
 
 std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const GameData* data,

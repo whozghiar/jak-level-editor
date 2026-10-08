@@ -165,8 +165,8 @@ std::vector<uint32_t> read_u32_view(const tinygltf::Model& m, int view_idx) {
 // and collide_pat is the exact surface of the node (ogle-extract, the decompiler's rips).
 const char* kCollisionKeys[] = {"set_collision", "set_invisible", "ignore",       "collide_material",
                                 "collide_event", "collide_mode",  "nolineofsight", "noedge",
-                                "nocamera",      "noentity",      "collide_pat",  "og_game",
-                                "collide_game",  "kind"};
+                                "nocamera",      "noentity",      "collide_pat",  "collide_game",
+                                "kind"};
 
 int json_int(const json& e, const char* key, int dflt = 0) {
   if (!e.is_object() || !e.contains(key)) return dflt;
@@ -208,11 +208,6 @@ bool import_gltf_file(Scene& scene, const std::string& path, const ImportOptions
   if (opts.read_settings && asset_extras.is_object() && asset_extras.contains("ogle")) {
     const auto& o = asset_extras["ogle"];
     if (o.contains("settings")) scene.settings = LevelSettings::from_json(o["settings"]);
-  }
-  // a decompiler rip says which game it comes from
-  if (opts.game_from_file && asset_extras.is_object() && asset_extras.contains("opengoal") &&
-      asset_extras["opengoal"].is_object() && asset_extras["opengoal"].contains("game")) {
-    scene.settings.game = game_from_name(asset_extras["opengoal"]["game"].get<std::string>(), scene.settings.game);
   }
   res.asset_extras = asset_extras;
 

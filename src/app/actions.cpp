@@ -135,6 +135,14 @@ void prepare_level_nodes(Scene& scene, const AssetLibrary& library, const GameDa
     }
     remove_subtrees(scene, std::move(doomed));
   }
+  // where each actor is in the game: the positions inside its data (paths) are the game's, and
+  // follow it when it moves (the export moves them by as much)
+  for (size_t i = first; i < scene.nodes.size(); i++) {
+    Node& n = scene.nodes[i];
+    if (n.kind != NodeKind::Actor || n.extras.contains("og_origin")) continue;
+    const Transform w = Transform::from_matrix(scene.world(n));
+    n.extras["og_origin"] = {w.t.x, w.t.y, w.t.z, w.r.x, w.r.y, w.r.z, w.r.w};
+  }
   // the terrain is locked: clicks go to what is on it. The extractor splits the level's shell
   // (tfrag) in pieces and marks the large ones og_terrain; older extractions have one mesh per
   // texture over the whole level, all terrain.
@@ -250,7 +258,6 @@ bool save_project(const Scene& scene, const std::string& path, std::string* erro
 bool open_level(Scene& scene, const AssetLibrary& library, const GameData* data, const LevelEntry& level,
                 std::string* error, bool actors) {
   ImportOptions o;
-  o.game_from_file = true;
   ImportResult r;
   if (!import_gltf(scene, level.background, o, &r, error)) return false;
   // the game's name of the level (a copy found in another DGO has its folder named after both)
@@ -275,8 +282,6 @@ uint32_t add_level(Scene& scene, const AssetLibrary& library, const GameData* da
     if (error) *error = "cannot read " + level.background;
     return 0;
   }
-  // its own game: it may differ from the document's (a level added from another game)
-  if (Node* g = scene.find(group)) g->extras["og_game"] = library.game();
   if (!data) return group;
   if (const LevelInfo* info = data->level(name))
     for (const auto& c : info->companions)
@@ -352,53 +357,21 @@ std::vector<uint32_t> paste_nodes(Scene& scene, const Clipboard& clip) {
 // library and document
 // ------------------------------------------------------------------------------------------------
 
-AssetLibrary* App::library_for(const std::string& game) {
-  auto it = all_libraries.find(game);
-  return it == all_libraries.end() ? nullptr : &it->second;
-}
-
-// Switches which extracted game the Levels panel browses (and File > New level, extraction's
-// default), without rescanning: every game was already scanned into all_libraries by set_library,
-// and the catalog does not depend on which one is browsed.
-bool App::browse_game(const std::string& game) {
-  AssetLibrary* lib = library_for(game);
-  if (!lib) return false;
-  library = *lib;
-  m_selected_level.clear();
-  Prefs& prefs = Prefs::get();
-  prefs.library_game = game;
-  prefs.save();
-  return true;
-}
-
-void App::set_library(const std::string& root, const std::string& game) {
+void App::set_library(const std::string& root) {
   library_root = root.empty() ? std::string() : library_root_of(root);
-  games = list_games(library_root);
-  const GameFolder* chosen = nullptr;
-  for (const auto& g : games)
-    if (g.game == game) chosen = &g;
-  if (!chosen && !games.empty()) chosen = &games.front();
   store.clear();
-  // every extracted game, always: the catalog and a document never distinguish between them (only
-  // exporting to a game does)
-  all_libraries.clear();
-  library_indexes.clear();
-  m_index_merged.clear();
-  for (const auto& g : games) {
-    AssetLibrary lib;
-    std::string err;
-    if (!lib.scan(g.path, &err)) {
-      LOG_ERROR("%s", err.c_str());
-      continue;
-    }
-    auto data = game_data_for(lib.game());
-    lib.set_listed([&](const LevelEntry& l) { return level_listed(l, data.get()); });
-    AssetLibrary& stored = (all_libraries[g.game] = std::move(lib));
-    library_indexes[g.game].start(stored, Prefs::dir() + "index/" + g.game, !Prefs::read_only);
-  }
   library.clear();
-  if (AssetLibrary* lib = chosen ? library_for(chosen->game) : nullptr) library = *lib;
-  m_index_applied = false;  // the browsed game's own progress bar (below)
+  if (const std::string folder = game_folder(library_root); !folder.empty()) {
+    std::string err;
+    if (library.scan(folder, &err)) {
+      auto data = game_data();
+      library.set_listed([&](const LevelEntry& l) { return level_listed(l, data.get()); });
+    } else {
+      LOG_ERROR("%s", err.c_str());
+    }
+  }
+  library_index.start(library, Prefs::dir() + "index/jak3", !Prefs::read_only);
+  m_index_applied = false;
   rebuild_catalog();
   m_all_parts_shown.clear();
   m_all_parts_filter = "";
@@ -409,7 +382,6 @@ void App::set_library(const std::string& root, const std::string& game) {
   refresh_prefabs();
   Prefs& prefs = Prefs::get();
   prefs.library_root = library_root;
-  prefs.library_game = chosen ? chosen->game : std::string();
   prefs.save();
 }
 
@@ -418,61 +390,34 @@ void App::rebuild_catalog() {
   catalog_models.clear();
   all_parts.clear();
   m_all_prototypes = m_all_pieces = 0;
-  for (const auto& g : games) {
-    AssetLibrary* lib = library_for(g.game);
-    if (!lib) continue;
-    auto data = game_data_for(g.game);
-    auto iit = library_indexes.find(g.game);
-    const LibraryIndex* idx = iit != library_indexes.end() && iit->second.ready() ? &iit->second : nullptr;
-    auto objs = build_catalog(*lib, data.get(), idx);
-    for (auto& o : objs) o.game = g.game;
-    auto models = list_catalog_models(*lib, data.get(), objs);
-    for (auto& m : models) m.game = g.game;
-    catalog.insert(catalog.end(), std::make_move_iterator(objs.begin()), std::make_move_iterator(objs.end()));
-    catalog_models.insert(catalog_models.end(), std::make_move_iterator(models.begin()), std::make_move_iterator(models.end()));
-    if (idx) {
-      auto parts = all_decor(*idx, *lib);
-      for (auto& p : parts) {
-        p.game = g.game;
-        (p.part.kind == CatalogPart::Kind::Prototype ? m_all_prototypes : m_all_pieces)++;
-      }
-      all_parts.insert(all_parts.end(), std::make_move_iterator(parts.begin()), std::make_move_iterator(parts.end()));
-    }
+  if (library.empty()) return;
+  auto data = game_data();
+  const LibraryIndex* idx = library_index.ready() ? &library_index : nullptr;
+  catalog = build_catalog(library, data.get(), idx);
+  catalog_models = list_catalog_models(library, data.get(), catalog);
+  if (idx) {
+    all_parts = all_decor(*idx, library);
+    for (const auto& p : all_parts) (p.part.kind == CatalogPart::Kind::Prototype ? m_all_prototypes : m_all_pieces)++;
   }
-  sort_catalog(catalog);
 }
 
 void App::apply_library_index() {
-  // the browsed game's own (the Levels panel's progress bar)
-  if (const LibraryIndex* idx = library.game().empty() ? nullptr : &library_indexes[library.game()];
-      idx && idx->ready())
-    m_index_applied = true;
-  bool any_new = false;
-  for (auto& [g, idx] : library_indexes)
-    if (idx.ready() && !m_index_merged.count(g)) {
-      m_index_merged.insert(g);
-      any_new = true;
-    }
-  if (any_new) rebuild_catalog();
+  if (m_index_applied || !library_index.ready()) return;
+  m_index_applied = true;
+  rebuild_catalog();
 }
 
-std::shared_ptr<const GameData> App::game_data_for(const std::string& game) {
-  if (game.empty()) return nullptr;
-  auto it = m_game_data.find(game);
-  if (it != m_game_data.end()) return it->second;
+std::shared_ptr<const GameData> App::game_data() {
+  if (m_game_data_read) return m_game_data;
+  m_game_data_read = true;
   auto data = std::make_shared<GameData>();
   std::string err;
-  std::shared_ptr<const GameData> loaded;
-  if (data->load(game_data_path(game), &err)) loaded = data;
-  else LOG_WARN(tr("log.game_data_missing"), game.c_str(), err.c_str());
-  m_game_data[game] = loaded;
-  return loaded;
+  if (data->load(game_data_path(), &err)) m_game_data = data;
+  else LOG_WARN(tr("log.game_data_missing"), err.c_str());
+  return m_game_data;
 }
 
-const GameData* App::document_game_data() {
-  if (!document_open()) return nullptr;
-  return game_data_for(game_name(scene.settings.game)).get();
-}
+const GameData* App::document_game_data() { return document_open() ? game_data().get() : nullptr; }
 
 // ------------------------------------------------------------------------------------------------
 // story view, ocean
@@ -603,11 +548,10 @@ void App::load_level(const LevelEntry& level) {
   m_level_name = level.name;
   AssetLibrary lib = library;  // the worker reads its own copy
   LevelEntry entry = level;
-  auto data = game_data_for(lib.game());
+  auto data = game_data();
   const bool actors = load_actors;
   m_level_future = std::async(std::launch::async, [lib, entry, data, actors]() -> std::unique_ptr<Scene> {
     auto s = std::make_unique<Scene>();
-    s->settings.game = game_from_name(lib.game());
     std::string err;
     if (!open_level(*s, lib, data.get(), entry, &err, actors)) {
       LOG_ERROR("%s: %s", entry.background.c_str(), err.c_str());
@@ -627,7 +571,6 @@ std::vector<App::DocumentLevel> App::document_levels() const {
   if (!document_open()) return out;
   DocumentLevel main;
   main.name = scene.settings.level;
-  main.game = game_name(scene.settings.game);
   out.push_back(main);
   std::unordered_map<uint32_t, const Node*> by_id;
   for (const auto& n : scene.nodes) by_id[n.id] = &n;
@@ -647,7 +590,6 @@ std::vector<App::DocumentLevel> App::document_levels() const {
       l.role = role;
       l.group = n.id;
       l.host = role == DocumentLevel::Added ? 0 : host_of(n);
-      l.game = n.extras.value("og_game", game_name(scene.settings.game));
       out.push_back(l);
     }
   }
@@ -672,12 +614,10 @@ bool App::add_level_to_document(const LevelEntry& level, std::string* error) {
   m_adding_level = level.name;
   AssetLibrary lib = library;  // the worker reads its own copy
   LevelEntry entry = level;
-  auto data = game_data_for(lib.game());
-  const Game game = scene.settings.game;
+  auto data = game_data();
   const bool actors = load_actors;
-  m_add_future = std::async(std::launch::async, [lib, entry, data, game, actors]() -> std::unique_ptr<Scene> {
+  m_add_future = std::async(std::launch::async, [lib, entry, data, actors]() -> std::unique_ptr<Scene> {
     auto s = std::make_unique<Scene>();
-    s->settings.game = game;
     std::string err;
     if (!add_level(*s, lib, data.get(), entry, &err, actors)) {
       LOG_ERROR("%s", err.c_str());
@@ -1091,9 +1031,7 @@ std::shared_ptr<Mesh> App::placement_mesh() {
       if (auto lm = store.model(placement.path, true)) {
         mesh = merge_mesh(scene, *lm->mesh, lm->textures, lm->materials);
         if (placement.kind == Placement::Kind::Object) {
-          // its own game (the catalog may hold objects of any extracted game), not the one browsed
-          const std::string game = !placement.object.game.empty() ? placement.object.game : library.game();
-          const GameData* data = game_data_for(game).get();
+          const GameData* data = game_data().get();
           if (data && data->is_water(placement.object.etype)) style_water_mesh(scene, *mesh, placement.object.model);
         }
       }
@@ -1234,8 +1172,8 @@ void App::open_dialog(DialogAction action) {
   }();
   const std::string iso_dir = [&] {
     if (!extract.detected_source.empty()) return from_path(to_path(extract.detected_source).parent_path());
-    const auto& sources = Prefs::get().extract_sources;
-    if (!sources.empty()) return from_path(to_path(sources.begin()->second).parent_path());
+    const std::string& source = Prefs::get().extract_source;
+    if (!source.empty()) return from_path(to_path(source).parent_path());
     fs::create_directories(to_path(default_iso_data_dir()), ec);
     return default_iso_data_dir();
   }();
@@ -1552,9 +1490,8 @@ Vec3 App::export_start_point() {
   return hit.hit() ? hit.point + Vec3{0, 1, 0} : Vec3{top.x, b.lo.y + 2.f, top.z};
 }
 
-LevelExportOptions App::default_export_options(Game destination) {
+LevelExportOptions App::default_export_options() {
   LevelExportOptions o;
-  o.game = destination;
   std::string base = scene.settings.level;
   if (base.empty() || base == "custom-level") base = "level";
   // a name the game does not have: "my-" and the level's, 10 characters at most
@@ -1566,24 +1503,21 @@ LevelExportOptions App::default_export_options(Game destination) {
   o.name = name;
   o.nickname = default_nickname(name);
   o.iso_name = default_iso_name(name);
-  o.base_id = default_base_id(destination);
-  const auto& folders = Prefs::get().export_folders;
-  auto it = folders.find(game_name(destination));
-  if (it != folders.end() && !it->second.empty()) {
-    o.folder = it->second;
-  } else {
-    // next to the extracted games (not in the editor's sources: the level holds their textures)
+  o.base_id = kDefaultBaseId;
+  o.folder = Prefs::get().export_folder;
+  if (o.folder.empty()) {
+    // next to the extracted game (not in the editor's sources: the level holds its textures)
     const std::string root = library_root.empty() ? Prefs::dir() : library_root;
-    o.folder = from_path(to_path(root) / "exports" / game_name(destination));
+    o.folder = from_path(to_path(root) / "exports");
   }
   o.start = export_start_point();
   return o;
 }
 
 void App::open_export_window() {
-  // the options of the last export of this level, else new ones for its game
+  // the options of the last export of this level, else new ones
   if (export_options.name.empty() || m_export_level != scene.settings.level) {
-    export_options = default_export_options(scene.settings.game);
+    export_options = default_export_options();
     m_export_level = scene.settings.level;
   }
   m_export_report.reset();
@@ -1601,22 +1535,11 @@ bool App::export_for_game(const LevelExportOptions& in, LevelExportReport* repor
   o.navmesh_names.clear();
   world_navmeshes(&o.navmeshes, &o.navmesh_names);
   scene.begin_frame();  // the world matrices and what is shown, after the last changes
-  auto to = game_data_for(game_name(o.game));
-  // every extracted game's data: a level added from another game, or a catalog object placed
-  // from one (extras og_game), keeps its own rules instead of the document's
-  std::vector<std::shared_ptr<const GameData>> kept_data;
-  std::map<std::string, const GameData*> by_game;
-  for (const auto& g : games)
-    if (auto d = game_data_for(g.game)) {
-      by_game[g.game] = d.get();
-      kept_data.push_back(std::move(d));
-    }
   LevelExportReport rep;
-  if (!export_level_for_game(scene, document_game_data(), to.get(), o, &rep, error, &by_game)) return false;
-  Prefs::get().export_folders[game_name(o.game)] = o.folder;
+  if (!export_level_for_game(scene, document_game_data(), o, &rep, error)) return false;
+  Prefs::get().export_folder = o.folder;
   if (!Prefs::read_only) Prefs::get().save();
-  LOG_INFO(tr("log.exported_for_game"), o.name.c_str(), tr((std::string("game.") + game_name(o.game)).c_str()),
-           rep.dir.c_str(), rep.meshes, rep.actors);
+  LOG_INFO(tr("log.exported_for_game"), o.name.c_str(), rep.dir.c_str(), rep.meshes, rep.actors);
   if (report) *report = std::move(rep);
   return true;
 }

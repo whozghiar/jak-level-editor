@@ -1,11 +1,11 @@
 #pragma once
 
-// Navigation meshes: where the creatures of a level walk (the enemies and citizens of Jak II and
-// Jak 3 follow them). Generated from the level's walkable surfaces with Recast: the surfaces are
+// Navigation meshes: where the creatures of a level walk (the enemies and citizens of Jak 3 follow
+// them). Generated from the level's walkable surfaces with Recast: the surfaces are
 // cut in voxels, kept where they are not too steep, where a creature has room above them and can
 // step from one to the next, shrunk by the creature's radius, then outlined and cut in convex
 // polygons of at most 4 corners. Then the limits of the game apply (the game's nav-mesh, see
-// goal_src/jak2/engine/nav/nav-mesh-h.gc): at most 255 polygons per mesh, each mesh in one piece
+// goal_src/jak3/engine/nav/nav-mesh-h.gc): at most 255 polygons per mesh, each mesh in one piece
 // (its route table must reach every polygon), polygons facing up.
 
 #include <cstdint>
@@ -34,11 +34,13 @@ struct NavParams {
 };
 
 // A polygon: corners (indices in its mesh's vertices), and for each edge (corner i to i+1) the
-// polygon across it in the same mesh, -1 at a border.
+// polygon across it in the same mesh, -1 at a border. `pat`: the game's flags of the polygon (0 for
+// the editor's; with bit 0, the game keeps it out of the mesh's grid).
 struct NavPoly {
   int count = 0;
   int v[4] = {0, 0, 0, 0};
   int adj[4] = {-1, -1, -1, -1};
+  uint8_t pat = 0;
 };
 
 struct NavMeshData {

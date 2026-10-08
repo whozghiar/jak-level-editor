@@ -1,15 +1,15 @@
 #pragma once
 
-// The library: the folder ogle-extract writes to, one subfolder per game (jak1/, jak2/, jak3/).
+// The library: the folder ogle-extract writes to, the game in its subfolder jak3/.
 //
 //   <game>/library.json                           the game, its version, the levels extracted
 //   <game>/<level>/decor/<level>-background.glb   a level: its decor, collision and actors
 //   <game>/<level>/models/<model>-lodN.glb        the models of its actors
 //   <game>/<level>/level.json                     what the folder holds (dgo, actors, models)
 //   <game>/common/models/                         the models every level uses
-//   <game>/prefabs/                               the user's prefabs made from that game's levels
+//   <game>/prefabs/                               the user's prefabs made from the game's levels
 //
-// An AssetLibrary is the folder of one game. Scanning only lists file names; geometry is read
+// An AssetLibrary is the folder of the game. Scanning only lists file names; geometry is read
 // when a level is opened or a thumbnail is drawn.
 
 #include <functional>
@@ -22,15 +22,10 @@
 
 namespace ogle {
 
-struct GameFolder {
-  std::string game;  // "jak2"
-  std::string name;  // "Jak II: Renegade" (from its library.json)
-  std::string path;  // absolute, '/' separated
-  size_t levels = 0;
-};
-// The extracted games of a library folder, in game order. A folder that is itself a game's
-// (it holds library.json) is taken as the game folder of its parent.
-std::vector<GameFolder> list_games(const std::string& library_root);
+// The folder of the extracted game in a library folder (<library>/jak3, absolute, '/' separated),
+// "" when the game was not extracted there. A folder that is itself the game's (it holds
+// library.json) is taken as the game folder of its parent.
+std::string game_folder(const std::string& library_root);
 // The library folder of a path the user chose: the parent of a game folder, else the path itself.
 std::string library_root_of(const std::string& folder);
 // The library folder when none holds an extracted game: library/ in the editor's own tree (the
@@ -44,9 +39,9 @@ std::string default_iso_data_dir();
 std::string default_projects_dir();
 
 struct LevelEntry {
-  std::string name;        // "atoll" (the folder)
-  std::string level;       // the game's name of the level (level.json), "nest" for "nest-nestt"
-  std::string dgo;         // "ATO.DGO" (level.json)
+  std::string name;        // "desert" (the folder)
+  std::string level;       // the game's name of the level (level.json), "<level>" for a copy "<level>-<dgo>"
+  std::string dgo;         // "DST.DGO" (level.json)
   std::string background;  // <level>/decor/<level>-background.glb
   int actors = 0;          // level.json
   int collision_triangles = -1;  // level.json, -1 when it does not say
@@ -68,7 +63,6 @@ class AssetLibrary {
   void clear();
   bool empty() const { return m_levels.empty(); }
   const std::string& root() const { return m_root; }
-  const std::string& game() const { return m_game; }  // "jak2", from library.json
   const std::vector<LevelEntry>& levels() const { return m_levels; }
   // decides which levels the Levels panel lists
   void set_listed(const std::function<bool(const LevelEntry&)>& listed);
@@ -88,7 +82,6 @@ class AssetLibrary {
 
  private:
   std::string m_root;
-  std::string m_game;
   std::vector<LevelEntry> m_levels;
   std::vector<ModelAsset> m_models;  // sorted by (name, group, lod)
 };

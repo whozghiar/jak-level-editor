@@ -106,13 +106,20 @@ struct Quat {
     return (qz * qy * qx).normalized();
   }
   Vec3 to_euler_deg() const {
-    float sinr = 2.f * (w * x + y * z);
-    float cosr = 1.f - 2.f * (x * x + y * y);
-    float sinp = std::clamp(2.f * (w * y - z * x), -1.f, 1.f);
-    float siny = 2.f * (w * z + x * y);
-    float cosy = 1.f - 2.f * (y * y + z * z);
-    return {degrees(std::atan2(sinr, cosr)), degrees(std::asin(sinp)),
-            degrees(std::atan2(siny, cosy))};
+    // from the rotation matrix, in double: at a quarter turn around y (gimbal lock) x and z turn
+    // around the same axis, so z is 0 and x takes the whole turn
+    const double qx = x, qy = y, qz = z, qw = w;
+    const double r20 = 2 * (qx * qz - qw * qy);
+    const double ry = std::asin(std::clamp(-r20, -1.0, 1.0));
+    double rx, rz;
+    if (std::fabs(r20) < 1 - 1e-6) {
+      rx = std::atan2(2 * (qy * qz + qw * qx), 1 - 2 * (qx * qx + qy * qy));
+      rz = std::atan2(2 * (qx * qy + qw * qz), 1 - 2 * (qy * qy + qz * qz));
+    } else {
+      rx = std::atan2(-2 * (qy * qz - qw * qx), 1 - 2 * (qx * qx + qz * qz));
+      rz = 0;
+    }
+    return {degrees((float)rx), degrees((float)ry), degrees((float)rz)};
   }
   static Quat from_matrix(const Mat4& m);  // rotation part, columns must be orthonormal
 };
