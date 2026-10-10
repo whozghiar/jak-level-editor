@@ -126,6 +126,7 @@ struct SceneCache {
   std::vector<AABB> bounds;       // world box of the node's mesh (Render, Collision), else empty
   // render nodes grouped by mesh (the instances of a prototype): mesh, node indices
   std::vector<std::pair<Mesh*, std::vector<uint32_t>>> mesh_groups;
+  std::vector<const Mesh*> meshes;  // each node's when they were grouped
   uint64_t frame = ~0ull;
   size_t count = 0;
   uint32_t first_id = 0, last_id = 0;

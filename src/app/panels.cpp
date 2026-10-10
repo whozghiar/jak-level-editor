@@ -135,6 +135,7 @@ void App::ui_menu() {
     if (ImGui::MenuItem(tr("menu.file.save"), "Ctrl+S", false, document_open())) save(false);
     if (ImGui::MenuItem(tr("menu.file.save_as"), "Ctrl+Shift+S", false, document_open())) save(true);
     ImGui::Separator();
+    if (ImGui::MenuItem(tr("menu.file.import_model"), nullptr, false, document_open())) open_dialog(DialogAction::ImportModel);
     if (ImGui::MenuItem(tr("menu.file.export_game"), nullptr, false, document_open())) open_export_window();
     ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.file.quit"))) request_quit();
@@ -172,6 +173,13 @@ void App::ui_menu() {
         if (ImGui::MenuItem(l.name.c_str(), nullptr, l.code == i18n_language())) set_language(l.code);
       ImGui::EndMenu();
     }
+    ImGui::EndMenu();
+  }
+  if (ImGui::BeginMenu(tr_id("menu.create").c_str(), document_open())) {
+    for (const auto& p : shape_presets())
+      if (ImGui::MenuItem(tr(("menu.create." + std::string(p.name)).c_str()))) start_shape_placement(p, false);
+    ImGui::Separator();
+    if (ImGui::MenuItem(tr("menu.file.import_model"))) open_dialog(DialogAction::ImportModel);
     ImGui::EndMenu();
   }
   if (ImGui::BeginMenu(tr_id("menu.tools").c_str())) {
@@ -975,6 +983,8 @@ void App::ui_node_inspector(Node& n) {
     ui_actor_behavior(n);
     ui_actor_params(n);
   }
+  ui_shape_inspector(n);
+  ui_material_inspector(n);
   ImGui::Spacing();
   if (ImGui::Button(tr_id("inspector.copy").c_str())) copy_selection();
   ImGui::SameLine();

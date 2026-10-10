@@ -975,6 +975,7 @@ std::string Placement::key() const {
     case Kind::Object:
     case Kind::Model: return "model:" + path;
     case Kind::Part: return "part:" + path + "#" + part.mesh_node;
+    case Kind::Shape: return "shape:" + shape.to_json().dump();
     default: return path;
   }
 }
@@ -1020,6 +1021,15 @@ void App::start_part_placement(const std::string& level_background, const Catalo
   store.level(level_background, true);
 }
 
+void App::start_shape_placement(const ShapePreset& preset, bool once) {
+  placement = Placement{};
+  placement.kind = Placement::Kind::Shape;
+  placement.name = preset.name;
+  placement.shape = preset.params;
+  placement.once = once;
+  tool = ToolMode::Place;
+}
+
 std::shared_ptr<Mesh> App::placement_mesh() {
   std::shared_ptr<Mesh>& mesh = m_prefab_previews[placement.key()];
   if (mesh) return mesh;
@@ -1045,6 +1055,9 @@ std::shared_ptr<Mesh> App::placement_mesh() {
       if (auto part = part_mesh(*level, placement.part)) mesh = merge_mesh(scene, *part, level->textures, level->materials);
       break;
     }
+    case Placement::Kind::Shape:
+      mesh = make_shape(placement.shape, shape_default_material(scene));
+      break;
   }
   return mesh;
 }
@@ -1087,6 +1100,15 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
       n.name = unique_name(placement.name, names);
       n.kind = NodeKind::Render;
       n.mesh = mesh;
+      n.local = Transform::from_matrix(m);
+      roots.push_back(scene.add(std::move(n)));
+    } else if (placement.kind == Placement::Kind::Shape) {
+      // its own mesh: its size changes apart from the others'
+      Node n;
+      n.name = unique_name(placement.name, names);
+      n.kind = NodeKind::Render;
+      n.mesh = std::make_shared<Mesh>(*mesh);
+      n.extras = json{{"og_shape", placement.shape.to_json()}};
       n.local = Transform::from_matrix(m);
       roots.push_back(scene.add(std::move(n)));
     } else {
@@ -1205,6 +1227,16 @@ void App::open_dialog(DialogAction action) {
       SDL_ShowSaveFileDialog(dialog_callback, req, m_window, nav_filter, 1, projects_dir.c_str());
       break;
     }
+    case DialogAction::ImportModel: {
+      static const SDL_DialogFileFilter model_filter[] = {{"glTF (.glb, .gltf)", "glb;gltf"}};
+      SDL_ShowOpenFileDialog(dialog_callback, req, m_window, model_filter, 1, projects_dir.c_str(), false);
+      break;
+    }
+    case DialogAction::TextureImage: {
+      static const SDL_DialogFileFilter image_filter[] = {{"Images (.png, .jpg, .tga, .bmp)", "png;jpg;jpeg;tga;bmp"}};
+      SDL_ShowOpenFileDialog(dialog_callback, req, m_window, image_filter, 1, projects_dir.c_str(), false);
+      break;
+    }
   }
 }
 
@@ -1241,6 +1273,22 @@ void App::process_dialog_results() {
         std::string p = r.path, err;
         if (lower_ext(p) != ".json") p += ".json";
         if (!export_navmeshes(p, nav_first_aid, &err)) LOG_ERROR(tr("log.navmesh_export_failed"), err.c_str());
+        break;
+      }
+      case DialogAction::ImportModel:
+        start_model_placement(CatalogModel{from_path(to_path(r.path).stem()), r.path, ""}, false);
+        break;
+      case DialogAction::TextureImage: {
+        std::string err;
+        const int ti = texture_from_image(scene, r.path, &err);
+        if (ti < 0) {
+          LOG_ERROR(tr("log.texture_failed"), r.path.c_str(), err.c_str());
+          break;
+        }
+        NodeChange c(scene);
+        for (auto id : m_texture_target.ids) c.save(id);
+        if (edit_material(scene, m_texture_target.ids, m_texture_target.material, [ti](Material& m) { m.texture = ti; }))
+          history.push(c.commit(tr("undo.texture")));
         break;
       }
     }

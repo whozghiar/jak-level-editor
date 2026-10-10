@@ -91,6 +91,7 @@ bool GameData::load(const std::string& path, std::string* error) {
   for (const auto& [name, model] : at(actors, "skeletons").items()) m_skeletons[name] = str(model);
   for (const auto& [type, up] : at(actors, "parents").items()) m_parents[type] = str(up);
   for (const auto& [type, stem] : at(actors, "code").items()) m_code[type] = str(stem);
+  for (const auto& [group, stem] : at(actors, "effect_code").items()) m_effect_code[group] = str(stem);
   for (const auto& [stem, files] : at(j, "code_needs").items())
     for (const auto& f : files) m_code_needs[stem].push_back(str(f));
   for (const auto& [type, ps] : at(actors, "params").items())
@@ -309,6 +310,15 @@ const std::vector<GameData::Param>* GameData::params(const std::string& etype) c
 const GameData::Enum* GameData::enumeration(const std::string& name) const {
   auto it = m_enums.find(name);
   return it == m_enums.end() ? nullptr : &it->second;
+}
+
+std::vector<std::string> GameData::effect_code_files(const std::string& group) const {
+  auto it = m_effect_code.find(group);
+  if (it == m_effect_code.end()) return {};
+  std::vector<std::string> out;
+  if (auto n = m_code_needs.find(it->second); n != m_code_needs.end()) out = n->second;
+  out.push_back(it->second);
+  return out;
 }
 
 std::vector<std::string> GameData::code_files(const std::string& etype) const {

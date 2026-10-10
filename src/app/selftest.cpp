@@ -32,7 +32,9 @@
 #include "io/library_index.h"
 #include "io/nav_export.h"
 #include "io/prefabs.h"
+#include "scene/shapes.h"
 #include "scene/story.h"
+#include "stb_image_write.h"
 
 namespace ogle {
 
@@ -1178,7 +1180,8 @@ int run_selftest() {
                 !data.derives_from("crate", "com-airlock") &&
                 data.code_files("industrial-board-vent") ==
                     std::vector<std::string>{"elec-gate", "ctyinda-part", "ctyinda-obs"} &&
-                data.code_files("cty-door").empty() && behavior_kind(&data, "wascity-awning-a") == BehaviorKind::Bouncer,
+                data.code_files("cty-door").empty() && behavior_kind(&data, "wascity-awning-a") == BehaviorKind::Bouncer &&
+                data.effect_code_files("group-ctyindb-red-floor-vent").back() == "ctyindb-part",
             "game data: the parameters of a type (lumps its code reads), what it derives from, the code it needs");
     }
 
@@ -1220,6 +1223,8 @@ int run_selftest() {
     s.settings.level = "testlvl";
     Material m;
     m.name = "stone";
+    // blended with its texture's alpha, as the levels' materials nearly all are: still a wall
+    m.alpha = AlphaMode::Blend;
     const int mat = s.add_material(m);
     Node tfrag;
     tfrag.name = "testlvl-tfrag-normal";
@@ -1338,7 +1343,7 @@ int run_selftest() {
               gd.find("\"sewer-obs.o\"") != std::string::npos && at_part != std::string::npos &&
               at_part < at_obs && at_obs < at_own && at_own < at_level &&
               install.find("(goal-src \"levels/my-test/my-test-obs.gc\" \"entity-debug\"") != std::string::npos &&
-              install.find("(bg 'my-test-vis)") != std::string::npos,
+              install.find("(get-continue-by-name *game-info* \"my-test-start\")") != std::string::npos,
           "export: the behaviors as the level's code, its DGO with the game's code its objects need");
     const json glb = read_glb_json(dir / "my-test.glb");
     size_t surfaces = 0;
@@ -1359,6 +1364,13 @@ int run_selftest() {
                           r.collision_triangles == 2 && r.collision_from_decor == 1;
     check(surfaces == 2 && floor_ignored && box_collides && notes_ok,
           "export: the game's collision one node per surface, the shell not colliding twice, the box by its shape");
+    // the game draws the builder's one tree of surfaces: blended ones cut out instead; the decor
+    // faces either way, its collision holds from both sides
+    bool none_blended = glb.is_object() && glb.contains("materials");
+    if (none_blended)
+      for (const auto& m : glb["materials"]) none_blended &= m.value("alphaMode", std::string()) != "BLEND";
+    check(none_blended && level.value("double_sided_collide", false),
+          "export: no blended surface (the game would not draw it), the decor's collision from both sides");
     (void)floor_id;
     (void)box_id;
   }
@@ -1376,6 +1388,80 @@ int run_selftest() {
               fs::path(projects).parent_path() == fs::path(library) && fs::path(iso).filename() == "iso_data" &&
               fs::path(projects).filename() == "projects",
           "directories: the library, iso_data and projects defaults are this editor's own, siblings, never jak-project's");
+  }
+
+  // shapes made in the editor, an image as a texture, a material changed on some pieces only
+  {
+    auto near3 = [](Vec3 a, Vec3 b) { return length(a - b) < 1e-4f; };
+    ShapeParams box;
+    box.size = {4, 2, 6};
+    box.tile = 2;
+    auto bm = make_shape(box, 0);
+    const AABB bb = bm->bounds();
+    const Primitive& bp = bm->prims[0];
+    float umin = 1e9f, umax = -1e9f;
+    for (const auto& uv : bp.uv) umin = std::min(umin, uv.x), umax = std::max(umax, uv.x);
+    bool outward = true;
+    for (size_t t = 0; t + 2 < bp.idx.size(); t += 3) {
+      const Vec3 a = bp.pos[bp.idx[t]], b = bp.pos[bp.idx[t + 1]], c = bp.pos[bp.idx[t + 2]];
+      const Vec3 nrm = bp.nrm[bp.idx[t]];
+      outward &= dot(cross(b - a, c - a), nrm) > 0 && dot(nrm, (a + b + c) / 3.f - Vec3{0, 1, 0}) > 0;
+    }
+    check(bm->tri_count() == 12 && near3(bb.lo, {-2, 0, -3}) && near3(bb.hi, {2, 2, 3}) &&
+              std::fabs(umax - umin - 3.f) < 1e-4f && outward,
+          "shapes: a box of its size on its base, its texture every 2 m, its faces outwards");
+    ShapeParams stairs, ramp, cyl;
+    stairs.kind = "stairs", stairs.size = {2, 2, 4}, stairs.steps = 4;
+    ramp.kind = "ramp";
+    cyl.kind = "cylinder", cyl.sides = 16;
+    const ShapeParams odd = ShapeParams::from_json({{"kind", "nope"}, {"size", {-1, 5, 5}}, {"tile", 0}});
+    check(make_shape(stairs, 0)->tri_count() == 48 && std::fabs(make_shape(stairs, 0)->bounds().hi.y - 2.f) < 1e-4f &&
+              make_shape(ramp, 0)->tri_count() == 8 && make_shape(cyl, 0)->tri_count() == 60 && odd.kind == "box" &&
+              odd.size.x == 0.05f && odd.tile == 0.1f,
+          "shapes: stairs, ramp and cylinder; sizes read back kept sensible");
+
+    Scene s;
+    const int grid = shape_default_material(s);
+    Node piece;
+    piece.kind = NodeKind::Render;
+    piece.mesh = make_shape(box, grid);
+    piece.extras = json{{"og_shape", box.to_json()}};
+    const uint32_t ia = s.add(piece), ib = s.add(piece), ic = s.add(piece);
+    const uint8_t px[2 * 2 * 4] = {200, 50, 50, 255, 50, 200, 50, 255, 50, 50, 200, 255, 200, 200, 200, 255};
+    const fs::path image = tmp / "brick.png";
+    stbi_write_png(image.string().c_str(), 2, 2, 4, px, 8);
+    const int ti = texture_from_image(s, image.string(), &err), again = texture_from_image(s, image.string(), &err);
+    s.begin_frame();
+    s.cache();
+    NodeChange change(s);
+    change.save(ia);
+    change.save(ib);
+    const size_t changed = edit_material(s, {ia, ib}, grid, [ti](Material& m) { m.texture = ti; });
+    // what is drawn: the new meshes, the node set being the same
+    s.begin_frame();
+    bool drawn_new = false, drawn_old = false;
+    for (const auto& [mesh, idx] : s.cache().mesh_groups) {
+      drawn_new |= mesh == s.find(ia)->mesh.get() && idx.size() == 2;
+      drawn_old |= mesh == s.find(ic)->mesh.get() && idx.size() == 1;
+    }
+    check(drawn_new && drawn_old, "scene: a node given another mesh is drawn with it");
+    HistoryEntry entry = change.commit("texture");
+    const int textured = s.find(ia)->mesh->prims[0].material;
+    const bool applied = changed == 2 && s.find(ia)->mesh == s.find(ib)->mesh && s.materials[textured].texture == ti &&
+                         s.find(ic)->mesh->prims[0].material == grid;
+    entry.undo();
+    const bool undone = s.find(ia)->mesh->prims[0].material == grid;
+    entry.redo();
+    check(ti >= 0 && ti == again && s.textures[ti].name == "brick" && s.textures[ti].width == 2 && applied && undone &&
+              shape_default_material(s) == grid && texture_from_image(s, (tmp / "none.png").string(), &err) < 0,
+          "materials: an image once as a texture, on the pieces chosen only, undone");
+    ShapeParams bigger = box;
+    bigger.size = {10, 1, 10};
+    reshape(s, *s.find(ia), bigger);
+    ShapeParams read;
+    check(std::fabs(s.find(ia)->mesh->bounds().hi.x - 5.f) < 1e-4f && s.find(ia)->mesh->prims[0].material == textured &&
+              node_shape(*s.find(ia), &read) && read.size.x == 10.f && s.find(ib)->mesh->bounds().hi.x == 2.f,
+          "shapes: resized alone, its texture kept");
   }
 
   // the game data shipped with the editor

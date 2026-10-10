@@ -30,6 +30,7 @@
 #include "render/thumbnails.h"
 #include "scene/pick.h"
 #include "scene/scene.h"
+#include "scene/shapes.h"
 #include "scene/story.h"
 #include "app/remote.h"
 #include "tools/gizmo.h"
@@ -53,18 +54,21 @@ enum class DialogAction {
   ExtractSourceFolder,
   ExtractOutput,
   ExportNavMeshes,
-  ExportFolder
+  ExportFolder,
+  ImportModel,   // a .glb made elsewhere (Blender...), placed like a model
+  TextureImage   // an image for the material being edited (m_texture_target)
 };
 
 // What the Place tool puts in the level: a prefab, an object of the catalog or a decor part of a
 // level.
 struct Placement {
-  enum class Kind { Prefab, Object, Model, Part };
+  enum class Kind { Prefab, Object, Model, Part, Shape };
   Kind kind = Kind::Prefab;
   std::string path;  // the prefab file, the model file (object, model), the part's level background
   std::string name;
   CatalogObject object;  // Object
   CatalogPart part;      // Part
+  ShapeParams shape;     // Shape
   float yaw = 0.f;    // radians (R, Ctrl + wheel)
   bool once = false;  // dragged from a panel: one placement, then back to selecting
   std::string key() const;  // of its preview and of the meshes merged into the document
@@ -269,6 +273,7 @@ class App {
   void start_object_placement(const CatalogObject& object, bool once);
   void start_model_placement(const CatalogModel& model, bool once);
   void start_part_placement(const std::string& level_background, const CatalogPart& part, bool once);
+  void start_shape_placement(const ShapePreset& preset, bool once);
   void stop_placement();
   Mat4 placement_matrix(const PickHit& hit, const Ray& ray) const;
   // the mesh of what is placed, merged into the document once (null while it loads)
@@ -337,6 +342,14 @@ class App {
   void ui_actor_behavior(Node& n);
   void ui_actor_params(Node& n);
   bool ui_condition(const char* id, json& value, bool with_always);
+  // a shape's size and a surface's materials (surface_panel.cpp)
+  void ui_shape_inspector(Node& n);
+  void ui_material_inspector(Node& n);
+  struct TextureTarget {
+    std::vector<uint32_t> ids;
+    int material = -1;
+  } m_texture_target;  // what the image dialog's texture goes to
+  std::unique_ptr<NodeChange> m_surface_edit;  // a color being dragged: the pieces before
   void ui_statusbar(float y, float h);
   void ui_windows();
   void ui_navmesh_window();

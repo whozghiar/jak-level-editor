@@ -186,12 +186,14 @@ std::string level_info(const LevelExportOptions& o, float bottom) {
   return t.str();
 }
 
+// a surface nothing stands on: glows and light shafts, water and glass drawn translucent (the
+// levels' own materials are blended with their texture's alpha almost everywhere: that alone does
+// not make them see-through), the same rule as the nav meshes'
 bool see_through(const Scene& scene, const Mesh& mesh) {
   bool any = false;
   for (const auto& p : mesh.prims) {
     if (p.idx.empty()) continue;
-    if (p.material < 0 || p.material >= (int)scene.materials.size() ||
-        scene.materials[p.material].alpha != AlphaMode::Blend)
+    if (p.material < 0 || p.material >= (int)scene.materials.size() || !navmesh_ignores(scene.materials[p.material]))
       return false;
     any = true;
   }
@@ -543,14 +545,22 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   size_t kill_masks = 0;
   std::string generated;                // the code of the level (<name>-obs.gc)
   std::vector<std::string> code_files;  // the code of the game the level needs, in order
-  auto need_code = [&](const std::string& etype) {
-    if (data)
-      for (const auto& f : data->code_files(etype))
-        if (std::find(code_files.begin(), code_files.end(), f) == code_files.end()) code_files.push_back(f);
+  auto need = [&](const std::vector<std::string>& files) {
+    for (const auto& f : files)
+      if (std::find(code_files.begin(), code_files.end(), f) == code_files.end()) code_files.push_back(f);
   };
   for (const auto& [i, type, name] : exported) {
     const Node& n = scene.nodes[i];
-    need_code(type);
+    // the code of its type, and of the particle group it draws (a part-spawner's art-name)
+    if (data) {
+      need(data->code_files(type));
+      if (auto l = n.extras.find("lump"); l != n.extras.end() && l->is_object())
+        if (auto art = l->find("art-name"); art != l->end() && art->is_string()) {
+          std::string group = art->get<std::string>();
+          if (!group.empty() && group[0] == '\'') group = group.substr(1);
+          need(data->effect_code_files(group));
+        }
+    }
     // its behavior, as a type of the level deriving its own, the actors it names by their names in
     // the level
     std::string etype = type;
@@ -722,7 +732,9 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     << "  // the game's collision is in the file; the builder makes the rest from the decor's shape\n"
     << "  \"automatic_wall_detection\": " << (auto_walls ? "true" : "false") << ",\n"
     << "  \"automatic_wall_angle\": 45.0,\n"
-    << "  \"double_sided_collide\": false,\n"
+    // the decor faces either way (the game draws both sides, its ground often faces down): a
+    // collision made from it holds from both sides
+    << "  \"double_sided_collide\": " << (rep.collision_from_decor > 0 ? "true" : "false") << ",\n"
     << "  \"base_id\": " << base_id << ",\n"
     << "  \"base_region_id\": " << base_id << ",\n"
     << "  \"cameras\": [],\n"
@@ -815,7 +827,9 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
      << "3. In `goal_src/jak3/engine/level/level-info.gc`, add the definition of `level-info.gc`\n"
      << "   (next to this file) and give it an `:index` no other level has. The player starts at\n"
      << "   (" << num(o.start.x) << ", " << num(o.start.y) << ", " << num(o.start.z) << ") m.\n"
-     << "4. Build the game (`(mi)` in the REPL), then go there: `(bg '" << o.name << "-vis)`.\n\n";
+     << "4. Build the game (`(mi)` in the REPL), then go there:\n"
+     << "   `(start 'play (get-continue-by-name *game-info* \"" << o.name << "-start\"))`.\n"
+     << "   (`bg` loads it next to the levels already there: from the city, no memory is left.)\n\n";
   if (!rep.notes.empty()) {
     md << "## What the export changed\n\n";
     for (const auto& note : rep.notes) md << "- " << strf(tr_en(note.key.c_str()), note.count, note.detail.c_str()) << "\n";
@@ -829,7 +843,11 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
      << "- The paths of the actors move with them; the other positions inside their data (targets) are\n"
      << "  the game's.\n"
      << "- The scripts of the game's objects (their `on-...` data) are left out: OpenGOAL's level\n"
-     << "  builder cannot write them. What an object does is its behavior, in `" << code_stem << ".gc`.\n";
+     << "  builder cannot write them. What an object does is its behavior"
+     << (generated.empty() ? std::string(" (here, the game's own).\n") : ", in `" + code_stem + ".gc`.\n");
+  if (rep.navmeshes)
+    md << "- The nav meshes are in `" << o.name << "-nav.json` (`nav_data` of the level): OpenGOAL's level builder\n"
+       << "  for Jak 3 writes them in the level only when it reads `nav_data` (see the editor's README).\n";
   const fs::path md_path = dir / to_path("INSTALL.md");
   if (!write_text(md_path, md.str(), error)) return false;
   rep.files.push_back(from_path(md_path));

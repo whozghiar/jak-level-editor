@@ -157,6 +157,8 @@ class GameData {
   // the code files (.o stems, in their order) a type needs beyond the common code: the file it
   // is defined in, after the files before it in its level's DGO; empty for the common code
   std::vector<std::string> code_files(const std::string& etype) const;
+  // the same for a particle group a part-spawner draws (its art-name, "group-...")
+  std::vector<std::string> effect_code_files(const std::string& group) const;
 
   const LevelInfo* level(const std::string& name) const;
   const OceanMap* ocean(const std::string& name) const;
@@ -193,7 +195,7 @@ class GameData {
   std::unordered_map<std::string, std::string> m_objects;
   std::unordered_map<std::string, std::vector<std::string>> m_type_models;
   std::unordered_map<std::string, std::string> m_skeletons;
-  std::unordered_map<std::string, std::string> m_parents, m_code;
+  std::unordered_map<std::string, std::string> m_parents, m_code, m_effect_code;
   std::unordered_map<std::string, std::vector<std::string>> m_code_needs;
   std::unordered_map<std::string, std::vector<Param>> m_params;
   std::unordered_map<std::string, Enum> m_enums;

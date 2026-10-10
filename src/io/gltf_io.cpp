@@ -582,6 +582,7 @@ struct ExportContext {
   std::map<int, int> texture_map;   // scene texture -> gltf texture
   std::map<uint64_t, int> mesh_map; // mesh uid -> gltf mesh
   bool sampler_added = false;
+  bool builder = false;
 
   explicit ExportContext(const Scene& s) : scene(s) {
     w.doc["nodes"] = json::array();
@@ -624,6 +625,11 @@ struct ExportContext {
     if (ti >= 0) pbr["baseColorTexture"] = {{"index", ti}};
     json jm = {{"name", m.name}, {"pbrMetallicRoughness", pbr}, {"doubleSided", m.double_sided}};
     if (m.alpha == AlphaMode::Mask) {
+      jm["alphaMode"] = "MASK";
+      jm["alphaCutoff"] = m.cutoff;
+    } else if (m.alpha == AlphaMode::Blend && builder) {
+      // the level builder puts blended surfaces in a tree of their own, which the game's level
+      // never draws: their texels under the reference cut out instead
       jm["alphaMode"] = "MASK";
       jm["alphaCutoff"] = m.cutoff;
     } else if (m.alpha == AlphaMode::Blend) {
@@ -719,6 +725,7 @@ bool export_glb(const Scene& scene, const std::string& path, const ExportOptions
 
   if (opts.mode == ExportMode::Builder) {
     // flat: every node at its world matrix, the builder's extras only
+    ctx.builder = true;
     for (auto id : opts.only) {
       const Node* n = scene.find(id);
       if (!n) continue;

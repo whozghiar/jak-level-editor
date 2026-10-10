@@ -336,6 +336,23 @@ elements placed in the void go to height 0.
 
 ![A new level built from the catalog: two decks, a stretched bridge over water, lamps, crates, orbs and a fountain](docs/captures/10-new-level.png)
 
+### Shapes and textures of your own
+
+To build what the game's decor has not, **Create** makes new shapes: a block, a floor, a wall, a
+ramp, stairs or a cylinder, placed like the other elements (click where it goes). The inspector
+sets a shape's **Size** in meters, its steps or sides, and **Texture every**: how many meters one
+repeat of its texture covers, so that a larger wall repeats its texture instead of stretching it
+(a shape stretched with the scale tool: **Make the scale its size**). New shapes have a grey grid
+whose cells are one repeat of the texture.
+
+The **Material** section of the inspector gives any element (a shape, a model, a decor part) an
+**Image...** (PNG, JPG, TGA, BMP), a texture of the levels opened (**Game textures...**) or a
+**Color** that multiplies its texture. It changes the elements selected that draw that material,
+not the other copies in the level; the image is saved in the project and in the level exported
+for the game. For a shape too complex for these, model it elsewhere (Blender...) and bring it in
+with **File > Import a model (.glb)**: it is placed like a model of the catalog, with its own
+textures.
+
 ### Nav meshes
 
 The enemies and citizens of Jak 3 walk on **nav meshes**: flat polygons over the ground
@@ -485,7 +502,9 @@ To add the level to the game (also in `INSTALL.md`):
    needs, is in `INSTALL.md`) and `(custom-level-cgo "<NICK>.DGO" "<name>/<name>.gd")`.
 3. Add the definition of `level-info.gc` to `goal_src/jak3/engine/level/level-info.gc`, with an
    `:index` no other level has.
-4. Build the game (`(mi)` in the REPL) and go there: `(bg '<name>-vis)`.
+4. Build the game (`(mi)` in the REPL) and go there:
+   `(start 'play (get-continue-by-name *game-info* "<name>-start"))`. This unloads the other
+   levels first; `(bg '<name>-vis)` does not, and crashes when the city is loaded.
 
 ## 5. Building levels with an assistant (MCP)
 
@@ -539,8 +558,9 @@ python tools/build_industrial_district.py --out build/demo/ironworks.glb --views
 | `list_levels`, `open_level`, `new_level` | the levels of the game (`near`: the ones the game displays with a level); open one (`actors: false`: its decor alone); start an empty one |
 | `add_level`, `remove_level`, `get_level_info` | several levels side by side: add one at its place in the game's world (`actors` too), take it out; a level's neighbors, continue points (positions in meters), role, bounds and root elements in the document |
 | `list_catalog`, `list_models`, `list_decor`, `list_prefabs` | what can be placed: objects and effects, models, the decor of every level (searched by name) or of one, prefabs |
-| `place`, `place_many` | puts an object, a model, a decor part or a prefab at a position (meters, Y up), turned (`yaw_deg`, or `rotation_deg` on the three axes) and scaled, dropped to the ground if asked; `place_many` places up to 2,000 at once, undone at once |
+| `place`, `place_many` | puts an object, a model (or a `.glb` file, `path`), a decor part, a prefab or a new shape (`shape`: box, floor, wall, ramp, stairs, cylinder, with its `size`) at a position (meters, Y up), turned (`yaw_deg`, or `rotation_deg` on the three axes) and scaled, dropped to the ground if asked; `place_many` places up to 2,000 at once, undone at once |
 | `find_nodes`, `get_node`, `raycast` | what the level holds and where: by name, type, kind (nav meshes too) or distance; an actor's data, behavior and parameters (what its type's code reads, their kind and default); the ground under a point |
+| `set_shape`, `set_material`, `list_textures` | a shape's size and texture repeat; a texture (an image file or a texture of the document) or a color for elements; the textures of the document |
 | `set_actor` | what an object does: its behavior (`open`, `active`, `leave`, `present`: see [Behaviors and parameters](#behaviors-and-parameters)) and its parameters (tag -> value, null: the game's) |
 | `transform_nodes`, `duplicate_nodes`, `delete_nodes`, `select`, `set_visibility` | move, turn, scale or stretch (`scale`, `scale_by`), copy, delete, show to the user (`level`: a whole level, to move it), show or hide (a level's group: the whole level) |
 | `set_camera`, `capture_view` | look somewhere, or frame elements, a level or the junction of two levels; a picture of the view, given to the assistant |

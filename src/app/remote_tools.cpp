@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <unordered_set>
 
@@ -291,6 +292,62 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     std::string err;
     if (!remove_document_level(group, &err)) return reply(fail(err));
     reply(ok(remote_status()));
+
+  } else if (tool == "set_shape") {
+    Node* n = scene.find(args.value("id", 0u));
+    ShapeParams p;
+    if (!n || !node_shape(*n, &p)) return reply(fail("id: a shape (place kind 'shape')"));
+    json j = p.to_json();
+    for (const char* k : {"size", "tile", "steps", "sides"})
+      if (args.contains(k)) j[k] = args[k];
+    NodeChange c(scene);
+    c.save(n->id);
+    reshape(scene, *n, ShapeParams::from_json(j));
+    history.push(c.commit(tr("undo.shape")));
+    reply(ok(remote_node_json(*n)));
+
+  } else if (tool == "set_material") {
+    const auto ids = ids_arg(args);
+    if (ids.empty()) return reply(fail("ids: the elements"));
+    int texture = -1;
+    const std::string tex = args.value("texture", std::string());
+    if (!tex.empty()) {
+      for (int i = 0; i < (int)scene.textures.size() && texture < 0; i++)
+        if (scene.textures[i].name == tex) texture = i;
+      std::string err;
+      if (texture < 0) texture = texture_from_image(scene, tex, &err);
+      if (texture < 0) return reply(fail("texture: no texture '" + tex + "' in the document (list_textures), nor an image file (" + err + ")"));
+    }
+    std::optional<Vec4> color;
+    if (args.contains("color")) {
+      const json& c = args["color"];
+      if (!c.is_array() || c.size() < 3 || c.size() > 4) return reply(fail("color: [r, g, b] or [r, g, b, a]"));
+      Vec4 v{1, 1, 1, 1};
+      for (size_t i = 0; i < c.size(); i++) (&v.x)[i] = c[i].get<float>();
+      color = v;
+    }
+    if (texture < 0 && !color) return reply(fail("texture or color"));
+    NodeChange c(scene);
+    for (auto id : ids) c.save(id);
+    const size_t changed = edit_material(scene, ids, args.value("material", -1), [&](Material& m) {
+      if (texture >= 0) m.texture = texture;
+      if (color) m.base_color = *color;
+    });
+    if (changed) history.push(c.commit(tr(texture >= 0 ? "undo.texture" : "undo.color")));
+    reply(ok({{"changed", changed}}));
+
+  } else if (tool == "list_textures") {
+    const std::string f = lower(args.value("filter", std::string()));
+    const int offset = std::max(0, args.value("offset", 0));
+    const int limit = std::clamp(args.value("limit", 100), 1, 1000);
+    json list = json::array();
+    int matching = 0;
+    for (const auto& t : scene.textures) {
+      if (!f.empty() && lower(t.name).find(f) == std::string::npos) continue;
+      if (matching++ < offset || (int)list.size() >= limit) continue;
+      list.push_back({{"name", t.name}, {"size", {t.width, t.height}}});
+    }
+    reply(ok({{"total", matching}, {"offset", offset}, {"textures", list}}));
 
   } else if (tool == "set_actor") {
     // an actor's behavior (merged into og_behavior) and parameters (its lumps, typed by its type's code)
@@ -654,7 +711,23 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     j["local"] = {{"position", vec3_json(n->local.t)},
                   {"rotation_deg", vec3_json(n->local.r.to_euler_deg())},
                   {"scale", vec3_json(n->local.s)}};
-    if (n->mesh) j["mesh"] = {{"name", n->mesh->name}, {"triangles", n->mesh->tri_count()}};
+    if (n->mesh) {
+      j["mesh"] = {{"name", n->mesh->name}, {"triangles", n->mesh->tri_count()}};
+      // its materials (set_material), their textures
+      json mats = json::array();
+      std::set<int> seen;
+      for (const auto& p : n->mesh->prims) {
+        if (!seen.insert(p.material).second || p.material < 0 || p.material >= (int)scene.materials.size()) continue;
+        const Material& m = scene.materials[p.material];
+        json e = {{"material", p.material},
+                  {"color", {m.base_color.x, m.base_color.y, m.base_color.z, m.base_color.w}}};
+        if (m.texture >= 0 && m.texture < (int)scene.textures.size()) e["texture"] = scene.textures[m.texture].name;
+        mats.push_back(e);
+      }
+      j["materials"] = mats;
+    }
+    ShapeParams shape;
+    if (node_shape(*n, &shape)) j["shape"] = shape.to_json();
     if (n->kind == NodeKind::Actor) {
       j["game_data"] = n->extras;
       // what configures it: the lumps its type's code reads (set_actor), and its behavior
@@ -944,12 +1017,30 @@ void App::remote_place(const json& args, RemoteReply reply) {
   scale = {std::max(scale.x, 0.01f), std::max(scale.y, 0.01f), std::max(scale.z, 0.01f)};
 
   // what to place: by name
-  if (kind == "model") {
+  if (kind == "model" && args.contains("path")) {
+    // a model made elsewhere
+    const std::string path = args.value("path", std::string());
+    const fs::path file(std::u8string((const char8_t*)path.c_str()));
+    std::error_code ec;
+    if (!fs::is_regular_file(file, ec)) return reply(fail("path: no file " + path));
+    const std::u8string u = file.stem().u8string();
+    const std::string stem(u.begin(), u.end());
+    start_model_placement(CatalogModel{name.empty() ? stem : name, path, ""}, false);
+  } else if (kind == "model") {
     const CatalogModel* found = nullptr;
     for (const auto& m : catalog_models)
       if (m.name == name) found = &m;
     if (!found) return reply(fail("no model '" + name + "' in the catalog (see list_models)"));
     start_model_placement(*found, false);
+  } else if (kind == "shape") {
+    const ShapePreset* preset = shape_preset(name);
+    if (!preset) return reply(fail("name: box, floor, wall, ramp, stairs or cylinder"));
+    json j = preset->params.to_json();
+    for (const char* k : {"size", "tile", "steps", "sides"})
+      if (args.contains(k)) j[k] = args[k];
+    ShapePreset p = *preset;
+    p.params = ShapeParams::from_json(j);
+    start_shape_placement(p, false);
   } else if (kind == "object") {
     const CatalogObject* found = nullptr;
     for (const auto& o : catalog)
@@ -1006,7 +1097,7 @@ void App::remote_place(const json& args, RemoteReply reply) {
     if (!found) return reply(fail("no decor part '" + name + "' in " + level->name + " (see list_decor)"));
     start_part_placement(level->background, *found, false);
   } else {
-    return reply(fail("kind: object, model, decor or prefab"));
+    return reply(fail("kind: object, model, decor, prefab or shape"));
   }
   placement.yaw = yaw;
 

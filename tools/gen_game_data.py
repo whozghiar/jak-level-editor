@@ -571,27 +571,31 @@ def actor_params(paths, lineage, actor_types):
 
 
 def type_code(root, paths):
-    """The code file (its .o stem) each type of the game's code is defined in, when it is not in
-    the common code (GAME.CGO), and for each such file the code files before it in the first DGO
-    that has it (what it needs)."""
+    """The code file (its .o stem) each type of the game's code is defined in, and each particle
+    group (what a part-spawner draws), when it is not in the common code (GAME.CGO); for each such
+    file the code files before it in the first DGO that has it (what it needs)."""
     dgos = {}
     for gd in sorted(glob.glob(os.path.join(root, 'dgos', '*.gd'))):
         dgos[os.path.basename(gd)] = re.findall(r'"([^"]+)\.o"', read(gd))
     common = set(dgos.get('game.gd', []))
-    defined = {}
+    defined, groups = {}, {}
     for path in paths:
         stem = os.path.splitext(os.path.basename(path))[0]
         if stem in common:
             continue
-        for t in re.findall(r'^\(deftype ([^\s()]+) ', read(path), re.M):
+        text = read(path)
+        for t in re.findall(r'^\(deftype ([^\s()]+) ', text, re.M):
             defined.setdefault(t, stem)
+        for g in re.findall(r'^\(defpartgroup ([^\s()]+)', text, re.M):
+            groups.setdefault(g, stem)
     needs = {}
-    for stem in sorted(set(defined.values())):
+    for stem in sorted(set(defined.values()) | set(groups.values())):
         for name, files in dgos.items():
             if name != 'game.gd' and stem in files:
                 needs[stem] = [f for f in files[:files.index(stem)] if f not in common]
                 break
-    return {t: s for t, s in sorted(defined.items()) if s in needs}, dict(sorted(needs.items()))
+    return ({t: s for t, s in sorted(defined.items()) if s in needs},
+            {g: s for g, s in sorted(groups.items()) if s in needs}, dict(sorted(needs.items())))
 
 
 def game_data(goal_src):
@@ -747,7 +751,7 @@ def game_data(goal_src):
             if up in parent:
                 parents[up] = parent[up]
     out['actors']['parents'] = dict(sorted(parents.items()))
-    out['actors']['code'], out['code_needs'] = type_code(root, everything)
+    out['actors']['code'], out['actors']['effect_code'], out['code_needs'] = type_code(root, everything)
     # the enums of those parameters (option bits, pickups), by name: [[name, value or bit], ...]
     enum_names = {k[5:] for ps in out['actors']['params'].values() for k, _ in ps.values() if k.startswith('enum:')}
     enum_names.add('pickup-type')

@@ -254,6 +254,8 @@ const SceneCache& Scene::cache() const {
   c.visible.assign(n, 0);
   c.actor.assign(n, 0);
   c.bounds.assign(n, AABB{});
+  c.meshes.resize(n, nullptr);
+  bool meshes_changed = false;  // a node given another mesh (a new texture, a shape resized, undo)
   // id -> index (ids are small and dense)
   uint32_t max_id = 0;
   for (const auto& node : nodes) max_id = std::max(max_id, node.id);
@@ -288,13 +290,17 @@ const SceneCache& Scene::cache() const {
         c.visible[j] = node.visible && !node.story_hidden;
       }
       if (node.mesh) c.bounds[j] = node.mesh->bounds().transformed(c.worlds[j]);
+      if (c.meshes[j] != node.mesh.get()) {
+        c.meshes[j] = node.mesh.get();
+        meshes_changed = true;
+      }
       done[j] = 1;
     }
   }
   // instances of a prototype (a decor piece, an actor's model) keep the same index in `nodes`
   // while only transforms change (a drag): regrouping by mesh, with its many small allocations,
-  // is only needed when the node set itself changed
-  if (!same_nodes) {
+  // is only needed when the node set itself changed, or a node's mesh
+  if (!same_nodes || meshes_changed) {
     c.mesh_groups.clear();
     std::unordered_map<const Mesh*, size_t> group_of;
     group_of.reserve(n / 4 + 1);

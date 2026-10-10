@@ -118,11 +118,17 @@ json tools() {
       tool("list_prefabs", "The prefabs of the game's library (groups of elements saved together)."),
       tool("place",
            "Puts in the document an object of the catalog (kind 'object', name from list_catalog), a model (kind "
-           "'model', from list_models), a decor part (kind 'decor', name and level from list_decor) or a prefab "
-           "(kind 'prefab'), at a position in meters (Y is up). Returns the new elements with their id. Undoable in the "
-           "editor.",
-           {{"kind", {{"type", "string"}, {"enum", {"object", "model", "decor", "prefab"}}}},
-            {"name", str("the object, part or prefab")},
+           "'model', from list_models, or a .glb file made elsewhere with path), a decor part (kind 'decor', name and "
+           "level from list_decor), a prefab (kind 'prefab') or a new shape (kind 'shape', name box, floor, wall, "
+           "ramp, stairs or cylinder, with size; its base's middle at the position; ramps and stairs rise towards "
+           "+z before the turn), at a position in meters (Y is up). Returns the new elements with their id. Undoable "
+           "in the editor.",
+           {{"kind", {{"type", "string"}, {"enum", {"object", "model", "decor", "prefab", "shape"}}}},
+            {"name", str("the object, part, prefab or shape")},
+            {"path", str("kind 'model': a .glb or .gltf file instead of a model of the game")},
+            {"size", vec3("kind 'shape': [width, height, depth] in meters")},
+            {"tile", num("kind 'shape': meters per repeat of its texture (2 by default)")},
+            {"steps", integer("kind 'shape', stairs: the number of steps")},
             {"level", str("kind 'decor': the level the part comes from (omitted: the first that has it)")},
             {"position", vec3("where, [x, y, z] in meters")},
             {"yaw_deg", num("turn around the vertical axis, in degrees")},
@@ -182,6 +188,30 @@ json tools() {
                                           "condition"}}},
             {"params", {{"type", "object"}, {"description", "tag -> value (null: back to the game's)"}}}},
            {"id"}),
+      tool("set_shape",
+           "Changes a shape made in the editor (place kind 'shape'): its size in meters, how many meters one repeat "
+           "of its texture covers, its steps (stairs) or sides (cylinder). Undoable.",
+           {{"id", integer("the shape")},
+            {"size", vec3("[width, height, depth] in meters")},
+            {"tile", num("meters per repeat of the texture")},
+            {"steps", integer("stairs")},
+            {"sides", integer("cylinder")}},
+           {"id"}),
+      tool("set_material",
+           "Gives elements (shapes, models, decor) a texture and/or a color: an image file (PNG, JPG, TGA, BMP) or "
+           "the name of a texture of the document (list_textures), saved with the project and exported for the "
+           "game. Only these elements change, not the others drawing the same material. Undoable.",
+           {{"ids", ids("the elements")},
+            {"texture", str("an image file path, or a texture name from list_textures")},
+            {"color", {{"description", "[r, g, b] or [r, g, b, a]: multiplies the texture (the game's materials are at 2)"}}},
+            {"material", integer("only this material of theirs (get_node: materials); omitted: all")}},
+           {"ids"}),
+      tool("list_textures",
+           "The textures of the document (those of the levels opened and the images added), by name and size, to "
+           "reuse with set_material.",
+           {{"filter", str("part of a name")},
+            {"offset", integer("first result (paging)")},
+            {"limit", integer("number of results, 100 by default")}}),
       tool("set_visibility",
            "Shows or hides elements (a level's group: the whole level). Hidden elements are not drawn nor picked. "
            "Undoable.",
