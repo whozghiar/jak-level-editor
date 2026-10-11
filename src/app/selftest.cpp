@@ -2232,6 +2232,17 @@ int run_selftest() {
     SDL_Quit();
   }
 
+  {
+    // the models' lights (merc's light-group 0): at noon the ambient light and the sun from 2 of its
+    // directions, half each
+    MoodSettings ms;
+    ms.hour = 12.f;
+    const GameMood m = game_mood(ms);
+    check(m.light_ambient[0] == m.times[0][0] && m.light_color[0][0] == m.times[2][0] * 0.5f &&
+              m.light_color[1][0] == m.times[3][0] * 0.5f && m.light_dir[1][0] == -0.5f && m.light_color[2][0] == 0.f,
+          "game view: the models lit by the mood's ambient light and its suns, as merc lights them");
+  }
+
   fs::remove_all(tmp, ec);
   std::printf("%s (%d failure%s)\n", g_failures ? "FAILED" : "OK", g_failures, g_failures == 1 ? "" : "s");
   return g_failures ? 1 : 0;

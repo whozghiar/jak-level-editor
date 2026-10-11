@@ -69,6 +69,14 @@ uniform vec3 u_fog_color;
 uniform float u_fog_start;
 uniform float u_fog_end;
 uniform vec3 u_cam_pos;
+// the game view: the models lit as merc lights them, fogged as the game fogs
+uniform int u_game_light;
+uniform vec3 u_light_ambient;
+uniform vec3 u_light_dir[3];
+uniform vec3 u_light_color[3];
+uniform vec4 u_game_fog;
+uniform vec2 u_game_fog_range;
+uniform vec3 u_cam_fwd;
 out vec4 o_color;
 // lit colors above 0.8 rolled off towards 1 instead of cut: a bright texture under a bright light
 // (the PS2 doubles vertex colors) keeps its detail instead of turning white
@@ -79,11 +87,20 @@ vec3 shoulder(vec3 x) {
 void main() {
   vec4 c = u_base;
   if (u_has_tex == 1) c *= texture(u_tex, v_uv);
-  if (u_use_vcol == 1) c.rgb = shoulder(c.rgb * clamp(v_col.rgb * u_vcol_scale, 0.0, 4.0));
+  if (u_game_light == 1) {
+    vec3 n = normalize(v_nrm);
+    if (!gl_FrontFacing) n = -n;
+    vec3 light = u_light_ambient;
+    for (int i = 0; i < 3; i++) light += max(dot(n, u_light_dir[i]), 0.0) * u_light_color[i];
+    vec3 vcol = u_use_vcol == 1 ? v_col.rgb * u_vcol_scale : vec3(1.0);
+    c.rgb = min(c.rgb * vcol * light, vec3(1.0));
+  } else if (u_use_vcol == 1) {
+    c.rgb = shoulder(c.rgb * clamp(v_col.rgb * u_vcol_scale, 0.0, 4.0));
+  }
   // alpha test, like the PS2: masked and blended materials (most of a level's) drop the texels
   // under their reference and write depth for the others
   if (u_alpha_mode != 0 && c.a < u_cutoff) discard;
-  if (u_shade == 1) {
+  if (u_shade == 1 && u_game_light == 0) {
     vec3 n = normalize(v_nrm);
     if (!gl_FrontFacing) n = -n;
     float l = 0.45 + 0.55 * max(dot(n, normalize(vec3(0.35, 1.0, 0.25))), 0.0);
@@ -93,6 +110,11 @@ void main() {
     float d = length(v_world - u_cam_pos);
     float f = clamp((d - u_fog_start) / max(u_fog_end - u_fog_start, 1.0), 0.0, 1.0);
     c.rgb = mix(c.rgb, u_fog_color, f);
+  }
+  if (u_game_light == 1) {
+    float d = dot(v_world - u_cam_pos, u_cam_fwd);
+    float f = clamp((d - u_game_fog_range.x) / max(u_game_fog_range.y - u_game_fog_range.x, 1.0), 0.0, 1.0);
+    c.rgb = mix(c.rgb, u_game_fog.rgb, f * u_game_fog.a);
   }
   c.rgb = mix(c.rgb, v_tint.rgb, v_tint.a);
   o_color = c;
@@ -250,6 +272,13 @@ bool Renderer::init(std::string* error) {
   m_u.mesh_fog_start = loc(m_mesh_prog, "u_fog_start");
   m_u.mesh_fog_end = loc(m_mesh_prog, "u_fog_end");
   m_u.mesh_cam_pos = loc(m_mesh_prog, "u_cam_pos");
+  m_u.mesh_game_light = loc(m_mesh_prog, "u_game_light");
+  m_u.mesh_light_ambient = loc(m_mesh_prog, "u_light_ambient");
+  m_u.mesh_light_dir = loc(m_mesh_prog, "u_light_dir");
+  m_u.mesh_light_color = loc(m_mesh_prog, "u_light_color");
+  m_u.mesh_game_fog = loc(m_mesh_prog, "u_game_fog");
+  m_u.mesh_game_fog_range = loc(m_mesh_prog, "u_game_fog_range");
+  m_u.mesh_cam_fwd = loc(m_mesh_prog, "u_cam_fwd");
   m_u.solid_color = loc(m_solid_prog, "u_color");
   m_u.solid_mvp = loc(m_solid_prog, "u_mvp");
 
@@ -568,6 +597,7 @@ void Renderer::set_view(const Camera& cam, int x, int y, int w, int h, float log
   m_viewproj = m_proj * m_view;
   if (!m_game) m_draw_vp = m_viewproj;
   m_cam_pos = cam.pos;
+  m_cam_fwd = cam.forward();
 }
 
 void Renderer::set_game_depth(const Mat4* clip) {
@@ -815,6 +845,15 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
   glUniform1f(m_u.mesh_fog_start, rs.fog_start);
   glUniform1f(m_u.mesh_fog_end, rs.fog_end);
   glUniform3f(m_u.mesh_cam_pos, m_cam_pos.x, m_cam_pos.y, m_cam_pos.z);
+  glUniform1i(m_u.mesh_game_light, rs.game_light ? 1 : 0);
+  if (rs.game_light) {
+    glUniform3fv(m_u.mesh_light_ambient, 1, rs.light_ambient);
+    glUniform3fv(m_u.mesh_light_dir, 3, &rs.light_dir[0][0]);
+    glUniform3fv(m_u.mesh_light_color, 3, &rs.light_color[0][0]);
+    glUniform4fv(m_u.mesh_game_fog, 1, rs.game_fog);
+    glUniform2f(m_u.mesh_game_fog_range, rs.game_fog_start, rs.game_fog_end);
+    glUniform3f(m_u.mesh_cam_fwd, m_cam_fwd.x, m_cam_fwd.y, m_cam_fwd.z);
+  }
   if (rs.wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glDepthMask(GL_TRUE);
   // opaque and masked primitives, then blended ones (with depth writes too: the PS2 draws most
@@ -958,6 +997,7 @@ void Renderer::draw_mesh(Mesh& mesh, const Mat4& world, const std::vector<Materi
   glUniform1f(m_u.mesh_vcol_scale, rs.vertex_color_scale);
   glUniformMatrix4fv(m_u.mesh_viewproj, 1, GL_FALSE, m_draw_vp.m);
   glUniform1i(m_u.mesh_fog, 0);  // a single mesh drawn apart (preview, thumbnail): no fog
+  glUniform1i(m_u.mesh_game_light, 0);
   // a see-through preview does not hide what is behind it
   const bool ghost = alpha < 1.f;
   bind_instances(0);

@@ -24,6 +24,12 @@ struct GameMood {
   float fog_start = 0, fog_end = 0;  // game units (4096 per meter)
   float fog_max = 255, fog_min = 0;  // how much of the color is kept, near and far (255: all)
   float sky_color[3] = {0, 0, 0};    // 0..255: the sky behind the level (the editor's clear color)
+  // the lights of the models (the mood's light-group 0, as merc lights them): the ambient light,
+  // and up to 3 directions of the sun (toward it, in the world) with their colors times their
+  // intensity at that hour
+  float light_ambient[3] = {0, 0, 0};
+  float light_dir[3][3] = {};
+  float light_color[3][3] = {};
 };
 
 struct MoodSettings {

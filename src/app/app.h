@@ -429,6 +429,8 @@ class App {
   bool show_effects = true;
   void update_effects(float dt);
   void draw_effects();
+  // what the editor draws over the game view: no grid, the models lit and fogged like the game's
+  void game_view_settings(RenderSettings& out);
   Camera camera;
   RenderSettings rs;
   Gizmo gizmo;

@@ -41,6 +41,10 @@ const Hour kHours[24] = {
     {6, 5, 0.75f, 0.5f},  {6, 5, 0.5f, 0.25f},  {6, 5, 0.25f, 0.f},   {6, 7, 0.f, 0.2f},
 };
 
+// the 4 directions of the sun (*mood-direction-table*), toward it
+const float kDirections[4][3] = {
+    {0.906f, 0.397f, 0.143f}, {0.5f, 0.814f, 0.296f}, {-0.5f, 0.814f, 0.296f}, {-0.906f, 0.397f, 0.143f}};
+
 // how much of the sun comes from each of its 4 directions, per hour (the moon at night)
 const float kChannels[4][24] = {
     {0, 0, 0, 0, 0, 0.2f, 0.4f, 1, 0.5f, 0.25f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -81,10 +85,21 @@ GameMood game_mood(const MoodSettings& s) {
   m.fog_max = kFogMax;
   m.fog_min = kFogMin;
 
-  // update-mood-direction: the sun's directions lit at that hour
+  // update-mood-direction: the sun's directions lit at that hour, and the light-group 0 the models
+  // take (their light-index is 0 unless said otherwise): the directions lit, 3 at most
+  for (int c = 0; c < 3; c++) m.light_ambient[c] = m.times[0][c];
+  int lights = 0;
   for (int c = 0; c < 4; c++) {
     const float w = (1.f - frac) * kChannels[c][h] + frac * kChannels[c][(h + 1) % 24];
-    if (w != 0.f) m.times[c + 1][3] = w;
+    if (w == 0.f) continue;
+    m.times[c + 1][3] = w;
+    if (lights < 3) {
+      for (int k = 0; k < 3; k++) {
+        m.light_dir[lights][k] = kDirections[c][k];
+        m.light_color[lights][k] = m.times[c + 1][k] * w;
+      }
+      lights++;
+    }
   }
 
   // the level's lights, like the city's (update-mood-ctyindb): its lamps at night, the lights

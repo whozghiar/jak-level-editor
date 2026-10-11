@@ -132,19 +132,16 @@ std::string App::capture_view_png(int w, int h, float game_hour) {
   // the game view at that hour (game_hour >= 0), or the editor's
   const bool game = game_hour >= 0 && game_view.ready() && document_open();
   RenderSettings view_rs = rs;
+  const float hour = game_view.mood.hour;
   if (game) {
-    view_rs.game_view = true;
-    view_rs.show_grid = false;
-    view_rs.far_ocean = false;
+    game_view.mood.hour = game_hour;
+    game_view_settings(view_rs);
   }
   renderer.begin(camera, 0, 0, w, h, view_rs, (float)w, (float)h);
   if (game) {
-    const float hour = game_view.mood.hour;
-    game_view.mood.hour = game_hour;
     Mat4 clip;
     game_view.draw_opaque(scene, camera, 0, 0, w, h, &clip);
     renderer.set_game_depth(&clip);
-    game_view.mood.hour = hour;
   }
   renderer.draw_scene(scene, view_rs, selection, 0);
   if (game) game_view.draw_translucent();
@@ -153,6 +150,7 @@ std::string App::capture_view_png(int w, int h, float game_hour) {
   draw_effects();
   draw_navmesh_overlay();
   renderer.set_game_depth(nullptr);
+  game_view.mood.hour = hour;
   const std::vector<uint8_t> png = target.png();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);

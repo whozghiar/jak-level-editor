@@ -326,11 +326,7 @@ void App::frame(float dt) {
   // game's camera and depth
   const bool game = game_view_on && game_view.ready() && document_open();
   RenderSettings view_rs = rs;
-  if (game) {
-    view_rs.game_view = true;
-    view_rs.show_grid = false;
-    view_rs.far_ocean = false;
-  }
+  if (game) game_view_settings(view_rs);
   renderer.begin(camera, px, py, pw, ph, view_rs, m_vp_w, m_vp_h);
   if (game) {
     Mat4 clip;
@@ -350,6 +346,26 @@ void App::frame(float dt) {
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void App::game_view_settings(RenderSettings& out) {
+  out.game_view = true;
+  out.show_grid = false;
+  out.far_ocean = false;
+  // the models lit and fogged as the game does at that hour (game_mood.h)
+  const GameMood m = game_mood(game_view.mood);
+  out.game_light = true;
+  for (int i = 0; i < 3; i++) {
+    out.light_ambient[i] = m.light_ambient[i];
+    for (int k = 0; k < 3; k++) {
+      out.light_dir[i][k] = m.light_dir[i][k];
+      out.light_color[i][k] = m.light_color[i][k];
+    }
+    out.game_fog[i] = m.fog_color[i] / 255.f;
+  }
+  out.game_fog[3] = game_view.fog ? (m.fog_max - m.fog_min) / 255.f : 0.f;
+  out.game_fog_start = m.fog_start / 4096.f;
+  out.game_fog_end = m.fog_end / 4096.f;
 }
 
 void App::process_event(const void* ev) {

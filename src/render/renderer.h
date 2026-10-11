@@ -41,6 +41,14 @@ struct RenderSettings {
   float fog_end = 400.f;
   // the game view draws the decor (game_view/game_view.h): the editor draws the rest over it
   bool game_view = false;
+  // the models lit as the game lights them (merc: the mood's ambient light and up to 3 lights, by
+  // their normals) and fogged like the game's, in the game view
+  bool game_light = false;
+  float light_ambient[3] = {0, 0, 0};
+  float light_dir[3][3] = {};
+  float light_color[3][3] = {};
+  float game_fog[4] = {0, 0, 0, 0};  // its color (0..1) and how much of it at most
+  float game_fog_start = 32.f, game_fog_end = 1000.f;  // meters
 };
 
 struct DrawStats {
@@ -173,6 +181,13 @@ class Renderer {
     int mesh_fog_start = -1;
     int mesh_fog_end = -1;
     int mesh_cam_pos = -1;
+    int mesh_game_light = -1;
+    int mesh_light_ambient = -1;
+    int mesh_light_dir = -1;
+    int mesh_light_color = -1;
+    int mesh_game_fog = -1;
+    int mesh_game_fog_range = -1;
+    int mesh_cam_fwd = -1;
     int solid_color = -1;
     int solid_mvp = -1;
   } m_u;
@@ -200,6 +215,7 @@ class Renderer {
   bool m_game = false;  // over the game view (set_game_depth)
   Vec4 m_planes[6];
   Vec3 m_cam_pos;
+  Vec3 m_cam_fwd;
   int m_vp[4] = {0, 0, 1, 1};
   float m_logical[2] = {1, 1};
   int m_frame = 0;

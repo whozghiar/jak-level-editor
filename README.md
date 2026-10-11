@@ -319,7 +319,8 @@ per material with the game's draw modes: alpha test, blending, fog), with the ga
 ![ctyindb in the game view at noon, lit by the game: a piece selected, its outline and the gizmo over it at the game's depth](docs/captures/22-game-view.png)
 
 The editor's things stay over it, at the game's depth: the selection, the gizmo, the actors' models
-(drawn by the editor), the markers, the nav meshes, the ocean. An edit shows at once: the level is
+(drawn by the editor, lit and fogged as the game's model renderer does: the hour's ambient light and
+the sun from up to 3 of its directions, by their normals), the markers, the nav meshes, the ocean. An edit shows at once: the level is
 made in chunks (the pieces sharing a palette in a cell of 128 m), and the chunks an edit touched are
 made again (a few milliseconds). The pieces made in the editor (shapes, models of your own,
 structures of Jak II) are lit like the level's geometry from their color, as the export lights
@@ -327,7 +328,7 @@ them.
 
 The game view needs OpenGL 4.1 (the game's shaders); without it the menu says why and the editor
 draws as usual. It draws the background (the decor) only: the sky is its color, the ocean, the
-actors' models and the particle effects are the editor's.
+actors' models (lit as the game lights them) and the particle effects are the editor's.
 
 ### Effects
 
@@ -1148,7 +1149,9 @@ nav meshes followed by creatures in the game.
   weather; the lamps (palettes 5 to 7) follow the city's levels (lit at night), not each level's own
   mood code.
 - **The game view** draws the background only: no sky (its color), no ocean of the game (the
-  editor's), no envmap reflections; the actors' models and the effects are the editor's. The level
+  editor's), no envmap reflections; the actors' models and the effects are the editor's (the models
+lit by the game's ambient light and suns, without their envmap shine nor the lights of the
+level's lamps nearby). The level
   builder quantizes a level's colors to 8,192 per tree (a few vertices of a big level lose a part
   of their afternoon sun): the game view does not, so it shows the palettes exactly.
 - **The catalog's objects** come from the extracted levels and the game's code. A new object
