@@ -1,5 +1,6 @@
-// The guide: the guided tour (F1), every tool with its animation, the keys; the tooltips of the
-// guide over the tools; and the Build panel (the shapes, the palette of Jak 3's materials).
+// The guide: the tutorials (F1: Getting started, then one per tool or task, each named, a few steps
+// each), every tool with its animation, the keys; the tooltips of the guide over the tools; and the
+// Build panel (the shapes, the materials of the games).
 
 #include <algorithm>
 #include <cstring>
@@ -31,10 +32,12 @@ struct GuideEntry {
 };
 const GuideEntry kGuide[] = {
     {"camera", "camera"},   {"select", "select"},       {"box_select", "box_select"}, {"move", "move"},
-    {"rotate", "rotate"},   {"scale", "scale"},         {"snap", "snap"},             {"local", nullptr},
+    {"rotate", "rotate"},   {"scale", "scale"},         {"snap", "snap"},             {"local", "local"},
+    {"free_rotate", "free_rotate"}, {"game_view", nullptr},
     {"build", "build"},     {"palette", "build"},       {"catalog", "place"},         {"interactive", nullptr},
     {"models", "place"},    {"decor", "place"},         {"jak2", nullptr},            {"prefab", "prefab"},
     {"game_prefabs", "prefab"}, {"bounce", "bounce"},   {"launch", "launch"},         {"collision", nullptr},
+    {"ingame", nullptr},    {"surface", nullptr},       {"event", nullptr},           {"relight", nullptr},
     {"levels", "story"},    {"story", "story"},         {"replace", "replace"},       {"export", nullptr}};
 
 const GuideEntry* guide_entry(const char* id) {
@@ -50,41 +53,82 @@ struct GuideSection {
 };
 const std::vector<GuideSection>& guide_sections() {
   static const std::vector<GuideSection> s = {
-      {"guide.section.view", {"camera", "select", "box_select"}},
-      {"guide.section.transform", {"move", "rotate", "scale", "snap", "local"}},
-      {"guide.section.build", {"build", "palette", "catalog", "interactive", "models", "decor", "jak2", "prefab", "game_prefabs"}},
-      {"guide.section.behaviors", {"bounce", "launch", "collision"}},
+      {"guide.section.view", {"camera", "select", "box_select", "game_view"}},
+      {"guide.section.transform", {"move", "rotate", "free_rotate", "scale", "snap", "local"}},
+      {"guide.section.build", {"build", "palette", "catalog", "interactive", "models", "decor", "jak2", "prefab", "game_prefabs", "relight"}},
+      {"guide.section.behaviors", {"ingame", "collision", "surface", "event", "bounce", "launch"}},
       {"guide.section.level", {"levels", "story", "replace", "export"}}};
   return s;
 }
 
-// The steps of the guided tour: tour.<id>.title, .text and .action (the button that shows it)
-enum class TourAction { None, Extract, LevelsTab, BuildTab, CatalogTab, PrefabsTab, Replace, Export };
+// The tutorials: tuto.<id>.title names one; a step's keys are <prefix><step>.title, .text and
+// .action (the button that shows it), `demos` its animations
+enum class TourAction { None, Extract, LevelsTab, BuildTab, CatalogTab, PrefabsTab, Replace, Export, GameView, Save, NavMeshes };
 struct TourStep {
   const char* id;
   std::vector<const char*> demos;
   TourAction action;
 };
-const std::vector<TourStep>& tour_steps() {
-  static const std::vector<TourStep> s = {
-      {"extract", {}, TourAction::Extract},
-      {"levels", {"story"}, TourAction::LevelsTab},
-      {"camera", {"camera"}, TourAction::None},
-      {"select", {"select", "box_select"}, TourAction::None},
-      {"gizmo", {"move", "rotate", "scale", "snap"}, TourAction::None},
-      {"build", {"build"}, TourAction::BuildTab},
-      {"catalog", {"place"}, TourAction::CatalogTab},
-      {"prefabs", {"prefab"}, TourAction::PrefabsTab},
-      {"behaviors", {"bounce", "launch"}, TourAction::None},
-      {"replace", {"replace"}, TourAction::Replace},
-      {"export", {}, TourAction::Export}};
-  return s;
+struct Tutorial {
+  const char* id;
+  const char* prefix;
+  std::vector<TourStep> steps;
+};
+const std::vector<Tutorial>& tutorials() {
+  using A = TourAction;
+  static const std::vector<Tutorial> t = {
+      {"start", "tour.",
+       {{"extract", {}, A::Extract},
+        {"levels", {"story"}, A::LevelsTab},
+        {"camera", {"camera"}, A::None},
+        {"select", {"select", "box_select"}, A::None},
+        {"gizmo", {"move", "rotate", "scale", "snap"}, A::None},
+        {"build", {"build"}, A::BuildTab},
+        {"catalog", {"place"}, A::CatalogTab},
+        {"prefabs", {"prefab"}, A::PrefabsTab},
+        {"behaviors", {"bounce", "launch"}, A::None},
+        {"replace", {"replace"}, A::Replace},
+        {"export", {}, A::Export}}},
+      {"move", "tuto.move.",
+       {{"select", {"select", "box_select"}, A::None}, {"drag", {"move"}, A::None}, {"fine", {"snap"}, A::None}, {"exact", {}, A::None}}},
+      {"rotate", "tuto.rotate.", {{"rings", {"rotate"}, A::None}, {"free", {"free_rotate"}, A::None}, {"exact", {}, A::None}}},
+      {"scale", "tuto.scale.", {{"axes", {"scale"}, A::None}, {"exact", {}, A::None}, {"shapes", {"build"}, A::BuildTab}}},
+      {"local", "tuto.local.", {{"what", {"local"}, A::None}, {"when", {"local"}, A::None}}},
+      {"snap", "tuto.snap.", {{"on", {"snap"}, A::None}, {"steps", {"snap"}, A::None}, {"place", {"place"}, A::None}}},
+      {"game_view", "tuto.game_view.",
+       {{"what", {}, A::GameView}, {"hour", {}, A::None}, {"live", {}, A::None}, {"limits", {}, A::None}}},
+      {"ingame", "tuto.ingame.",
+       {{"section", {}, A::None},
+        {"collision", {}, A::None},
+        {"surface", {}, A::None},
+        {"event", {}, A::None},
+        {"more", {}, A::None},
+        {"jumps", {"bounce", "launch"}, A::None}}},
+      {"materials", "tuto.materials.", {{"window", {}, A::None}, {"catalog", {"build"}, A::CatalogTab}, {"light", {}, A::None}}},
+      {"catalog", "tuto.catalog.",
+       {{"game", {}, A::CatalogTab}, {"objects", {"place"}, A::None}, {"decor", {}, A::None}, {"jak2", {}, A::None}}},
+      {"prefabs", "tuto.prefabs.", {{"game", {"prefab"}, A::PrefabsTab}, {"mine", {"prefab"}, A::None}}},
+      {"levels", "tuto.levels.", {{"open", {"story"}, A::LevelsTab}, {"add", {}, A::None}, {"story", {"story"}, A::None}}},
+      {"replace", "tuto.replace.", {{"choose", {"replace"}, A::Replace}, {"align", {"replace"}, A::None}, {"export", {}, A::Export}}},
+      {"save", "tuto.save.", {{"save", {}, A::Save}, {"export", {}, A::Export}, {"navmesh", {}, A::NavMeshes}}}};
+  return t;
 }
 
 const ImVec4 kTitle(0.45f, 0.82f, 0.9f, 1.f);
 const ImVec4 kExample(0.95f, 0.8f, 0.5f, 1.f);
 
 }  // namespace
+
+bool App::select_tutorial(const std::string& id, int step) {
+  const auto& all = tutorials();
+  for (int i = 0; i < (int)all.size(); i++)
+    if (id == all[i].id) {
+      guide_tutorial = i;
+      guide_step = step;
+      return true;
+    }
+  return false;
+}
 
 void App::ui_demo(const std::string& name, float w, float h, double t) {
   static std::vector<DemoOverlay> overlay;
@@ -175,7 +219,7 @@ void App::guide_tip(const char* id) {
 
 void App::ui_guide_window() {
   if (!show_help) return;
-  ImGui::SetNextWindowSize(ImVec2(780, 640), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(980, 700), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin(tr_id("guide.title").c_str(), &show_help)) {
     ImGui::End();
     return;
@@ -186,29 +230,51 @@ void App::ui_guide_window() {
       if (!ImGui::BeginTabItem(tr_id(tabs[tab]).c_str(), nullptr, guide_tab_request == tab ? ImGuiTabItemFlags_SetSelected : 0))
         continue;
       if (tab == 0) {
-        // the guided tour: a step at a time, its animations, a button that shows where it is
-        const auto& steps = tour_steps();
+        // the tutorials, by name, the steps of the one chosen; a step at a time, its animations, a
+        // button that shows where it is
+        const auto& all = tutorials();
+        guide_tutorial = std::clamp(guide_tutorial, 0, (int)all.size() - 1);
+        const Tutorial& tut = all[guide_tutorial];
+        const auto& steps = tut.steps;
         guide_step = std::clamp(guide_step, 0, (int)steps.size() - 1);
-        static int started_step = -1;
+        static int started_tutorial = -1, started_step = -1;
         static double since = 0;
-        if (started_step != guide_step) {
+        if (started_step != guide_step || started_tutorial != guide_tutorial) {
           started_step = guide_step;
+          started_tutorial = guide_tutorial;
           since = ImGui::GetTime();
         }
-        const TourStep& s = steps[guide_step];
-        const std::string k = std::string("tour.") + s.id;
-        // where we are: a dot per step
-        for (int i = 0; i < (int)steps.size(); i++) {
+        ImGui::BeginChild("tutorials", ImVec2(250, 0), ImGuiChildFlags_Borders);
+        for (int i = 0; i < (int)all.size(); i++) {
           ImGui::PushID(i);
-          ImGui::PushStyleColor(ImGuiCol_Button, i == guide_step ? ImVec4(0.22f, 0.6f, 0.66f, 1.f)
-                                                                 : ImVec4(0.3f, 0.32f, 0.36f, 1.f));
-          if (ImGui::Button(strf("%d", i + 1).c_str(), ImVec2(28, 0))) guide_step = i;
+          ImGui::PushStyleColor(ImGuiCol_Text, i == guide_tutorial ? kTitle : ImGui::GetStyleColorVec4(ImGuiCol_Text));
+          if (ImGui::Selectable(strf("%d. %s", i + 1, tr(("tuto." + std::string(all[i].id) + ".title").c_str())).c_str(),
+                                i == guide_tutorial) &&
+              i != guide_tutorial) {
+            guide_tutorial = i;
+            guide_step = 0;
+          }
           ImGui::PopStyleColor();
-          tooltip(tr(("tour." + std::string(steps[i].id) + ".title").c_str()));
+          if (i == guide_tutorial) {
+            // its steps, named
+            ImGui::Indent();
+            for (int j = 0; j < (int)steps.size(); j++) {
+              ImGui::PushID(j);
+              const std::string title = tr((std::string(tut.prefix) + steps[j].id + ".title").c_str());
+              if (ImGui::Selectable(strf("%d.%d %s", i + 1, j + 1, title.c_str()).c_str(), j == guide_step)) guide_step = j;
+              ImGui::PopID();
+            }
+            ImGui::Unindent();
+          }
           ImGui::PopID();
-          ImGui::SameLine();
         }
-        ImGui::NewLine();
+        ImGui::EndChild();
+        ImGui::SameLine();
+        ImGui::BeginChild("tutorial");
+        const TourStep& s = steps[guide_step];
+        const std::string k = std::string(tut.prefix) + s.id;
+        ImGui::TextDisabled("%s - %s", tr(("tuto." + std::string(tut.id) + ".title").c_str()),
+                            strf(tr("tuto.step"), guide_step + 1, (int)steps.size()).c_str());
         ImGui::Spacing();
         ImGui::TextColored(kTitle, "%s", tr((k + ".title").c_str()));
         ImGui::TextWrapped("%s", tr((k + ".text").c_str()));
@@ -236,7 +302,8 @@ void App::ui_guide_window() {
         ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), ImGui::GetWindowHeight() - bottom));
         ImGui::Separator();
         if (s.action != TourAction::None) {
-          const bool needs_document = s.action == TourAction::Replace || s.action == TourAction::Export;
+          const bool needs_document = s.action == TourAction::Replace || s.action == TourAction::Export ||
+                                      s.action == TourAction::Save || s.action == TourAction::NavMeshes;
           ImGui::BeginDisabled(needs_document && !document_open());
           if (ImGui::Button(tr_id((k + ".action").c_str()).c_str())) {
             switch (s.action) {
@@ -250,6 +317,9 @@ void App::ui_guide_window() {
                 m_scroll_to_replace = true;
                 break;
               case TourAction::Export: open_export_window(); break;
+              case TourAction::GameView: game_view_on = game_view.ready(); break;
+              case TourAction::Save: save(false); break;
+              case TourAction::NavMeshes: show_navmesh_window = true; break;
               case TourAction::None: break;
             }
           }
@@ -257,7 +327,7 @@ void App::ui_guide_window() {
           if (needs_document && !document_open()) tooltip(tr("tour.needs_level"));
           ImGui::SameLine();
         }
-        const float nav_w = 110.f;
+        const float nav_w = 130.f;
         ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - nav_w * 2 - 24.f));
         ImGui::BeginDisabled(guide_step == 0);
         if (ImGui::Button(tr_id("tour.previous").c_str(), ImVec2(nav_w, 0))) guide_step--;
@@ -265,9 +335,17 @@ void App::ui_guide_window() {
         ImGui::SameLine();
         if (guide_step + 1 < (int)steps.size()) {
           if (ImGui::Button(tr_id("tour.next").c_str(), ImVec2(nav_w, 0))) guide_step++;
+        } else if (guide_tutorial + 1 < (int)all.size()) {
+          // the next tutorial
+          if (ImGui::Button(tr_id("tuto.next").c_str(), ImVec2(nav_w, 0))) {
+            guide_tutorial++;
+            guide_step = 0;
+          }
+          tooltip(tr(("tuto." + std::string(all[guide_tutorial + 1].id) + ".title").c_str()));
         } else if (ImGui::Button(tr_id("tour.finish").c_str(), ImVec2(nav_w, 0))) {
           show_help = false;
         }
+        ImGui::EndChild();
       } else if (tab == 1) {
         // every tool: its animation, what it does, a concrete example
         ImGui::BeginChild("tools");
@@ -313,8 +391,8 @@ void App::ui_guide_window() {
         ImGui::SeparatorText(tr("help.story"));
         for (const char* key : {"help.story.1", "help.story.2", "help.story.3"}) bullet(tr(key));
         ImGui::SeparatorText(tr("help.editing"));
-        for (const char* key : {"help.editing.1", "help.editing.2", "help.editing.3", "help.editing.4", "help.editing.5",
-                                "help.editing.6", "help.editing.7", "help.editing.8", "help.editing.9"})
+        for (const char* key : {"help.editing.1", "help.editing.2", "help.editing.10", "help.editing.3", "help.editing.4",
+                                "help.editing.5", "help.editing.6", "help.editing.7", "help.editing.8", "help.editing.9"})
           bullet(tr(key));
       }
       ImGui::EndTabItem();
@@ -388,7 +466,7 @@ void App::ui_build_panel() {
   if (ids.empty()) ImGui::TextWrapped("%s", tr("build.materials.none"));
   else ImGui::TextWrapped("%s", strf(tr("build.materials.count"), ids.size()).c_str());
   ImGui::PopStyleColor();
-  ui_palette(ids, -1, ImGui::GetContentRegionAvail().x);
+  ui_texture_browser(ids, -1, ImGui::GetContentRegionAvail().x, std::max(240.f, ImGui::GetContentRegionAvail().y));
 }
 
 }  // namespace ogle

@@ -1,7 +1,9 @@
 // The inspector's sections of a surface (panels.cpp shows them): the size of a shape made in the
-// editor (scene/shapes.h), and the materials of any piece: an image file or a texture of the
-// document, a color. A change gives the pieces selected a new material and copies of their meshes:
-// the other pieces drawing the same material keep it, and undo puts the meshes back.
+// editor (scene/shapes.h), and the materials of any piece: an image file, or a texture of the games
+// (the browser: a game, a level, a name). A change gives the pieces selected a new material and
+// copies of their meshes: the other pieces drawing the same material keep it, and undo puts the
+// meshes back. Their color is the game's (not edited: the game's materials are drawn twice as
+// bright, their vertex colors at half).
 
 #include <algorithm>
 
@@ -11,6 +13,7 @@
 #include "imgui.h"
 #include "imgui_stdlib.h"
 #include "io/jak2_import.h"
+#include "scene/relight.h"
 
 namespace ogle {
 
@@ -18,6 +21,11 @@ namespace {
 
 void tooltip(const char* text) {
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort) && text && *text) ImGui::SetTooltip("%s", text);
+}
+
+std::string lower(std::string s) {
+  for (auto& c : s) c = (char)std::tolower((unsigned char)c);
+  return s;
 }
 
 // the materials a mesh draws, in the order of its pieces
@@ -75,70 +83,183 @@ void App::ui_shape_inspector(Node& n) {
   }
 }
 
-void App::ui_palette(const std::vector<uint32_t>& ids, int material, float width) {
-  if (palette_textures.empty()) {
-    ImGui::TextDisabled("%s", tr(library_index.ready() ? "palette.empty" : "palette.indexing"));
-    return;
+void App::ui_texture_browser(const std::vector<uint32_t>& ids, int material, float width, float height,
+                             bool choose_game) {
+  const float top = ImGui::GetCursorPosY();  // `height` is the whole browser's
+  // the game: Jak 3's textures, or Jak II's when it was extracted too (chosen here, or by the caller)
+  if (library_jak2.empty() && !m_tex_game.empty()) {
+    m_tex_game.clear();
+    m_tex_level.clear();
   }
-  // its themes (the first word of the textures' names: city, wascity, des...), the most used first
-  static std::string theme, filter;
-  std::map<std::string, int> counts;
-  for (const auto& t : palette_textures) counts[t.theme]++;
-  std::vector<std::pair<int, std::string>> themes;
-  for (const auto& [name, n] : counts) themes.push_back({-n, name});
-  std::sort(themes.begin(), themes.end());
-  ImGui::SetNextItemWidth(160);
-  if (ImGui::BeginCombo("##theme", theme.empty() ? tr("palette.all") : theme.c_str(), ImGuiComboFlags_HeightLarge)) {
-    if (ImGui::Selectable(tr("palette.all"), theme.empty())) theme.clear();
-    for (const auto& [n, name] : themes)
-      if (ImGui::Selectable(strf("%s (%d)", name.c_str(), -n).c_str(), theme == name)) theme = name;
+  if (choose_game && !library_jak2.empty()) {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(tr("textures.game"));
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Jak 3##tex-game", m_tex_game.empty()) && !m_tex_game.empty()) {
+      m_tex_game.clear();
+      m_tex_level.clear();
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Jak II##tex-game", m_tex_game == "jak2") && m_tex_game != "jak2") {
+      m_tex_game = "jak2";
+      m_tex_level.clear();
+    }
+  }
+  const bool jak2 = m_tex_game == "jak2";
+  const LibraryIndex& index = jak2 ? library_index_jak2 : library_index;
+  const std::vector<PaletteTexture>& every = jak2 ? game_textures_jak2 : game_textures;
+  // a level of the other game chosen before: every level
+  if (!m_tex_level.empty() && m_tex_level != "*" && index.ready()) {
+    bool there = false;
+    for (const auto& li : index.levels()) there |= li.level == m_tex_level;
+    if (!there) m_tex_level.clear();
+  }
+  // a level (the textures its decor draws), every level, or the textures of the document
+  const float combo_w = std::min(230.f, width * 0.5f);
+  ImGui::SetNextItemWidth(combo_w);
+  const std::string label = m_tex_level.empty()   ? tr("textures.all_levels")
+                            : m_tex_level == "*" ? tr("textures.document")
+                                                 : m_tex_level;
+  if (ImGui::BeginCombo("##tex-level", label.c_str(), ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::Selectable(tr("textures.all_levels"), m_tex_level.empty())) m_tex_level.clear();
+    if (ImGui::Selectable(tr("textures.document"), m_tex_level == "*")) m_tex_level = "*";
+    if (index.ready())
+      for (const auto& li : index.levels())
+        if (!li.textures.empty() && ImGui::Selectable(strf("%s (%zu)", li.level.c_str(), li.textures.size()).c_str(),
+                                                      m_tex_level == li.level))
+          m_tex_level = li.level;
     ImGui::EndCombo();
   }
+  tooltip(tr("textures.level.tip"));
   ImGui::SameLine();
-  ImGui::SetNextItemWidth(std::max(80.f, width - 160.f - ImGui::GetStyle().ItemSpacing.x));
-  ImGui::InputTextWithHint("##palette-filter", tr("palette.filter"), &filter);
+  ImGui::SetNextItemWidth(std::max(80.f, width - combo_w - ImGui::GetStyle().ItemSpacing.x));
+  ImGui::InputTextWithHint("##tex-filter", tr("textures.filter"), &m_tex_filter);
+  const std::string f = lower(m_tex_filter);
+
+  // what is shown: the document's textures (by index), or textures of the game
+  std::vector<int> mine;
   std::vector<const PaletteTexture*> shown;
-  for (const auto& t : palette_textures)
-    if ((theme.empty() || t.theme == theme) && (filter.empty() || t.name.find(filter) != std::string::npos))
-      shown.push_back(&t);
-  ImGui::TextDisabled(tr("palette.count"), shown.size(), palette_textures.size());
-  const float size = 56.f;
-  ImGui::BeginChild("palette-grid", ImVec2(width, 360), ImGuiChildFlags_Borders);
+  size_t total = 0;
+  static std::vector<PaletteTexture> of_level;  // the textures of the level chosen
+  static std::string of_level_key;
+  if (m_tex_level == "*") {
+    total = scene.textures.size();
+    for (int i = 0; i < (int)scene.textures.size(); i++)
+      if (f.empty() || lower(scene.textures[i].name).find(f) != std::string::npos) mine.push_back(i);
+  } else {
+    if (!index.ready()) {
+      ImGui::TextDisabled(tr("catalog.indexing"), index.done(), index.total());
+      return;
+    }
+    const std::vector<PaletteTexture>* list = &every;
+    if (!m_tex_level.empty()) {
+      const std::string key = library_root + "/" + m_tex_game + "/" + m_tex_level;
+      if (of_level_key != key) {
+        of_level_key = key;
+        of_level.clear();
+        for (const auto& li : index.levels())
+          if (li.level == m_tex_level)
+            for (const auto& [name, n] : li.textures) {
+              if (name.rfind("anim-slot", 0) == 0) continue;
+              PaletteTexture t;
+              t.name = name;
+              t.game = m_tex_game;
+              t.background = li.background;
+              t.levels = 1;
+              t.uses = n;
+              of_level.push_back(std::move(t));
+            }
+        std::sort(of_level.begin(), of_level.end(),
+                  [](const PaletteTexture& a, const PaletteTexture& b) { return a.uses != b.uses ? a.uses > b.uses : a.name < b.name; });
+      }
+      list = &of_level;
+    }
+    total = list->size();
+    for (const auto& t : *list)
+      if (f.empty() || t.name.find(f) != std::string::npos) shown.push_back(&t);
+  }
+  const size_t count = m_tex_level == "*" ? mine.size() : shown.size();
+  ImGui::TextDisabled(tr("textures.count"), count, total);
+
+  // the texture of the material chosen, marked
+  std::string current;
+  if (material >= 0 && material < (int)scene.materials.size()) {
+    const int ti = scene.materials[material].texture;
+    if (ti >= 0 && ti < (int)scene.textures.size()) current = scene.textures[ti].name;
+  }
+  auto give = [&](int ti) {
+    if (ti < 0) return;
+    NodeChange change(scene);
+    for (auto id : ids) change.save(id);
+    if (edit_material(scene, ids, material, [ti](Material& m) { m.texture = ti; })) history.push(change.commit(tr("undo.texture")));
+  };
+  const float size = 60.f;
+  ImGui::BeginChild("tex-grid", ImVec2(width, std::max(120.f, height - (ImGui::GetCursorPosY() - top))),
+                    ImGuiChildFlags_Borders);
   const float cell = size + 6 + ImGui::GetStyle().ItemSpacing.x;
   const int per_row = std::max(1, (int)((ImGui::GetContentRegionAvail().x + ImGui::GetStyle().ItemSpacing.x) / cell));
   ImGuiListClipper clipper;
-  clipper.Begin((int)(shown.size() + per_row - 1) / per_row, size + 6 + ImGui::GetStyle().ItemSpacing.y);
+  clipper.Begin((int)(count + per_row - 1) / per_row, size + 6 + ImGui::GetStyle().ItemSpacing.y);
   while (clipper.Step())
     for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; r++)
       for (int c = 0; c < per_row; c++) {
         const size_t i = (size_t)r * per_row + c;
-        if (i >= shown.size()) break;
-        const PaletteTexture& t = *shown[i];
+        if (i >= count) break;
         if (c) ImGui::SameLine();
         ImGui::PushID((int)i);
-        const unsigned tex = palette.gl(t);
+        const PaletteTexture* t = m_tex_level == "*" ? nullptr : shown[i];
+        const std::string name = t ? (t->game.empty() ? t->name : t->game + "-" + t->name) : scene.textures[mine[i]].name;
+        const unsigned tex = t ? palette.gl(*t) : renderer.gl_texture(scene, mine[i]);
+        const bool on = !current.empty() && current == name;
+        if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.6f, 0.66f, 1.f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(3, 3));
         const bool clicked = tex ? ImGui::ImageButton("##t", (ImTextureID)(uint64_t)tex, ImVec2(size, size))
                                  : ImGui::Button("...", ImVec2(size + 6, size + 6));
         ImGui::PopStyleVar();
+        if (on) ImGui::PopStyleColor();
         if (ImGui::BeginItemTooltip()) {
-          ImGui::TextUnformatted(t.name.c_str());
-          ImGui::TextDisabled(tr("palette.used"), t.levels, t.uses);
+          ImGui::TextUnformatted(name.c_str());
+          if (!t) {
+            ImGui::TextDisabled("%dx%d", scene.textures[mine[i]].width, scene.textures[mine[i]].height);
+          } else if (m_tex_level.empty()) {
+            ImGui::TextDisabled(tr("textures.used"), t->levels, t->uses);
+          } else {
+            ImGui::TextDisabled(tr("textures.used_level"), t->uses);
+          }
           ImGui::EndTooltip();
         }
-        if (clicked) {
-          // the texture into the document (read now if its image is not yet), then on the pieces
-          const int ti = palette_texture(t, true);
-          if (ti >= 0) {
-            NodeChange change(scene);
-            for (auto id : ids) change.save(id);
-            if (edit_material(scene, ids, material, [ti](Material& m) { m.texture = ti; }))
-              history.push(change.commit(tr("undo.texture")));
-          }
-        }
+        // the texture into the document (read now if its image is not yet), then on the pieces
+        if (clicked) give(t ? palette_texture(*t, true) : mine[i]);
         ImGui::PopID();
       }
+  if (!count) ImGui::TextDisabled("%s", tr("textures.none"));
   ImGui::EndChild();
+}
+
+void App::ui_texture_window() {
+  TextureWindow& w = m_texture_window;
+  if (!w.open) return;
+  // the pieces it was opened for, while they are there
+  w.ids.erase(std::remove_if(w.ids.begin(), w.ids.end(), [&](uint32_t id) { return !scene.find(id); }), w.ids.end());
+  if (w.ids.empty()) {
+    w.open = false;
+    return;
+  }
+  ImGui::SetNextWindowSize(ImVec2(640, 600), ImGuiCond_FirstUseEver);
+  if (!ImGui::Begin(tr_id("textures.title").c_str(), &w.open)) {
+    ImGui::End();
+    return;
+  }
+  const Node* n = scene.find(w.ids.front());
+  const std::vector<int> materials = n->mesh ? mesh_materials(*n->mesh) : std::vector<int>{};
+  const int material = w.slot >= 0 && w.slot < (int)materials.size() ? materials[w.slot] : -1;
+  const Material* m = material >= 0 && material < (int)scene.materials.size() ? &scene.materials[material] : nullptr;
+  const Texture* t = m && m->texture >= 0 && m->texture < (int)scene.textures.size() ? &scene.textures[m->texture] : nullptr;
+  ImGui::TextWrapped(tr("textures.for"), n->name.c_str(), t ? t->name.c_str() : tr("inspector.material.no_texture"));
+  if (w.ids.size() > 1) ImGui::TextDisabled(tr("textures.for_more"), w.ids.size() - 1);
+  ImGui::Separator();
+  ui_texture_browser(w.ids, material, ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
+  ImGui::End();
 }
 
 void App::ui_import_inspector(Node& n) {
@@ -157,7 +278,7 @@ void App::ui_import_inspector(Node& n) {
                   c.value("no_uv", (size_t)0));
     else if (what == "colors")
       text = strf(tr("import.check.colors"), c.value("without", (size_t)0), c.value("outside", (size_t)0));
-    else if (what == "lighting")
+    else if (what == "lighting" && !n.extras.value(kLitHere, false))  // lit where it stands: moot
       text = strf(tr("import.check.lighting"), c.value("ratio", 1.0));
     else if (what == "materials")
       text = strf(tr("import.check.materials"), c.value("count", (size_t)0), c.value("blended", (size_t)0));
@@ -198,6 +319,9 @@ void App::ui_material_inspector(Node& n) {
   if (std::find(targets.begin(), targets.end(), n.id) == targets.end()) targets.push_back(n.id);
   const std::vector<int> materials = mesh_materials(*n.mesh);
   ImGui::SeparatorText(tr("inspector.material"));
+  // its light: the game's palettes of where it stands (done when it is placed or moved, or asked)
+  if (ImGui::Button(tr_id("inspector.relight").c_str(), ImVec2(-1, 0))) relight_selection();
+  guide_tip("relight");
   constexpr size_t kShown = 12;
   for (size_t slot = 0; slot < materials.size() && slot < kShown; slot++) {
     const int mi = materials[slot];
@@ -212,63 +336,12 @@ void App::ui_material_inspector(Node& n) {
     }
     tooltip(tr("inspector.material.image.tip"));
     ImGui::SameLine();
-    if (ImGui::Button(tr_id("inspector.material.textures").c_str())) ImGui::OpenPopup("textures");
+    // a texture of the games: the window chooses it (a game, a level, a name)
+    const bool open = m_texture_window.open && m_texture_window.slot == (int)slot && m_texture_window.ids == targets;
+    if (open) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.6f, 0.66f, 1.f));
+    if (ImGui::Button(tr_id("inspector.material.textures").c_str())) m_texture_window = {true, targets, (int)slot};
+    if (open) ImGui::PopStyleColor();
     tooltip(tr("inspector.material.textures.tip"));
-    if (ImGui::BeginPopup("textures")) {
-      static std::string filter;
-      ImGui::SetNextItemWidth(320);
-      if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-      ImGui::InputTextWithHint("##filter", tr("inspector.material.filter"), &filter);
-      std::string f = filter;
-      for (auto& c : f) c = (char)std::tolower((unsigned char)c);
-      std::vector<int> shown;
-      for (int i = 0; i < (int)scene.textures.size(); i++) {
-        std::string name = scene.textures[i].name;
-        for (auto& c : name) c = (char)std::tolower((unsigned char)c);
-        if (f.empty() || name.find(f) != std::string::npos) shown.push_back(i);
-      }
-      ImGui::BeginChild("list", ImVec2(320, 300));
-      ImGuiListClipper clip;
-      clip.Begin((int)shown.size());
-      while (clip.Step())
-        for (int k = clip.DisplayStart; k < clip.DisplayEnd; k++) {
-          const Texture& tx = scene.textures[shown[k]];
-          const std::string label = tx.name + "  (" + std::to_string(tx.width) + "x" + std::to_string(tx.height) + ")##" +
-                                    std::to_string(shown[k]);
-          if (ImGui::Selectable(label.c_str())) {
-            const int ti = shown[k];
-            NodeChange c(scene);
-            for (auto id : targets) c.save(id);
-            if (edit_material(scene, targets, mi, [ti](Material& mat) { mat.texture = ti; }))
-              history.push(c.commit(tr("undo.texture")));
-            ImGui::CloseCurrentPopup();
-          }
-        }
-      ImGui::EndChild();
-      ImGui::EndPopup();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button(tr_id("palette.button").c_str())) ImGui::OpenPopup("palette");
-    tooltip(tr("palette.button.tip"));
-    if (ImGui::BeginPopup("palette")) {
-      ui_palette(targets, mi);
-      ImGui::EndPopup();
-    }
-    // its color: multiplies the texture (the game's own materials are at 2, their vertex colors at half)
-    Vec4 color = m ? m->base_color : Vec4{1, 1, 1, 1};
-    ImGui::SetNextItemWidth(-90);
-    const bool edited = ImGui::ColorEdit4(tr_id("inspector.material.color").c_str(), &color.x,
-                                          ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
-    if (ImGui::IsItemActivated() || (edited && !m_surface_edit)) {
-      m_surface_edit = std::make_unique<NodeChange>(scene);
-      for (auto id : targets) m_surface_edit->save(id);
-    }
-    if (edited) edit_material(scene, targets, mi, [color](Material& mat) { mat.base_color = color; });
-    if (ImGui::IsItemDeactivated() && m_surface_edit) {
-      if (ImGui::IsItemDeactivatedAfterEdit()) history.push(m_surface_edit->commit(tr("undo.color")));
-      m_surface_edit.reset();
-    }
-    tooltip(tr("inspector.material.color.tip"));
     ImGui::PopID();
     if (slot + 1 < materials.size()) ImGui::Separator();
   }

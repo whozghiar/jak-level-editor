@@ -38,6 +38,7 @@
 #include "render/offscreen.h"
 #include "scene/bvh.h"
 #include "scene/particles.h"
+#include "scene/relight.h"
 #include "scene/shapes.h"
 #include "scene/story.h"
 #include "stb_image_write.h"
@@ -1451,9 +1452,12 @@ int run_selftest() {
     o.start = {1, 2, 3};
     LevelExportReport r;
     const bool exported = read && check_export_names(o).empty() && export_level_for_game(s, &data, o, &r, &err);
-    const fs::path dir = out / "my-test";
-    bool files = exported && r.files.size() == 6 && r.behaviors == 2;
-    for (const char* f : {"my-test.glb", "my-test.jsonc", "my-test.gd", "level-info.gc", "INSTALL.md", "my-test-obs.gc"})
+    // laid out like the jak-project checkout: the level, its code, the README at the top
+    const fs::path dir = out / "custom_assets" / "jak3" / "levels" / "my-test";
+    const fs::path code = out / "goal_src" / "jak3" / "levels" / "my-test" / "my-test-obs.gc";
+    bool files = exported && r.files.size() == 6 && r.behaviors == 2 && fs::is_regular_file(out / "README.md", ec) &&
+                 fs::is_regular_file(code, ec) && fs::path(r.level_dir) == dir;
+    for (const char* f : {"my-test.glb", "my-test.jsonc", "my-test.gd", "level-info.gc"})
       files &= fs::is_regular_file(dir / f, ec);
     const json level = read_jsonc_file(dir / "my-test.jsonc");
     std::map<std::string, const json*> by_name;
@@ -1481,8 +1485,8 @@ int run_selftest() {
           "export: the files, links by name, a path moved with its actor, the data kept, the scripts, the kill "
           "mask and visibility box left out, an object never there left out");
     // the level's code and the code of the game it needs, in its DGO
-    const std::string gc = read_text_file(dir / "my-test-obs.gc"), gd = read_text_file(dir / "my-test.gd"),
-                      install = read_text_file(dir / "INSTALL.md");
+    const std::string gc = read_text_file(code), gd = read_text_file(dir / "my-test.gd"),
+                      install = read_text_file(out / "README.md");
     const size_t at_part = gd.find("\"ctyinda-part.o\""), at_obs = gd.find("\"ctyinda-obs.o\""),
                  at_own = gd.find("\"my-test-obs.o\""), at_level = gd.find("\"my-test.go\"");
     check(gc.find("(in-package goal)") != std::string::npos &&
@@ -1600,9 +1604,9 @@ int run_selftest() {
       ro.folder = (tmp / "export-replace").generic_string();
       LevelExportReport rr;
       const bool replaced = check_export_names(ro, &data).empty() && export_level_for_game(s, &data, ro, &rr, &err);
-      const fs::path rdir = tmp / "export-replace" / "my-ctyb";
+      const fs::path rdir = tmp / "export-replace" / "custom_assets" / "jak3" / "levels" / "my-ctyb";
       const std::string info = read_text_file(rdir / "level-info.gc"), rgd = read_text_file(rdir / "my-ctyb.gd"),
-                        rinstall = read_text_file(rdir / "INSTALL.md");
+                        rinstall = read_text_file(tmp / "export-replace" / "README.md");
       const json rglb = read_glb_json(rdir / "my-ctyb.glb");
       bool own_only = rglb.is_object(), ground_kept = false;
       if (own_only)
@@ -1649,7 +1653,7 @@ int run_selftest() {
       dop.folder = (tmp / "export-decor").generic_string();
       LevelExportReport dr;
       const bool done = export_level_for_game(d, &data, dop, &dr, &err);
-      const fs::path dd = tmp / "export-decor" / "my-decor";
+      const fs::path dd = tmp / "export-decor" / "custom_assets" / "jak3" / "levels" / "my-decor";
       const json dglb = read_glb_json(dd / "my-decor.glb");
       std::map<std::string, json> extras;
       if (dglb.is_object())
@@ -1658,7 +1662,7 @@ int run_selftest() {
       std::map<std::string, json> actors;
       if (dlevel.is_object())
         for (const auto& a : dlevel["actors"]) actors[a["lump"].value("name", std::string())] = a;
-      const std::string dgc = read_text_file(dd / "my-decor-obs.gc");
+      const std::string dgc = read_text_file(tmp / "export-decor" / "goal_src" / "jak3" / "levels" / "my-decor" / "my-decor-obs.gc");
       const bool ice = extras["ice-slab"].value("collide_material", -1) == 1 && extras["ice-slab"].value("collide_event", -1) == 1 &&
                        extras["ice-slab"].value("noedge", 0) == 1;
       const bool through = extras["cable"].value("ignore", 0) == 1;
@@ -1736,7 +1740,8 @@ int run_selftest() {
       for (const auto& note : fr.notes)
         if (note.key == "export.note.collision_taken_out") taken_out = note.count;
       std::map<std::string, json> extras;
-      const json fglb = read_glb_json(tmp / "export-follow" / "my-follow" / "my-follow.glb");
+      const json fglb =
+          read_glb_json(tmp / "export-follow" / "custom_assets" / "jak3" / "levels" / "my-follow" / "my-follow.glb");
       if (fglb.is_object())
         for (const auto& n : fglb["nodes"]) extras[n.value("name", std::string())] = n.value("extras", json::object());
       // the floor's collision kept (and the bottoms of the wall and the block, on it), the rest of
@@ -1811,11 +1816,15 @@ int run_selftest() {
     r.margin = 1.f;
     r.exclude = {"dirt"};
     const auto members = recipe_members(lvl, r, &err);
-    check(recipes.size() >= 25 && categories.count("house") && categories.count("bridge") && categories.count("platform") &&
+    // Jak II's: their own files, apart from Jak 3's
+    const auto jak2 = load_prefab_recipes(prefab_recipes_path("jak2"), &err, "jak2");
+    bool jak2_apart = !jak2.empty();
+    for (const auto& j : jak2) jak2_apart &= j.game == "jak2" && j.file.rfind("jak2/", 0) == 0;
+    check(recipes.size() >= 50 && categories.count("house") && categories.count("bridge") && categories.count("platform") &&
               categories.count("vent") && categories.count("generator") && categories.count("industrial") &&
-              members == std::vector<uint32_t>{anchor, bolt},
-          "game prefabs: the recipes shipped by category; a recipe takes its anchor and what is on it, not what is far, "
-          "too large or left out by name");
+              members == std::vector<uint32_t>{anchor, bolt} && jak2_apart,
+          "game prefabs: the recipes shipped by category, Jak II's apart; a recipe takes its anchor and what is on it, "
+          "not what is far, too large or left out by name");
   }
 
   // a structure of Jak II brought into a Jak 3 level: the image Jak 3 has shared, another renamed,
@@ -2001,11 +2010,20 @@ int run_selftest() {
       bridge_gone = closed_at > 1 && data.eval(*bridge, data.moment(closed_at - 1)) &&
                     !data.eval(*bridge, data.moment(closed_at));
     }
+    // the city's ocean: the port's basins (masked for the mid ocean) are the near ocean's water, and
+    // by the shores its squares of 3 m
+    const OceanMap* city = read ? data.ocean("*ocean-map-city*") : nullptr;
+    const int port = city ? 33 * city->size + 10 : 0;
+    bool shore = false;
+    if (city)
+      for (const auto& [cell, rows] : city->near) shore |= rows.size() == 32;
+    const bool port_water = city && !city->cells[port] && city->near.count(port) && city->near.at(port).empty() && shore;
     check(read && data.role("mech") == ActorRole::Creature && data.role("marauder") == ActorRole::Creature &&
               data.role("part-spawner") == ActorRole::Logic && data.role("crate") == ActorRole::Object &&
               data.is_water("water-anim") && bridge_gone && desert && !desert->ocean.empty() &&
-              std::count(desert->companions.begin(), desert->companions.end(), "deserta") == 1,
-          "game data: roles, water, the mine's bridge broken by the story, the desert's ocean and companions");
+              std::count(desert->companions.begin(), desert->companions.end(), "deserta") == 1 && port_water,
+          "game data: roles, water, the mine's bridge broken by the story, the desert's ocean and companions, the "
+          "near ocean of the city's port");
     // the catalog: props and doors, the interactive objects apart, no collectible; the living ones
     // the ancestry misses are creatures (left out of the levels too)
     check(read && data.catalog_category("wascity-windmill") == "static" &&
@@ -2230,6 +2248,80 @@ int run_selftest() {
     if (gl) SDL_GL_DestroyContext(gl);
     if (window) SDL_DestroyWindow(window);
     SDL_Quit();
+  }
+
+  {
+    // the collision a piece of decor has when none is set, as the export gives it: the game's for a
+    // level's piece (its level's collision in the document), none for a small piece, its shape else
+    Scene s;
+    auto group = [&](const char* name, uint32_t parent) {
+      Node g;
+      g.name = name;
+      g.parent = parent;
+      return s.add(g);
+    };
+    auto piece = [&](const char* name, uint32_t parent, float size) {
+      ShapeParams sp;
+      sp.size = {size, size, size};
+      Node n;
+      n.kind = NodeKind::Render;
+      n.name = name;
+      n.parent = parent;
+      n.mesh = make_shape(sp, -1);
+      return s.add(n);
+    };
+    const uint32_t lvx = group("lvx", 0);
+    const uint32_t tfrag = group("lvx-tfrag-0", lvx);
+    group("lvx-collision", lvx);
+    const uint32_t a = piece("wall", tfrag, 8.f), b = piece("lamp", 0, 1.f), c = piece("slab", 0, 8.f);
+    s.begin_frame();
+    check(default_decor_collision(s, s.index_of(a)) == DefaultCollision::Game &&
+              default_decor_collision(s, s.index_of(b)) == DefaultCollision::Small &&
+              default_decor_collision(s, s.index_of(c)) == DefaultCollision::Shape,
+          "in the game: the collision a piece has by default (the game's, none for a small one, its shape)");
+  }
+
+  {
+    // an element placed on a lit floor takes the floor's light (its 8 palettes), its own palette; one
+    // placed far from any lit decor keeps its own light
+    Scene s;
+    auto quad = [](float y, float half) {
+      auto m = std::make_shared<Mesh>();
+      Primitive p;
+      p.pos = {{-half, y, -half}, {half, y, -half}, {half, y, half}, {-half, y, half}};
+      p.nrm.assign(4, Vec3{0, 1, 0});
+      p.idx = {0, 2, 1, 0, 3, 2};
+      m->prims.push_back(std::move(p));
+      return m;
+    };
+    auto palette = std::make_shared<TodPalette>();
+    for (int k = 0; k < 8; k++) palette->rgba.insert(palette->rgba.end(), {100, 50, (uint8_t)(10 * k), 128});
+    auto tod = std::make_shared<TodColors>();
+    tod->palette = palette;
+    tod->index = {{0, 0, 0, 0}};
+    Node floor;
+    floor.kind = NodeKind::Render;
+    floor.name = "floor";
+    floor.mesh = quad(0.f, 6.f);
+    floor.tod = tod;
+    s.add(floor);
+    Node piece;
+    piece.kind = NodeKind::Render;
+    piece.name = "piece";
+    piece.mesh = quad(0.5f, 1.f);
+    const uint32_t near_id = s.add(piece);
+    piece.local.t = {200, 0, 0};
+    const uint32_t far_id = s.add(piece);
+    const size_t lit = light_like_surroundings(s, {near_id, far_id});
+    const Node* a = s.find(near_id);
+    const Node* b = s.find(far_id);
+    bool same = a && a->tod && a->tod->fits(*a->mesh) && a->tod->palette->local && a->tod->palette->size() == 1;
+    if (same)
+      for (int k = 0; k < 32; k++) same &= a->tod->palette->rgba[k] == palette->rgba[k];
+    check(lit == 1 && same && a->extras.value(kLitHere, false) && a->mesh->prims[0].col.size() == 4 &&
+              std::fabs(a->mesh->prims[0].col[0].x - 100.f / 255.f) < 0.01f && b && !b->tod &&
+              lit_here_nodes(s, {near_id, far_id}) == std::vector<uint32_t>{near_id},
+          "placing: an element takes the light of the level around it, one far from it keeps its own");
   }
 
   {

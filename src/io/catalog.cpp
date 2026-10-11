@@ -300,13 +300,14 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
 }
 
 std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const GameData* data,
-                                              const std::vector<CatalogObject>& objects) {
+                                              const std::vector<CatalogObject>& objects,
+                                              const std::set<std::string>& creatures) {
   std::set<std::string> taken;
   for (const auto& o : objects)
     if (!o.model.empty()) taken.insert(o.model);
   // the characters: the models of the creatures, the ones named after a creature (its parts: a
   // boss's pieces) or after an NPC's name, the ones of the cutscenes
-  std::set<std::string> characters, creature_names;
+  std::set<std::string> characters, creature_names = creatures;
   if (data) {
     // and the models of what the catalog leaves out: the collectibles (orbs, gems...), the technical
     // types (shots, vehicles, the player's gun and board)
@@ -315,13 +316,12 @@ std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const
       if (data->role(type) == ActorRole::Creature || category == "collectible" || category == "technical")
         characters.insert(models.begin(), models.end());
     }
-    for (const auto& [type, role] : data->roles()) {
-      if (role != ActorRole::Creature) continue;
-      creature_names.insert(type);
-      for (const char* suffix : {"-npc", "-highres"})
-        if (ends_with(type, suffix)) creature_names.insert(type.substr(0, type.size() - std::string(suffix).size()));
-    }
+    for (const auto& [type, role] : data->roles())
+      if (role == ActorRole::Creature) creature_names.insert(type);
   }
+  for (const std::string& type : std::set<std::string>(creature_names))
+    for (const char* suffix : {"-npc", "-highres"})
+      if (ends_with(type, suffix)) creature_names.insert(type.substr(0, type.size() - std::string(suffix).size()));
   auto named_after_creature = [&](const std::string& model) {
     for (size_t dash = model.size(); dash != std::string::npos; dash = dash ? model.rfind('-', dash - 1) : std::string::npos) {
       if (creature_names.count(model.substr(0, dash))) return true;
@@ -335,7 +335,9 @@ std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const
     // the player's own (Jak, Daxter, the board, the gun, the HUD: the models every level shares, and
     // Jak's elsewhere) are no prop either
     const bool player = m.group == "common" || m.name.rfind("jak", 0) == 0 || m.name.rfind("daxter", 0) == 0;
-    if (taken.count(m.name) || characters.count(m.name) || named_after_creature(m.name) || player ||
+    // the museums show the game's characters and props again, out of their levels
+    const bool museum = m.group.rfind("museum", 0) == 0;
+    if (taken.count(m.name) || characters.count(m.name) || named_after_creature(m.name) || player || museum ||
         m.name.rfind("collectables-", 0) == 0 ||
         m.name.find("-highres") != std::string::npos || ends_with(m.name, "-lowres") || ends_with(m.name, "-fma") ||
         ends_with(m.name, "-shadow") || m.name.find("-collision") != std::string::npos || m.name == "scenecamera")

@@ -32,7 +32,7 @@ class ToolDemo {
   // first: shown with its v flipped), 0 for a demo that does not exist. `overlay` gets what goes over it.
   unsigned draw(const std::string& name, double t, int w, int h, std::vector<DemoOverlay>* overlay);
   // the demos: select, box_select, move, rotate, scale, snap, place, build, prefab, camera, bounce,
-  // launch, replace, story
+  // launch, replace, story, local, free_rotate
   static const std::vector<std::string>& names();
   // A shape seen from above at three quarters, `size` pixels square (drawn once): the buttons of the
   // Build panel
@@ -45,7 +45,7 @@ class ToolDemo {
   };
   void scene_once();
   void mesh(const Shape& s, const Mat4& world, const Vec4& tint = {0, 0, 0, 0}, float alpha = 1.f);
-  void gizmo_axes(const Vec3& at, float size, int hot);
+  void gizmo_axes(const Vec3& at, float size, int hot, const Quat& turn = Quat{});
   void gizmo_rings(const Vec3& at, float size, int hot);
   Vec2 screen(const Vec3& world) const;
 

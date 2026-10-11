@@ -6,6 +6,7 @@
 // game's assets with ogle-extract).
 
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <future>
 #include <map>
@@ -53,7 +54,6 @@ enum class ToolMode {
 
 enum class DialogAction {
   OpenProject,
-  SaveProjectAs,
   ExtractSourceIso,
   ExtractSourceFolder,
   ExtractOutput,
@@ -72,9 +72,11 @@ struct Placement {
   std::string name;
   CatalogObject object;  // Object
   CatalogPart part;      // Part
-  std::string game;      // Part: "jak2" for a structure of Jak II (io/jak2_import.h), else Jak 3's
+  std::string game;      // Part, Model: "jak2" for Jak II's (io/jak2_import.h), else Jak 3's
+  std::string level;     // Model: the level it comes from
   ShapeParams shape;     // Shape
   float yaw = 0.f;    // radians (R, Ctrl + wheel)
+  Quat tilt;          // the turn the right button gives it, in the world (applied after the yaw)
   bool once = false;  // dragged from a panel: one placement, then back to selecting
   std::string key() const;  // of its preview and of the meshes merged into the document
 };
@@ -178,6 +180,17 @@ class App {
   void frame(float dt);
   void process_event(const void* sdl_event);
   void update_camera(float dt);
+  // The right button held on the selection (or on what is being placed) turns it on every axis with
+  // the mouse: across around the vertical, up and down around the camera's horizontal (Shift finer,
+  // the snap's steps of turn with the snap); elsewhere it looks around (update_camera).
+  bool start_free_rotation();
+  void update_free_rotation(const Vec2& rel);
+  void finish_free_rotation();
+  bool m_free_rotating = false;
+  bool m_free_rotating_placement = false;  // what is being placed, not the selection
+  Vec3 m_free_pivot, m_free_right;
+  float m_free_yaw = 0, m_free_pitch = 0;
+  Quat m_free_tilt0;
   void viewport_interaction();
   void select_tool(bool clicked, bool released);
   // what a click on `node` selects: the actor of an actor's model, nothing on the locked ground
@@ -187,7 +200,6 @@ class App {
   void draw_tool_overlays();
   void draw_navmesh_overlay();
   void handle_shortcuts();
-  void autosave_tick();
   void poll_level_opening();
 
   // nav meshes (actions.cpp): generated on a worker thread from the walkable surfaces of `region`,
@@ -281,7 +293,17 @@ class App {
   void set_ocean_backdrop();  // the far ocean in the render settings, before the viewport is drawn
   void load_level(const LevelEntry& level);
   void open_project_file(const std::string& path);
+  // Saves the project, only when the user asks: in its folder of <library>/projects/<name>/ (the
+  // first time and with save_as, the user names it), its .glb and its nav meshes for the game
+  // (<name>-nav.json) when it has some
   void save(bool save_as);
+  bool save_project_as(const std::string& name, std::string* error);
+  bool save_project_files(const std::string& glb_path, std::string* error);
+  std::string projects_root() const;                           // <library>/projects
+  std::string project_name() const;                            // its folder's name, or the level's
+  static std::string project_folder_name(const std::string& name);  // a name as a folder can have it
+  bool m_show_save_as = false;
+  std::string m_save_name;
   void select_only(uint32_t id);
   void toggle_select(uint32_t id);
   std::vector<uint32_t> selection_roots() const;  // selected nodes without selected ancestors
@@ -318,8 +340,13 @@ class App {
   Mat4 placement_matrix(const PickHit& hit, const Ray& ray) const;
   // the mesh of what is placed, merged into the document once (null while it loads)
   std::shared_ptr<Mesh> placement_mesh();
-  // puts what is placed at `m`; returns the new roots
+  // puts what is placed at `m`, lit like the level around it (scene/relight.h); returns the new roots
   std::vector<uint32_t> place_at(const Mat4& m);
+  // the elements under `roots` lit where they stood (placed, pasted), lit again where they are now,
+  // within `change` (saved before they change)
+  void relight_moved(NodeChange& change, const std::vector<uint32_t>& roots);
+  // the inspector's Light like here: the selection lit like the level around it (undoable)
+  void relight_selection();
   void new_level();  // an empty document of the library's game
   // a level or a new one is being edited (a new level has no node yet)
   bool document_open() const { return !scene.nodes.empty() || !scene.settings.level.empty(); }
@@ -346,6 +373,15 @@ class App {
   bool remote_unsaved(const json& args) const;
   // the 3D view from the camera, PNG in base64; with game_hour >= 0, the game view at that hour
   std::string capture_view_png(int w, int h, float game_hour = -1.f);
+  // ui_input (tests of the interface): mouse events given to SDL one frame after the other, as the
+  // system gives them, and pictures of the whole window
+  std::deque<json> m_ui_events;
+  RemoteReply m_ui_reply;
+  Vec2 m_ui_mouse{0, 0};
+  int m_ui_wait = 0;
+  bool m_ui_shot_pending = false;
+  std::string m_ui_shot;  // the last picture, PNG in base64
+  void ui_input_step();
 
   // extraction (extract.cpp)
   static std::string extractor_path();  // ogle-extract next to the editor, "" when missing
@@ -375,6 +411,7 @@ class App {
   void ui_catalog_models();
   void ui_catalog_decor();
   void ui_catalog_decor_all();  // the decor of every level, searched by name
+  void ui_catalog_materials();  // the textures of the game's levels, for the selection
   // a decor part in a grid of thumbnails: its thumbnail, its tooltip, a click or drag places it
   void ui_decor_cell(const std::string& background, int64_t stamp, const CatalogPart& part, const std::string& from,
                      int levels, float size);
@@ -401,7 +438,6 @@ class App {
     std::vector<uint32_t> ids;
     int material = -1;
   } m_texture_target;  // what the image dialog's texture goes to
-  std::unique_ptr<NodeChange> m_surface_edit;  // a color being dragged: the pieces before
   void ui_statusbar(float y, float h);
   void ui_windows();
   void ui_navmesh_window();
@@ -418,9 +454,10 @@ class App {
   Scene scene;
   History history;
   Renderer renderer;
-  // the level drawn by the game's own renderer (View > Game view), when OpenGL allows it
+  // the level drawn by the game's own renderer (View > Game rendering, G), when OpenGL allows it: on
+  // from the start
   GameView game_view;
-  bool game_view_on = false;
+  bool game_view_on = true;
   std::string game_view_error;  // why there is none
   // the particle effects of the game (data/jak3/particles.json): the level's effects run in the
   // view (View > Effects) and in the catalog's pictures
@@ -460,6 +497,7 @@ class App {
   uint64_t m_game_prefab_runs = 0;  // counts the builds finished (the remote waits on it)
   std::vector<CatalogObject> catalog;        // the objects of the game
   std::vector<CatalogModel> catalog_models;  // its other models (props)
+  std::vector<CatalogModel> catalog_models_jak2;  // Jak II's models, placed as decor
   // what the catalog reads of every level on a worker thread: their decor, the art-names of their
   // actors (all the variants and effects); merged into the catalog once ready
   LibraryIndex library_index;
@@ -470,15 +508,29 @@ class App {
   LibraryIndex library_index_jak2;
   std::vector<DecorEntry> all_parts_jak2;
   bool m_index_jak2_applied = false;
-  bool m_decor_jak2 = false;  // the Decor catalog shows Jak II's structures
+  bool m_catalog_jak2 = false;  // the catalog shows Jak II's models, structures and materials
   // the palette of materials: the textures Jak 3's levels use again and again (render/texture_palette.h)
   TexturePalette palette;
   std::vector<PaletteTexture> palette_textures;
   // a texture of the palette made a texture of the document (-1 while its image is read; `wait`:
-  // read now, for the remote control)
+  // read now, for the remote control); Jak II's named "jak2-<name>"
   int palette_texture(const PaletteTexture& t, bool wait = false);
-  // the palette's grid: a click gives the texture to `ids` (their material `material`, -1 all)
-  void ui_palette(const std::vector<uint32_t>& ids, int material, float width = 430.f);
+  // every texture of the games' levels (all_textures), once their index is ready
+  std::vector<PaletteTexture> game_textures, game_textures_jak2;
+  // The textures of the games: the game (Jak 3, Jak II when extracted), a level (or every level, or
+  // the document's own textures), a part of a name; a click gives the texture to `ids` (their
+  // material `material`, -1 all)
+  void ui_texture_browser(const std::vector<uint32_t>& ids, int material, float width, float height,
+                          bool choose_game = true);
+  std::string m_tex_game, m_tex_level, m_tex_filter;  // its choices: "" Jak 3 / "jak2"; "" every level, "*" the document
+  // the window of the inspector's Textures of the game... (for one material of the pieces selected:
+  // its place in the first one's list, the material itself being a new one after each change)
+  struct TextureWindow {
+    bool open = false;
+    std::vector<uint32_t> ids;
+    int slot = 0;
+  } m_texture_window;
+  void ui_texture_window();
   void apply_library_index();  // the index, once it just became ready
   void rebuild_catalog();      // catalog, catalog_models and all_parts
   Placement placement;
@@ -495,9 +547,11 @@ class App {
 
   // windows and panels
   bool show_log = false;
-  bool show_help = false;  // the guide (F1): the guided tour, every tool, the keys
-  int guide_tab_request = -1;  // 0 the tour, 1 every tool, 2 the keys
-  int guide_step = 0;          // of the tour
+  bool show_help = false;  // the guide (F1): the tutorials, every tool, the keys
+  int guide_tab_request = -1;  // 0 the tutorials, 1 every tool, 2 the keys
+  int guide_tutorial = 0;      // the tutorial shown (0: Getting started)
+  int guide_step = 0;          // its step
+  bool select_tutorial(const std::string& id, int step = 0);  // by its id ("game_view"); false: none
   bool show_labels = true;
   bool show_navmesh = true;          // the nav meshes drawn over the level
   bool select_terrain = false;       // the ground (locked) can be clicked and box-selected
@@ -567,7 +621,8 @@ class App {
   std::string m_levels_filter;
   std::string m_selected_level;
   // catalog panel: its objects, or the decor of a level
-  int m_catalog_tab = 0;  // 0 objects, 1 models, 2 decor, 3 the interactive objects
+  int m_catalog_tab = 0;  // 0 objects, 1 models, 2 decor, 3 the interactive objects, 4 materials
+  std::string m_models_level;  // the level whose models are shown, "" for every level
   std::string m_catalog_filter;
   std::string m_catalog_family;  // "" for every family
   std::string m_decor_level;     // the level whose decor is shown, "" for every level
@@ -597,8 +652,9 @@ class App {
   NavJob m_nav_last;           // meshes moved into the document once applied
   std::unordered_map<uint64_t, NavMeshData> m_nav_draw_cache;  // the polygons of each nav mesh drawn, by mesh
   uint64_t m_nav_generation = 0;  // counts the generations applied (the remote waits on it)
-  // a batch of placements (place_many): one undo entry for all
+  // a batch of placements (place_many): one undo entry for all, lit at the end
   std::unique_ptr<NodeChange> m_batch_change;
+  std::vector<uint32_t> m_batch_placed;
   // confirmation before losing unsaved changes
   std::function<void()> m_pending_discard;
   bool m_show_discard = false;
@@ -609,12 +665,6 @@ class App {
   };
   std::mutex m_dialog_mutex;
   std::vector<DialogResult> m_dialog_results;
-  // autosave
-  uint64_t m_last_seen_revision = 0;
-  double m_last_change_time = 0;
-  double m_last_backup_time = 0;
-  uint64_t m_backup_revision = 0;
-  double m_time = 0;
   float m_frame_ms = 0;               // the CPU time of a frame, averaged (get_status)
   uint64_t m_frame_revision = ~0ull;  // history revision the scene cache was computed at
   uint64_t m_story_revision = ~0ull;  // history revision the story view was applied at
@@ -624,9 +674,12 @@ class App {
   // remote control: the connection, the requests waiting for something (checked each frame)
   RemoteServer m_remote;
   std::vector<std::function<bool()>> m_remote_waits;
-  // the ocean of the level: a mesh at height 0, drawn at the ocean's height
+  // the ocean of the level: a mesh at height 0, drawn at the ocean's height, its waves moving
   std::shared_ptr<Mesh> m_ocean;
-  std::vector<Material> m_ocean_materials;
+  WaterLook m_ocean_look;
+  float m_water_time = 0;  // seconds: the water's animation
+  // its look in the view: lit by the game's hour in the game view
+  WaterLook ocean_look(const RenderSettings& view_rs) const;
   std::string m_ocean_map;
   float m_ocean_height = 0;
   bool m_ocean_far = false;  // the far ocean drawn: a level of the document asks for it

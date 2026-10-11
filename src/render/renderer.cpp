@@ -27,6 +27,7 @@ layout(location = 3) in vec4 a_col;
 uniform mat4 u_viewproj;
 uniform samplerBuffer u_instances;
 uniform int u_instance_base;
+uniform vec2 u_uv_scroll;
 out vec3 v_nrm;
 out vec2 v_uv;
 out vec4 v_col;
@@ -41,7 +42,7 @@ void main() {
   mat3 nm = mat3(model);
   for (int i = 0; i < 3; i++) nm[i] /= max(dot(nm[i], nm[i]), 1e-8);
   v_nrm = nm * a_nrm;
-  v_uv = a_uv;
+  v_uv = a_uv + u_uv_scroll;
   v_col = a_col;
   v_tint = a_tint;
   vec4 world = model * vec4(a_pos, 1.0);
@@ -118,6 +119,74 @@ void main() {
   }
   c.rgb = mix(c.rgb, v_tint.rgb, v_tint.a);
   o_color = c;
+}
+)";
+
+// the ocean: a flat mesh, its surface moving (draw_water)
+const char* kWaterVs = R"(#version 330 core
+layout(location = 0) in vec3 a_pos;
+uniform mat4 u_viewproj;
+uniform mat4 u_world;
+out vec3 v_world;
+void main() {
+  vec4 w = u_world * vec4(a_pos, 1.0);
+  v_world = w.xyz;
+  gl_Position = u_viewproj * w;
+}
+)";
+
+const char* kWaterFs = R"(#version 330 core
+in vec3 v_world;
+uniform float u_time;
+uniform vec3 u_color;
+uniform vec3 u_deep;
+uniform vec3 u_sky;
+uniform vec3 u_sun_dir;
+uniform vec3 u_sun_color;
+uniform vec3 u_cam_pos;
+uniform vec3 u_cam_fwd;
+uniform float u_alpha;
+uniform vec4 u_fog;  // the game's fog (game view): its color, how much at most (0: none)
+uniform vec2 u_fog_range;
+out vec4 o_color;
+// the swell: waves of a few lengths and directions, each as fast as deep water waves of its length
+// go; their slopes bend the normal, the small ones fading away with the distance (no shimmer)
+vec3 waves(vec2 p, float t, float dist, out float height) {
+  const vec2 dirs[6] = vec2[](vec2(0.98, 0.2), vec2(0.71, 0.71), vec2(-0.29, 0.96), vec2(0.91, -0.41),
+                              vec2(-0.85, 0.53), vec2(0.2, -0.98));
+  const float lens[6] = float[](31.0, 17.0, 9.7, 5.3, 2.9, 1.6);
+  vec2 slope = vec2(0.0);
+  height = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float k = 6.2831853 / lens[i];
+    float w = sqrt(9.81 * k);
+    float a = 0.05 / k * clamp(1.0 - dist / (lens[i] * 90.0), 0.0, 1.0);
+    float ph = k * dot(dirs[i], p) - w * t + float(i) * 1.7;
+    height += a * sin(ph);
+    slope += a * k * cos(ph) * dirs[i];
+  }
+  return normalize(vec3(-slope.x, 1.0, -slope.y));
+}
+void main() {
+  float dist = length(u_cam_pos - v_world);
+  float h;
+  vec3 n = waves(v_world.xz, u_time, dist, h);
+  vec3 v = normalize(u_cam_pos - v_world);
+  float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+  vec3 r = reflect(-v, n);
+  vec3 sky = mix(u_sky * 1.15 + 0.05, u_sky, clamp(r.y, 0.0, 1.0));
+  // the water: deeper looking far away, lighter on the crests
+  vec3 body = mix(u_color, u_deep, clamp(dist / 700.0, 0.0, 1.0) * 0.6);
+  body *= 0.92 + 0.9 * clamp(h, -0.15, 0.3);
+  vec3 c = mix(body, sky, clamp(fresnel * 0.85, 0.0, 1.0));
+  c += u_sun_color * pow(max(dot(r, normalize(u_sun_dir)), 0.0), 160.0) * 1.4;
+  float alpha = mix(u_alpha, 1.0, fresnel);
+  if (u_fog.a > 0.0) {
+    float d = dot(v_world - u_cam_pos, u_cam_fwd);
+    float f = clamp((d - u_fog_range.x) / max(u_fog_range.y - u_fog_range.x, 1.0), 0.0, 1.0);
+    c = mix(c, u_fog.rgb, f * u_fog.a);
+  }
+  o_color = vec4(c, alpha);
 }
 )";
 
@@ -251,7 +320,8 @@ bool Renderer::init(std::string* error) {
   m_flat_prog = link(kFlatVs, kFlatFs, error);
   m_solid_prog = link(kSolidVs, kSolidFs, error);
   m_sprite_prog = link(kSpriteVs, kSpriteFs, error);
-  if (!m_mesh_prog || !m_flat_prog || !m_solid_prog || !m_sprite_prog) return false;
+  m_water_prog = link(kWaterVs, kWaterFs, error);
+  if (!m_mesh_prog || !m_flat_prog || !m_solid_prog || !m_sprite_prog || !m_water_prog) return false;
   // uniform locations, looked up once (a lookup is a string search in the driver)
   m_u.flat_alpha = loc(m_flat_prog, "u_alpha");
   m_u.flat_mvp = loc(m_flat_prog, "u_mvp");
@@ -279,6 +349,7 @@ bool Renderer::init(std::string* error) {
   m_u.mesh_game_fog = loc(m_mesh_prog, "u_game_fog");
   m_u.mesh_game_fog_range = loc(m_mesh_prog, "u_game_fog_range");
   m_u.mesh_cam_fwd = loc(m_mesh_prog, "u_cam_fwd");
+  m_u.mesh_uv_scroll = loc(m_mesh_prog, "u_uv_scroll");
   m_u.solid_color = loc(m_solid_prog, "u_color");
   m_u.solid_mvp = loc(m_solid_prog, "u_mvp");
 
@@ -324,6 +395,7 @@ void Renderer::shutdown() {
   glDeleteProgram(m_flat_prog);
   glDeleteProgram(m_solid_prog);
   glDeleteProgram(m_sprite_prog);
+  glDeleteProgram(m_water_prog);
   for (auto& [name, id] : m_sprite_textures)
     if (id) glDeleteTextures(1, &id);
   m_sprite_textures.clear();
@@ -572,8 +644,11 @@ void Renderer::set_material(const Material* mat, const std::vector<Texture>& tex
   }
   Vec4 base = mat ? mat->base_color : Vec4{0.8f, 0.8f, 0.8f, 1.f};
   bool vcol = rs.vertex_colors && has_colors;
+  // a water surface's texture flows (the game animates the textures of its water)
+  const bool flows = mat && mat->water && has_tex;
   MaterialState st{has_tex ? 1 : 0, {base.x, base.y, base.z, base.w * alpha}, mat ? (int)mat->alpha : 0,
-                   mat ? mat->cutoff : 0.5f, vcol ? 1 : 0, (!vcol && rs.shade_uncolored) ? 1 : 0};
+                   mat ? mat->cutoff : 0.5f, vcol ? 1 : 0, (!vcol && rs.shade_uncolored) ? 1 : 0,
+                   {flows ? std::fmod(rs.time * 0.031f, 1.f) : 0.f, flows ? std::fmod(rs.time * 0.017f, 1.f) : 0.f}};
   if (m_material_valid && std::memcmp(&st, &m_material, sizeof(st)) == 0) return;
   glUniform1i(m_u.mesh_has_tex, st.has_tex);
   glUniform4f(m_u.mesh_base, st.base[0], st.base[1], st.base[2], st.base[3]);
@@ -581,6 +656,7 @@ void Renderer::set_material(const Material* mat, const std::vector<Texture>& tex
   glUniform1f(m_u.mesh_cutoff, st.cutoff);
   glUniform1i(m_u.mesh_use_vcol, st.use_vcol);
   glUniform1i(m_u.mesh_shade, st.shade);
+  glUniform2f(m_u.mesh_uv_scroll, st.scroll[0], st.scroll[1]);
   m_material = st;
   m_material_valid = true;
 }
@@ -977,6 +1053,43 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
       }
     }
   }
+}
+
+void Renderer::draw_water(Mesh& mesh, const Mat4& world, const WaterLook& look, const RenderSettings& rs) {
+  auto& gm = gpu_mesh(mesh);
+  glUseProgram(m_water_prog);
+  auto at = [&](const char* name) { return glGetUniformLocation(m_water_prog, name); };
+  glUniformMatrix4fv(at("u_viewproj"), 1, GL_FALSE, m_draw_vp.m);
+  glUniformMatrix4fv(at("u_world"), 1, GL_FALSE, world.m);
+  glUniform1f(at("u_time"), rs.time);
+  glUniform3fv(at("u_color"), 1, look.color);
+  glUniform3fv(at("u_deep"), 1, look.deep);
+  glUniform3fv(at("u_sky"), 1, look.sky);
+  glUniform3fv(at("u_sun_dir"), 1, look.sun_dir);
+  glUniform3fv(at("u_sun_color"), 1, look.sun_color);
+  glUniform3f(at("u_cam_pos"), m_cam_pos.x, m_cam_pos.y, m_cam_pos.z);
+  glUniform3f(at("u_cam_fwd"), m_cam_fwd.x, m_cam_fwd.y, m_cam_fwd.z);
+  glUniform1f(at("u_alpha"), look.alpha);
+  const float no_fog[4] = {0, 0, 0, 0};
+  glUniform4fv(at("u_fog"), 1, rs.game_light ? rs.game_fog : no_fog);
+  glUniform2f(at("u_fog_range"), rs.game_fog_start, rs.game_fog_end);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(depth_func(GL_LEQUAL));
+  glDepthMask(GL_TRUE);
+  glDisable(GL_CULL_FACE);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBindVertexArray(gm.vao);
+  for (const auto& gp : gm.prims) {
+    glDrawElementsBaseVertex(GL_TRIANGLES, gp.count, GL_UNSIGNED_INT, (void*)(gp.first_index * sizeof(uint32_t)),
+                             gp.base_vertex);
+    stats.draws++;
+    stats.triangles += gp.count / 3;
+  }
+  glBindVertexArray(0);
+  glDisable(GL_BLEND);
+  m_bound_vao = ~0u;
+  m_material_valid = false;
 }
 
 void Renderer::draw_mesh(Mesh& mesh, const Mat4& world, const std::vector<Material>& materials,

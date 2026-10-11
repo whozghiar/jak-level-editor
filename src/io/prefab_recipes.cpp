@@ -37,9 +37,12 @@ std::string slug(const std::string& name) {
 
 }  // namespace
 
-std::string prefab_recipes_path() { return from_path(to_path(game_data_path()).parent_path() / "prefabs.json"); }
+std::string prefab_recipes_path(const std::string& game) {
+  const fs::path jak3 = to_path(game_data_path()).parent_path();
+  return from_path((game.empty() ? jak3 : jak3.parent_path() / to_path(game)) / "prefabs.json");
+}
 
-std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::string* error) {
+std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::string* error, const std::string& game) {
   std::vector<PrefabRecipe> out;
   std::ifstream f(to_path(path), std::ios::binary);
   const json j = f ? json::parse(f, nullptr, false) : json();
@@ -50,6 +53,7 @@ std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::stri
   for (const auto& p : j["prefabs"]) {
     if (!p.is_object()) continue;
     PrefabRecipe r;
+    r.game = game;
     r.name = p.value("name", std::string());
     r.category = p.value("category", std::string("other"));
     r.description = p.value("description", std::string());
@@ -69,7 +73,7 @@ std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::stri
       r.box.add(vec3_of(p["box"][1], {0, 0, 0}));
     }
     if (r.name.empty() || r.level.empty() || (r.anchor.empty() && !r.box.valid())) continue;
-    r.file = slug(r.name) + ".glb";
+    r.file = (game.empty() ? std::string() : game + "/") + slug(r.name) + ".glb";
     out.push_back(std::move(r));
   }
   return out;

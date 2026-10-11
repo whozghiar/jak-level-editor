@@ -16,6 +16,7 @@
 //   parts    the decor of a level, to reuse in another: the prototypes of its decor (a pillar, a
 //            lamp post) and the pieces of its shell (a wall, a bridge)
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -58,12 +59,15 @@ struct CatalogModel {
   std::string name;   // without "-lodN"
   std::string path;   // its lowest lod
   std::string group;  // the level folder it comes from ("common" for the shared ones)
+  std::string game;   // "" Jak 3's, "jak2" Jak II's (placed as decor: io/jak2_import.h)
 };
 
 // The models of the library that are not the model of an object of `objects` nor a character's,
-// by name.
+// by name; `creatures`: more types of living things whose models are left out (Jak II's, which has
+// no game data: data/jak2/creatures.json).
 std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const GameData* data,
-                                              const std::vector<CatalogObject>& objects);
+                                              const std::vector<CatalogObject>& objects,
+                                              const std::set<std::string>& creatures = {});
 
 // The data of an actor, without what ties it to its level: its name, story (kill mask),
 // visibility volume, paths and the actors it refers to.

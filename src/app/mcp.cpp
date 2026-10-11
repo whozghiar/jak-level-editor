@@ -132,8 +132,10 @@ json tools() {
             {"limit", integer("number of results, 100 by default")}}),
       tool("list_models",
            "The other models of the game (parts of objects, debris, props: everything but the characters), placed "
-           "as decor with place (kind 'model').",
-           {{"filter", str("part of a name or of the level it comes from")},
+           "as decor with place (kind 'model'). With game 'jak2': Jak II's objects by their model (place with game "
+           "'jak2': converted for Jak 3, without their behavior).",
+           {{"game", str("'jak2': Jak II's (when Jak II was extracted too)")},
+            {"filter", str("part of a name or of the level it comes from")},
             {"offset", integer("first result (paging)")},
             {"limit", integer("number of results, 100 by default")}}),
       tool("list_decor",
@@ -169,7 +171,8 @@ json tools() {
             {"tile", num("kind 'shape': meters per repeat of its texture (2 by default)")},
             {"steps", integer("kind 'shape', stairs: the number of steps")},
             {"level", str("kind 'decor': the level the part comes from (omitted: the first that has it)")},
-            {"game", str("kind 'decor': 'jak2' for a structure of Jak II (list_decor game 'jak2')")},
+            {"game", str("kind 'decor' or 'model': 'jak2' for a structure or an object of Jak II (list_decor, list_models "
+                         "with game 'jak2')")},
             {"position", vec3("where, [x, y, z] in meters")},
             {"yaw_deg", num("turn around the vertical axis, in degrees")},
             {"rotation_deg", vec3("instead of yaw_deg: [x, y, z] rotation in degrees")},
@@ -238,14 +241,13 @@ json tools() {
             {"sides", integer("cylinder")}},
            {"id"}),
       tool("set_material",
-           "Gives elements (shapes, models, decor) a texture and/or a color: an image file (PNG, JPG, TGA, BMP) or "
-           "the name of a texture of the document (list_textures), saved with the project and exported for the "
-           "game. Only these elements change, not the others drawing the same material. Undoable.",
+           "Gives elements (shapes, models, decor) a texture: an image file (PNG, JPG, TGA, BMP) or the name of a "
+           "texture of the document (list_textures), saved with the project and exported for the game. Only these "
+           "elements change, not the others drawing the same material. Undoable.",
            {{"ids", ids("the elements")},
             {"texture", str("an image file path, or a texture name from list_textures (palette ones too)")},
-            {"color", {{"description", "[r, g, b] or [r, g, b, a]: multiplies the texture (the game's materials are at 2)"}}},
             {"material", integer("only this material of theirs (get_node: materials); omitted: all")}},
-           {"ids"}),
+           {"ids", "texture"}),
       tool("list_textures",
            "The textures of the document (those of the levels opened and the images added), by name and size, to "
            "reuse with set_material; or with palette: the textures Jak 3's levels use again and again (city walls, "
@@ -294,16 +296,18 @@ json tools() {
             {"first_id", integer("the entity id of the first nav mesh (60000 by default): unique in the game, not an actor's")}},
            {"path"}),
       tool("export_level",
-           "Writes what the view shows as a custom level of OpenGOAL for Jak 3: <folder>/<name>/ with the .glb, "
-           "the .jsonc and the .gd its level builder takes, level-info.gc and INSTALL.md (the lines to add to the "
-           "game's code); notes says what changed or was left out. Hidden levels and elements are left out.",
+           "Writes what the view shows as a custom level of OpenGOAL for Jak 3, in the project's export folder "
+           "(<library>/export/<project>/ by default) laid out like the jak-project checkout: "
+           "custom_assets/jak3/levels/<name>/ (the .glb, the .jsonc and the .gd its level builder takes, "
+           "level-info.gc), goal_src/jak3/levels/<name>/ (the behaviors' code) and README.md (how to bring it into "
+           "the game); notes says what changed or was left out. Hidden levels and elements are left out.",
            {{"name", str("the level's name in the game: 3 to 10 lower case letters, digits or '-' (not a level of "
                          "the game)")},
             {"nickname", str("3 lower case letters: its DGO's name (made from the name by default)")},
             {"iso_name", str("up to 8 upper case letters or digits (made from the name by default)")},
             {"base_id", integer("the first actor id (above the game's own actors' by default)")},
-            {"folder", str("where <name>/ is written: custom_assets/jak3/levels of a jak-project checkout, "
-                           "or by default the last folder used, else exports/ next to the extracted game")},
+            {"folder", str("the export's folder (README.md, custom_assets/..., goal_src/... in it): by default "
+                           "<library>/export/<project>/")},
             {"actors", boolean("false: the decor alone (true by default)")},
             {"collision", str("'game' (default): the levels' own collision, exact, where they have it, the rest "
                               "made by the builder from the decor; 'decor': all of it made from the decor")},
@@ -330,12 +334,13 @@ json tools() {
             {"fog", boolean("the game's fog in the game view")},
             {"effects", boolean("the particle effects")}}),
       tool("capture_view",
-           "A picture of the 3D view from the editor's camera (PNG), to see the result of what was placed. With "
-           "game_hour, the level as the game draws it (the game's renderer, its lighting at that hour of the day, its "
-           "fog): what the exported level will look like in the game.",
+           "A picture of the 3D view from the editor's camera (PNG), to see the result of what was placed. By "
+           "default it shows what the user's view shows: the game rendering (the level as the game draws it, its "
+           "lighting at the view's hour, its fog: what the exported level will look like in the game) when it is on. "
+           "game_hour chooses the hour of the game rendering; -1 the editor's own view.",
            {{"width", integer("pixels, 960 by default")},
             {"height", integer("pixels, 600 by default")},
-            {"game_hour", num("0..24: the game view at that hour (12: noon, 22: night)")}}),
+            {"game_hour", num("0..24: the game rendering at that hour (12: noon, 22: night); -1: the editor's view")}}),
       tool("select",
            "Selects elements in the editor, to show them to the user; or a whole level (level: its name), to move "
            "it with transform_nodes on the selection's ids.",
@@ -349,9 +354,9 @@ json tools() {
       tool("create_prefab", "Saves elements as a prefab, to place again with place (kind 'prefab').",
            {{"ids", ids("the elements")}, {"name", str("the prefab's name")}}, {"ids", "name"}),
       tool("save_project",
-           "Saves the document as a project (.glb). path is needed the first time (an absolute path of a .glb "
-           "file).",
-           {{"path", str("where to save")}}),
+           "Saves the document as a project: <library>/projects/<name>/<name>.glb, and its nav meshes for the game "
+           "(<name>-nav.json) when it has some. name is needed the first time (then it saves there again).",
+           {{"name", str("the project's name (its folder)")}, {"path", str("or a .glb file to save to")}}),
       tool("open_project", "Opens a project (.glb) saved before.",
            {{"path", str("the .glb file")}, {"discard_changes", discard}}, {"path"}),
       tool("restore_effects",

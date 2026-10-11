@@ -255,6 +255,9 @@ struct GameView::Impl {
   void build(Chunk& c, const Key& key, const std::vector<uint32_t>& nodes, const Scene& scene,
              const std::array<float, 8>& ratios) {
     const TodPalette* palette = std::get<0>(key);
+    // a level's palette larger than a tree of the renderer takes (the decor instances of a whole
+    // desert): the colors the chunk uses, as the new geometry's
+    const bool compact = palette && palette->size() > kMaxColors;
     std::vector<tfrag3::PreloadedVertex> verts;
     std::map<int, std::vector<u32>> by_material[2];  // [translucent]
     std::vector<uint8_t> synth;                     // the palette of the new geometry
@@ -270,7 +273,8 @@ struct GameView::Impl {
       for (uint32_t i : nodes) {
         const Node& n = scene.nodes[i];
         const Mat4& w = cache.worlds[i];
-        const bool lit = palette && n.tod && n.tod->palette.get() == palette && n.tod->fits(*n.mesh);
+        const bool lit = palette && !compact && n.tod && n.tod->palette.get() == palette && n.tod->fits(*n.mesh);
+        const bool own = !lit && n.tod && n.tod->fits(*n.mesh) && (n.tod->palette->local || compact);
         for (size_t pi = 0; pi < n.mesh->prims.size(); pi++) {
           const Primitive& p = n.mesh->prims[pi];
           if (p.idx.empty()) continue;
@@ -293,12 +297,17 @@ struct GameView::Impl {
             if (lit) {
               pv.color_index = n.tod->index[pi][v];
             } else {
-              // new geometry: lit like the level's, from the color shown (game_export's)
-              Vec4 shown = v < p.col.size() ? p.col[v] : Vec4{1, 1, 1, 1};
-              if (mat)
-                shown = {shown.x * mat->base_color.x, shown.y * mat->base_color.y, shown.z * mat->base_color.z, shown.w};
+              // new geometry: its own palettes (lit like the level around it), else lit like the
+              // level's from the color shown (game_export's)
               uint8_t col[32];
-              tod_from_color(shown, ratios, col);
+              if (own) {
+                std::memcpy(col, &n.tod->palette->rgba[(size_t)n.tod->index[pi][v] * 32], 32);
+              } else {
+                Vec4 shown = v < p.col.size() ? p.col[v] : Vec4{1, 1, 1, 1};
+                if (mat)
+                  shown = {shown.x * mat->base_color.x, shown.y * mat->base_color.y, shown.z * mat->base_color.z, shown.w};
+                tod_from_color(shown, ratios, col);
+              }
               if (shift)
                 for (auto& b : col) b = (uint8_t)((b >> shift) << shift);
               auto [it, fresh] = synth_index.emplace(std::string((const char*)col, 32), (u16)synth_index.size());
@@ -313,15 +322,15 @@ struct GameView::Impl {
       }
     };
     make();
-    while (!palette && synth_index.size() > kMaxColors && shift < 6) {
+    while ((!palette || compact) && synth_index.size() > kMaxColors && shift < 6) {
       shift++;
       make();
     }
 
     auto level = std::make_unique<tfrag3::Level>();
     level->level_name = c.name;
-    const uint8_t* colors = palette ? palette->rgba.data() : synth.data();
-    const size_t color_count = palette ? palette->size() : synth.size() / 32;
+    const uint8_t* colors = palette && !compact ? palette->rgba.data() : synth.data();
+    const size_t color_count = palette && !compact ? palette->size() : synth.size() / 32;
     c.triangles = 0;
     for (int t = 0; t < 2; t++) {
       if (by_material[t].empty()) continue;
@@ -395,7 +404,7 @@ struct GameView::Impl {
       const Node& n = scene.nodes[i];
       if (n.kind != NodeKind::Render || !n.mesh || !cache.visible[i] || cache.actor[i]) continue;
       if (i < cache.reference.size() && cache.reference[i]) continue;
-      const TodPalette* pal = n.tod && n.tod->fits(*n.mesh) ? n.tod->palette.get() : nullptr;
+      const TodPalette* pal = n.tod && !n.tod->palette->local && n.tod->fits(*n.mesh) ? n.tod->palette.get() : nullptr;
       const Vec3 at = i < cache.bounds.size() && cache.bounds[i].valid() ? cache.bounds[i].center()
                                                                           : cache.worlds[i].point({0, 0, 0});
       members[{pal, (int)std::floor(at.x / kCell), (int)std::floor(at.z / kCell)}].push_back((uint32_t)i);

@@ -2,6 +2,8 @@
 // carried out on the main thread between frames, like the user's actions (shown as they happen,
 // undoable). Positions are in meters, Y up, like the editor's view.
 
+#include <SDL3/SDL.h>
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -13,6 +15,7 @@
 #include "io/behaviors.h"
 #include "io/decor_behaviors.h"
 #include "io/jak2_import.h"
+#include "scene/relight.h"
 #include "core/i18n.h"
 #include "core/log.h"
 #include "core/prefs.h"
@@ -71,7 +74,94 @@ void App::remote_start(int port) {
   else LOG_WARN(tr("log.remote_failed"), err.c_str());
 }
 
+void App::ui_input_step() {
+  // one event per frame, as a person would give them; then the answer (with the last picture)
+  if (m_ui_wait > 0) {
+    m_ui_wait--;
+    return;
+  }
+  if (m_ui_shot_pending) return;
+  if (m_ui_events.empty()) {
+    if (m_ui_reply) {
+      json answer = ok({{"mouse", {m_ui_mouse.x, m_ui_mouse.y}}});
+      if (!m_ui_shot.empty()) answer["image"] = m_ui_shot;
+      m_ui_shot.clear();
+      auto reply = std::move(m_ui_reply);
+      m_ui_reply = nullptr;
+      reply(answer);
+    }
+    return;
+  }
+  const json e = m_ui_events.front();
+  m_ui_events.pop_front();
+  SDL_Event ev{};
+  const SDL_WindowID window = SDL_GetWindowID(m_window);
+  auto motion = [&](float x, float y, float dx, float dy) {
+    ev.type = SDL_EVENT_MOUSE_MOTION;
+    ev.motion.windowID = window;
+    ev.motion.which = 0;
+    ev.motion.x = x;
+    ev.motion.y = y;
+    ev.motion.xrel = dx;
+    ev.motion.yrel = dy;
+    SDL_PushEvent(&ev);
+  };
+  auto button = [&](const std::string& b, bool down) {
+    ev.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    ev.button.windowID = window;
+    ev.button.which = 0;
+    ev.button.button = b == "right" ? SDL_BUTTON_RIGHT : b == "middle" ? SDL_BUTTON_MIDDLE : SDL_BUTTON_LEFT;
+    ev.button.down = down;
+    ev.button.clicks = 1;
+    ev.button.x = m_ui_mouse.x;
+    ev.button.y = m_ui_mouse.y;
+    SDL_PushEvent(&ev);
+  };
+  if (e.contains("move") && e["move"].is_array() && e["move"].size() == 2) {
+    const Vec2 to{e["move"][0].get<float>(), e["move"][1].get<float>()};
+    motion(to.x, to.y, to.x - m_ui_mouse.x, to.y - m_ui_mouse.y);
+    m_ui_mouse = to;
+  } else if (e.contains("move_to_node")) {
+    // over a point of the element the view shows (not hidden by something in front)
+    const uint32_t id = e["move_to_node"].get<uint32_t>();
+    const Node* n = scene.find(id);
+    PickFilter pf;
+    pf.actors = rs.show_actors;
+    pf.include_locked = true;
+    bool found = false;
+    if (n && n->mesh) {
+      const Mat4 w = scene.world(*n);
+      for (const auto& p : n->mesh->prims)
+        for (size_t t = 0; t + 2 < p.idx.size() && !found; t += 3) {
+          const Vec3 c = w.point((p.pos[p.idx[t]] + p.pos[p.idx[t + 1]] + p.pos[p.idx[t + 2]]) * (1.f / 3.f));
+          Vec2 s;
+          if (!renderer.project(c, &s) || s.x < 2 || s.y < 2 || s.x > m_vp_w - 2 || s.y > m_vp_h - 2) continue;
+          if (selectable(pick(scene, camera.ray(s.x, s.y, m_vp_w, m_vp_h), pf).node) != id) continue;
+          const Vec2 to{m_vp_x + s.x, m_vp_y + s.y};
+          motion(to.x, to.y, to.x - m_ui_mouse.x, to.y - m_ui_mouse.y);
+          m_ui_mouse = to;
+          found = true;
+        }
+    }
+  } else if (e.contains("rel") && e["rel"].is_array() && e["rel"].size() == 2) {
+    // the mouse moved while the cursor stays (relative mode: turning, looking around)
+    motion(m_ui_mouse.x, m_ui_mouse.y, e["rel"][0].get<float>(), e["rel"][1].get<float>());
+  } else if (e.contains("down")) {
+    button(e["down"].get<std::string>(), true);
+  } else if (e.contains("up")) {
+    button(e["up"].get<std::string>(), false);
+  } else if (e.contains("click")) {
+    button(e["click"].get<std::string>(), true);
+    m_ui_events.push_front(json{{"up", e["click"]}});
+  } else if (e.contains("wait")) {
+    m_ui_wait = std::max(0, e["wait"].get<int>());
+  } else if (e.contains("shot")) {
+    m_ui_shot_pending = true;
+  }
+}
+
 void App::remote_poll() {
+  ui_input_step();
   // requests that wait for something (a level loading...): answered when it is there
   for (size_t i = 0; i < m_remote_waits.size();) {
     if (m_remote_waits[i]()) m_remote_waits.erase(m_remote_waits.begin() + (long)i);
@@ -146,7 +236,7 @@ std::string App::capture_view_png(int w, int h, float game_hour) {
   renderer.draw_scene(scene, view_rs, selection, 0);
   if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && document_open())
-    renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, view_rs);
+    renderer.draw_water(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), ocean_look(view_rs), view_rs);
   draw_effects();
   draw_navmesh_overlay();
   renderer.set_game_depth(nullptr);
@@ -348,32 +438,22 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (ids.empty()) return reply(fail("ids: the elements"));
     int texture = -1;
     const std::string tex = args.value("texture", std::string());
-    if (!tex.empty()) {
-      for (int i = 0; i < (int)scene.textures.size() && texture < 0; i++)
-        if (scene.textures[i].name == tex) texture = i;
-      // a texture of the palette (the textures Jak 3's levels use again and again), read now
-      for (const auto& t : palette_textures)
-        if (texture < 0 && t.name == tex) texture = palette_texture(t, true);
-      std::string err;
-      if (texture < 0) texture = texture_from_image(scene, tex, &err);
-      if (texture < 0) return reply(fail("texture: no texture '" + tex + "' in the document (list_textures), nor an image file (" + err + ")"));
-    }
-    std::optional<Vec4> color;
-    if (args.contains("color")) {
-      const json& c = args["color"];
-      if (!c.is_array() || c.size() < 3 || c.size() > 4) return reply(fail("color: [r, g, b] or [r, g, b, a]"));
-      Vec4 v{1, 1, 1, 1};
-      for (size_t i = 0; i < c.size(); i++) (&v.x)[i] = c[i].get<float>();
-      color = v;
-    }
-    if (texture < 0 && !color) return reply(fail("texture or color"));
+    if (tex.empty()) return reply(fail("texture: an image file, or a texture name (list_textures)"));
+    for (int i = 0; i < (int)scene.textures.size() && texture < 0; i++)
+      if (scene.textures[i].name == tex) texture = i;
+    // a texture of the games' levels (Jak II's named jak2-<name>), read now
+    for (const auto& t : game_textures.empty() ? palette_textures : game_textures)
+      if (texture < 0 && t.name == tex) texture = palette_texture(t, true);
+    for (const auto& t : game_textures_jak2)
+      if (texture < 0 && "jak2-" + t.name == tex) texture = palette_texture(t, true);
+    std::string err;
+    if (texture < 0) texture = texture_from_image(scene, tex, &err);
+    if (texture < 0) return reply(fail("texture: no texture '" + tex + "' in the document or the games' levels (list_textures), nor an image file (" + err + ")"));
     NodeChange c(scene);
     for (auto id : ids) c.save(id);
-    const size_t changed = edit_material(scene, ids, args.value("material", -1), [&](Material& m) {
-      if (texture >= 0) m.texture = texture;
-      if (color) m.base_color = *color;
-    });
-    if (changed) history.push(c.commit(tr(texture >= 0 ? "undo.texture" : "undo.color")));
+    const size_t changed =
+        edit_material(scene, ids, args.value("material", -1), [&](Material& m) { m.texture = texture; });
+    if (changed) history.push(c.commit(tr("undo.texture")));
     reply(ok({{"changed", changed}}));
 
   } else if (tool == "list_textures") {
@@ -535,12 +615,15 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     reply(ok({{"total", matching}, {"offset", offset}, {"objects", objects}, {"families", families}}));
 
   } else if (tool == "list_models") {
+    // Jak II's objects by their model (game: "jak2"), placed as decor, or Jak 3's models
+    const bool jak2 = args.value("game", std::string()) == "jak2";
+    if (jak2 && library_jak2.empty()) return reply(fail("Jak II was not extracted (File > Extract game assets with a Jak II disc)"));
     const std::string f = lower(args.value("filter", std::string()));
     const int offset = std::max(0, args.value("offset", 0));
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
     json models = json::array();
     int matching = 0;
-    for (const auto& m : catalog_models) {
+    for (const auto& m : jak2 ? catalog_models_jak2 : catalog_models) {
       if (!f.empty() && m.name.find(f) == std::string::npos && m.group.find(f) == std::string::npos) continue;
       if (matching++ < offset || (int)models.size() >= limit) continue;
       models.push_back({{"name", m.name}, {"from", m.group}});
@@ -614,7 +697,8 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       json mine = json::array(), game = json::array();
       for (const auto& p : prefabs) mine.push_back(p.name);
       for (const auto& p : game_prefabs)
-        game.push_back({{"name", p.name}, {"category", p.category}, {"description", p.description}});
+        game.push_back({{"name", p.name}, {"category", p.category}, {"description", p.description},
+                        {"game", p.game.empty() ? "jak3" : p.game}, {"level", p.level}});
       reply(ok({{"prefabs", mine}, {"game_prefabs", game}}));
       return true;
     });
@@ -812,6 +896,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       notes.push_back({{"key", n.key}, {"count", n.count}, {"detail", n.detail},
                        {"text", strf(tr_en(n.key.c_str()), n.count, n.detail.c_str())}});
     reply(ok({{"folder", r.dir},
+              {"level_folder", r.level_dir},
               {"files", r.files},
               {"meshes", r.meshes},
               {"triangles", r.triangles},
@@ -947,6 +1032,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       n->local.s = {std::max(n->local.s.x, 0.01f), std::max(n->local.s.y, 0.01f), std::max(n->local.s.z, 0.01f)};
       moved.push_back(remote_node_json(*n));
     }
+    relight_moved(c, ids);
     history.push(c.commit(tr(set_scale || mul_scale ? "undo.scale"
                              : set_rotation || turn != 0.f ? "undo.rotate"
                                                            : "undo.move")));
@@ -1050,7 +1136,9 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
   } else if (tool == "capture_view") {
     const int w = std::clamp(args.value("width", 960), 64, 2048);
     const int h = std::clamp(args.value("height", 600), 64, 2048);
-    const float hour = args.contains("game_hour") && args["game_hour"].is_number() ? args["game_hour"].get<float>() : -1.f;
+    // what the user's view shows by default: the game rendering at its hour when it is on
+    const float shown = game_view_on && game_view.ready() ? game_view.mood.hour : -1.f;
+    const float hour = args.contains("game_hour") && args["game_hour"].is_number() ? args["game_hour"].get<float>() : shown;
     if (hour >= 0 && !game_view.ready()) return reply(fail("no game view: " + game_view_error));
     const std::string png = capture_view_png(w, h, hour);
     if (png.empty()) return reply(fail("the view could not be captured"));
@@ -1128,19 +1216,31 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
                  return l;
                }()}}));
 
+  } else if (tool == "ui_input") {
+    // for the tests of the interface (not offered to the assistant): mouse events one frame after
+    // the other ({"move": [x, y]} in the window's pixels, {"move_to_node": id}, {"rel": [dx, dy]},
+    // {"down"|"up"|"click": "left"|"right"|"middle"}, {"wait": frames}, {"shot": true}: a picture of
+    // the whole window, given back with the answer)
+    if (m_ui_reply) return reply(fail("ui_input: events are still being given"));
+    const json events = args.value("events", json::array());
+    if (!events.is_array()) return reply(fail("events: a list"));
+    for (const auto& e : events) m_ui_events.push_back(e);
+    m_ui_reply = reply;
+
   } else if (tool == "save_project") {
-    std::string path = args.value("path", project_path);
-    if (path.empty()) return reply(fail("path: where to save the project (a .glb file)"));
-    if (fs::path(path).extension() != ".glb") path += ".glb";
+    // a name: its folder in <library>/projects; a path: that file; else where it was saved
     std::string err;
-    if (!save_project(scene, path, &err)) return reply(fail("cannot save: " + err));
-    project_path = path;
-    saved_revision = history.revision();
-    Prefs::get().add_recent_project(path);
-    Prefs::get().save();
-    set_title();
-    LOG_INFO(tr("log.project_saved"), path.c_str());
-    reply(ok({{"path", path}}));
+    const std::string name = args.value("name", std::string());
+    std::string path = args.value("path", std::string());
+    if (!name.empty()) {
+      if (!save_project_as(name, &err)) return reply(fail("cannot save: " + err));
+    } else {
+      if (path.empty()) path = project_path;
+      if (path.empty()) return reply(fail("name: the project's name (saved in <library>/projects/<name>/)"));
+      if (fs::path(path).extension() != ".glb") path += ".glb";
+      if (!save_project_files(path, &err)) return reply(fail("cannot save: " + err));
+    }
+    reply(ok({{"path", project_path}}));
 
   } else if (tool == "open_project") {
     const std::string path = args.value("path", std::string());
@@ -1199,8 +1299,9 @@ void App::remote_place(const json& args, RemoteReply reply) {
     const std::string stem(u.begin(), u.end());
     start_model_placement(CatalogModel{name.empty() ? stem : name, path, ""}, false);
   } else if (kind == "model") {
+    const bool jak2 = args.value("game", std::string()) == "jak2";
     const CatalogModel* found = nullptr;
-    for (const auto& m : catalog_models)
+    for (const auto& m : jak2 ? catalog_models_jak2 : catalog_models)
       if (m.name == name) found = &m;
     if (!found) return reply(fail("no model '" + name + "' in the catalog (see list_models)"));
     start_model_placement(*found, false);
@@ -1320,6 +1421,9 @@ void App::remote_place_many(const json& items, size_t next, json placed, RemoteR
     size_t count = 0;
     for (const auto& p : placed) count += p.contains("id");
     if (m_batch_change) {
+      // lit like the level around them, all at once
+      if (!m_batch_placed.empty()) light_like_surroundings(scene, m_batch_placed);
+      m_batch_placed.clear();
       if (count) history.push(m_batch_change->commit(strf(tr("undo.place_many"), count)));
       m_batch_change.reset();
     }

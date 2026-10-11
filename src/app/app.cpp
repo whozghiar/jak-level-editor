@@ -1,4 +1,5 @@
 #include "app/app.h"
+#include "scene/relight.h"
 
 #include <SDL3/SDL.h>
 
@@ -261,9 +262,25 @@ int App::run(const AppOptions& opts) {
     float dt = std::min((now - last) / 1e9f, 0.1f);
     last = now;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    frame(dt);
+    if (m_ui_shot_pending) {
+      // a picture of the whole window asked by ui_input: this frame drawn apart too (a hidden
+      // window has no pixels of its own); the answer waits for it
+      OffscreenTarget shot;
+      int fbw = 0, fbh = 0;
+      SDL_GetWindowSizeInPixels(m_window, &fbw, &fbh);
+      if (shot.create(fbw, fbh)) {
+        glBindFramebuffer(GL_FRAMEBUFFER, shot.fbo);
+        frame(dt);
+        glFinish();
+        const std::vector<uint8_t> png = shot.png();
+        m_ui_shot = base64_encode(png.data(), png.size());
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      }
+      m_ui_shot_pending = false;
+    } else {
+      frame(dt);
+    }
     SDL_GL_SwapWindow(m_window);
-    autosave_tick();
     set_title();
   }
   extract_stop();
@@ -280,10 +297,12 @@ void App::frame(float dt) {
     float& ms;
     ~Timer() { ms = ms * 0.9f + (SDL_GetTicksNS() - start) / 1e6f * 0.1f; }
   } timer{frame_start, m_frame_ms};
-  m_time += dt;
+  m_water_time += dt;
+  rs.time = m_water_time;
   // the scene cache (world matrices...) is kept while nothing changes: the history did not move,
   // no gizmo drag, no field being dragged (nodes added or removed are detected by the cache)
-  if (history.revision() != m_frame_revision || gizmo.active() || ImGui::IsAnyItemActive()) scene.begin_frame();
+  if (history.revision() != m_frame_revision || gizmo.active() || m_free_rotating || ImGui::IsAnyItemActive())
+    scene.begin_frame();
   m_frame_revision = history.revision();
   // nodes added or brought back by the history are shown as the story says
   if (history.revision() != m_story_revision) apply_story_view();
@@ -319,7 +338,8 @@ void App::frame(float dt) {
   int px = (int)(m_vp_x * sx), pw = (int)(m_vp_w * sx), ph = (int)(m_vp_h * sy);
   int py = fbh - (int)((m_vp_y + m_vp_h) * sy);
   // what the tools changed this frame is drawn now
-  if (history.revision() != m_frame_revision || gizmo.active() || ImGui::IsAnyItemActive()) scene.begin_frame();
+  if (history.revision() != m_frame_revision || gizmo.active() || m_free_rotating || ImGui::IsAnyItemActive())
+    scene.begin_frame();
   m_frame_revision = history.revision();
   set_ocean_backdrop();
   // the game view: the decor drawn by the game's renderer, the editor's things over it with the
@@ -336,7 +356,7 @@ void App::frame(float dt) {
   renderer.draw_scene(scene, view_rs, selection, hovered);
   if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && !scene.nodes.empty())
-    renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, view_rs);
+    renderer.draw_water(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), ocean_look(view_rs), view_rs);
   update_effects(dt);
   draw_effects();
   draw_navmesh_overlay();
@@ -401,9 +421,16 @@ void App::update_camera(float dt) {
   Vec2 rel = m_mouse_rel;
   m_mouse_rel = {0, 0};
   const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-  if (!m_looking && rmb && m_mouse_in_vp && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+  // on the selection (or what is placed) the right button turns it, elsewhere it looks around
+  if (!m_looking && !m_free_rotating && rmb && m_mouse_in_vp && ImGui::IsMouseClicked(ImGuiMouseButton_Right) &&
+      !start_free_rotation()) {
     m_looking = true;
     SDL_SetWindowRelativeMouseMode(m_window, true);
+  }
+  if (m_free_rotating) {
+    if (rmb) update_free_rotation(rel);
+    else finish_free_rotation();
+    return;
   }
   if (m_looking && !rmb) {
     m_looking = false;
@@ -471,6 +498,79 @@ void App::update_camera(float dt) {
   }
 }
 
+bool App::start_free_rotation() {
+  if (tool == ToolMode::Place) {
+    if (!m_place_valid) return false;
+    m_free_rotating_placement = true;
+  } else {
+    // the selection, under the cursor
+    if (selection.empty() || gizmo.active()) return false;
+    PickFilter pf;
+    pf.actors = rs.show_actors;
+    pf.navmesh = show_navmesh;
+    pf.include_locked = true;
+    const uint32_t under = selectable(pick(scene, camera.ray(m_mouse_vp.x, m_mouse_vp.y, m_vp_w, m_vp_h), pf).node);
+    if (!under || !selection.count(under)) return false;
+    m_drag_change = std::make_unique<NodeChange>(scene);
+    m_drag_start.clear();
+    for (auto id : selection_roots())
+      if (const Node* n = scene.find(id)) {
+        m_drag_change->save(id);
+        m_drag_start[id] = scene.world(*n);
+      }
+    if (m_drag_start.empty()) {
+      m_drag_change.reset();
+      return false;
+    }
+    m_free_pivot = selection_frame().col3(3);
+    m_free_rotating_placement = false;
+  }
+  m_free_rotating = true;
+  m_free_right = camera.right();
+  m_free_yaw = m_free_pitch = 0;
+  m_free_tilt0 = placement.tilt;
+  // the cursor stays where it is: the mouse turns it as far as wanted
+  SDL_SetWindowRelativeMouseMode(m_window, true);
+  return true;
+}
+
+void App::update_free_rotation(const Vec2& rel) {
+  const ImGuiIO& io = ImGui::GetIO();
+  const float k = io.KeyShift ? 0.002f : 0.008f;  // radians per pixel
+  m_free_yaw += rel.x * k;
+  m_free_pitch += rel.y * k;
+  float yaw = m_free_yaw, pitch = m_free_pitch;
+  if (gizmo.snap.enabled != io.KeyCtrl && gizmo.snap.rotate_deg > 0.f) {
+    const float s = radians(gizmo.snap.rotate_deg);
+    yaw = std::round(yaw / s) * s;
+    pitch = std::round(pitch / s) * s;
+  }
+  const Quat r = (Quat::axis_angle({0, 1, 0}, yaw) * Quat::axis_angle(m_free_right, pitch)).normalized();
+  if (m_free_rotating_placement) {
+    placement.tilt = (r * m_free_tilt0).normalized();
+    // the preview where it was, turned (the cursor does not move it while it turns)
+    m_place_matrix = Mat4::translate(m_place_matrix.col3(3)) * Mat4::rotate(placement.tilt) *
+                     Mat4::rotate(Quat::axis_angle({0, 1, 0}, placement.yaw));
+    return;
+  }
+  const Mat4 turn = Mat4::translate(m_free_pivot) * Mat4::rotate(r) * Mat4::translate(-m_free_pivot);
+  for (const auto& [id, start] : m_drag_start)
+    if (Node* n = scene.find(id)) scene.set_world(*n, turn * start);
+}
+
+void App::finish_free_rotation() {
+  m_free_rotating = false;
+  SDL_SetWindowRelativeMouseMode(m_window, false);
+  if (m_free_rotating_placement || !m_drag_change) return;
+  // what was placed is lit like where it is now
+  std::vector<uint32_t> roots;
+  for (const auto& [id, start] : m_drag_start) roots.push_back(id);
+  relight_moved(*m_drag_change, roots);
+  history.push(m_drag_change->commit(tr("undo.rotate")));
+  m_drag_change.reset();
+  m_drag_start.clear();
+}
+
 void App::viewport_interaction() {
   ImGuiIO& io = ImGui::GetIO();
   m_mouse_vp = {io.MousePos.x - m_vp_x, io.MousePos.y - m_vp_y};
@@ -482,7 +582,7 @@ void App::viewport_interaction() {
   m_mouse_in_vp = inside && !io.WantCaptureMouse && !modal;
   const ImGuiPayload* payload = ImGui::GetDragDropPayload();
   if (!payload || !payload->IsDataType("OGLE_PREFAB")) m_drag_from_panel = false;
-  if (m_looking || m_orbiting || m_panning) {
+  if (m_looking || m_orbiting || m_panning || m_free_rotating) {
     hovered = 0;
     return;
   }
@@ -545,6 +645,10 @@ void App::select_tool(bool clicked, bool released) {
     }
     if (res.finished && m_drag_change) {
       const char* label = gizmo.op == GizmoOp::Translate ? "undo.move" : gizmo.op == GizmoOp::Rotate ? "undo.rotate" : "undo.scale";
+      // what was placed is lit like where it goes
+      std::vector<uint32_t> roots;
+      for (const auto& [id, start] : m_drag_start) roots.push_back(id);
+      relight_moved(*m_drag_change, roots);
       history.push(m_drag_change->commit(tr(label)));
       m_drag_change.reset();
       m_drag_start.clear();
@@ -715,7 +819,7 @@ void App::draw_tool_overlays() {
 
 void App::handle_shortcuts() {
   ImGuiIO& io = ImGui::GetIO();
-  if (io.WantTextInput || m_looking) return;
+  if (io.WantTextInput || m_looking || m_free_rotating) return;
   const bool ctrl = io.KeyCtrl, shift = io.KeyShift;
   auto pressed = [](ImGuiKey k) { return ImGui::IsKeyPressed(k, false); };
   if (ctrl && pressed(ImGuiKey_Z)) {
@@ -782,6 +886,8 @@ void App::handle_shortcuts() {
 //   models  : the level `in` loaded, the models of the Catalog panel
 //   decor   : the level `in` loaded, its decor in the Catalog panel
 //   decor-all : the level `in` loaded, the decor of every level searched for "catwalk"
+//   materials : the level `in` loaded, the materials of the Catalog panel
+//   textures : as select, the window of the inspector's Game textures... open for its first material
 //   effects : the level `in` loaded, the particle effects of the Catalog panel
 //   actors  : the level `in` loaded with its actors (its effects running)
 //   navmesh : the level or project `in`, its nav meshes drawn (generated for the whole level when
@@ -797,10 +903,9 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
     fs::remove_all(tmp, ec);
     apply_options(opts);
     new_document();
-    if (opts.game_hour >= 0) {
-      game_view_on = game_view.ready();
-      game_view.mood.hour = opts.game_hour;
-    }
+    // the editor's own view, or the game rendering at an hour (--game)
+    game_view_on = opts.game_hour >= 0 && game_view.ready();
+    if (game_view_on) game_view.mood.hour = opts.game_hour;
     m_prefab_dir_override = (tmp / "prefabs").generic_string();
     refresh_prefabs();
     const bool project_in = in.size() > 4 && (in.compare(in.size() - 4, 4, ".glb") == 0 ||
@@ -813,7 +918,7 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
                                               setup == "effects" || setup == "actors" ||
                                               setup == "decor" || setup == "decor-all" || setup == "navmesh" ||
                                               setup == "export" || setup == "guide" || setup == "tools" ||
-                                              setup == "build");
+                                              setup == "build" || setup == "materials" || setup == "textures");
     if (with_project) open_project_file(in);  // the preferences are not written in this mode
     if (setup == "project") left_tab_request = 1;
     if (with_level) {
@@ -835,15 +940,21 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
       show_help = true;
       guide_tab_request = setup == "help" ? 2 : setup == "tools" ? 1 : 0;
       guide_step = 4;  // the gizmo: four animations
+      // --select <tutorial>[:<step>]: that tutorial instead
+      if (!opts.select.empty()) {
+        const size_t colon = opts.select.find(':');
+        select_tutorial(opts.select.substr(0, colon), colon == std::string::npos ? 0 : std::atoi(opts.select.c_str() + colon + 1));
+      }
     }
     if (setup == "build") left_tab_request = 3;
-    if (setup == "catalog" || setup == "models" || setup == "decor" || setup == "decor-all" || setup == "effects") {
+    if (setup == "catalog" || setup == "models" || setup == "decor" || setup == "decor-all" || setup == "effects" ||
+        setup == "materials") {
       left_tab_request = 1;
       if (setup == "effects") {
         m_catalog_family = "effect";
         m_catalog_filter = opts.select;  // --select: the effects searched for
       }
-      m_catalog_tab = setup == "decor" || setup == "decor-all" ? 2 : setup == "models" ? 1 : 0;
+      m_catalog_tab = setup == "decor" || setup == "decor-all" ? 2 : setup == "models" ? 1 : setup == "materials" ? 4 : 0;
       if (setup == "decor") m_decor_level = in;
       if (setup == "decor-all") m_catalog_filter = "catwalk";
     }
@@ -925,10 +1036,11 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
             camera.yaw = 0.7f;
             camera.pitch = -0.5f;
             camera.frame(document_level_bounds(group));
-          } else if (setup == "select" || setup == "scale" || setup == "prefab") {
+          } else if (setup == "select" || setup == "scale" || setup == "prefab" || setup == "textures") {
             if (target_node) {
               select_only(target_node->id);
               for (auto id : named) selection.insert(id);
+              if (setup == "textures") m_texture_window = {true, {target_node->id}, 0};
               if (setup == "scale") {
                 gizmo.op = GizmoOp::Scale;
                 if (!with_project && named.empty()) scene.find(target_node->id)->local.s = {2.5f, 1.f, 1.f};

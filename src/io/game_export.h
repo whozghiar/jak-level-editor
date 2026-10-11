@@ -1,7 +1,16 @@
 #pragma once
 
 // A document exported as a custom level of OpenGOAL for Jak 3: the files its level builder
-// (goalc/build_level) takes, in custom_assets/jak3/levels/<name>/.
+// (goalc/build_level) takes, laid out in <folder> (the project's export: <library>/export/<project>/)
+// as in the jak-project checkout they are copied into:
+//
+//   README.md                                   how to bring it into the game (the folders to copy,
+//                                               the lines to add to game.gp and level-info.gc, how to
+//                                               build it and go there) and what the export changed
+//   custom_assets/jak3/levels/<name>/           the level:
+//   goal_src/jak3/levels/<name>/<name>-obs.gc   the behaviors set in the editor (when there are some)
+//
+// The level's files:
 //
 //   <name>.glb     what the view shows of the decor, in the game's space; the collision of the
 //                  game where the levels have it (exact: one node per surface), the rest made by
@@ -12,8 +21,8 @@
 //                  the art groups of their models
 //   <name>.gd      the DGO: the art groups and the level
 //   <name>-nav.json  the nav meshes of the document (nav_data)
-//   INSTALL.md     the lines to add to the game's code (game.gp, level-info.gc), and what the
-//                  export changed
+//   level-info.gc  its definition in the game's code (or the line to change, for a level replacing
+//                  one of the game's)
 //
 // The collision surfaces are written as the builder takes them (Jak 1's fields, which it converts:
 // the materials and events it lacks become the nearest ones); the kill masks are dropped (the new
@@ -39,7 +48,7 @@ struct LevelExportOptions {
   std::string nickname;  // 3 letters: the DGO's name
   std::string iso_name;  // at most 8 letters and digits, upper case
   uint32_t base_id = 0;  // the actors' ids from it (0: kDefaultBaseId)
-  std::string folder;    // <folder>/<name>/ is written
+  std::string folder;    // the export's folder: README.md, custom_assets/..., goal_src/...
   bool actors = true;
   bool game_collision = true;  // the levels' own collision where they have it (else from the decor)
   Vec3 start{0, 0, 0};         // where the player starts (the continue point), meters
@@ -69,7 +78,8 @@ struct ExportNote {
 };
 
 struct LevelExportReport {
-  std::string dir;  // the folder written
+  std::string dir;        // the folder written (the export's: README.md at its top)
+  std::string level_dir;  // the level's files: <dir>/custom_assets/jak3/levels/<name>
   std::vector<std::string> files;
   size_t meshes = 0, triangles = 0;
   size_t collision_triangles = 0;   // the game's, exact or approximated
@@ -107,6 +117,13 @@ std::vector<ContinueCheck> check_continues(const Scene& scene, const GameData* d
 // Whether the node at index `i` is part of the document's own level: not under a level added to it,
 // a companion, a mission layer, nor a reference.
 bool own_level_node(const Scene& scene, size_t i);
+
+// The collision an element of the decor has in the game when the editor sets none (the export's
+// rule): the game's own (a piece of a level whose collision the document has, where it is still in
+// place), none (a surface seen through: water, glass; a piece under 4 m: a pipe, a lamp, a decal)
+// or one made from its shape by the level builder.
+enum class DefaultCollision { Game, SeeThrough, Small, Shape };
+DefaultCollision default_decor_collision(const Scene& scene, size_t index);
 
 // Writes the level. `data`: the game's data (may be null: then the actor types are not checked).
 bool export_level_for_game(const Scene& scene, const GameData* data, const LevelExportOptions& opts,

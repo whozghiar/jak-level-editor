@@ -38,8 +38,9 @@ struct KeepTarget {
 }  // namespace
 
 const std::vector<std::string>& ToolDemo::names() {
-  static const std::vector<std::string> n = {"select", "box_select", "move",   "rotate", "scale",   "snap",   "place",
-                                             "build",  "prefab",     "camera", "bounce", "launch", "replace", "story"};
+  static const std::vector<std::string> n = {"select", "box_select", "move",    "rotate", "scale",   "snap",
+                                             "place",  "build",      "prefab",  "camera", "bounce",  "launch",
+                                             "replace", "story",     "local",   "free_rotate"};
   return n;
 }
 
@@ -126,8 +127,8 @@ Vec2 ToolDemo::screen(const Vec3& world) const {
   return s;
 }
 
-void ToolDemo::gizmo_axes(const Vec3& at, float size, int hot) {
-  const Vec3 axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+void ToolDemo::gizmo_axes(const Vec3& at, float size, int hot, const Quat& turn) {
+  const Vec3 axes[3] = {turn.rotate({1, 0, 0}), turn.rotate({0, 1, 0}), turn.rotate({0, 0, 1})};
   const uint32_t colors[3] = {kRed, kGreen, kBlue};
   for (int i = 0; i < 3; i++) {
     const uint32_t c = hot == i ? kHot : colors[i];
@@ -278,6 +279,32 @@ unsigned ToolDemo::draw(const std::string& name, double time, int w, int h, std:
     cursor(t < 0.9f ? start + (grip - start) * ease(t, 0.f, 0.9f) : grip);
     if (t > 1.f && t < 3.2f) readout(grip, "X x%.2f", k);
     label(corner, "guide.demo.scale");
+  } else if (name == "local") {
+    // a catwalk turned: in the world's axes the arrow goes across it, in its own along it
+    period(8);
+    const bool local = t >= 4.f;
+    const float s = local ? t - 4.f : t;
+    const Quat turn = Quat::axis_angle({0, 1, 0}, radians(35.f));
+    const float d = 2.2f * ease(s, 1.f, 2.8f);
+    const Vec3 dir = local ? turn.rotate({1, 0, 0}) : Vec3{1, 0, 0};
+    const Vec3 at = Vec3{-1.2f, 0, 0.6f} + dir * d, pivot = at + Vec3{0, 0.8f, 0};
+    mesh(m_wall, Mat4::translate(at) * Mat4::rotate(turn), kSelected);
+    gizmo_axes(pivot, 1.8f, s > 0.8f && s < 3.f ? 0 : -1, local ? turn : Quat{});
+    const Vec2 grip = screen(pivot + dir * 1.4f);
+    cursor(s < 0.9f ? start + (grip - start) * ease(s, 0.f, 0.9f) : grip);
+    label(corner, local ? "guide.demo.local" : "guide.demo.world");
+  } else if (name == "free_rotate") {
+    // the right button held on the selection: the mouse turns it every way
+    period(6);
+    const float k = ease(t, 0.9f, 5.f);
+    const float yaw = std::sin(k * 2.f * kPi) * 1.1f, pitch = std::sin(k * 4.f * kPi) * 0.5f;
+    const Vec3 pivot{0, 0.8f, 0};
+    const Quat r = (Quat::axis_angle({0, 1, 0}, yaw) * Quat::axis_angle({1, 0, -1}, pitch)).normalized();
+    mesh(m_box, Mat4::translate(pivot) * Mat4::rotate(r) * Mat4::translate(-pivot), kSelected);
+    const Vec2 on = screen(pivot + Vec3{0.2f, 0.3f, 0.3f});
+    const Vec2 swirl{std::sin(k * 2.f * kPi) * 40.f, std::sin(k * 4.f * kPi) * 18.f};
+    cursor(t < 0.9f ? start + (on - start) * ease(t, 0.f, 0.9f) : on + swirl);
+    label(corner, "guide.demo.free_rotate");
   } else if (name == "place") {
     // the piece follows the cursor on the ground; each click leaves a copy
     period(4);

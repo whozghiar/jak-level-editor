@@ -483,6 +483,24 @@ std::string check_export_names(const LevelExportOptions& o, const GameData* data
   return {};
 }
 
+DefaultCollision default_decor_collision(const Scene& scene, size_t index) {
+  const SceneCache& cache = scene.cache();
+  if (index >= scene.nodes.size() || index >= cache.bounds.size() || !scene.nodes[index].mesh) return DefaultCollision::Shape;
+  const Node& n = scene.nodes[index];
+  // a piece of a level whose collision is in the document: its "<level>-collision" group, next to it
+  const auto level = piece_level(scene, n);
+  if (!level.second.empty()) {
+    const std::string group = level.second + "-collision";
+    for (const auto& g : scene.nodes)
+      if (g.kind == NodeKind::Group && g.parent == level.first && g.name == group) return DefaultCollision::Game;
+  }
+  if (see_through(scene, *n.mesh)) return DefaultCollision::SeeThrough;
+  const AABB& b = cache.bounds[index];
+  if (!n.extras.contains("og_shape") && b.valid() && std::max({b.size().x, b.size().y, b.size().z}) < kSmallPiece)
+    return DefaultCollision::Small;
+  return DefaultCollision::Shape;
+}
+
 bool own_level_node(const Scene& scene, size_t i) {
   const SceneCache& c = scene.cache();
   if (i >= scene.nodes.size()) return false;
@@ -661,15 +679,19 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   // it are the game's, loaded by the game as they are); never a level shown for reference
   const bool replacing = !o.replaces.empty();
   const LevelInfo* replaced = replacing && data ? data->level(o.replaces) : nullptr;
-  const fs::path dir = to_path(o.folder) / to_path(o.name);
+  // the export's folder, laid out like the jak-project checkout it is copied into
+  const std::string install_dir = "custom_assets/jak3/levels/" + o.name + "/";
+  const std::string code_dir = "goal_src/jak3/levels/" + o.name + "/";
+  const fs::path top = to_path(o.folder);
+  const fs::path dir = top / "custom_assets" / "jak3" / "levels" / to_path(o.name);
   std::error_code ec;
   fs::create_directories(dir, ec);
   if (!fs::is_directory(dir, ec)) {
     if (error) *error = "cannot create " + from_path(dir);
     return false;
   }
-  rep.dir = from_path(dir);
-  const std::string install_dir = "custom_assets/jak3/levels/" + o.name + "/";
+  rep.dir = from_path(top);
+  rep.level_dir = from_path(dir);
   const uint32_t base_id = o.base_id ? o.base_id : kDefaultBaseId;
   Notes notes;
 
@@ -1259,7 +1281,7 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   std::ostringstream j;
   j << "// " << o.name << ": exported by the OpenGOAL Level Editor for Jak 3 from "
     << (scene.settings.level.empty() ? std::string("a new level") : scene.settings.level) << ".\n"
-    << "// To add it to the game: INSTALL.md, next to this file.\n"
+    << "// To add it to the game: README.md, at the top of the export's folder.\n"
     << "{\n"
     << "  \"long_name\": \"" << o.name << "\",\n"
     << "  \"iso_name\": \"" << o.iso_name << "\",\n"
@@ -1302,7 +1324,8 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
        << ";; " << o.name << ": the behaviors of its objects, set in the OpenGOAL Level Editor. Each object\n"
        << ";; whose behavior differs from the game's has a type of its own deriving the game's.\n\n"
        << generated;
-    const fs::path gc_path = dir / to_path(code_stem + ".gc");
+    const fs::path gc_path = top / "goal_src" / "jak3" / "levels" / to_path(o.name) / to_path(code_stem + ".gc");
+    fs::create_directories(gc_path.parent_path(), ec);
     if (!write_text(gc_path, gc.str(), error)) return false;
     rep.files.push_back(from_path(gc_path));
     rep.code_file = from_path(gc_path);
@@ -1355,11 +1378,21 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   if (rep.navmeshes) md << ", " << rep.navmeshes << " nav meshes";
   if (rep.behaviors) md << ", " << rep.behaviors << " objects with a behavior of their own (`" << code_stem << ".gc`)";
   md << ".\n\n"
-     << "## Adding it to the game\n\n"
-     << "1. Copy this folder to `" << install_dir << "` in the jak-project checkout";
+     << "## What is in this folder\n\n"
+     << "It is laid out like the jak-project checkout (OpenGOAL's source folder, the one with `goal_src` and\n"
+     << "`custom_assets`) it goes into:\n\n"
+     << "- `" << install_dir << "`: the level for OpenGOAL's level builder: `" << o.name
+     << ".glb` (its decor and collision), `" << o.name << ".jsonc` (its names and actors), `" << o.name
+     << ".gd` (its DGO, " << nick_upper << ".DGO), `level-info.gc` (its definition in the game's code)"
+     << (rep.navmeshes ? ", `" + o.name + "-nav.json` (its nav meshes)" : std::string()) << ".\n";
   if (!generated.empty())
-    md << ", and `" << code_stem << ".gc` to `goal_src/jak3/levels/" << o.name << "/" << code_stem << ".gc`";
-  md << ".\n"
+    md << "- `" << code_dir << code_stem << ".gc`: the behaviors set in the editor (the level's code).\n";
+  md << "\n## Adding it to the game\n\n"
+     << "1. Copy the folder" << (generated.empty() ? " `custom_assets`" : "s `custom_assets` and `goal_src`")
+     << " of this folder into your jak-project checkout: "
+     << (generated.empty() ? "it merges" : "they merge") << " with the folder"
+     << (generated.empty() ? "" : "s") << " of the same name there (nothing of the game is replaced: the level has a\n"
+     << "   folder of its own).\n"
      << "2. In `goal_src/jak3/game.gp`, next to the lines of the test-zone:\n\n"
      << "   ```\n"
      << "   (build-custom-level \"" << o.name << "\")\n";
@@ -1374,20 +1407,23 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   if (replaced) {
     const std::string first = replaced->continues.empty() ? o.replaces + "-start" : replaced->continues.front().name;
     md << "3. In `goal_src/jak3/engine/level/level-info.gc`, in `(define " << o.replaces << " ...)`, change\n"
-       << "   `:nickname '" << replaced->nickname << "` to `:nickname '" << o.nickname << "` (see `level-info.gc` next to this\n"
-       << "   file). The game loads `<nickname>.DGO` for a level: it now loads " << nick_upper << ".DGO, this level,\n"
+       << "   `:nickname '" << replaced->nickname << "` to `:nickname '" << o.nickname << "` (see `" << install_dir
+       << "level-info.gc`). The game loads `<nickname>.DGO` for a level: it now loads " << nick_upper << ".DGO, this level,\n"
        << "   wherever it loads " << o.replaces << ", and keeps everything else of " << o.replaces
        << " (its continue points, its music,\n"
        << "   its missions, the levels around it). The game's own `" << replaced->dgo
        << "` is still built: put the nickname\n"
        << "   back to play the game's " << o.replaces << " again.\n"
-       << "4. Build the game (`(mi)` in the REPL), then go there as in the game (from a level next to it), or:\n"
-       << "   `(start 'play (get-continue-by-name *game-info* \"" << first << "\"))`.\n\n";
+       << "4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout), type `(mi)`, then\n"
+       << "   start the game (`gk`). Go there as in the game (from a level next to it), or in the REPL:\n"
+       << "   `(lt)` then `(start 'play (get-continue-by-name *game-info* \"" << first << "\"))`.\n\n";
   } else {
-    md << "3. In `goal_src/jak3/engine/level/level-info.gc`, add the definition of `level-info.gc`\n"
-       << "   (next to this file) and give it an `:index` no other level has. The player starts at\n"
+    md << "3. In `goal_src/jak3/engine/level/level-info.gc`, add the definition of `" << install_dir
+       << "level-info.gc`\n"
+       << "   and give it an `:index` no other level has. The player starts at\n"
        << "   (" << num(o.start.x) << ", " << num(o.start.y) << ", " << num(o.start.z) << ") m.\n"
-       << "4. Build the game (`(mi)` in the REPL), then go there:\n"
+       << "4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout), type `(mi)`, then\n"
+       << "   start the game (`gk`) and, in the REPL, `(lt)` then go there:\n"
        << "   `(start 'play (get-continue-by-name *game-info* \"" << o.name << "-start\"))`.\n"
        << "   (`bg` loads it next to the levels already there: from the city, no memory is left.)\n\n";
   }
@@ -1420,7 +1456,7 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   if (rep.regions)
     md << "- The level's regions are the ones of " << o.replaces << " (" << rep.regions
        << "): where the game loads and shows the levels around it as Jak or the camera goes by.\n";
-  const fs::path md_path = dir / to_path("INSTALL.md");
+  const fs::path md_path = top / "README.md";
   if (!write_text(md_path, md.str(), error)) return false;
   rep.files.push_back(from_path(md_path));
 

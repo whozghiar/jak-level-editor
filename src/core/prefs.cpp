@@ -60,7 +60,6 @@ void Prefs::load() {
     extract_source = j.value("extract_source", std::string());
     language = j.value("language", std::string());
     recent_projects = j.value("recent_projects", std::vector<std::string>());
-    export_folder = j.value("export_folder", std::string());
     guide_seen = j.value("guide_seen", false);
   } catch (const std::exception& e) {
     LOG_WARN("unreadable preferences (%s): defaults used", e.what());
@@ -73,7 +72,6 @@ void Prefs::save() const {
             {"extract_source", extract_source},
             {"language", language},
             {"recent_projects", recent_projects},
-            {"export_folder", export_folder},
             {"guide_seen", guide_seen}};
   std::error_code ec;
   fs::create_directories(to_path(dir()), ec);

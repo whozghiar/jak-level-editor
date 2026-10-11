@@ -56,6 +56,9 @@ struct Material {
   // through, like glass and water. The game blends most of a level's other surfaces too, but
   // writes their depth: they are walls (the alpha test makes their holes).
   bool translucent = false;
+  // a water surface of the game (a water actor's model): its texture flows, as the game animates it
+  // (set when its model is drawn, not saved)
+  bool water = false;
 };
 
 // Whether the game draws a material in its translucent pass, behind which the rest shows (glass,
@@ -112,6 +115,8 @@ struct Mesh {
 // frame from the time of the day and the level's mood. A table of colors, 8 RGBA bytes each...
 struct TodPalette {
   std::vector<uint8_t> rgba;  // color c's palette k at c * 32 + k * 4
+  // made for one element, lit like the level around it (scene/relight.h), not a tree of the level's
+  bool local = false;
   size_t size() const { return rgba.size() / 32; }
 };
 

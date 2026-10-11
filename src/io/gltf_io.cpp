@@ -421,6 +421,7 @@ bool import_gltf_file(Scene& scene, const std::string& path, const ImportOptions
       std::shared_ptr<TodPalette> pal;
       if (view_accessor(model, pa, &v) && v.ctype == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && v.comps == 4) {
         pal = std::make_shared<TodPalette>();
+        pal->local = j.value("local", false);
         pal->rgba.resize(v.count / 8 * 32);
         for (size_t i = 0; i < pal->rgba.size() / 4; i++) memcpy(&pal->rgba[i * 4], v.data + i * v.stride, 4);
       }
@@ -795,7 +796,9 @@ struct ExportContext {
       const auto& v = n.tod->index[p];
       index.push_back(w.add_accessor(v.data(), v.size(), 1, 5123, 0, "SCALAR", false));
     }
-    return {{"palette", it->second}, {"index", index}};
+    json out{{"palette", it->second}, {"index", index}};
+    if (pal->local) out["local"] = true;
+    return out;
   }
 
   // builder: the node's own mesh, its lighting as the 8 palettes per vertex the builder reads

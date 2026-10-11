@@ -3,6 +3,8 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -121,6 +123,17 @@ bool GameData::load(const std::string& path, std::string* error) {
       const std::string row = str(rows[r]);
       for (int col = 0; col < map.size && col < (int)row.size(); col++) map.cells[(size_t)r * map.size + col] = row[col] == '1';
     }
+    if (o.contains("near") && o["near"].is_object())
+      for (const auto& [key, v] : o["near"].items()) {
+        int r = 0, col = 0;
+        if (std::sscanf(key.c_str(), "%d,%d", &r, &col) != 2 || !v.is_string()) continue;
+        std::vector<uint32_t> bits;
+        const std::string hex = v.get<std::string>();
+        if (hex != "full")
+          for (size_t i = 0; i + 8 <= hex.size() && bits.size() < 32; i += 8)
+            bits.push_back((uint32_t)std::strtoul(hex.substr(i, 8).c_str(), nullptr, 16));
+        if (hex == "full" || bits.size() == 32) map.near[r * map.size + col] = std::move(bits);
+      }
     const json& color = at(o, "color");
     if (color.size() == 3) map.color = {color[0].get<float>(), color[1].get<float>(), color[2].get<float>()};
     const json& far = at(o, "far_color");

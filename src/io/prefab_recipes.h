@@ -3,7 +3,10 @@
 // The game's prefabs: ready-made assemblies of Jak 3's decor (a slum building with its fans and
 // pipes, a bridge of the port, a floor vent of the industrial zone and its grate, a generator...),
 // described by recipes (data/jak3/prefabs.json: no data of the game, only names) and made from the
-// user's own extracted levels the first time they are needed, into <prefabs>/game/.
+// user's own extracted levels the first time they are needed, into <prefabs>/game/. Jak II's
+// (data/jak2/prefabs.json: Haven's buildings, the palace, the stadium...) are made from its levels
+// extracted next to Jak 3's, into <prefabs>/game/jak2/, their textures named "jak2-<name>" as the
+// structures brought in one by one (io/jak2_import.h).
 //
 // A recipe names a level, one decor element of it (the anchor: a prototype, the index-th of its
 // instances in the level, or a piece of its shell) and how far around it to take what the game put
@@ -23,6 +26,7 @@ class GameData;
 
 struct PrefabRecipe {
   std::string name;         // shown ("Slum house with fans")
+  std::string game;         // "" Jak 3's, "jak2" Jak II's
   std::string category;     // building, house, bridge, platform, vent, generator, industrial...
   std::string description;  // what it is, where it comes from
   std::string level;        // the level it is taken from
@@ -34,12 +38,12 @@ struct PrefabRecipe {
   // roofs and what hangs on them)
   AABB box;
   std::vector<std::string> exclude;          // parts of names left out
-  std::string file;         // the prefab's file name ("<slug>.glb")
+  std::string file;         // the prefab's file in <prefabs>/game/ ("<slug>.glb", Jak II's "jak2/<slug>.glb")
 };
 
-// The recipes of data/jak3/prefabs.json (next to the game's data).
-std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::string* error);
-std::string prefab_recipes_path();
+// The recipes of data/<game>/prefabs.json (next to the game's data); `game`: "" Jak 3, "jak2".
+std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::string* error, const std::string& game = "");
+std::string prefab_recipes_path(const std::string& game = "");
 
 // The elements of `level` (a document of it: opened without actors) a recipe takes: the anchor
 // and what is around it.

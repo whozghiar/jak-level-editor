@@ -23,6 +23,10 @@ namespace fs = std::filesystem;
 namespace {
 
 fs::path to_path(const std::string& s) { return fs::path(std::u8string((const char8_t*)s.c_str())); }
+std::string from_path(const fs::path& p) {
+  auto u = p.u8string();
+  return std::string(u.begin(), u.end());
+}
 
 std::string lower(std::string s) {
   for (auto& c : s) c = (char)std::tolower((unsigned char)c);
@@ -232,7 +236,6 @@ void App::ui_menu() {
       if (ImGui::MenuItem(tr(items[i]), i == 0 ? "F1" : nullptr)) {
         show_help = true;
         guide_tab_request = i;
-        if (i == 0) guide_step = 0;
       }
     ImGui::EndMenu();
   }
@@ -466,20 +469,85 @@ void App::ui_catalog_panel() {
     ImGui::TextWrapped("%s", tr("catalog.no_library"));
     return;
   }
-  if (ImGui::RadioButton(tr_id("catalog.objects").c_str(), m_catalog_tab == 0)) m_catalog_tab = 0;
-  guide_tip("catalog");
-  ImGui::SameLine();
-  if (ImGui::RadioButton(tr_id("catalog.interactive").c_str(), m_catalog_tab == 3)) m_catalog_tab = 3;
-  guide_tip("interactive");
-  ImGui::SameLine();
-  if (ImGui::RadioButton(tr_id("catalog.models").c_str(), m_catalog_tab == 1)) m_catalog_tab = 1;
-  guide_tip("models");
-  ImGui::SameLine();
-  if (ImGui::RadioButton(tr_id("catalog.decor").c_str(), m_catalog_tab == 2)) m_catalog_tab = 2;
-  guide_tip("decor");
+  // the game: Jak 3's, or Jak II's when it was extracted too (its models, structures and materials,
+  // brought in as decor: its objects' code is not in Jak 3)
+  if (!library_jak2.empty()) {
+    const bool before = m_catalog_jak2;
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(tr("catalog.game"));
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Jak 3##catalog-game", !m_catalog_jak2)) m_catalog_jak2 = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Jak II##catalog-game", m_catalog_jak2)) m_catalog_jak2 = true;
+    guide_tip("jak2");
+    if (m_catalog_jak2 != before) {
+      m_decor_level.clear();
+      m_decor_scene.reset();
+      m_decor_parts.clear();
+      m_models_level.clear();
+      m_all_parts_filter = "\x01";  // the search made again
+      // Jak II has no objects for Jak 3
+      if (m_catalog_jak2 && (m_catalog_tab == 0 || m_catalog_tab == 3)) m_catalog_tab = 1;
+    }
+    ImGui::Separator();
+  } else {
+    m_catalog_jak2 = false;
+  }
+  // its kinds, on as many lines as the panel's width needs
+  {
+    struct Kind {
+      int tab;
+      const char* key;
+      const char* guide;
+    };
+    std::vector<Kind> kinds;
+    if (!m_catalog_jak2) kinds = {{0, "catalog.objects", "catalog"}, {3, "catalog.interactive", "interactive"}};
+    kinds.push_back({1, m_catalog_jak2 ? "catalog.models.jak2" : "catalog.models", "models"});
+    kinds.push_back({2, "catalog.decor", "decor"});
+    kinds.push_back({4, "catalog.materials", "palette"});
+    const float edge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+    for (size_t i = 0; i < kinds.size(); i++) {
+      const std::string label = tr_id(kinds[i].key);
+      const ImGuiStyle& st = ImGui::GetStyle();
+      const float w = ImGui::GetFrameHeight() + st.ItemInnerSpacing.x + ImGui::CalcTextSize(label.c_str(), nullptr, true).x;
+      if (i && ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= edge) ImGui::SameLine();
+      if (ImGui::RadioButton(label.c_str(), m_catalog_tab == kinds[i].tab)) m_catalog_tab = kinds[i].tab;
+      guide_tip(kinds[i].guide);
+    }
+  }
+  if (m_catalog_jak2 && (m_catalog_tab == 0 || m_catalog_tab == 3)) m_catalog_tab = 1;
   if (m_catalog_tab == 0 || m_catalog_tab == 3) ui_catalog_objects(m_catalog_tab == 3);
   else if (m_catalog_tab == 1) ui_catalog_models();
+  else if (m_catalog_tab == 4) ui_catalog_materials();
   else ui_catalog_decor();
+}
+
+void App::ui_catalog_materials() {
+  // the textures of the game chosen above, given to the selection (all its materials)
+  static uint64_t counted_rev = ~0ull;
+  static std::set<uint32_t> counted_sel;
+  static std::vector<uint32_t> ids;
+  if (counted_rev != history.revision() || counted_sel != selection) {
+    counted_rev = history.revision();
+    counted_sel = selection;
+    ids.clear();
+    const auto roots = selection_roots();
+    const auto below = scene.descendants_of(roots);
+    auto add = [&](uint32_t id) {
+      const Node* n = scene.find(id);
+      if (n && n->kind == NodeKind::Render && n->mesh && !scene.actor_of(*n)) ids.push_back(id);
+    };
+    for (size_t r = 0; r < roots.size(); r++) {
+      add(roots[r]);
+      for (auto id : below[r]) add(id);
+    }
+  }
+  ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+  if (ids.empty()) ImGui::TextWrapped("%s", tr("build.materials.none"));
+  else ImGui::TextWrapped("%s", strf(tr("build.materials.count"), ids.size()).c_str());
+  ImGui::PopStyleColor();
+  m_tex_game = m_catalog_jak2 ? "jak2" : "";
+  ui_texture_browser(ids, -1, ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y, false);
 }
 
 namespace {
@@ -613,13 +681,35 @@ void App::ui_catalog_objects(bool interactive) {
 }
 
 void App::ui_catalog_models() {
+  const std::vector<CatalogModel>& models = m_catalog_jak2 ? catalog_models_jak2 : catalog_models;
+  if (m_catalog_jak2) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("%s", tr("catalog.models.jak2.tip"));
+    ImGui::PopStyleColor();
+  }
+  // the level they come from, or every level
+  std::vector<std::string> levels;
+  for (const auto& m : models)
+    if (std::find(levels.begin(), levels.end(), m.group) == levels.end()) levels.push_back(m.group);
+  std::sort(levels.begin(), levels.end());
+  if (std::find(levels.begin(), levels.end(), m_models_level) == levels.end()) m_models_level.clear();
+  ImGui::SetNextItemWidth(-1);
+  if (ImGui::BeginCombo("##models-level", m_models_level.empty() ? tr("catalog.all_levels") : m_models_level.c_str(),
+                        ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::Selectable(tr("catalog.all_levels"), m_models_level.empty())) m_models_level.clear();
+    for (const auto& l : levels)
+      if (ImGui::Selectable(l.c_str(), l == m_models_level)) m_models_level = l;
+    ImGui::EndCombo();
+  }
   ImGui::SetNextItemWidth(-1);
   ImGui::InputTextWithHint("##models-filter", tr("catalog.filter"), &m_catalog_filter);
   const std::string f = lower(m_catalog_filter);
   std::vector<const CatalogModel*> shown;
-  for (const auto& m : catalog_models)
-    if (f.empty() || m.name.find(f) != std::string::npos || m.group.find(f) != std::string::npos) shown.push_back(&m);
-  ImGui::TextDisabled(tr("catalog.count"), shown.size(), catalog_models.size());
+  for (const auto& m : models)
+    if ((m_models_level.empty() || m.group == m_models_level) &&
+        (f.empty() || m.name.find(f) != std::string::npos || m.group.find(f) != std::string::npos))
+      shown.push_back(&m);
+  ImGui::TextDisabled(tr("catalog.count"), shown.size(), models.size());
   ImGui::BeginChild("models");
   const float size = 80.f;
   thumbnail_grid((int)shown.size(), size, [&](int i) {
@@ -699,23 +789,8 @@ void App::ui_decor_cell(const std::string& background, int64_t stamp, const Cata
 }
 
 void App::ui_catalog_decor() {
-  // the decor of Jak 3's levels, or Jak II's structures when Jak II was extracted too
-  if (!library_jak2.empty()) {
-    const bool before = m_decor_jak2;
-    if (ImGui::RadioButton(tr_id("catalog.decor.jak3").c_str(), !m_decor_jak2)) m_decor_jak2 = false;
-    ImGui::SameLine();
-    if (ImGui::RadioButton(tr_id("catalog.decor.jak2").c_str(), m_decor_jak2)) m_decor_jak2 = true;
-    guide_tip("jak2");
-    if (m_decor_jak2 != before) {
-      m_decor_level.clear();
-      m_decor_scene.reset();
-      m_decor_parts.clear();
-      m_all_parts_filter = "\x01";  // the search made again
-    }
-  } else {
-    m_decor_jak2 = false;
-  }
-  const AssetLibrary& lib = m_decor_jak2 ? library_jak2 : library;
+  // the decor of Jak 3's levels, or Jak II's structures (the game chosen above)
+  const AssetLibrary& lib = m_catalog_jak2 ? library_jak2 : library;
   // the level whose decor is shown, or every level
   ImGui::SetNextItemWidth(-1);
   if (ImGui::BeginCombo("##decor-level", m_decor_level.empty() ? tr("catalog.all_levels") : m_decor_level.c_str(),
@@ -744,7 +819,7 @@ void App::ui_catalog_decor() {
   if (!m_decor_scene) {
     m_decor_scene = store.level(level->background, true);
     if (m_decor_scene) m_decor_parts = list_parts(*m_decor_scene);
-    if (m_decor_jak2)
+    if (m_catalog_jak2)
       m_decor_parts.erase(std::remove_if(m_decor_parts.begin(), m_decor_parts.end(),
                                          [](const CatalogPart& p) { return !jak2_structure(p); }),
                           m_decor_parts.end());
@@ -773,8 +848,8 @@ void App::ui_catalog_decor() {
 }
 
 void App::ui_catalog_decor_all() {
-  const LibraryIndex& index = m_decor_jak2 ? library_index_jak2 : library_index;
-  const std::vector<DecorEntry>& parts = m_decor_jak2 ? all_parts_jak2 : all_parts;
+  const LibraryIndex& index = m_catalog_jak2 ? library_index_jak2 : library_index;
+  const std::vector<DecorEntry>& parts = m_catalog_jak2 ? all_parts_jak2 : all_parts;
   // the levels are read once (then from the cache)
   if (!index.ready()) {
     const int done = index.done(), total = index.total();
@@ -782,18 +857,11 @@ void App::ui_catalog_decor_all() {
     ImGui::ProgressBar(total > 0 ? (float)done / total : 0.f, ImVec2(-1, 0), "");
     return;
   }
+  // every part of every level (a level chosen above shows its own), searched by name
   ImGui::SetNextItemWidth(-1);
   ImGui::InputTextWithHint("##decor-all-filter", tr("catalog.decor.filter"), &m_catalog_filter);
   const std::string f = lower(m_catalog_filter);
-  if (f.empty()) {
-    if (m_decor_jak2) {
-      ImGui::TextWrapped(tr("catalog.decor.jak2.search"), parts.size(), library_jak2.levels().size());
-    } else {
-      ImGui::TextWrapped(tr("catalog.decor.search"), m_all_prototypes, m_all_pieces);
-    }
-    return;
-  }
-  if (f != m_all_parts_filter) {
+  if (f != m_all_parts_filter || (f.empty() && m_all_parts_shown.size() != parts.size())) {
     m_all_parts_filter = f;
     m_all_parts_shown.clear();
     for (size_t i = 0; i < parts.size(); i++)
@@ -842,10 +910,47 @@ void App::ui_prefabs_panel() {
       if (ImGui::Button(tr_id("prefabs.game.make").c_str(), ImVec2(-1, 0))) start_game_prefabs();
       tooltip(tr("prefabs.game.make.tip"));
     }
-    static std::string category;
-    std::vector<std::string> categories;
-    for (const auto& p : game_prefabs)
-      if (std::find(categories.begin(), categories.end(), p.category) == categories.end()) categories.push_back(p.category);
+    // the game (Jak II's when it was extracted), the level they come from, their category
+    static std::string game, level, category;
+    if (!library_jak2.empty()) {
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted(tr("catalog.game"));
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Jak 3##prefab-game", game.empty()) && !game.empty()) {
+        game.clear();
+        level.clear();
+        category.clear();
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Jak II##prefab-game", game == "jak2") && game != "jak2") {
+        game = "jak2";
+        level.clear();
+        category.clear();
+      }
+    } else {
+      game.clear();
+    }
+    std::vector<std::string> categories, levels;
+    for (const auto& p : game_prefabs) {
+      if (p.game != game) continue;
+      if (std::find(levels.begin(), levels.end(), p.level) == levels.end()) levels.push_back(p.level);
+      if ((level.empty() || p.level == level) &&
+          std::find(categories.begin(), categories.end(), p.category) == categories.end())
+        categories.push_back(p.category);
+    }
+    std::sort(levels.begin(), levels.end());
+    if (std::find(levels.begin(), levels.end(), level) == levels.end()) level.clear();
+    if (std::find(categories.begin(), categories.end(), category) == categories.end()) category.clear();
+    if (!levels.empty()) {
+      ImGui::SetNextItemWidth(-1);
+      if (ImGui::BeginCombo("##prefab-level", level.empty() ? tr("catalog.all_levels") : level.c_str(),
+                            ImGuiComboFlags_HeightLarge)) {
+        if (ImGui::Selectable(tr("catalog.all_levels"), level.empty())) level.clear();
+        for (const auto& l : levels)
+          if (ImGui::Selectable(l.c_str(), l == level)) level = l;
+        ImGui::EndCombo();
+      }
+    }
     if (!categories.empty()) {
       ImGui::SetNextItemWidth(-1);
       const std::string all = tr("prefabs.game.all");
@@ -859,7 +964,8 @@ void App::ui_prefabs_panel() {
     }
     size_t shown = 0;
     for (const PrefabInfo& p : game_prefabs) {
-      if (!category.empty() && p.category != category) continue;
+      if (p.game != game || (!level.empty() && p.level != level) || (!category.empty() && p.category != category))
+        continue;
       ImGui::PushID(p.path.c_str());
       if (shown++ % per_row) ImGui::SameLine();
       ImGui::BeginGroup();
@@ -877,7 +983,8 @@ void App::ui_prefabs_panel() {
       if (placing) ImGui::PopStyleColor();
       if (ImGui::BeginItemTooltip()) {
         ImGui::TextUnformatted(p.name.c_str());
-        ImGui::TextDisabled("%s", tr(("prefabs.category." + p.category).c_str()));
+        ImGui::TextDisabled("%s - %s%s", tr(("prefabs.category." + p.category).c_str()), p.game == "jak2" ? "Jak II, " : "",
+                            p.level.c_str());
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
         if (!p.description.empty()) ImGui::TextUnformatted(p.description.c_str());
         ImGui::TextDisabled("%s", tr("prefabs.cell_tip"));
@@ -1742,6 +1849,9 @@ void App::ui_export_window() {
     }
     ImGui::TextWrapped("%s", tr("export.install"));
     if (ImGui::Button(tr_id("export.open_folder").c_str())) SDL_OpenURL(("file:///" + r.dir).c_str());
+    ImGui::SameLine();
+    if (ImGui::Button(tr_id("export.open_readme").c_str()))
+      SDL_OpenURL(("file:///" + from_path(to_path(r.dir) / "README.md")).c_str());
   }
   ImGui::End();
 }
@@ -1749,6 +1859,7 @@ void App::ui_export_window() {
 void App::ui_windows() {
   ui_navmesh_window();
   ui_export_window();
+  ui_texture_window();
   ui_guide_window();
 
   if (show_log) {
@@ -1801,6 +1912,38 @@ void App::ui_windows() {
     ImGui::EndPopup();
   }
 
+  // the project's name: its folder in <library>/projects
+  if (m_show_save_as) {
+    ImGui::OpenPopup(tr_id("save.title").c_str());
+    m_show_save_as = false;
+  }
+  if (ImGui::BeginPopupModal(tr_id("save.title").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.f);
+    ImGui::TextUnformatted(tr("save.text"));
+    ImGui::PopTextWrapPos();
+    ImGui::SetNextItemWidth(360);
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    const bool enter = ImGui::InputText(tr_id("save.name").c_str(), &m_save_name, ImGuiInputTextFlags_EnterReturnsTrue);
+    const std::string folder = project_folder_name(m_save_name);
+    const fs::path glb = to_path(projects_root()) / to_path(folder) / to_path(folder + ".glb");
+    std::error_code ec;
+    if (!folder.empty()) {
+      ImGui::TextDisabled("%s", from_path(glb).c_str());
+      if (fs::exists(glb, ec) && from_path(glb) != project_path)
+        ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), "%s", tr("save.exists"));
+    }
+    ImGui::BeginDisabled(folder.empty());
+    if (ImGui::Button(tr_id("save.button").c_str(), ImVec2(140, 0)) || (enter && !folder.empty())) {
+      std::string err;
+      if (!save_project_as(m_save_name, &err)) LOG_ERROR(tr("log.save_failed"), err.c_str());
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button(tr_id("popup.cancel").c_str(), ImVec2(140, 0))) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+  }
+
   // unsaved changes before loading or quitting
   if (m_show_discard) {
     ImGui::OpenPopup(tr_id("discard.title").c_str());
@@ -1812,8 +1955,8 @@ void App::ui_windows() {
     if (ImGui::Button(tr_id("discard.save").c_str(), ImVec2(160, 0))) {
       save(false);
       ImGui::CloseCurrentPopup();
-      // saved at once when the project has a file; else the Save as dialog opens and the action waits
-      // for the user to ask again
+      // saved at once when the project has a file; else the window naming it opens and the action
+      // waits for the user to ask again
       if (history.revision() == saved_revision && m_pending_discard) m_pending_discard();
       m_pending_discard = nullptr;
     }

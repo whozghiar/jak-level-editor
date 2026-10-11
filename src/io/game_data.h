@@ -96,7 +96,11 @@ struct OceanMap {
   Vec3 corner;  // meters; y: its height
   float cell = 96.f;
   int size = 48;
-  std::vector<uint8_t> cells;  // size x size, rows along z: 1 where the ocean is
+  std::vector<uint8_t> cells;  // size x size, rows along z: 1 where the ocean is (the mid ocean's)
+  // the near ocean's water by the shores (the game draws it near the camera, the mid ocean's cells
+  // masked there): per cell (row * size + column), 32 rows of 32 squares of 3 m (bit x of row z: 1
+  // water); an empty row list: water everywhere in the cell
+  std::map<int, std::vector<uint32_t>> near;
   Vec3 color{0.1f, 0.3f, 0.35f};
   Vec3 far_color{0.02f, 0.24f, 0.29f};  // the far ocean's
 };

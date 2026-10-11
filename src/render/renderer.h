@@ -49,6 +49,17 @@ struct RenderSettings {
   float light_color[3][3] = {};
   float game_fog[4] = {0, 0, 0, 0};  // its color (0..1) and how much of it at most
   float game_fog_start = 32.f, game_fog_end = 1000.f;  // meters
+  float time = 0.f;  // seconds: the water's animation (Material::water, draw_water)
+};
+
+// The ocean's look (draw_water): its waves move, the sun glints on them, they reflect the sky
+struct WaterLook {
+  float color[3] = {0.24f, 0.56f, 0.64f};  // the water near (the ocean map's colors)
+  float deep[3] = {0.02f, 0.24f, 0.29f};   // far away (the far ocean's)
+  float sky[3] = {0.5f, 0.62f, 0.72f};     // what it reflects
+  float sun_dir[3] = {0.32f, 0.92f, 0.23f};  // toward the sun (the moon at night)
+  float sun_color[3] = {1.f, 0.95f, 0.85f};
+  float alpha = 0.62f;  // seen from above (more opaque at grazing angles)
 };
 
 struct DrawStats {
@@ -78,6 +89,9 @@ class Renderer {
   void draw_mesh(Mesh& mesh, const Mat4& world, const std::vector<Material>& materials,
                  const std::vector<Texture>& textures, const RenderSettings& rs,
                  const Vec4& tint = {0, 0, 0, 0}, float alpha = 1.f);
+  // The ocean (a flat mesh at its height): waves of a few lengths moving as deep water waves do
+  // (rs.time), the sky they reflect, the sun on them; the game's fog over the game view.
+  void draw_water(Mesh& mesh, const Mat4& world, const WaterLook& look, const RenderSettings& rs);
 
   // immediate mode, world space, flushed by flush()
   void line(const Vec3& a, const Vec3& b, uint32_t color);
@@ -155,7 +169,8 @@ class Renderer {
   unsigned depth_func(unsigned func) const;
   void polygon_offset(float factor, float units) const;
 
-  unsigned m_mesh_prog = 0, m_flat_prog = 0, m_solid_prog = 0, m_sprite_prog = 0;
+  unsigned m_mesh_prog = 0, m_flat_prog = 0, m_solid_prog = 0, m_sprite_prog = 0, m_water_prog = 0;
+  float m_time = 0.f;  // rs.time of the frame
   unsigned m_sprite_vao = 0, m_sprite_vbo = 0;
   std::string m_sprite_folder;
   std::unordered_map<std::string, unsigned> m_sprite_textures;  // by name, 0: missing (white)
@@ -188,6 +203,7 @@ class Renderer {
     int mesh_game_fog = -1;
     int mesh_game_fog_range = -1;
     int mesh_cam_fwd = -1;
+    int mesh_uv_scroll = -1;
     int solid_color = -1;
     int solid_mvp = -1;
   } m_u;
@@ -200,6 +216,7 @@ class Renderer {
     float cutoff;
     int use_vcol;
     int shade;
+    float scroll[2];  // a water surface's texture flowing
   };
   MaterialState m_material{};
   bool m_material_valid = false;

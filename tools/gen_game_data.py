@@ -12,8 +12,9 @@ and the extractor's type table (extractor/data/jak3/all-types.gc).
   actors.placeholders types the type table keeps for the entities of the older games, that spawn
                       nothing of theirs (process-drawable-reserved)
   actors.water_looks  the model of each "look" of the water-anim actors (water, dark eco, lava)
-  oceans              the ocean maps: corner, height, the cells the ocean covers, and the color of
-                      the far ocean (the sea to the horizon, drawn behind everything)
+  oceans              the ocean maps: corner, height, the cells the ocean covers (the mid ocean's,
+                      96 m), the near ocean's water by shore (3 m squares of the cells it covers), and
+                      the color of the far ocean (the sea to the horizon, drawn behind everything)
   levels              per level: task level, base task mask, ocean, layer or companion levels,
                       neighbors (the levels the game displays together with it) and continue
                       points (where the game starts the player, in meters, and the levels shown)
@@ -846,8 +847,43 @@ def game_data(goal_src):
                          for k in ('r', 'g', 'b')]
         far = kwargs(kw['far-color']) if is_new(kw.get('far-color'), 'vector') else {}
         far_color = [round(min(float(far.get(k, 0.0)) / 128.0, 1.0), 3) for k in 'xyz'] if far else color
+        # the near ocean (ocean.gc, get-height): a 96 m cell whose trans index has a parent has 4 x 4
+        # squares of 24 m (ocean-near-indices, -1: no water), each a mask of 8 x 8 squares of 3 m
+        # (a bit set: no water); written per cell as 32 rows of 32 bits (hex, 1: water), "full" for a
+        # cell of water only
+        near = {}
+        trans_form, near_form = table('ocean-trans-indices'), table('ocean-near-indices')
+        if trans_form is not None and near_form is not None:
+            trans = [kwargs(f) for f in walk(trans_form) if is_new(f, 'ocean-trans-index')]
+            near_idx = []
+            for f in walk(near_form):
+                if is_new(f, 'ocean-near-index'):
+                    d = kwargs(f).get('data')
+                    near_idx.append([int(v) & 0xffff for v in d[4:20]] if is_list(d) else [0] * 16)
+            for cell, t in enumerate(trans):
+                if int(t.get('parent', 0)) == -1:
+                    continue
+                child = int(t.get('child', 0))
+                if child < 0 or child >= len(near_idx):
+                    continue
+                bits = [[0] * 32 for _ in range(32)]
+                for sz in range(4):
+                    for sx in range(4):
+                        mi = near_idx[child][sz * 4 + sx]
+                        if mi == 0xffff:
+                            continue
+                        m = mask_list[mi] if mi < len(mask_list) else [0xff] * 8
+                        for row in range(8):
+                            for bit in range(8):
+                                if not (int(m[row]) & (1 << bit)):
+                                    bits[sz * 8 + row][sx * 8 + bit] = 1
+                if all(all(r) for r in bits):
+                    near['%d,%d' % (cell // 48, cell % 48)] = 'full'
+                elif any(any(r) for r in bits):
+                    near['%d,%d' % (cell // 48, cell % 48)] = ''.join(
+                        '%08x' % int(''.join(str(b) for b in reversed(r)), 2) for r in bits)
         oceans[name] = {'corner': [round(float(corner.get(k, 0.0)) / 4096.0, 4) for k in ('x', 'y', 'z')],
-                        'cell': 96.0, 'cells': rows, 'color': color, 'far_color': far_color}
+                        'cell': 96.0, 'cells': rows, 'near': near, 'color': color, 'far_color': far_color}
     out['oceans'] = dict(sorted(oceans.items()))
 
     # --- levels ----------------------------------------------------------------------------------

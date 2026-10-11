@@ -14,6 +14,7 @@
 #include "imgui_stdlib.h"
 #include "io/behaviors.h"
 #include "io/decor_behaviors.h"
+#include "io/game_export.h"
 
 namespace ogle {
 
@@ -240,6 +241,7 @@ void App::ui_actor_behavior(Node& n) {
 void App::ui_decor_behavior(Node& n) {
   if (n.kind != NodeKind::Render || !n.mesh || scene.actor_of(n)) return;
   ImGui::SeparatorText(tr("decor.title"));
+  guide_tip("ingame");
   // every selected piece of decor gets what is set here
   std::vector<uint32_t> targets;
   for (auto id : selection)
@@ -248,56 +250,121 @@ void App::ui_decor_behavior(Node& n) {
   if (std::find(targets.begin(), targets.end(), n.id) == targets.end()) targets.push_back(n.id);
   DecorBehavior b = decor_behavior_of(n.extras);
   bool changed = false, dragging = false;
-  auto combo = [&](const char* id, const char* prefix, std::string& value, const std::vector<std::string>& options) {
+  // a list of choices, each with what it does (in the list, and under it for the one chosen); the
+  // options in groups (a title key, or null)
+  using Groups = std::vector<std::pair<const char*, std::vector<std::string>>>;
+  auto choice = [&](const char* id, const char* prefix, std::string& value, const Groups& groups) {
     bool edited = false;
+    const std::string p = prefix;
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::BeginCombo(id, tr((std::string(prefix) + value).c_str()), ImGuiComboFlags_HeightLarge)) {
-      for (const auto& o : options)
-        if (ImGui::Selectable(tr((std::string(prefix) + o).c_str()), o == value) && o != value) {
-          value = o;
-          edited = true;
+    if (ImGui::BeginCombo(id, tr((p + value).c_str()), ImGuiComboFlags_HeightLargest)) {
+      const float wrap = ImGui::GetFontSize() * 21.f;
+      for (const auto& [group, options] : groups) {
+        if (group) ImGui::SeparatorText(tr(group));
+        for (const auto& o : options) {
+          ImGui::PushID(o.c_str());
+          ImGui::BeginGroup();
+          bool picked = ImGui::Selectable(tr((p + o).c_str()), o == value, 0, ImVec2(wrap, 0));
+          ImGui::Indent();
+          ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap - ImGui::GetStyle().IndentSpacing);
+          ImGui::TextDisabled("%s", tr((p + o + ".tip").c_str()));
+          ImGui::PopTextWrapPos();
+          ImGui::Unindent();
+          ImGui::EndGroup();
+          // its explanation picks it too
+          if (!picked && ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            picked = true;
+            ImGui::CloseCurrentPopup();
+          }
+          if (picked && o != value) {
+            value = o;
+            edited = true;
+          }
+          ImGui::PopID();
         }
+      }
       ImGui::EndCombo();
     }
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextDisabled("%s", tr((p + value + ".tip").c_str()));
+    ImGui::PopTextWrapPos();
     return edited;
   };
-  // its collision
+  // its collision: yes or no; by default what the export gives it (the game's own, made from its
+  // shape, or none: a small piece, a surface seen through)
   {
-    std::string kind = b.collision.set ? b.collision.kind : "shape";
-    ImGui::TextUnformatted(tr("decor.collision"));
-    guide_tip("collision");
-    if (combo("##decor-kind", "decor.kind.", kind, {"shape", "none", "invisible"})) {
+    static uint64_t checked_rev = ~0ull;
+    static uint32_t checked_id = 0;
+    static DefaultCollision by_default = DefaultCollision::Shape;
+    if (checked_rev != history.revision() || checked_id != n.id) {
+      checked_rev = history.revision();
+      checked_id = n.id;
+      const int index = scene.index_of(n.id);
+      by_default = index >= 0 ? default_decor_collision(scene, (size_t)index) : DefaultCollision::Shape;
+    }
+    const bool default_on = by_default == DefaultCollision::Game || by_default == DefaultCollision::Shape;
+    bool on = b.collision.set ? b.collision.kind != "none" : default_on;
+    if (ImGui::Checkbox(tr_id("decor.collision").c_str(), &on)) {
       b.collision.set = true;
-      b.collision.kind = kind;
+      b.collision.kind = on ? (b.collision.kind == "invisible" ? "invisible" : "shape") : "none";
       changed = true;
     }
-    tooltip(tr(("decor.kind." + kind + ".tip").c_str()));
-    if (kind != "none") {
+    guide_tip("collision");
+    const char* why = !b.collision.set                         ? by_default == DefaultCollision::Game         ? "decor.collision.game"
+                                                                 : by_default == DefaultCollision::SeeThrough ? "decor.collision.see_through"
+                                                                 : by_default == DefaultCollision::Small      ? "decor.collision.small"
+                                                                                                              : "decor.collision.shape"
+                      : !on                                     ? "decor.collision.off"
+                      : b.collision.kind == "invisible"         ? "decor.collision.invisible_on"
+                                                                : "decor.collision.on";
+    ImGui::Indent();
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextDisabled("%s", tr(why));
+    ImGui::PopTextWrapPos();
+    ImGui::Unindent();
+    if (on) {
+      // what Jak walks on: the sound of his steps and their dust, and for a few how he moves
       ImGui::TextUnformatted(tr("decor.material"));
+      guide_tip("surface");
       std::string material = b.collision.material;
-      if (combo("##decor-material", "decor.material.", material, collision_materials())) {
+      if (choice("##decor-material", "decor.material.", material,
+                 {{"decor.material.group.sound",
+                   {"stone", "metal", "wood", "grass", "dirt", "sand", "snow", "deepsnow", "straw", "crwood", "pcmetal",
+                    "hotcoals", "lava", "tar", "swamp", "rotate", "neutral"}},
+                  {"decor.material.group.move", {"ice", "gravel", "quicksand", "tube", "waterbottom"}},
+                  {"decor.material.group.special", {"stopproj"}}})) {
         b.collision.set = true;
         b.collision.material = material;
         changed = true;
       }
-      tooltip(tr("decor.material.tip"));
+      // what touching it does to Jak
       ImGui::TextUnformatted(tr("decor.event"));
+      guide_tip("event");
       std::string event = b.collision.event;
-      if (combo("##decor-event", "decor.event.", event, collision_events())) {
+      if (choice("##decor-event", "decor.event.", event,
+                 {{nullptr, {"none"}},
+                  {"decor.event.group.hurt", {"deadly", "burn", "deadlyup", "burnup"}},
+                  {"decor.event.group.death", {"endlessfall", "melt"}}})) {
         b.collision.set = true;
         b.collision.event = event;
         changed = true;
       }
-      tooltip(tr("decor.event.tip"));
       if (ImGui::TreeNode(tr_id("decor.more").c_str())) {
+        // not drawn in the game, it collides: an invisible wall
+        bool invisible = b.collision.set && b.collision.kind == "invisible";
+        if (ImGui::Checkbox(tr_id("decor.invisible").c_str(), &invisible)) {
+          b.collision.set = true;
+          b.collision.kind = invisible ? "invisible" : "shape";
+          changed = true;
+        }
+        tooltip(tr("decor.invisible.tip"));
         std::string mode = b.collision.mode;
         ImGui::TextUnformatted(tr("decor.mode"));
-        if (combo("##decor-mode", "decor.mode.", mode, {"auto", "ground", "wall", "obstacle"})) {
+        if (choice("##decor-mode", "decor.mode.", mode, {{nullptr, {"auto", "ground", "wall", "obstacle"}}})) {
           b.collision.set = true;
           b.collision.mode = mode;
           changed = true;
         }
-        tooltip(tr("decor.mode.tip"));
         for (auto [key, flag] : {std::pair{"noedge", &b.collision.noedge}, {"nocamera", &b.collision.nocamera},
                                  {"noentity", &b.collision.noentity}, {"nolineofsight", &b.collision.nolineofsight}}) {
           if (ImGui::Checkbox(tr_id((std::string("decor.flag.") + key).c_str()).c_str(), flag)) {
@@ -314,7 +381,7 @@ void App::ui_decor_behavior(Node& n) {
       changed = true;
     }
   }
-  // what it does to Jak
+  // what it does to Jak on top of it
   if (ImGui::Checkbox(tr_id("decor.bounce").c_str(), &b.bounce.set)) changed = true;
   guide_tip("bounce");
   if (b.bounce.set) {

@@ -89,6 +89,38 @@ std::vector<PaletteTexture> recurring_textures(const LibraryIndex& index, const 
   return out;
 }
 
+std::vector<PaletteTexture> all_textures(const LibraryIndex& index, const AssetLibrary& library, const std::string& game) {
+  std::map<std::string, PaletteTexture> all;
+  std::map<std::string, int> most;  // the most pieces one level draws it with
+  for (const auto& li : index.levels()) {
+    const LevelEntry* level = library.level(li.level);
+    if (!level || !level->listed) continue;
+    for (const auto& [name, n] : li.textures) {
+      if (name.rfind("anim-slot", 0) == 0 || name.find("lowres") != std::string::npos) continue;
+      PaletteTexture& t = all[name];
+      t.name = name;
+      t.game = game;
+      t.levels++;
+      t.uses += n;
+      if (n > most[name]) {
+        most[name] = n;
+        t.background = li.background;
+      }
+    }
+  }
+  std::vector<PaletteTexture> out;
+  out.reserve(all.size());
+  for (auto& [name, t] : all) {
+    const size_t dash = name.find('-');
+    t.theme = dash == std::string::npos ? name : name.substr(0, dash);
+    out.push_back(std::move(t));
+  }
+  std::sort(out.begin(), out.end(), [](const PaletteTexture& a, const PaletteTexture& b) {
+    return a.levels != b.levels ? a.levels > b.levels : a.uses != b.uses ? a.uses > b.uses : a.name < b.name;
+  });
+  return out;
+}
+
 bool read_level_textures(const std::string& background, const std::vector<std::string>& names, std::vector<Texture>* out,
                          std::string* error) {
   std::ifstream f(to_path(background), std::ios::binary);
@@ -155,14 +187,15 @@ TexturePalette::~TexturePalette() {
 }
 
 const Texture* TexturePalette::image(const PaletteTexture& t) {
-  auto it = m_images.find(t.name);
+  const std::string k = key(t);
+  auto it = m_images.find(k);
   if (it != m_images.end()) return it->second.width > 0 ? &it->second : nullptr;  // read (or not there)
-  if (std::find(m_working.begin(), m_working.end(), t.name) == m_working.end()) m_wanted[t.name] = t.background;
+  if (std::find(m_working.begin(), m_working.end(), k) == m_working.end()) m_wanted[k] = {t.background, t.name, t.game};
   return nullptr;
 }
 
 unsigned TexturePalette::gl(const PaletteTexture& t) {
-  auto it = m_gl.find(t.name);
+  auto it = m_gl.find(key(t));
   if (it != m_gl.end()) return it->second;
   const Texture* img = image(t);
   if (!img || img->width <= 0 || img->height <= 0) return 0;
@@ -175,14 +208,19 @@ unsigned TexturePalette::gl(const PaletteTexture& t) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ONE);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img->width, img->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img->rgba.data());
   glBindTexture(GL_TEXTURE_2D, 0);
-  m_gl[t.name] = id;
+  m_gl[key(t)] = id;
   return id;
 }
 
 void TexturePalette::update() {
   using namespace std::chrono_literals;
   if (m_work.valid() && m_work.wait_for(0s) == std::future_status::ready) {
-    for (auto& t : m_work.get()) m_images[t.name] = std::move(t);
+    for (auto& t : m_work.get()) {
+      PaletteTexture p;
+      p.name = t.name;
+      p.game = m_working_game;
+      m_images[key(p)] = std::move(t);
+    }
     // what the level did not have: not asked again
     for (const auto& n : m_working)
       if (!m_images.count(n)) m_images[n] = Texture{};
@@ -190,15 +228,17 @@ void TexturePalette::update() {
   }
   if (m_work.valid() || m_wanted.empty()) return;
   // the images of one level at once: its file is read once
-  const std::string background = m_wanted.begin()->second;
+  const std::string background = m_wanted.begin()->second.background;
+  m_working_game = m_wanted.begin()->second.game;
+  std::vector<std::string> names;
   for (auto it = m_wanted.begin(); it != m_wanted.end();)
-    if (it->second == background) {
+    if (it->second.background == background) {
       m_working.push_back(it->first);
+      names.push_back(it->second.name);
       it = m_wanted.erase(it);
     } else {
       ++it;
     }
-  const std::vector<std::string> names = m_working;
   m_work = std::async(std::launch::async, [background, names]() {
     std::vector<Texture> out;
     std::string err;

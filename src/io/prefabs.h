@@ -18,8 +18,9 @@ struct PrefabInfo {
   std::string name;  // file name without .glb (a game prefab: its recipe's name)
   std::string path;
   int64_t mtime = 0;
-  // a prefab of the game (io/prefab_recipes.h): its category and what it is
-  std::string category, description;
+  // a prefab of the game (io/prefab_recipes.h): its category and what it is, its game ("" Jak 3,
+  // "jak2") and the level it comes from
+  std::string category, description, game, level;
 };
 std::vector<PrefabInfo> list_prefabs(const std::string& folder);
 

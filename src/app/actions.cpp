@@ -4,6 +4,7 @@
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -14,6 +15,7 @@
 #include "core/prefs.h"
 #include "io/gltf_io.h"
 #include "io/jak2_import.h"
+#include "scene/relight.h"
 #include "io/nav_export.h"
 #include "scene/story.h"
 
@@ -55,6 +57,7 @@ void style_water_mesh(Scene& scene, const Mesh& mesh, const std::string& model) 
       continue;
     Material& m = scene.materials[prim.material];
     m.alpha = AlphaMode::Blend;
+    m.water = true;
     if (dark_eco) {
       m.texture = -1;
       m.base_color = {0.2f, 0.07f, 0.3f, 0.88f};
@@ -345,6 +348,7 @@ std::vector<uint32_t> paste_nodes(Scene& scene, const Clipboard& clip) {
     } else {
       n.parent = ids[src.parent];
     }
+    if (n.kind == NodeKind::Render && n.mesh) n.extras[kLitHere] = true;
     if (n.kind == NodeKind::Actor) {
       // a copied actor is a new one: the game gives it its id, and names it like the others of
       // its type (<type>-<number>)
@@ -395,6 +399,9 @@ void App::set_library(const std::string& root) {
   particles.clear();
   palette.clear();
   palette_textures.clear();
+  game_textures.clear();
+  game_textures_jak2.clear();
+  m_tex_level.clear();
   // Jak II's structures, extracted to import them (<library>/jak2): the levels the game has, none of
   // its actors (Jak 3's game data says nothing of them)
   library_jak2.clear();
@@ -431,6 +438,19 @@ void App::rebuild_catalog() {
   const LibraryIndex* idx = library_index.ready() ? &library_index : nullptr;
   catalog = build_catalog(library, data.get(), idx);
   catalog_models = list_catalog_models(library, data.get(), catalog);
+  // Jak II's: its models alone (its objects' code is not in Jak 3), placed as decor, but its living
+  // things' (data/jak2/creatures.json, from its type table)
+  catalog_models_jak2.clear();
+  if (!library_jak2.empty()) {
+    std::set<std::string> creatures;
+    std::ifstream f(to_path(game_data_path()).parent_path().parent_path() / "jak2" / "creatures.json");
+    const json c = f ? json::parse(f, nullptr, false) : json();
+    if (c.is_object() && c.contains("creatures") && c["creatures"].is_array())
+      for (const auto& t : c["creatures"])
+        if (t.is_string()) creatures.insert(t.get<std::string>());
+    catalog_models_jak2 = list_catalog_models(library_jak2, nullptr, {}, creatures);
+  }
+  for (auto& m : catalog_models_jak2) m.game = "jak2";
   if (idx) {
     all_parts = all_decor(*idx, library);
     for (const auto& p : all_parts) (p.part.kind == CatalogPart::Kind::Prototype ? m_all_prototypes : m_all_pieces)++;
@@ -444,11 +464,13 @@ void App::apply_library_index() {
     all_parts_jak2.erase(std::remove_if(all_parts_jak2.begin(), all_parts_jak2.end(),
                                         [](const DecorEntry& e) { return !jak2_structure(e.part); }),
                          all_parts_jak2.end());
+    game_textures_jak2 = all_textures(library_index_jak2, library_jak2, "jak2");
   }
   if (m_index_applied || !library_index.ready()) return;
   m_index_applied = true;
   rebuild_catalog();
   palette_textures = recurring_textures(library_index, library);
+  game_textures = all_textures(library_index, library);
 }
 
 int App::palette_texture(const PaletteTexture& t, bool wait) {
@@ -458,7 +480,12 @@ int App::palette_texture(const PaletteTexture& t, bool wait) {
     std::string err;
     if (read_level_textures(t.background, {t.name}, &read, &err) && !read.empty()) img = &read[0];
   }
-  return img ? add_texture_once(scene, *img) : -1;
+  if (!img) return -1;
+  if (t.game.empty()) return add_texture_once(scene, *img);
+  // Jak II's: named apart from Jak 3's of the same name (as io/jak2_import.h names them)
+  Texture copy = *img;
+  copy.name = t.game + "-" + copy.name;
+  return add_texture_once(scene, copy);
 }
 
 std::shared_ptr<const GameData> App::game_data() {
@@ -561,36 +588,93 @@ void App::update_ocean() {
   m_ocean_height = data->ocean_height(ocean_level, story.enabled ? story.step_of(ocean_level) : 1);
   if (m_ocean && m_ocean_map == info->ocean) return;
   m_ocean_map = info->ocean;
-  // a quad per run of ocean cells along x, at height 0 (drawn at the ocean's height)
+  // the water: the mid ocean's cells, and the near ocean's water by the shores (3 m squares) where
+  // the game draws it instead; a quad per run of water along x, at height 0 (drawn at the ocean's
+  // height)
   auto mesh = std::make_shared<Mesh>();
   mesh->name = "ocean";
   Primitive p;
   const int size = map->size;
+  auto quad = [&](float x0, float x1, float z0, float z1) {
+    const uint32_t base = (uint32_t)p.pos.size();
+    p.pos.insert(p.pos.end(), {{x0, 0, z0}, {x1, 0, z0}, {x1, 0, z1}, {x0, 0, z1}});
+    p.nrm.insert(p.nrm.end(), 4, Vec3{0, 1, 0});
+    p.idx.insert(p.idx.end(), {base, base + 2, base + 1, base, base + 3, base + 2});
+  };
+  auto whole = [&](int r, int c) {
+    const auto it = map->near.find(r * size + c);
+    return it != map->near.end() ? it->second.empty() : map->cells[(size_t)r * size + c] != 0;
+  };
+  const float sq = map->cell / 32.f;
   for (int r = 0; r < size; r++) {
     for (int c = 0; c < size;) {
-      if (!map->cells[(size_t)r * size + c]) {
+      if (!whole(r, c)) {
+        // part of the cell, by the shore: its rows of water squares
+        const auto it = map->near.find(r * size + c);
+        if (it != map->near.end())
+          for (int row = 0; row < 32; row++) {
+            const uint32_t bits = it->second[row];
+            for (int x = 0; x < 32;) {
+              if (!(bits >> x & 1u)) {
+                x++;
+                continue;
+              }
+              const int x0 = x;
+              while (x < 32 && (bits >> x & 1u)) x++;
+              const float cx = map->corner.x + c * map->cell, cz = map->corner.z + r * map->cell;
+              quad(cx + x0 * sq, cx + x * sq, cz + row * sq, cz + (row + 1) * sq);
+            }
+          }
         c++;
         continue;
       }
       const int c0 = c;
-      while (c < size && map->cells[(size_t)r * size + c]) c++;
-      const float x0 = map->corner.x + c0 * map->cell, x1 = map->corner.x + c * map->cell;
-      const float z0 = map->corner.z + r * map->cell, z1 = z0 + map->cell;
-      const uint32_t base = (uint32_t)p.pos.size();
-      p.pos.insert(p.pos.end(), {{x0, 0, z0}, {x1, 0, z0}, {x1, 0, z1}, {x0, 0, z1}});
-      p.nrm.insert(p.nrm.end(), 4, Vec3{0, 1, 0});
-      p.idx.insert(p.idx.end(), {base, base + 2, base + 1, base, base + 3, base + 2});
+      while (c < size && whole(r, c)) c++;
+      const float z0 = map->corner.z + r * map->cell;
+      quad(map->corner.x + c0 * map->cell, map->corner.x + c * map->cell, z0, z0 + map->cell);
     }
   }
   p.material = 0;
   mesh->prims.push_back(std::move(p));
   m_ocean = mesh;
-  Material m;
-  m.name = "ocean";
+  // its colors: the map's (0x80 is 1.0), lifted, and the far ocean's
   auto lift = [](float v) { return std::min(1.f, v * 1.6f + 0.08f); };
-  m.base_color = {lift(map->color.x), lift(map->color.y), lift(map->color.z), 0.55f};
-  m.alpha = AlphaMode::Blend;
-  m_ocean_materials = {m};
+  const float near[3] = {lift(map->color.x), lift(map->color.y), lift(map->color.z)};
+  const float deep[3] = {map->far_color.x, map->far_color.y, map->far_color.z};
+  for (int i = 0; i < 3; i++) {
+    m_ocean_look.color[i] = near[i];
+    m_ocean_look.deep[i] = deep[i];
+  }
+}
+
+WaterLook App::ocean_look(const RenderSettings& view_rs) const {
+  WaterLook look = m_ocean_look;
+  if (!view_rs.game_view) return look;
+  // the game's hour: the sky it reflects, the sun (or the moon) glinting, as bright as its light
+  const GameMood m = game_mood(game_view.mood);
+  int best = -1;
+  float strongest = 0;
+  for (int i = 0; i < 3; i++) {
+    const float s = m.light_color[i][0] + m.light_color[i][1] + m.light_color[i][2];
+    if (s > strongest) {
+      strongest = s;
+      best = i;
+    }
+  }
+  const float ambient = (m.light_ambient[0] + m.light_ambient[1] + m.light_ambient[2]) / 3.f;
+  const float k = std::clamp(ambient + strongest / 6.f, 0.15f, 1.1f);
+  for (int c = 0; c < 3; c++) {
+    look.sky[c] = m.sky_color[c] / 255.f;
+    look.color[c] *= k;
+    look.deep[c] *= k;
+    if (best >= 0) {
+      look.sun_dir[c] = m.light_dir[best][c];
+      look.sun_color[c] = std::min(1.f, m.light_color[best][c] * 0.6f);
+    } else {
+      look.sun_color[c] = 0.f;
+    }
+  }
+  return look;
 }
 
 void App::load_level(const LevelEntry& level) {
@@ -897,20 +981,75 @@ void App::open_project_file(const std::string& path) {
   if (const size_t lit = restore_level_lighting()) LOG_INFO(tr("log.lighting_restored"), lit);
 }
 
+std::string App::projects_root() const {
+  return library_root.empty() ? default_projects_dir() : from_path(to_path(library_root) / "projects");
+}
+
+std::string App::project_folder_name(const std::string& name) {
+  // what a folder's name can hold on every system: no separators nor reserved characters, no space
+  std::string out;
+  for (char c : name) {
+    const unsigned char u = (unsigned char)c;
+    if (u < 32 || std::strchr("<>:\"/\\|?*", c)) continue;
+    out += c == ' ' ? '-' : c;
+  }
+  while (!out.empty() && (out.back() == '.' || out.back() == '-')) out.pop_back();
+  while (!out.empty() && (out.front() == '.' || out.front() == '-')) out.erase(out.begin());
+  return out;
+}
+
+std::string App::project_name() const {
+  if (!project_path.empty()) return from_path(to_path(project_path).stem());
+  const std::string base = !scene.settings.replaces.empty() ? scene.settings.replaces : scene.settings.level;
+  return base.empty() || base == "custom-level" ? std::string("my-level") : "my-" + base;
+}
+
 void App::save(bool save_as) {
   if (save_as || project_path.empty()) {
-    open_dialog(DialogAction::SaveProjectAs);
+    // the user names it: its folder in <library>/projects
+    m_save_name = project_name();
+    m_show_save_as = true;
     return;
   }
   std::string err;
-  if (save_project(scene, project_path, &err)) {
-    saved_revision = history.revision();
-    Prefs::get().add_recent_project(project_path);
-    Prefs::get().save();
-    LOG_INFO(tr("log.project_saved"), project_path.c_str());
-  } else {
-    LOG_ERROR(tr("log.save_failed"), err.c_str());
+  if (!save_project_files(project_path, &err)) LOG_ERROR(tr("log.save_failed"), err.c_str());
+}
+
+bool App::save_project_as(const std::string& name, std::string* error) {
+  const std::string folder = project_folder_name(name);
+  if (folder.empty()) {
+    if (error) *error = tr("save.bad_name");
+    return false;
   }
+  const fs::path dir = to_path(projects_root()) / to_path(folder);
+  std::error_code ec;
+  fs::create_directories(dir, ec);
+  if (!fs::is_directory(dir, ec)) {
+    if (error) *error = "cannot create " + from_path(dir);
+    return false;
+  }
+  return save_project_files(from_path(dir / to_path(folder + ".glb")), error);
+}
+
+bool App::save_project_files(const std::string& glb_path, std::string* error) {
+  if (!save_project(scene, glb_path, error)) return false;
+  // its nav meshes as the game takes them, next to it (none: the file of an earlier save goes)
+  const fs::path p = to_path(glb_path);
+  const fs::path nav = p.parent_path() / to_path(from_path(p.stem()) + "-nav.json");
+  std::error_code ec;
+  if (!navmesh_nodes().empty()) {
+    std::string err;
+    if (!export_navmeshes(from_path(nav), nav_first_aid, &err)) LOG_WARN(tr("log.navmesh_export_failed"), err.c_str());
+  } else if (fs::exists(nav, ec)) {
+    fs::remove(nav, ec);
+  }
+  project_path = glb_path;
+  saved_revision = history.revision();
+  Prefs::get().add_recent_project(glb_path);
+  Prefs::get().save();
+  set_title();
+  LOG_INFO(tr("log.project_saved"), glb_path.c_str());
+  return true;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1264,6 +1403,23 @@ void App::copy_selection() {
   LOG_INFO(tr("log.copied"), roots.size());
 }
 
+void App::relight_moved(NodeChange& change, const std::vector<uint32_t>& roots) {
+  const std::vector<uint32_t> lit = lit_here_nodes(scene, roots);
+  if (lit.empty()) return;
+  for (auto id : lit) change.save(id);
+  light_like_surroundings(scene, lit);
+}
+
+void App::relight_selection() {
+  const auto roots = selection_roots();
+  if (roots.empty()) return;
+  NodeChange c(scene);
+  c.save_subtrees(roots);
+  const size_t lit = light_like_surroundings(scene, roots);
+  if (lit) history.push(c.commit(tr("undo.relight")));
+  LOG_INFO(tr("log.relit"), lit);
+}
+
 void App::paste() {
   if (clipboard.empty()) return;
   NodeChange c(scene);
@@ -1295,10 +1451,12 @@ std::string App::prefab_folder() const {
 void App::refresh_prefabs() {
   const std::string folder = prefab_folder();
   prefabs = folder.empty() ? std::vector<PrefabInfo>{} : list_prefabs(folder);
-  // the game's prefabs made so far, in the order of their recipes
-  if (prefab_recipes.empty()) {
+  // the game's prefabs made so far, in the order of their recipes (Jak II's when it was extracted)
+  {
     std::string err;
     prefab_recipes = load_prefab_recipes(prefab_recipes_path(), &err);
+    if (!library_jak2.empty())
+      for (auto& r : load_prefab_recipes(prefab_recipes_path("jak2"), &err, "jak2")) prefab_recipes.push_back(std::move(r));
   }
   game_prefabs.clear();
   if (folder.empty()) return;
@@ -1312,6 +1470,8 @@ void App::refresh_prefabs() {
     p.mtime = (int64_t)fs::last_write_time(to_path(path), ec).time_since_epoch().count();
     p.category = r.category;
     p.description = r.description;
+    p.game = r.game;
+    p.level = r.level;
     game_prefabs.push_back(std::move(p));
   }
 }
@@ -1328,19 +1488,31 @@ void App::start_game_prefabs(bool rebuild) {
   m_game_prefab_total = (int)todo.size();
   auto done = m_game_prefab_done;
   *done = 0;
-  AssetLibrary lib = library;  // the worker reads its own copy
+  AssetLibrary lib = library, lib2 = library_jak2;  // the worker reads its own copies
   auto data = game_data();
   LOG_INFO(tr("log.game_prefabs_started"), todo.size());
-  m_game_prefab_work = std::async(std::launch::async, [lib, data, todo, folder, done]() {
+  m_game_prefab_work = std::async(std::launch::async, [lib, lib2, data, todo, folder, done]() {
     // each level opened once (without its actors) for all its recipes
-    std::map<std::string, std::vector<const PrefabRecipe*>> by_level;
-    for (const auto& r : todo) by_level[r.level].push_back(&r);
+    std::map<std::pair<std::string, std::string>, std::vector<const PrefabRecipe*>> by_level;
+    for (const auto& r : todo) by_level[{r.game, r.level}].push_back(&r);
     size_t built = 0;
-    for (const auto& [name, recipes] : by_level) {
+    for (const auto& [key, recipes] : by_level) {
+      const auto& [game, name] = key;
+      const bool jak2 = game == "jak2";
       Scene level;
       std::string err;
-      const LevelEntry* entry = lib.level(name);
-      const bool opened = entry && open_level(level, lib, data.get(), *entry, &err, false);
+      const LevelEntry* entry = (jak2 ? lib2 : lib).level(name);
+      const bool opened = entry && open_level(level, jak2 ? lib2 : lib, jak2 ? nullptr : data.get(), *entry, &err, false);
+      if (opened && jak2) {
+        // Jak II's textures and materials named apart from Jak 3's, where its pieces come from kept
+        for (auto& t : level.textures)
+          if (t.name.rfind("jak2-", 0) != 0) t.name = "jak2-" + t.name;
+        for (auto& m : level.materials)
+          if (m.name.rfind("jak2-", 0) != 0) m.name = "jak2-" + m.name;
+        for (auto& n : level.nodes)
+          if (n.kind == NodeKind::Render && n.mesh)
+            n.extras["og_import"] = json{{"game", "jak2"}, {"level", name}, {"part", n.name}, {"checks", json::array()}};
+      }
       for (const PrefabRecipe* r : recipes) {
         size_t elements = 0;
         if (opened && save_recipe_prefab(level, *r, folder + "/game/" + r->file, &elements, &err)) built++;
@@ -1429,6 +1601,8 @@ void App::start_model_placement(const CatalogModel& model, bool once) {
   placement.kind = Placement::Kind::Model;
   placement.path = model.path;
   placement.name = model.name;
+  placement.game = model.game;
+  placement.level = model.group;
   placement.once = once;
   tool = ToolMode::Place;
   store.model(model.path, true);
@@ -1464,6 +1638,13 @@ std::shared_ptr<Mesh> App::placement_mesh() {
     case Placement::Kind::Model:
       if (placement.path.empty()) break;  // an object drawn without a model: a marker
       if (auto lm = store.model(placement.path, true)) {
+        if (placement.game == "jak2") {
+          // a model of Jak II: its textures renamed, what could break checked (kept with the mesh)
+          json checks;
+          mesh = import_jak2_mesh(scene, *lm->mesh, lm->textures, lm->materials, &checks);
+          mesh->extras["og_import_checks"] = checks;
+          break;
+        }
         mesh = merge_mesh(scene, *lm->mesh, lm->textures, lm->materials);
         if (placement.kind == Placement::Kind::Object) {
           const GameData* data = game_data().get();
@@ -1504,6 +1685,9 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
     NodeChange c(scene);
     roots = place_prefab(scene, *prefab, m, &m_prefab_meshes[placement.path]);
     if (roots.empty()) return roots;
+    // lit like the level around it (a batch: once, at its end)
+    if (m_batch_change) m_batch_placed.insert(m_batch_placed.end(), roots.begin(), roots.end());
+    else light_like_surroundings(scene, roots);
     if (!m_batch_change) history.push(c.commit(strf(tr("undo.place"), placement.name.c_str())));
   } else {
     std::shared_ptr<Mesh> mesh = placement_mesh();
@@ -1531,9 +1715,14 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
       roots.push_back(id);
     } else if (placement.kind == Placement::Kind::Model) {
       Node n;
-      n.name = unique_name(placement.name, names);
+      n.name = unique_name(placement.game == "jak2" ? "jak2-" + placement.name : placement.name, names);
       n.kind = NodeKind::Render;
       n.mesh = mesh;
+      if (placement.game == "jak2")
+        n.extras = json{{"og_import", {{"game", "jak2"},
+                                       {"level", placement.level},
+                                       {"part", placement.name},
+                                       {"checks", mesh->extras.value("og_import_checks", json::array())}}}};
       n.local = Transform::from_matrix(m);
       roots.push_back(scene.add(std::move(n)));
     } else if (placement.kind == Placement::Kind::Shape) {
@@ -1564,6 +1753,9 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
       n.name = unique_name(base, names);
       roots.push_back(scene.add(std::move(n)));
     }
+    // lit like the level around it (not an actor's model: the game lights it); a batch: at its end
+    if (m_batch_change) m_batch_placed.insert(m_batch_placed.end(), roots.begin(), roots.end());
+    else light_like_surroundings(scene, roots);
     if (!m_batch_change) history.push(c.commit(strf(tr("undo.place"), placement.name.c_str())));
   }
   selection = std::set<uint32_t>(roots.begin(), roots.end());
@@ -1600,7 +1792,7 @@ Mat4 App::placement_matrix(const PickHit& hit, const Ray& ray) const {
     p.x = std::round(p.x / s) * s;
     p.z = std::round(p.z / s) * s;
   }
-  return Mat4::translate(p) * Mat4::rotate(Quat::axis_angle({0, 1, 0}, placement.yaw));
+  return Mat4::translate(p) * Mat4::rotate(placement.tilt) * Mat4::rotate(Quat::axis_angle({0, 1, 0}, placement.yaw));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1629,11 +1821,9 @@ void App::open_dialog(DialogAction action) {
   // or a preference already points somewhere the user chose
   std::error_code ec;
   const std::string projects_dir = [&] {
-    if (!project_path.empty()) return from_path(to_path(project_path).parent_path());
-    const auto& recent = Prefs::get().recent_projects;
-    if (!recent.empty()) return from_path(to_path(recent.front()).parent_path());
-    fs::create_directories(to_path(default_projects_dir()), ec);
-    return default_projects_dir();
+    // the projects' folder (each project in a folder of its own there)
+    fs::create_directories(to_path(projects_root()), ec);
+    return projects_root();
   }();
   const std::string iso_dir = [&] {
     if (!extract.detected_source.empty()) return from_path(to_path(extract.detected_source).parent_path());
@@ -1645,9 +1835,6 @@ void App::open_dialog(DialogAction action) {
   switch (action) {
     case DialogAction::OpenProject:
       SDL_ShowOpenFileDialog(dialog_callback, req, m_window, project_filter, 1, projects_dir.c_str(), false);
-      break;
-    case DialogAction::SaveProjectAs:
-      SDL_ShowSaveFileDialog(dialog_callback, req, m_window, project_filter, 1, projects_dir.c_str());
       break;
     case DialogAction::ExtractSourceIso:
       SDL_ShowOpenFileDialog(dialog_callback, req, m_window, iso_filter, 1, iso_dir.c_str(), false);
@@ -1694,13 +1881,6 @@ void App::process_dialog_results() {
       case DialogAction::OpenProject:
         open_project_file(r.path);
         break;
-      case DialogAction::SaveProjectAs: {
-        std::string p = r.path;
-        if (lower_ext(p) != ".glb") p += ".glb";
-        project_path = p;
-        save(false);
-        break;
-      }
       case DialogAction::ExtractSourceIso:
       case DialogAction::ExtractSourceFolder:
         extract.source = r.path;
@@ -1762,39 +1942,6 @@ void App::set_language(const std::string& code) {
   if (!i18n_select(code)) return;
   Prefs::get().language = code;
   Prefs::get().save();
-}
-
-// ------------------------------------------------------------------------------------------------
-// backups: a snapshot a few seconds after the last change, 10 kept
-// ------------------------------------------------------------------------------------------------
-
-void App::autosave_tick() {
-  uint64_t rev = history.revision();
-  if (rev != m_last_seen_revision) {
-    m_last_seen_revision = rev;
-    m_last_change_time = m_time;
-  }
-  if (project_path.empty() || rev == m_backup_revision || rev == saved_revision) return;
-  if (m_time - m_last_change_time < 5.0 || m_time - m_last_backup_time < 60.0) return;
-  fs::path dir = to_path(project_path + ".backups");
-  std::error_code ec;
-  fs::create_directories(dir, ec);
-  std::time_t now = std::time(nullptr);
-  char stamp[32];
-  std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", std::localtime(&now));
-  std::string err;
-  if (save_project(scene, from_path(dir / (std::string(stamp) + ".glb")), &err)) {
-    m_backup_revision = rev;
-    m_last_backup_time = m_time;
-    std::vector<fs::path> files;
-    for (auto& e : fs::directory_iterator(dir, ec))
-      if (e.path().extension() == ".glb") files.push_back(e.path());
-    std::sort(files.begin(), files.end());
-    while (files.size() > 10) {
-      fs::remove(files.front(), ec);
-      files.erase(files.begin());
-    }
-  }
 }
 
 }  // namespace ogle
@@ -2008,12 +2155,12 @@ LevelExportOptions App::default_export_options() {
   o.nickname = untaken_nickname(default_nickname(name));
   o.iso_name = default_iso_name(name);
   o.base_id = kDefaultBaseId;
-  o.folder = Prefs::get().export_folder;
-  if (o.folder.empty()) {
-    // next to the extracted game (not in the editor's sources: the level holds its textures)
-    const std::string root = library_root.empty() ? Prefs::dir() : library_root;
-    o.folder = from_path(to_path(root) / "exports");
-  }
+  // the project's export, next to the extracted game (not in the editor's sources: the level holds
+  // its textures): <library>/export/<project>/
+  const std::string root = library_root.empty() ? Prefs::dir() : library_root;
+  std::string project = project_folder_name(project_name());
+  if (project.empty()) project = name;
+  o.folder = from_path(to_path(root) / "export" / to_path(project));
   o.start = export_start_point();
   return o;
 }
@@ -2067,8 +2214,6 @@ bool App::export_for_game(const LevelExportOptions& in, LevelExportReport* repor
   scene.begin_frame();  // the world matrices and what is shown, after the last changes
   LevelExportReport rep;
   if (!export_level_for_game(scene, document_game_data(), o, &rep, error)) return false;
-  Prefs::get().export_folder = o.folder;
-  if (!Prefs::read_only) Prefs::get().save();
   LOG_INFO(tr("log.exported_for_game"), o.name.c_str(), rep.dir.c_str(), rep.meshes, rep.actors);
   if (report) *report = std::move(rep);
   return true;

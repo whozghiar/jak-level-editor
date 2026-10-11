@@ -20,6 +20,7 @@ namespace ogle {
 
 struct PaletteTexture {
   std::string name;        // the game's name of the texture ("city-ind-wall-05")
+  std::string game;        // "" Jak 3's, "jak2" Jak II's (named "jak2-<name>" in a document)
   std::string theme;       // the first word of its name, what it comes from ("city", "wascity", "des")
   std::string background;  // the level that draws it most: where its image is read
   int levels = 0;          // the levels whose decor draws it
@@ -30,6 +31,11 @@ struct PaletteTexture {
 // shared first (at most `max`).
 std::vector<PaletteTexture> recurring_textures(const LibraryIndex& index, const AssetLibrary& library,
                                                size_t max = 600);
+
+// Every texture the decor of the levels draws (but the animated textures' slots and the far
+// scenery's), the most shared first; `game`: "" for Jak 3's library, "jak2" for Jak II's.
+std::vector<PaletteTexture> all_textures(const LibraryIndex& index, const AssetLibrary& library,
+                                         const std::string& game = "");
 
 // The images named `names` of a level's background file, read from its JSON (RGBA). Those it does
 // not have are left out.
@@ -50,11 +56,17 @@ class TexturePalette {
   void clear();   // another library
 
  private:
-  std::map<std::string, std::string> m_wanted;  // name -> background
+  // by key: the name, "jak2:" before Jak II's (both games have textures of the same names)
+  static std::string key(const PaletteTexture& t) { return t.game.empty() ? t.name : t.game + ":" + t.name; }
+  struct Wanted {
+    std::string background, name, game;
+  };
+  std::map<std::string, Wanted> m_wanted;
   std::map<std::string, Texture> m_images;
   std::map<std::string, unsigned> m_gl;
   std::future<std::vector<Texture>> m_work;
-  std::vector<std::string> m_working;  // the names being read
+  std::vector<std::string> m_working;  // the keys being read
+  std::string m_working_game;          // their game
 };
 
 }  // namespace ogle
