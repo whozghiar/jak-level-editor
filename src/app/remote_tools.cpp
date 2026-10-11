@@ -183,6 +183,15 @@ json App::remote_status() {
             // the time the editor takes for a frame (interface, tools, drawing), averaged, and the
             // last drawing's steps
             {"frame_ms", round3(m_frame_ms)},
+            {"view",
+             {{"game_view", game_view_on && game_view.ready()},
+              {"hour", round3(game_view.mood.hour)},
+              {"fog", game_view.fog},
+              {"effects", show_effects},
+              {"particles", particles.count()},
+              {"game_chunks", game_view.stats.chunks},
+              {"game_triangles", game_view.stats.triangles},
+              {"game_build_ms", round3((float)game_view.stats.ms_build)}}},
             {"draw",
              {{"draws", renderer.stats.draws},
               {"triangles", renderer.stats.triangles},
@@ -985,6 +994,18 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     json j = {{"hit", true}, {"point", vec3_json(hit.point)}, {"normal", vec3_json(hit.normal)}, {"distance", round3(hit.t)}};
     if (const Node* n = scene.find(hit.node)) j["node"] = remote_node_json(*n);
     reply(ok(j));
+
+  } else if (tool == "set_view") {
+    // the game view (the game's renderer), its hour and fog, the effects
+    if (args.contains("game_view") && args["game_view"].is_boolean()) {
+      if (args["game_view"].get<bool>() && !game_view.ready()) return reply(fail("no game view: " + game_view_error));
+      game_view_on = args["game_view"].get<bool>();
+    }
+    if (args.contains("hour") && args["hour"].is_number())
+      game_view.mood.hour = std::clamp(args["hour"].get<float>(), 0.f, 24.f);
+    if (args.contains("fog") && args["fog"].is_boolean()) game_view.fog = args["fog"].get<bool>();
+    if (args.contains("effects") && args["effects"].is_boolean()) show_effects = args["effects"].get<bool>();
+    reply(ok(remote_status()["view"]));
 
   } else if (tool == "set_camera") {
     Vec3 position, target;

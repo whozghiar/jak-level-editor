@@ -833,7 +833,8 @@ python tools/build_industrial_district.py --out build/demo/ironworks.glb --views
 | `set_actor` | what an object does: its behavior (`open`, `active`, `leave`, `present`: see [Behaviors and parameters](#behaviors-and-parameters)) and its parameters (tag -> value, null: the game's) |
 | `set_decor` | what the game does with pieces of decor: their collision, bounce, propulsion (see [What the decor does](#what-the-decor-does)) |
 | `transform_nodes`, `duplicate_nodes`, `delete_nodes`, `select`, `set_visibility` | move, turn, scale or stretch (`scale`, `scale_by`), copy, delete, show to the user (`level`: a whole level, to move it), show or hide (a level's group: the whole level) |
-| `set_camera`, `capture_view` | look somewhere, or frame elements, a level or the junction of two levels; a picture of the view, given to the assistant |
+| `set_camera`, `capture_view` | look somewhere, or frame elements, a level or the junction of two levels; a picture of the view, given to the assistant (with `game_hour`: as the game draws it, at that hour) |
+| `set_view` | the game view (`game_view`, `hour`, `fog`) and the particle effects (`effects`); `get_status` says the view's state (its chunks, triangles, the time to make them) |
 | `set_story` | the story view, each level at its own point: `level`, then `state` (1 to its number of states), `step` or `after_node` |
 | `export_level` | the document as a custom level of OpenGOAL for Jak 3 (`name`, `folder`, `replaces`...): the files written and what changed (`notes`) |
 | `generate_navmesh`, `export_navmesh` | nav meshes for the whole level, the selection or a box, with the creature's size; only the ground connected to given points (`from`); written for the game |
@@ -1094,6 +1095,10 @@ on Linux).
   `capture_view`, `set_story`, `generate_navmesh`, `export_level`, `save_project`, `open_project`.
 - The screenshots of [the tour](docs/captures/README.md), made with `--screenshot` and the demo
   level built by `tools/build_demo_level.py` through the remote control.
+- The game view, through the remote control against a hidden editor: `ctywide` with `ctyinda`,
+  `ctyindb` and `ctyport` added (27,733 elements, 936,318 triangles in 418 chunks): made in 161 ms,
+  a frame in 11 to 12 ms (the editor's own view: 17 ms), an element moved five times, its chunk
+  made again in 4 ms each time.
 - The viewport, measured through the remote control against a hidden editor, before and after this
   version: `ctyinda` with `ctyindb` and `ctywide` added (19,874 elements), 1,000 elements selected:
   a frame 120 ms then 13 ms, moving them 171 ms then 14 ms, duplicating them 1.35 s then 27 ms, a

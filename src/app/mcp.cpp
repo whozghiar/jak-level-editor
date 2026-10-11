@@ -321,6 +321,14 @@ json tools() {
             {"yaw_deg", num("0 looks toward -Z")},
             {"pitch_deg", num("negative looks down")},
             {"frame", {{"description", "'all', 'selection' or a list of ids"}}}}),
+      tool("set_view",
+           "How the 3D view draws the level: game_view true draws it with the game's own renderer (its lighting at "
+           "the hour of the day, its fog), as the exported level will look in the game; effects: the particle "
+           "effects of the level (steam, sparks, lights). Answers the view's state.",
+           {{"game_view", boolean("the game's renderer")},
+            {"hour", num("0..24: the time of the day of the game view (12: noon, 22: night)")},
+            {"fog", boolean("the game's fog in the game view")},
+            {"effects", boolean("the particle effects")}}),
       tool("capture_view",
            "A picture of the 3D view from the editor's camera (PNG), to see the result of what was placed. With "
            "game_hour, the level as the game draws it (the game's renderer, its lighting at that hour of the day, its "
