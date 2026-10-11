@@ -482,6 +482,52 @@ bool ground_piece(Mesh& mesh) {
   return all > 0 && flat >= 0.5 * all;
 }
 
+bool translucent_in_game(const Material& m) {
+  // a level's material is drawn twice as bright (base_color 2: the PS2's colors), the editor's not
+  return m.alpha == AlphaMode::Blend && (m.blend != BlendMode::Alpha || m.translucent || m.base_color.w <= 1.5f);
+}
+
+bool TodColors::fits(const Mesh& mesh) const {
+  if (!palette || index.size() != mesh.prims.size()) return false;
+  for (size_t p = 0; p < index.size(); p++)
+    if (index[p].size() != mesh.prims[p].pos.size()) return false;
+  return true;
+}
+
+std::array<float, 8> tod_ratios(const Scene& scene, const std::vector<uint32_t>& nodes) {
+  // a district of the city (ctyindb): the ambient light gives almost all of the brightest color
+  std::array<float, 8> ratios = {0.986f, 0.117f, 0.17f, 0.164f, 0.135f, 0.007f, 0.043f, 0.037f};
+  double sum[8] = {}, brightest = 0;
+  for (uint32_t id : nodes) {
+    const Node* n = scene.find(id);
+    if (!n || !n->mesh || !n->tod || !n->tod->fits(*n->mesh)) continue;
+    const auto& rgba = n->tod->palette->rgba;
+    for (const auto& prim : n->tod->index)
+      for (size_t v = 0; v < prim.size(); v += 7) {
+        const uint8_t* c = &rgba[(size_t)prim[v] * 32];
+        float best = 0;
+        for (int k = 0; k < 8; k++) {
+          const float lum = (c[k * 4] + c[k * 4 + 1] + c[k * 4 + 2]) / 3.f;
+          sum[k] += lum;
+          best = std::max(best, lum);
+        }
+        brightest += best;
+      }
+  }
+  if (brightest > 0)
+    for (int k = 0; k < 8; k++) ratios[k] = (float)(sum[k] / brightest);
+  return ratios;
+}
+
+void tod_from_color(const Vec4& shown, const std::array<float, 8>& ratios, uint8_t out[32]) {
+  // the game doubles the colors it mixes (128 is 1.0)
+  for (int k = 0; k < 8; k++) {
+    const float c[3] = {shown.x, shown.y, shown.z};
+    for (int ch = 0; ch < 3; ch++) out[k * 4 + ch] = (uint8_t)std::clamp(c[ch] * ratios[k] * 127.5f + 0.5f, 0.f, 255.f);
+    out[k * 4 + 3] = 128;  // the game's (the alpha it mixes is capped there)
+  }
+}
+
 AABB Scene::focus_bounds() const {
   const std::vector<AABB> boxes = drawn_boxes(*this);
   const AABB b = focus_box(boxes);
@@ -518,6 +564,7 @@ uint64_t fnv1a(const std::vector<uint8_t>& data) {
 
 bool same_material(const Material& a, const Material& b) {
   return a.name == b.name && a.texture == b.texture && a.alpha == b.alpha && a.blend == b.blend &&
+         a.translucent == b.translucent &&
          a.cutoff == b.cutoff && a.double_sided == b.double_sided && a.base_color.x == b.base_color.x &&
          a.base_color.y == b.base_color.y && a.base_color.z == b.base_color.z && a.base_color.w == b.base_color.w;
 }

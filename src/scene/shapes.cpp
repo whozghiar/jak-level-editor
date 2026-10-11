@@ -23,6 +23,7 @@ std::string from_path(const fs::path& p) {
 
 bool same_material(const Material& a, const Material& b) {
   return a.name == b.name && a.texture == b.texture && a.alpha == b.alpha && a.blend == b.blend &&
+         a.translucent == b.translucent &&
          a.cutoff == b.cutoff && a.double_sided == b.double_sided && a.base_color.x == b.base_color.x &&
          a.base_color.y == b.base_color.y && a.base_color.z == b.base_color.z && a.base_color.w == b.base_color.w;
 }

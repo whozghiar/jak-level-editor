@@ -26,6 +26,7 @@
 #include "io/library_index.h"
 #include "io/prefab_recipes.h"
 #include "io/prefabs.h"
+#include "game_view/game_view.h"
 #include "render/camera.h"
 #include "render/renderer.h"
 #include "render/texture_palette.h"
@@ -123,6 +124,8 @@ struct AppOptions {
   std::string select;
   // --add a,b,...: the levels captures add to the one loaded (its neighbors)
   std::string add;
+  // --game <hour>: captures show the game view (the game's renderer) at that hour of the day
+  float game_hour = -1;
   int remote_port = kRemotePort;  // the MCP server's connection (0: none)
   bool hidden = false;            // --hidden: no window shown (tests)
 };
@@ -250,6 +253,10 @@ class App {
   // (with its companions and layers, without the levels added nor the nav meshes)
   std::vector<uint32_t> document_level_roots(uint32_t group) const;
   uint32_t level_of_node(uint32_t id) const;  // the added level's group it is in, 0 for the one opened
+  // The game's lighting (the 8 palettes of each vertex) of the levels' decor that misses it (a
+  // document made before the extraction kept it): from the levels as extracted, piece by piece
+  // where its mesh is the same. How many pieces got it back.
+  size_t restore_level_lighting();
   void select_level(uint32_t group);
   // roughly: within the camera's field of view and not past its far plane (a cone, not the exact
   // frustum: good enough to decide whether a point needs framing to be seen)
@@ -293,6 +300,11 @@ class App {
   mutable std::unordered_map<uint32_t, std::pair<uint64_t, Vec3>> m_group_centers;
   PickHit pick_surface(const Vec2& mouse_vp);     // what is under a viewport point
   void delete_selection();
+  // The particle effects of the document's levels as the game has them (steam, sparks, lights) added
+  // back where the document has none (a project made before the editor kept them, effects deleted);
+  // not those whose decor was taken out of the level. Undoable. Returns how many were added, and
+  // in `left_out` how many were not.
+  size_t restore_level_effects(size_t* left_out);
   void copy_selection();
   void paste();
   void duplicate_selection();
@@ -332,7 +344,8 @@ class App {
   json remote_node_json(const Node& n);
   json remote_level_json(const std::string& name);  // what get_level_info says of a level
   bool remote_unsaved(const json& args) const;
-  std::string capture_view_png(int w, int h);  // the 3D view from the camera, PNG in base64
+  // the 3D view from the camera, PNG in base64; with game_hour >= 0, the game view at that hour
+  std::string capture_view_png(int w, int h, float game_hour = -1.f);
 
   // extraction (extract.cpp)
   static std::string extractor_path();  // ogle-extract next to the editor, "" when missing
@@ -401,6 +414,10 @@ class App {
   Scene scene;
   History history;
   Renderer renderer;
+  // the level drawn by the game's own renderer (View > Game view), when OpenGL allows it
+  GameView game_view;
+  bool game_view_on = false;
+  std::string game_view_error;  // why there is none
   Camera camera;
   RenderSettings rs;
   Gizmo gizmo;

@@ -513,7 +513,8 @@ Node navmesh_node(const NavMeshData& mesh, const std::string& name) {
 }
 
 bool navmesh_ignores(const Material& m) {
-  return m.blend != BlendMode::Alpha || (m.alpha == AlphaMode::Blend && m.base_color.w < 0.95f);
+  return m.blend != BlendMode::Alpha ||
+         (m.alpha == AlphaMode::Blend && (m.translucent || m.base_color.w < 0.95f));
 }
 
 bool navmesh_of_node(const Node& n, NavMeshData* out) {

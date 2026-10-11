@@ -139,6 +139,7 @@ bool AssetLibrary::scan(const std::string& game_folder, std::string* error) {
       level.actors = info.value("actors", 0);
       level.collision_triangles = info.value("collision_triangles", -1);
       if (info.contains("actor_types")) level.actor_types = info["actor_types"];
+      if (info.contains("region_trees")) level.region_trees = info["region_trees"];
     }
     m_levels.push_back(std::move(level));
   }
@@ -265,6 +266,7 @@ std::shared_ptr<Mesh> merge_mesh(Scene& doc, const Mesh& mesh, const std::vector
     for (int i = 0; i < (int)doc.materials.size() && found < 0; i++) {
       const Material& d = doc.materials[i];
       if (d.name == m.name && d.texture == m.texture && d.alpha == m.alpha && d.blend == m.blend &&
+          d.translucent == m.translucent &&
           d.cutoff == m.cutoff && d.double_sided == m.double_sided && d.base_color.x == m.base_color.x &&
           d.base_color.y == m.base_color.y && d.base_color.z == m.base_color.z &&
           d.base_color.w == m.base_color.w)

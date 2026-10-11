@@ -119,7 +119,7 @@ bool App::remote_unsaved(const json& args) const {
   return history.revision() != saved_revision && document_open() && !args.value("discard_changes", false);
 }
 
-std::string App::capture_view_png(int w, int h) {
+std::string App::capture_view_png(int w, int h, float game_hour) {
   OffscreenTarget target;
   if (!target.create(w, h)) return {};
   GLint viewport[4];
@@ -129,11 +129,29 @@ std::string App::capture_view_png(int w, int h) {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   scene.begin_frame();
   set_ocean_backdrop();
-  renderer.begin(camera, 0, 0, w, h, rs, (float)w, (float)h);
-  renderer.draw_scene(scene, rs, selection, 0);
+  // the game view at that hour (game_hour >= 0), or the editor's
+  const bool game = game_hour >= 0 && game_view.ready() && document_open();
+  RenderSettings view_rs = rs;
+  if (game) {
+    view_rs.game_view = true;
+    view_rs.show_grid = false;
+    view_rs.far_ocean = false;
+  }
+  renderer.begin(camera, 0, 0, w, h, view_rs, (float)w, (float)h);
+  if (game) {
+    const float hour = game_view.mood.hour;
+    game_view.mood.hour = game_hour;
+    Mat4 clip;
+    game_view.draw_opaque(scene, camera, 0, 0, w, h, &clip);
+    renderer.set_game_depth(&clip);
+    game_view.mood.hour = hour;
+  }
+  renderer.draw_scene(scene, view_rs, selection, 0);
+  if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && document_open())
-    renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, rs);
+    renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, view_rs);
   draw_navmesh_overlay();
+  renderer.set_game_depth(nullptr);
   const std::vector<uint8_t> png = target.png();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
@@ -1012,7 +1030,9 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
   } else if (tool == "capture_view") {
     const int w = std::clamp(args.value("width", 960), 64, 2048);
     const int h = std::clamp(args.value("height", 600), 64, 2048);
-    const std::string png = capture_view_png(w, h);
+    const float hour = args.contains("game_hour") && args["game_hour"].is_number() ? args["game_hour"].get<float>() : -1.f;
+    if (hour >= 0 && !game_view.ready()) return reply(fail("no game view: " + game_view_error));
+    const std::string png = capture_view_png(w, h, hour);
     if (png.empty()) return reply(fail("the view could not be captured"));
     json answer = ok({{"width", w}, {"height", h}, {"camera", remote_status()["camera"]}});
     answer["image"] = png;
@@ -1110,6 +1130,11 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (project_path != path) return reply(fail("cannot open " + path + " (see the editor's log)"));
     reply(ok(remote_status()));
 
+  } else if (tool == "restore_effects") {
+    if (!document_open()) return reply(fail("no document open"));
+    size_t left_out = 0;
+    const size_t added = restore_level_effects(&left_out);
+    reply(ok({{"added", added}, {"left_out", left_out}}));
   } else if (tool == "undo" || tool == "redo") {
     const bool can = tool == "undo" ? history.can_undo() : history.can_redo();
     const std::string label = tool == "undo" ? history.undo_label() : history.redo_label();

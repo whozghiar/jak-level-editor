@@ -23,7 +23,8 @@ game. Every picture was made by the editor itself (its `--screenshot` mode, see
 16. [Save, and find help](#15-save-and-find-help)
 17. [Build with shapes and the materials of Jak 3](#16-build-with-shapes-and-the-materials-of-jak-3)
 18. [Replace a level of the game](#17-replace-a-level-of-the-game)
-19. [Making these screenshots again](#making-these-screenshots-again)
+19. [See it as the game draws it](#18-see-it-as-the-game-draws-it)
+20. [Making these screenshots again](#making-these-screenshots-again)
 
 ## The approach
 
@@ -371,6 +372,20 @@ down, and tanks of the port in its place. **Place it where the original is**, **
 around it; the inspector lists where the game starts the player there, green with ground under it,
 orange without. **Export in place of ctyindb...** writes it so that the game loads it instead of
 `ctyindb`, with its continue points, music and missions (`INSTALL.md` says the one line to change).
+Its regions go with it: the places where the game loads the slums and the industrial zone next door
+as Jak walks by.
+
+## 18. See it as the game draws it
+
+![ctyindb in the game view at noon, lit by the game: a piece selected, its outline and the gizmo over it at the game's depth](22-game-view.png)
+
+**View > Game view** (G) hands the level to the game's own renderer, OpenGOAL's: the decor is made
+into what the level builder makes of an export, and drawn with the game's camera, fog and lighting.
+The game lights each vertex with 8 palettes its artists baked (the ambient light, the sun from four
+directions, the level's lamps) and mixes them by the hour: the **Hour** slider goes from the dawn to
+the moonlit night, and the level's lamps light up after dusk. The editor's tools stay over it at the
+game's depth (the selection's outline goes behind the pipe), and an edit shows at once: only the
+part of the level it touched is made again.
 
 ## Making these screenshots again
 
@@ -390,6 +405,7 @@ $E --screenshot wascitya docs/captures/09-models.png models --lang en
 $E --screenshot ctyindb docs/captures/08-decor-search.png decor-all --lang en
 $E --screenshot ctyport docs/captures/12-help.png guide --lang en
 $E --screenshot ctyindb docs/captures/20-build.png build --lang en
+$E --screenshot ctyindb docs/captures/22-game-view.png select --lang en --game 12
 
 # the demo level, built through the remote control, and the assistant's view of it
 python tools/build_demo_level.py --view docs/captures/11-assistant-view.png
@@ -442,8 +458,8 @@ The setups (the word after the file name):
 | `build` | the level given, the Build panel: the shapes and the materials of Jak 3 |
 
 The options: `--size WxH` (1600x900 by default), `--camera x,y,z,yaw,pitch` (position in meters, angles in degrees), `--story off|<step>|<node>` (the point of the story shown),
-`--select a,b,...` (the elements `select`, `scale` and `prefab` use, by name) and `--add a,b,...`
-(levels added to the one loaded). A capture never
+`--select a,b,...` (the elements `select`, `scale` and `prefab` use, by name), `--add a,b,...`
+(levels added to the one loaded) and `--game <hour>` (the game view at that hour). A capture never
 changes the editor's preferences, and the prefab of `prefab` is written to a temporary folder.
 
 The screenshots show levels of Jak 3 extracted from a copy of the game. Jak 3 belongs to Sony

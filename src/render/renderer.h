@@ -38,6 +38,8 @@ struct RenderSettings {
   float fog_color[3] = {0.60f, 0.68f, 0.72f};
   float fog_start = 50.f;   // meters
   float fog_end = 400.f;
+  // the game view draws the decor (game_view/game_view.h): the editor draws the rest over it
+  bool game_view = false;
 };
 
 struct DrawStats {
@@ -75,6 +77,10 @@ class Renderer {
   void circle(const Vec3& center, const Vec3& axis_u, const Vec3& axis_v, float radius,
               uint32_t color, int segments = 48);
   void flush(bool depth_test, bool depth_offset = false);
+
+  // What is drawn next goes over the game view (game_view/game_view.h): with the game camera's
+  // matrix (world -> clip space) and its depth (reversed: 1 near, 0 far). nullptr: the editor's.
+  void set_game_depth(const Mat4* clip);
 
   // world -> viewport pixels (origin top-left of the viewport). False when behind the camera.
   bool project(const Vec3& world, Vec2* out) const;
@@ -129,6 +135,9 @@ class Renderer {
   void markers(Scene& scene, const RenderSettings& rs, const std::set<uint32_t>& selection,
                uint32_t hovered, const std::vector<Mat4>& worlds);
   bool visible(const AABB& box) const;
+  // a depth test of the editor's (GL_LESS, GL_LEQUAL) over the game view's reversed depth
+  unsigned depth_func(unsigned func) const;
+  void polygon_offset(float factor, float units) const;
 
   unsigned m_mesh_prog = 0, m_flat_prog = 0, m_solid_prog = 0;
   struct {
@@ -174,6 +183,8 @@ class Renderer {
   std::vector<GlTexture> m_textures;
   unsigned m_white = 0;
   Mat4 m_view, m_proj, m_viewproj;
+  Mat4 m_draw_vp;       // what the draws use: m_viewproj, or the game camera's over the game view
+  bool m_game = false;  // over the game view (set_game_depth)
   Vec4 m_planes[6];
   Vec3 m_cam_pos;
   int m_vp[4] = {0, 0, 1, 1};

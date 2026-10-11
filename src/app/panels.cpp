@@ -159,6 +159,23 @@ void App::ui_menu() {
     if (ImGui::MenuItem(tr("menu.view.frame_selection"), "F", false, sel)) frame_selection();
     if (ImGui::MenuItem(tr("menu.view.frame_all"), tr("key.home"))) frame_all();
     ImGui::Separator();
+    // the level drawn by the game's own renderer, lit at an hour of the day
+    ImGui::BeginDisabled(!game_view.ready());
+    ImGui::MenuItem(tr("menu.view.game_view"), "G", &game_view_on);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+      ImGui::SetTooltip("%s", game_view.ready() ? tr("menu.view.game_view.tip")
+                                                : strf(tr("menu.view.game_view.unavailable"), game_view_error.c_str()).c_str());
+    if (game_view_on && game_view.ready()) {
+      ImGui::Indent();
+      ImGui::SetNextItemWidth(160);
+      ImGui::SliderFloat(tr_id("menu.view.game_hour").c_str(), &game_view.mood.hour, 0.f, 24.f, "%.1f h");
+      ImGui::MenuItem(tr("menu.view.game_fog"), nullptr, &game_view.fog);
+      ImGui::MenuItem(tr("menu.view.game_lights"), nullptr, &game_view.mood.level_lights);
+      if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.view.game_lights.tip"));
+      ImGui::Unindent();
+    }
+    ImGui::Separator();
     ImGui::MenuItem(tr("menu.view.actors"), nullptr, &rs.show_actors);
     ImGui::MenuItem(tr("menu.view.ocean"), nullptr, &rs.show_ocean);
     ImGui::MenuItem(tr("menu.view.fog"), nullptr, &rs.fog);
@@ -195,6 +212,12 @@ void App::ui_menu() {
       m_scroll_to_replace = true;
     }
     guide_tip("replace");
+    if (ImGui::MenuItem(tr("menu.level.restore_effects"))) {
+      size_t left_out = 0;
+      const size_t added = restore_level_effects(&left_out);
+      LOG_INFO(tr("log.effects_restored"), added, left_out);
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.level.restore_effects.tip"));
     if (ImGui::MenuItem(tr("menu.level.navmesh"), nullptr, show_navmesh_window)) show_navmesh_window = !show_navmesh_window;
     ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.file.export_game"))) open_export_window();
@@ -1699,6 +1722,7 @@ void App::ui_export_window() {
     ImGui::TextWrapped(tr("export.written"), r.dir.c_str());
     ImGui::TextWrapped(tr("export.counts"), r.meshes, r.triangles, r.collision_triangles, r.actors, r.art_groups);
     if (r.navmeshes) ImGui::TextWrapped(tr("export.counts.navmeshes"), r.navmeshes);
+    if (r.regions) ImGui::TextWrapped(tr("export.counts.regions"), r.regions);
     for (const auto& note : r.notes) {
       ImGui::Bullet();
       ImGui::SameLine();

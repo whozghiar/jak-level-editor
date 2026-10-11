@@ -269,6 +269,7 @@ bool import_gltf_file(Scene& scene, const std::string& path, const ImportOptions
       m.blend = blend_mode_from_name(mat_extras["og_blend"].get<std::string>());
       if (m.blend != BlendMode::Alpha) m.alpha = AlphaMode::Blend;
     }
+    if (mat_extras.is_object()) m.translucent = mat_extras.value("og_translucent", false);
     material_map[i] = scene.add_material(std::move(m));
   }
 
@@ -288,6 +289,13 @@ bool import_gltf_file(Scene& scene, const std::string& path, const ImportOptions
 
   // meshes (shared between nodes: instancing is kept)
   std::vector<std::shared_ptr<Mesh>> mesh_cache(model.meshes.size());
+  // per primitive kept: the glTF primitive it is, and the vertices of that one it kept (the
+  // nodes' lighting, og_tod, is given per vertex of the glTF primitives)
+  struct PrimSource {
+    size_t prim = 0;
+    std::vector<uint32_t> used;
+  };
+  std::vector<std::vector<PrimSource>> prim_sources(model.meshes.size());
   auto get_mesh = [&](int mi) -> std::shared_ptr<Mesh> {
     if (mi < 0 || mi >= (int)model.meshes.size()) return nullptr;
     if (mesh_cache[mi]) return mesh_cache[mi];
@@ -395,9 +403,49 @@ bool import_gltf_file(Scene& scene, const std::string& path, const ImportOptions
       }
       res.triangles += p.tri_count();
       mesh->prims.push_back(std::move(p));
+      prim_sources[mi].push_back({pi, std::move(used)});
     }
     mesh_cache[mi] = mesh;
     return mesh;
+  };
+
+  // the nodes' lighting: a palette (8 RGBA bytes per color) shared by the nodes of a tree, and
+  // per glTF primitive the color of each vertex
+  std::map<int, std::shared_ptr<const TodPalette>> palettes;
+  auto read_tod = [&](const json& j, const std::vector<PrimSource>& sources) -> std::shared_ptr<const TodColors> {
+    if (!j.is_object() || !j.contains("palette") || !j.contains("index") || !j["index"].is_array()) return nullptr;
+    const int pa = json_int(j, "palette", -1);
+    auto pit = palettes.find(pa);
+    if (pit == palettes.end()) {
+      AccessorView v;
+      std::shared_ptr<TodPalette> pal;
+      if (view_accessor(model, pa, &v) && v.ctype == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && v.comps == 4) {
+        pal = std::make_shared<TodPalette>();
+        pal->rgba.resize(v.count / 8 * 32);
+        for (size_t i = 0; i < pal->rgba.size() / 4; i++) memcpy(&pal->rgba[i * 4], v.data + i * v.stride, 4);
+      }
+      pit = palettes.emplace(pa, pal).first;
+    }
+    if (!pit->second) return nullptr;
+    auto tod = std::make_shared<TodColors>();
+    tod->palette = pit->second;
+    for (const auto& src : sources) {
+      if (src.prim >= j["index"].size() || !j["index"][src.prim].is_number_integer()) return nullptr;
+      AccessorView v;
+      if (!view_accessor(model, j["index"][src.prim].get<int>(), &v) || v.comps != 1 ||
+          v.ctype != TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+        return nullptr;
+      auto& out = tod->index.emplace_back();
+      out.reserve(src.used.size());
+      for (uint32_t u : src.used) {
+        if (u >= v.count) return nullptr;
+        uint16_t c;
+        memcpy(&c, v.data + u * v.stride, 2);
+        if (c >= tod->palette->size()) return nullptr;
+        out.push_back(c);
+      }
+    }
+    return tod;
   };
 
   // nodes
@@ -423,6 +471,11 @@ bool import_gltf_file(Scene& scene, const std::string& path, const ImportOptions
     json extras = to_json(gn.extras);
     if (!extras.is_object()) extras = json::object();
     n.mesh = get_mesh(gn.mesh);
+    if (n.mesh && extras.contains("og_tod")) {
+      n.tod = read_tod(extras["og_tod"], prim_sources[gn.mesh]);
+      if (n.tod && !n.tod->fits(*n.mesh)) n.tod.reset();
+    }
+    extras.erase("og_tod");
 
     NodeKind kind = n.mesh ? NodeKind::Render : NodeKind::Group;
     if (extras.contains("og_kind")) {
@@ -579,8 +632,13 @@ struct ExportContext {
   const Scene& scene;
   GlbWriter w;
   std::map<int, int> material_map;  // scene material -> gltf material
-  std::map<int, int> texture_map;   // scene texture -> gltf texture
+  std::map<std::pair<int, bool>, int> texture_map;  // scene texture, alpha doubled -> gltf texture
   std::map<uint64_t, int> mesh_map; // mesh uid -> gltf mesh
+  std::map<const TodPalette*, int> palette_map;  // the nodes' lighting -> accessor
+  // builder: the geometry of each primitive (mesh uid, primitive), written once for the nodes
+  // sharing its mesh, each with its own lighting
+  std::map<std::pair<uint64_t, size_t>, json> prim_map;
+  std::array<float, 8> tod_ratios{};  // builder: the lighting of the geometry without its own
   bool sampler_added = false;
   bool builder = false;
 
@@ -589,14 +647,22 @@ struct ExportContext {
     w.doc["meshes"] = json::array();
   }
 
-  int texture(int ti) {
-    auto it = texture_map.find(ti);
+  // `double_alpha`: a texture of the game, its alpha the PS2's (128 is opaque), for the builder,
+  // which halves the alpha of the files it reads
+  int texture(int ti, bool double_alpha = false) {
+    auto it = texture_map.find({ti, double_alpha});
     if (it != texture_map.end()) return it->second;
     if (ti < 0 || ti >= (int)scene.textures.size()) return -1;
     const auto& t = scene.textures[ti];
     if (t.width <= 0 || t.height <= 0) return -1;
     std::vector<uint8_t> png;
-    stbi_write_png_to_func(png_write_cb, &png, t.width, t.height, 4, t.rgba.data(), t.width * 4);
+    if (double_alpha) {
+      std::vector<uint8_t> rgba = t.rgba;
+      for (size_t i = 3; i < rgba.size(); i += 4) rgba[i] = (uint8_t)std::min(255, rgba[i] * 2);
+      stbi_write_png_to_func(png_write_cb, &png, t.width, t.height, 4, rgba.data(), t.width * 4);
+    } else {
+      stbi_write_png_to_func(png_write_cb, &png, t.width, t.height, 4, t.rgba.data(), t.width * 4);
+    }
     int view = w.add_view(png.data(), png.size(), 0);
     if (!w.doc.contains("images")) w.doc["images"] = json::array();
     if (!w.doc.contains("textures")) w.doc["textures"] = json::array();
@@ -609,7 +675,7 @@ struct ExportContext {
     w.doc["images"].push_back({{"name", t.name}, {"bufferView", view}, {"mimeType", "image/png"}});
     w.doc["textures"].push_back({{"source", (int)w.doc["images"].size() - 1}, {"sampler", 0}});
     int gi = (int)w.doc["textures"].size() - 1;
-    texture_map[ti] = gi;
+    texture_map[{ti, double_alpha}] = gi;
     return gi;
   }
 
@@ -621,24 +687,36 @@ struct ExportContext {
     json pbr = {{"baseColorFactor", {m.base_color.x, m.base_color.y, m.base_color.z, m.base_color.w}},
                 {"metallicFactor", 0.0},
                 {"roughnessFactor", 1.0}};
-    int ti = texture(m.texture);
+    // a material of the game (its colors doubled, as the PS2 blends them: its texture's alpha is the
+    // PS2's): for the builder, the alpha of its texture and its reference as a file has them
+    const bool game_alpha = builder && m.base_color.w > 1.5f;
+    const float cutoff = game_alpha ? std::min(1.f, m.cutoff * 2.f) : m.cutoff;
+    int ti = texture(m.texture, game_alpha);
     if (ti >= 0) pbr["baseColorTexture"] = {{"index", ti}};
     json jm = {{"name", m.name}, {"pbrMetallicRoughness", pbr}, {"doubleSided", m.double_sided}};
     if (m.alpha == AlphaMode::Mask) {
       jm["alphaMode"] = "MASK";
-      jm["alphaCutoff"] = m.cutoff;
+      jm["alphaCutoff"] = cutoff;
+    } else if (m.alpha == AlphaMode::Blend && builder && translucent_in_game(m)) {
+      // see through: the level builder's translucent tree, with the PS2 blend and the texels under
+      // the reference dropped (og_blend: jak-project's builder of the editor's branch; the game's
+      // own builder blends them over what is behind)
+      jm["alphaMode"] = "BLEND";
+      jm["alphaCutoff"] = cutoff;
+      jm["extras"] = {{"og_blend", m.blend == BlendMode::Alpha ? "alpha" : blend_mode_name(m.blend)}};
     } else if (m.alpha == AlphaMode::Blend && builder) {
-      // the level builder puts blended surfaces in a tree of their own, which the game's level
-      // never draws: their texels under the reference cut out instead
+      // a wall the game blends and writes the depth of: in the builder's tree of solid surfaces,
+      // its texels under the reference cut out (the soft edges of its texture are lost)
       jm["alphaMode"] = "MASK";
-      jm["alphaCutoff"] = m.cutoff;
+      jm["alphaCutoff"] = cutoff;
     } else if (m.alpha == AlphaMode::Blend) {
       // the PS2 also drops the texels of blended surfaces under a reference: kept like the
       // extractor writes it (without it, water and glass would come back with glTF's 0.5)
       jm["alphaMode"] = "BLEND";
       jm["alphaCutoff"] = m.cutoff;
     }
-    if (m.blend != BlendMode::Alpha) jm["extras"] = {{"og_blend", blend_mode_name(m.blend)}};
+    if (m.blend != BlendMode::Alpha && !jm.contains("extras")) jm["extras"] = {{"og_blend", blend_mode_name(m.blend)}};
+    if (m.translucent && !builder) jm["extras"]["og_translucent"] = true;
     if (!w.doc.contains("materials")) w.doc["materials"] = json::array();
     w.doc["materials"].push_back(jm);
     int gi = (int)w.doc["materials"].size() - 1;
@@ -664,8 +742,9 @@ struct ExportContext {
       attrs["TEXCOORD_0"] = w.add_accessor(p.uv.data(), p.uv.size(), 2, 5126, 34962, "VEC2", false);
     if (p.col.size() == p.pos.size())
       attrs["COLOR_0"] = w.add_accessor(p.col.data(), p.col.size(), 4, 5126, 34962, "VEC4", false);
+    // (for the builder, the nodes' lighting replaces the palettes a file brought)
     for (const auto& [name, data] : p.extra_attrs) {
-      if (data.size() == p.pos.size())
+      if (data.size() == p.pos.size() && !builder)
         attrs[name] = w.add_accessor(data.data(), data.size(), 4, 5126, 34962, "VEC4", false);
     }
     jp["attributes"] = attrs;
@@ -704,6 +783,64 @@ struct ExportContext {
     return gi;
   }
 
+  // a node's lighting (og_tod): its palette, once, and an index per primitive written
+  json tod(const Node& n) {
+    const TodPalette* pal = n.tod->palette.get();
+    auto it = palette_map.find(pal);
+    if (it == palette_map.end())
+      it = palette_map.emplace(pal, w.add_accessor(pal->rgba.data(), pal->rgba.size() / 4, 4, 5121, 0, "VEC4", false)).first;
+    json index = json::array();
+    for (size_t p = 0; p < n.mesh->prims.size(); p++) {
+      if (n.mesh->prims[p].idx.empty()) continue;
+      const auto& v = n.tod->index[p];
+      index.push_back(w.add_accessor(v.data(), v.size(), 1, 5123, 0, "SCALAR", false));
+    }
+    return {{"palette", it->second}, {"index", index}};
+  }
+
+  // builder: the node's own mesh, its lighting as the 8 palettes per vertex the builder reads
+  // (_SUNRISE...: the names of Jak 1's times of the day), on the geometry of its mesh
+  int builder_mesh(const Node& n) {
+    static const char* kPalettes[8] = {"_SUNRISE", "_MORNING",  "_NOON",    "_AFTERNOON",
+                                       "_SUNSET",  "_TWILIGHT", "_EVENING", "_GREENSUN"};
+    const Mesh& m = *n.mesh;
+    const bool lit = n.tod && n.tod->fits(m);
+    json prims = json::array();
+    std::vector<uint8_t> pal[8];
+    for (size_t pi = 0; pi < m.prims.size(); pi++) {
+      const Primitive& p = m.prims[pi];
+      if (p.idx.empty()) continue;
+      auto it = prim_map.find({m.uid, pi});
+      if (it == prim_map.end()) it = prim_map.emplace(std::make_pair(m.uid, pi), primitive(p, true)).first;
+      json jp = it->second;
+      const size_t nv = p.pos.size();
+      for (auto& v : pal) v.assign(nv * 4, 0);
+      const Material* mat =
+          p.material >= 0 && p.material < (int)scene.materials.size() ? &scene.materials[p.material] : nullptr;
+      for (size_t v = 0; v < nv; v++) {
+        uint8_t c[32];
+        if (lit) {
+          memcpy(c, &n.tod->palette->rgba[(size_t)n.tod->index[pi][v] * 32], 32);
+        } else {
+          // new geometry: lit like the level's, from the color shown
+          Vec4 shown = v < p.col.size() ? p.col[v] : Vec4{1, 1, 1, 1};
+          if (mat) shown = {shown.x * mat->base_color.x, shown.y * mat->base_color.y, shown.z * mat->base_color.z, shown.w};
+          tod_from_color(shown, tod_ratios, c);
+        }
+        // the alpha the PS2's (128 is 1.0): the builder halves the alpha it reads, as a texture's
+        for (int k = 0; k < 8; k++) {
+          memcpy(&pal[k][v * 4], c + k * 4, 4);
+          pal[k][v * 4 + 3] = (uint8_t)std::min(255, c[k * 4 + 3] * 2);
+        }
+      }
+      for (int k = 0; k < 8; k++)
+        jp["attributes"][kPalettes[k]] = w.add_accessor(pal[k].data(), nv, 4, 5121, 34962, "VEC4", false);
+      prims.push_back(jp);
+    }
+    w.doc["meshes"].push_back({{"name", m.name}, {"primitives", prims}});
+    return (int)w.doc["meshes"].size() - 1;
+  }
+
   int add_node(json jn) {
     w.doc["nodes"].push_back(std::move(jn));
     return (int)w.doc["nodes"].size() - 1;
@@ -726,13 +863,14 @@ bool export_glb(const Scene& scene, const std::string& path, const ExportOptions
   if (opts.mode == ExportMode::Builder) {
     // flat: every node at its world matrix, the builder's extras only
     ctx.builder = true;
+    ctx.tod_ratios = tod_ratios(scene, opts.only);
     for (auto id : opts.only) {
       const Node* n = scene.find(id);
       if (!n) continue;
       json jn;
       jn["name"] = n->name;
       trs_json(jn, Transform::from_matrix(scene.world(*n)));
-      if (n->mesh) jn["mesh"] = ctx.mesh(n->mesh, false);
+      if (n->mesh) jn["mesh"] = ctx.builder_mesh(*n);
       auto e = opts.node_extras.find(id);
       if (e != opts.node_extras.end() && !e->second.empty()) jn["extras"] = e->second;
       scene_roots.push_back(ctx.add_node(jn));
@@ -778,6 +916,7 @@ bool export_glb(const Scene& scene, const std::string& path, const ExportOptions
     if (n.mesh) jn["mesh"] = ctx.mesh(n.mesh, n.kind == NodeKind::Collision);
     json extras = n.extras.is_object() ? n.extras : json::object();
     extras["og_kind"] = kind_name(n.kind);
+    if (n.mesh && n.tod && n.tod->fits(*n.mesh)) extras["og_tod"] = ctx.tod(n);
     if (opts.mode == ExportMode::Project) extras["og_id"] = n.id;
     if (!n.visible) extras["og_hidden"] = true;
     if (n.locked) extras["og_locked"] = true;

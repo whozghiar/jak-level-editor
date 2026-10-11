@@ -27,6 +27,10 @@ be brought into Jak 3 levels, checked and converted; a piece of decor can **coll
 place (a `ctyindbis` made from `ctyindb`, which the game loads instead of it). A **guided tour**,
 with an animation of each tool, opens at the first start (F1).
 
+The **game view** (View > Game view, G) draws the level with **the game's own renderer**
+(OpenGOAL's), lit as the game lights it at the hour you choose, fogged as the game fogs it: what the
+level will look like in the game once exported. Edits show at once.
+
 - No game data comes with the editor: everything is read from the user's disc.
 - It needs nothing but this repository and your disc: it does not use jak-project to build, to
   extract or to run. The repository holds the editor and `ogle-extract`, the extractor it runs,
@@ -139,7 +143,8 @@ library/jak3/common/models/*.glb                       models every level uses (
 library/jak3/<level>/decor/<level>-background.glb      the level: decor (one node per element),
                                                        collision and actors
 library/jak3/<level>/models/<model>-lodN.glb           the models of its actors (crates, doors...)
-library/jak3/<level>/level.json                        what the folder holds (DGO, actors, models)
+library/jak3/<level>/level.json                        what the folder holds (DGO, actors, models,
+                                                       regions)
 library/jak3/prefabs/*.glb                             your prefabs
 library/jak3/prefabs/game/*.glb                        the game's prefabs, made from these levels
 library/jak2/...                                       Jak II's levels, the same way (when extracted)
@@ -290,6 +295,34 @@ layers its missions lend it, and its own point of the story (the list of the sto
 | Speed | Shift: faster, Ctrl: slower; the wheel while flying changes the speed |
 | Forward, pan, turn around | wheel; middle button; Alt + left button |
 | Frame | F: the selection; Home: the level |
+
+### The game view
+
+**View > Game view** (G) draws the level as the game draws it. OpenGOAL's own renderer of the
+game's background (`TFragment` and its shaders, vendored in `extractor/opengoal`) draws the decor as
+the level builder makes it of the export (the triangles of every piece in the game's units, a draw
+per material with the game's draw modes: alpha test, blending, fog), with the game's camera:
+
+- **Hour**: the time of the day. The game lights every vertex of a level by mixing 8 palettes baked
+  by its artists (the ambient light, the sun from 4 directions, the level's own lights) with weights
+  its mood code sets from the hour (`update-mood-exterior`, clear weather): dawn, noon, dusk and the
+  moonlit night as in the game. The sky behind is the mood's sky color at that hour.
+- **The game's fog**, from 32 m to the horizon.
+- **The level's lights**: the lamps lit at night, the lights always on and the flickering ones, as
+  the city's levels drive them (palettes 5 to 7).
+
+![ctyindb in the game view at noon, lit by the game: a piece selected, its outline and the gizmo over it at the game's depth](docs/captures/22-game-view.png)
+
+The editor's things stay over it, at the game's depth: the selection, the gizmo, the actors' models
+(drawn by the editor), the markers, the nav meshes, the ocean. An edit shows at once: the level is
+made in chunks (the pieces sharing a palette in a cell of 128 m), and the chunks an edit touched are
+made again (a few milliseconds). The pieces made in the editor (shapes, models of your own,
+structures of Jak II) are lit like the level's geometry from their color, as the export lights
+them.
+
+The game view needs OpenGL 4.1 (the game's shaders); without it the menu says why and the editor
+draws as usual. It draws the background (the decor) only: the sky is its color, the ocean, the
+actors' models and the particle effects are the editor's.
 
 ### Selecting and editing
 
@@ -596,8 +629,8 @@ files its level builder (`goalc/build_level`) takes for Jak 3.
 
 | File | What it is |
 |---|---|
-| `<name>.glb` | the decor in the game's space, one node per element with the builder's extras: `set_collision` + `ignore` on the decor covered by the game's collision (and on the see-through surfaces: water, glass), none on the rest (the builder makes their collision); the game's collision, one node per surface (`set_collision`, `set_invisible`, `collide_material`, `collide_event`, `collide_mode`, `noedge`, `nocamera`, `noentity`, `nolineofsight`) with the game's normals |
-| `<name>.jsonc` | the level for the builder: its names, `gltf_file`, `base_id`, `base_region_id`, the art groups of the actors' models, and the actors (`trans`, `etype`, `game_task`, `quat`, `bsphere`, `lump`: their data typed as the builder reads it) |
+| `<name>.glb` | the decor in the game's space, lit as the game lights it (the 8 palettes of each vertex: see below), one node per element with the builder's extras: `set_collision` + `ignore` on the decor covered by the game's collision (and on the see-through surfaces: water, glass), none on the rest (the builder makes their collision); the game's collision, one node per surface (`set_collision`, `set_invisible`, `collide_material`, `collide_event`, `collide_mode`, `noedge`, `nocamera`, `noentity`, `nolineofsight`) with the game's normals |
+| `<name>.jsonc` | the level for the builder: its names, `gltf_file`, `base_id`, `base_region_id`, the art groups of the actors' models, the actors (`trans`, `etype`, `game_task`, `quat`, `bsphere`, `lump`: their data typed as the builder reads it), and for a level replacing one of the game's, that level's regions (`region_trees`) |
 | `<name>-obs.gc` | the level's code: the behaviors set in the editor, one type per object whose behavior differs from the game's (written only when there is one) |
 | `<name>.gd` | its DGO: the code of the game its objects need (a type defined in a level's code: the board vents in `ctyinda-obs.o`, with the files before it in that level's DGO), the level's code, the art groups and the level |
 | `<name>-nav.json` | the document's nav meshes (`nav_data`) |
@@ -623,6 +656,22 @@ triangles, more than 461 around Jak on a fifth of its floors). So the export wri
   stop Jak in the inspector (**In the game > Collision**);
 - and the report says the places of the floors where Jak would still meet more than 461
   triangles, the densest first.
+
+**The lighting.** The game lights a level's vertices with 8 palettes it mixes by the hour and the
+level's lights (see [The game view](#the-game-view)). The export writes each piece's own as the
+game has them (the builder's attributes `_SUNRISE` to `_GREENSUN`), per instance for the decor's
+prototypes; the pieces made in the editor get palettes made from their color, in the proportions of
+the level's (the ambient light gives almost all of it). Without them the builder copies one color
+into the 8 palettes, which the game adds up: such a level is 3 to 4 times too bright. The alpha of
+the textures and of the palettes is written as the builder reads it (it halves it). A project made
+before the extraction kept the palettes takes them from the extracted levels when it opens.
+
+**Translucent surfaces.** The game blends most surfaces of its levels and writes their depth: they
+are walls, exported cut out (`MASK`). The ones it draws without their depth (stains, decals, glass,
+water: the extraction marks them `og_translucent`), the additive ones (glows, light shafts) and the
+editor's own blended materials go to the builder's translucent tree (`BLEND`, their PS2 blend in
+`extras.og_blend`). The game draws that tree with the level builder of the editor's jak-project
+branch (`drawable-tree-tfrag-trans`); OpenGOAL's own builder leaves it undrawn.
 
 What the export changes:
 
@@ -687,6 +736,13 @@ points, music and missions, and the levels around it as they are.
    `:nickname` becomes your level's. Put it back to play the game's own `ctyindb` again (its DGO is
    still built). The report says the elements of the levels next to it that were left out and the
    continue points without ground.
+6. **The regions**: the export writes the regions of the level replaced (`region_trees`, read from
+   its `level.json`): where the game loads and shows the levels around it as Jak or the camera goes
+   by (`(want-load 'ctysluma 'ctyindb 'ctywide-kg)`), and its weather and sewer regions. Without
+   them the game never loads the levels next to it: the slums next to `ctyindb` stayed unloaded.
+   A region of the game made of several faces gets one id per face (the builder takes one).
+   The code of the effects that the levels around it already load (`ctywide-part`, for the city's)
+   stays out of its DGO.
 
 The MCP tool `replace_level` does the same (`show_original`, `align`, `turn_deg`) and answers
 where the game starts the player there; `export_level` takes `replaces`.
@@ -774,6 +830,7 @@ turns it off. The status bar shows **Assistant connected** while the MCP server 
 | Ctrl+L | Select the whole level of the selection |
 | Ctrl+Z, Ctrl+Y | Undo, redo |
 | F, Home | Frame the selection, frame the level |
+| G | The game view (the game's renderer) |
 | R, Ctrl + wheel (while placing) | Turn what is being placed |
 | Esc | Stop placing, then clear the selection |
 | Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S | New level, open, save, save as |
@@ -816,7 +873,10 @@ each tag of its lump in `lump_types`), and its model is a `render` child marked 
 `asset.extras.ogle.settings`, with the level of the game it replaces (`replaces`); the original
 shown to compare is a group marked `og_level` and `og_reference`. What a piece of decor does is in
 its `og_decor`, a shape's kind and size in `og_shape`, and where a structure of Jak II comes from
-and its checks in `og_import`.
+and its checks in `og_import`. The game's lighting of a piece is in its `og_tod`: `palette`, an
+accessor of 8 RGBA bytes per color (shared by the pieces of a tree), and `index`, an accessor per
+primitive of the color of each vertex. A material drawn by the game without its depth keeps
+`og_translucent`.
 
 ### Nav meshes for the game (`.json`)
 
@@ -875,8 +935,11 @@ then rebuild (the files are copied next to the executable).
 marked `og_terrain`), its decor (one group per prototype whose instances share the mesh), its collision (one node per surface: `collide_pat`, the exact
 32-bit value) and its actors (nodes with `kind: "actor"` and the actor's
 data, with the type of each tag of its lump in `lump_types`). Materials that the PS2 blends additively (glows, light beams) keep their blend in
-`extras.og_blend` (`add`, `add_alpha`, `subtract`, `half`). `level.json` lists the actors by type
-with the data of one of each (the catalog's templates) and the art-names they choose.
+`extras.og_blend` (`add`, `add_alpha`, `subtract`, `half`), the ones it draws without their depth
+`og_translucent`. Every piece keeps the game's lighting in `og_tod` (the 8 palettes of its tree and
+the color of each vertex, per instance of a prototype: see [Project](#project-glb)). `level.json`
+lists the actors by type with the data of one of each (the catalog's templates) and the art-names
+they choose, and the level's regions (`region_trees`, in the level builder's format, meters).
 
 A library extracted before this version of the editor still opens, but extract the game again to
 get the lit interiors, the shell in pieces and the catalog's templates.
@@ -888,6 +951,7 @@ open-goal-level-editor [project.glb] [--library <folder>] [--lang <code>] [--rem
 open-goal-level-editor --screenshot <in> <image.png> [setup] [--size WxH] [--library <folder>]
                        [--lang <code>] [--camera x,y,z,yaw,pitch]
                        [--story off|<step>|<node>] [--select a,b,...] [--add a,b,...]
+                       [--game <hour>]
 open-goal-level-editor --mcp [--remote-port <port>]
 open-goal-level-editor --selftest
 ```
@@ -906,7 +970,7 @@ open-goal-level-editor --selftest
   `--story` shows the level with every state (`off`), at a step, or just after a task node
   (`tower-destroy-resolution`); `--select` names the elements `select`, `scale` and `prefab`
   use (a level added: `select` selects it whole); `--add` adds levels to the one loaded, one after
-  the other.
+  the other; `--game` shows the game view at that hour of the day.
 - `--mcp` is the MCP server of [5](#5-building-levels-with-an-assistant-mcp); `--remote-port` the
   port of the editor's remote control (47821, `0` turns it off); `--hidden` runs the editor without
   a window and without changing the preferences (tests of the MCP server).
@@ -920,7 +984,7 @@ on Linux).
 
 ## 10. What was tested
 
-- `--selftest`: 89 checks (math, rotations read back as angles even at a quarter turn around y, a
+- `--selftest`: 93 checks (math, rotations read back as angles even at a quarter turn around y, a
   library written like the extractor writes one, opening its level: locked terrain, decor instances,
   actor with its model, collision surfaces; copy and paste with undo; prefab file names, saving,
   pivot, placing twice with shared meshes, the actors of a prefab named apart; project round trip,
@@ -958,7 +1022,11 @@ on Linux).
   windows and roofs of the shapes; a structure of Jak II brought in (a texture shared, another
   renamed, the lighting matched); the guide's animations, drawn in a hidden window (each draws its
   scene and says what it shows) and the Build panel's icons; the game's collision taken out with
-  the pieces of decor deleted or moved, and a place denser than the collide cache said.
+  the pieces of decor deleted or moved, and a place denser than the collide cache said; the game
+  view (a document drawn by the game's renderer, a chunk per palette; a piece moved making its
+  chunk again, alone; the game's camera placing things where the editor's does); the export's 8
+  palettes on every mesh, a piece's own exactly; a level's blended walls cut out and its glass in
+  the translucent tree.
 - Jak 3 NTSC (SCUS-97330), from the folder of the disc: `ogle-extract` writes the 272 levels in 1
   minute 10 to 1 minute 20 seconds (3.7 GB), and the editor lists 105 of them. Jak II PAL
   (SCES-51608): the outside of its palace (`PALOUT`) extracted with `--levels PALOUT`, four of its
@@ -1005,7 +1073,10 @@ on Linux).
   1,764 small ones without collision: 10 places over the cache (482 triangles at most), on the
   tower and the top of the facades. Not played yet.
 - The replacement of a level: a `ctyindbis` made from `ctyindb`, replacing it with the original
-  shown, exported (`level-info.gc`, its DGO with `ctyindb`'s code, `INSTALL.md`); the demo of
+  shown, exported (`level-info.gc`, its DGO with `ctyindb`'s code, `INSTALL.md`), then built by
+  `(mi)` with the level builder of the editor's jak-project branch: its 8 palettes per vertex, 12
+  translucent materials in its translucent tree, `ctyindb`'s 9 regions, a DGO of `ctyindb`'s code
+  only; the demo of
   [the tour](docs/captures/README.md#17-replace-a-level-of-the-game) built by
   `tools/build_replace_demo.py`.
 
@@ -1028,10 +1099,15 @@ nav meshes followed by creatures in the game.
 
 - **Reflections (envmap) are not drawn**, and the additive blends of the PS2 are approximated:
   water is a translucent blue surface, dark eco a dark purple one.
-- **The light is still**: each surface takes the brightest of its level's light layers, where the
-  game mixes them as time goes (the sun, lamps, flickering), and very
-  bright surfaces are softened. **View > Fog** only hazes the low-detail backdrop scenery meshes
-  (made to be seen through the game's own fog): nothing nearer is fogged.
+- **The editor's own view is still**: each surface takes the brightest of its level's light
+  layers, and very bright surfaces are softened; **View > Fog** only hazes the low-detail backdrop
+  scenery meshes. The game view lights and fogs as the game does, at the hour chosen, in clear
+  weather; the lamps (palettes 5 to 7) follow the city's levels (lit at night), not each level's own
+  mood code.
+- **The game view** draws the background only: no sky (its color), no ocean of the game (the
+  editor's), no particles, no envmap reflections; the actors' models are the editor's. The level
+  builder quantizes a level's colors to 8,192 per tree (a few vertices of a big level lose a part
+  of their afternoon sun): the game view does not, so it shows the palettes exactly.
 - **The catalog's objects** come from the extracted levels and the game's code. A new object
   takes the data of one of its type: check it before building the level for the game. The
   particle effects are markers: their particles are not drawn.
@@ -1085,7 +1161,8 @@ nav meshes followed by creatures in the game.
   a level is moved; the builder cannot write all of Jak 3's own
   surfaces (see [Exporting for the game](#exporting-for-the-game)); the scripts kept (`pair` data)
   need a level builder that reads them; the level's definition keeps the test-zone's `:index`, to
-  change; the regions, cameras and ambient sounds of the levels are not exported.
+  change; the cameras and ambient sounds of the levels are not exported, nor the regions of a level
+  of its own (a level replacing one of the game's takes that level's).
 
 ## 12. Repository layout
 
@@ -1098,6 +1175,8 @@ src/io/        glTF import and export, the library of extracted levels, prefabs 
                behaviors (decor_behaviors), the structures of Jak II (jak2_import)
 src/render/    camera, OpenGL renderer, thumbnails, offscreen captures, the palette of materials
                (texture_palette), the guide's animations (tool_demo)
+src/game_view/ the game view: the document made into the game's background data and drawn by the
+               game's renderer (game_view), the game's time of day (game_mood)
 src/tools/     the gizmo, the nav mesh generator (navmesh: Recast, then the game's limits)
 src/app/       window and main loop, document actions, interface panels (panels, the guide and the
                Build panel: guide_panel, behaviors, surfaces), extraction window, the remote control
@@ -1115,7 +1194,8 @@ library/       the levels extracted from your game (created by the extraction, i
 iso_data/      put your own disc images or disc folders here for the extraction to read (ignored
                by git, only a .gitignore of its own is kept)
 extractor/     ogle-extract: main.cpp, the games' tables (data/jak3/, data/jak2/) and the data readers of OpenGOAL's
-               decompiler it is built from (opengoal/, ISC license)
+               decompiler it is built from (opengoal/, ISC license); opengoal/game/graphics: the
+               game's background renderer and its shaders, built into the editor for the game view
 third-party/   Dear ImGui, glad, tinygltf, nlohmann json, stb, Recast
 docs/          behaviors.md: the study of what the decor can do in the game; captures/: the guided
                tour and its screenshots, and how to make them again
@@ -1123,15 +1203,16 @@ docs/          behaviors.md: the study of what the decor can do in the game; cap
 ```
 
 Neither OpenGOAL's game runtime, nor its compiler, nor its REPL are in the repository: only the
-editor and the extractor it needs.
+editor, the extractor it needs, and the part of the game's renderer the game view draws with.
 
 ## 13. License
 
 ISC (see [`LICENSE`](LICENSE)), the license of OpenGOAL.
 
 This editor is built on the work of the [OpenGOAL](https://github.com/open-goal/jak-project) team:
-its extractor is made of the data readers of OpenGOAL's decompiler (`extractor/opengoal/`, OpenGOAL
-code under the ISC license: `extractor/opengoal/LICENSE`), its game data is generated from
+its extractor is made of the data readers of OpenGOAL's decompiler and its game view of the
+game's renderer (`extractor/opengoal/`, OpenGOAL code under the ISC license:
+`extractor/opengoal/LICENSE`), its game data is generated from
 OpenGOAL's decompiled game code, and what it knows of the game's formats comes from their research.
 It is an independent project: it is not affiliated with the OpenGOAL team, nor endorsed by it, and
 it reuses their license, the ISC license.

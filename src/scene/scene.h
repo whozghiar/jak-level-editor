@@ -10,6 +10,7 @@
 //
 // A project is saved as a .glb: the same data, with the editor's node extras (og_kind...).
 
+#include <array>
 #include <map>
 #include <memory>
 #include <optional>
@@ -51,9 +52,20 @@ struct Material {
   BlendMode blend = BlendMode::Alpha;
   float cutoff = 0.5f;
   bool double_sided = true;
+  // drawn by the game without writing its depth (extras.og_translucent: the extractor's): see
+  // through, like glass and water. The game blends most of a level's other surfaces too, but
+  // writes their depth: they are walls (the alpha test makes their holes).
+  bool translucent = false;
 };
 
+// Whether the game draws a material in its translucent pass, behind which the rest shows (glass,
+// water, glows, light shafts): additive and subtractive blends, the levels' surfaces drawn so
+// (Material::translucent), and the editor's own blended materials. What the export gives the level
+// builder's translucent tree, and the game view draws last.
+bool translucent_in_game(const Material& m);
+
 struct Bvh;
+class Scene;
 
 struct Primitive {
   std::vector<Vec3> pos;
@@ -95,6 +107,31 @@ struct Mesh {
   uint64_t m_bvh_version = 0;
 };
 
+// The game's lighting of a level's geometry (Jak 3): the game mixes 8 palettes per color (the
+// ambient light, 4 directions of the sun, the lamps of each area...) with weights it sets every
+// frame from the time of the day and the level's mood. A table of colors, 8 RGBA bytes each...
+struct TodPalette {
+  std::vector<uint8_t> rgba;  // color c's palette k at c * 32 + k * 4
+  size_t size() const { return rgba.size() / 32; }
+};
+
+// ...and the color of each vertex of a node's mesh in it. The instances of a decor prototype share
+// its mesh, not their lighting: it is the node's.
+struct TodColors {
+  std::shared_ptr<const TodPalette> palette;
+  std::vector<std::vector<uint16_t>> index;  // per primitive of the mesh, per vertex (< palette's size)
+  // whether it still matches the mesh (its vertices edited, the node is lit like new geometry)
+  bool fits(const Mesh& mesh) const;
+};
+
+// How much of a lit color each palette gives on average (the colors of the extracted levels are
+// the brightest of their 8): new geometry, which has one color, gets its palettes this way. From
+// the nodes of the scene that have their lighting, else a district of the city's (ctyindb).
+std::array<float, 8> tod_ratios(const Scene& scene, const std::vector<uint32_t>& nodes);
+// a color as the editor shows it (the vertex's times its material's: 1 is the texture as it is)
+// as 8 palettes
+void tod_from_color(const Vec4& shown, const std::array<float, 8>& ratios, uint8_t out[32]);
+
 struct Node {
   uint32_t id = 0;
   uint32_t parent = 0;  // 0 = root
@@ -103,6 +140,7 @@ struct Node {
   Transform local;
   std::shared_ptr<Mesh> mesh;    // Render, Collision
   json extras = json::object();  // actor data (etype, aid, lump...), glTF extras
+  std::shared_ptr<const TodColors> tod;  // its lighting in the game, when known (Render)
   bool visible = true;
   bool locked = false;           // not selectable (the terrain)
   bool story_hidden = false;     // not shown at the point of the story viewed (not saved)

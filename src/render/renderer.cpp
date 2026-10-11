@@ -408,7 +408,24 @@ void Renderer::set_view(const Camera& cam, int x, int y, int w, int h, float log
   m_view = cam.view();
   m_proj = cam.proj((float)m_vp[2] / (float)m_vp[3]);
   m_viewproj = m_proj * m_view;
+  if (!m_game) m_draw_vp = m_viewproj;
   m_cam_pos = cam.pos;
+}
+
+void Renderer::set_game_depth(const Mat4* clip) {
+  m_game = clip != nullptr;
+  m_draw_vp = clip ? *clip : m_viewproj;
+}
+
+unsigned Renderer::depth_func(unsigned func) const {
+  if (!m_game) return func;
+  return func == GL_LESS ? GL_GREATER : func == GL_LEQUAL ? GL_GEQUAL : func;
+}
+
+void Renderer::polygon_offset(float factor, float units) const {
+  // toward the camera: a smaller depth, or a larger one over the game view
+  if (m_game) glPolygonOffset(-factor, -units);
+  else glPolygonOffset(factor, units);
 }
 
 void Renderer::begin(const Camera& cam, int x, int y, int w, int h, const RenderSettings& rs,
@@ -525,17 +542,18 @@ void Renderer::circle(const Vec3& center, const Vec3& u, const Vec3& v, float r,
 void Renderer::flush(bool depth_test, bool depth_offset) {
   if (m_lines.empty() && m_tris.empty()) return;
   glUseProgram(m_flat_prog);
-  glUniformMatrix4fv(m_u.flat_mvp, 1, GL_FALSE, m_viewproj.m);
+  glUniformMatrix4fv(m_u.flat_mvp, 1, GL_FALSE, m_draw_vp.m);
   glUniform1f(m_u.flat_alpha, 1.f);
   glUniform4f(m_u.flat_override, 0, 0, 0, 0);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   if (depth_test) glEnable(GL_DEPTH_TEST);
   else glDisable(GL_DEPTH_TEST);
+  glDepthFunc(depth_func(GL_LEQUAL));
   glDepthMask(GL_FALSE);
   if (depth_offset) {
     glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-1.f, -2.f);
+    polygon_offset(-1.f, -2.f);
   }
   glBindVertexArray(m_imm_vao);
   glBindBuffer(GL_ARRAY_BUFFER, m_imm_vbo);
@@ -558,7 +576,7 @@ void Renderer::flush(bool depth_test, bool depth_offset) {
 void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
                           const std::set<uint32_t>& selection, uint32_t hovered) {
   glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
+  glDepthFunc(depth_func(GL_LEQUAL));
   glDisable(GL_CULL_FACE);
 
   // world matrices and visibility of the frame
@@ -585,6 +603,8 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
     for (uint32_t i : members) {
       if (!vis[i]) continue;
       if (!rs.show_actors && cache.actor[i]) continue;
+      // the decor is the game view's (the actors' models and the levels shown for reference are not)
+      if (rs.game_view && !cache.actor[i] && !(cache.reference.size() == cache.count && cache.reference[i])) continue;
       if (rs.frustum_culling && !visible(cache.bounds[i])) {
         stats.nodes_culled++;
         continue;
@@ -632,7 +652,7 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
   m_material_valid = false;
   m_bound_vao = ~0u;
   glUniform1f(m_u.mesh_vcol_scale, rs.vertex_color_scale);
-  glUniformMatrix4fv(m_u.mesh_viewproj, 1, GL_FALSE, m_viewproj.m);
+  glUniformMatrix4fv(m_u.mesh_viewproj, 1, GL_FALSE, m_draw_vp.m);
   glUniform3f(m_u.mesh_fog_color, rs.fog_color[0], rs.fog_color[1], rs.fog_color[2]);
   glUniform1f(m_u.mesh_fog_start, rs.fog_start);
   glUniform1f(m_u.mesh_fog_end, rs.fog_end);
@@ -687,7 +707,7 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
     set_blend(BlendMode::Alpha);
     glEnable(GL_BLEND);
     glDepthMask(GL_FALSE);
-    glDepthFunc(GL_LESS);
+    glDepthFunc(depth_func(GL_LESS));
     glUniform1i(m_u.mesh_fog, 0);
     for (size_t bi = first_reference; bi < buckets.size(); bi++) {
       const Bucket& b = buckets[bi];
@@ -710,7 +730,7 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
         stats.triangles += (size_t)(gp.count / 3) * b.nodes.size();
       }
     }
-    glDepthFunc(GL_LEQUAL);
+    glDepthFunc(depth_func(GL_LEQUAL));
   }
   set_blend(BlendMode::Alpha);
   glDisable(GL_BLEND);
@@ -725,7 +745,7 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
   glUseProgram(m_solid_prog);
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glEnable(GL_POLYGON_OFFSET_LINE);
-  glPolygonOffset(-1.f, -1.f);
+  polygon_offset(-1.f, -1.f);
   glEnable(GL_BLEND);
   for (uint32_t id : selection) {
     int i = scene.index_of(id);
@@ -733,7 +753,7 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
     auto& n = scene.nodes[i];
     if (n.kind != NodeKind::Render || !n.mesh || !vis[i]) continue;
     auto& gm = gpu_mesh(*n.mesh);
-    Mat4 mvp = m_viewproj * worlds[i];
+    Mat4 mvp = m_draw_vp * worlds[i];
     glUniformMatrix4fv(m_u.solid_mvp, 1, GL_FALSE, mvp.m);
     glUniform4f(m_u.solid_color, 1.f, 0.62f, 0.15f, 0.55f);
     glBindVertexArray(gm.vao);
@@ -769,7 +789,7 @@ void Renderer::draw_mesh(Mesh& mesh, const Mat4& world, const std::vector<Materi
   m_instances.assign(1, make_instance(world, tint));
   upload_instances();
   glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
+  glDepthFunc(depth_func(GL_LEQUAL));
   glDisable(GL_CULL_FACE);
   glUseProgram(m_mesh_prog);
   glActiveTexture(GL_TEXTURE0);
@@ -778,7 +798,7 @@ void Renderer::draw_mesh(Mesh& mesh, const Mat4& world, const std::vector<Materi
   m_material_valid = false;
   m_bound_vao = ~0u;
   glUniform1f(m_u.mesh_vcol_scale, rs.vertex_color_scale);
-  glUniformMatrix4fv(m_u.mesh_viewproj, 1, GL_FALSE, m_viewproj.m);
+  glUniformMatrix4fv(m_u.mesh_viewproj, 1, GL_FALSE, m_draw_vp.m);
   glUniform1i(m_u.mesh_fog, 0);  // a single mesh drawn apart (preview, thumbnail): no fog
   // a see-through preview does not hide what is behind it
   const bool ghost = alpha < 1.f;

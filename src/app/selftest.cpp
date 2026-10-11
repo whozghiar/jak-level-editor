@@ -35,6 +35,7 @@
 #include "io/nav_export.h"
 #include "io/prefab_recipes.h"
 #include "io/prefabs.h"
+#include "render/offscreen.h"
 #include "scene/bvh.h"
 #include "scene/shapes.h"
 #include "scene/story.h"
@@ -148,6 +149,23 @@ json read_glb_json(const fs::path& path) {
   std::memcpy(&json_len, &bytes[12], 4);
   if (20 + (size_t)json_len > bytes.size()) return json();
   return json::parse(std::string(bytes.begin() + 20, bytes.begin() + 20 + json_len), nullptr, false);
+}
+
+// The bytes of an accessor of a .glb (its binary chunk)
+std::vector<uint8_t> glb_accessor_bytes(const fs::path& path, const json& glb, int accessor) {
+  std::ifstream f(path, std::ios::binary);
+  std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  if (bytes.size() < 20 || !glb.contains("accessors") || accessor < 0 || accessor >= (int)glb["accessors"].size())
+    return {};
+  uint32_t json_len;
+  std::memcpy(&json_len, &bytes[12], 4);
+  const size_t bin = 20 + (size_t)json_len + 8;
+  const json& a = glb["accessors"][accessor];
+  const json& v = glb["bufferViews"][a.value("bufferView", 0)];
+  const size_t start = bin + v.value("byteOffset", (size_t)0) + a.value("byteOffset", (size_t)0);
+  const size_t len = v.value("byteLength", (size_t)0);
+  if (start + len > bytes.size()) return {};
+  return std::vector<uint8_t>(bytes.begin() + start, bytes.begin() + start + len);
 }
 
 // A level written like ogle-extract writes one: a background with the terrain (tfrag), a decor
@@ -616,9 +634,9 @@ int run_selftest() {
     std::string actors;
     for (const auto& x : town.nodes)
       if (x.kind == NodeKind::Actor) actors += x.name + " ";
-    check(town_opened && actors.find("grunt") == std::string::npos && actors.find("part-spawner") == std::string::npos &&
+    check(town_opened && actors.find("grunt") == std::string::npos && actors.find("part-spawner") != std::string::npos &&
               actors.find("jak-highres") == std::string::npos && node_named("crate-1") && node_named("statue-broken-6"),
-          "level with game data: creatures, logic actors and cutscene characters left out");
+          "level with game data: creatures and cutscene characters left out, its particle effects kept");
     bool pool_model = false;
     if (Node* pool = node_named("pool-5"))
       for (auto c : town.children(pool->id))
@@ -1328,7 +1346,12 @@ int run_selftest() {
     m.name = "stone";
     // blended with its texture's alpha, as the levels' materials nearly all are: still a wall
     m.alpha = AlphaMode::Blend;
+    m.base_color = {2, 2, 2, 2};  // a level's (the PS2's colors)
     const int mat = s.add_material(m);
+    Material glass_mat = m;
+    glass_mat.name = "glass";
+    glass_mat.translucent = true;  // drawn by the game without writing its depth
+    const int glass = s.add_material(glass_mat);
     Node tfrag;
     tfrag.name = "testlvl-tfrag-normal";
     const uint32_t tfrag_id = s.add(tfrag);
@@ -1337,6 +1360,15 @@ int run_selftest() {
     floor_node.kind = NodeKind::Render;
     floor_node.parent = tfrag_id;
     floor_node.mesh = make_floor(mat);
+    {
+      // its lighting in the game: one color, each of its 8 palettes recognizable
+      auto pal = std::make_shared<TodPalette>();
+      for (int k = 0; k < 8; k++) pal->rgba.insert(pal->rgba.end(), {(uint8_t)(10 + k), (uint8_t)(20 + k), (uint8_t)(30 + k), 128});
+      auto tod = std::make_shared<TodColors>();
+      tod->palette = pal;
+      tod->index = {std::vector<uint16_t>(floor_node.mesh->prims[0].pos.size(), 0)};
+      floor_node.tod = tod;
+    }
     const uint32_t floor_id = s.add(floor_node);
     Node col_group;
     col_group.name = "testlvl-collision";
@@ -1355,6 +1387,12 @@ int run_selftest() {
     box.local.t = {10, 0, 0};
     box.local.s = {3, 3, 3};  // 6 m: a piece that collides by its shape
     const uint32_t box_id = s.add(box);
+    Node window;  // see through: the builder's translucent tree
+    window.name = "glass-1";
+    window.kind = NodeKind::Render;
+    window.mesh = make_box("glass", glass);
+    window.local.t = {30, 0, 0};
+    s.add(window);
     Node lamp;  // 2 m: a detail, without collision
     lamp.name = "lamp-1";
     lamp.kind = NodeKind::Render;
@@ -1476,13 +1514,40 @@ int run_selftest() {
     check(surfaces == 2 && floor_ignored && box_collides && lamp_ignored && notes_ok,
           "export: the game's collision one node per surface, the shell not colliding twice, a 6 m box by its "
           "shape, a 2 m lamp without collision");
-    // the game draws the builder's one tree of surfaces: blended ones cut out instead; the decor
+    // a level's blended walls (their depth written) cut out in the builder's solid tree; the decor
     // faces either way, its collision holds from both sides
-    bool none_blended = glb.is_object() && glb.contains("materials");
-    if (none_blended)
-      for (const auto& m : glb["materials"]) none_blended &= m.value("alphaMode", std::string()) != "BLEND";
-    check(none_blended && level.value("double_sided_collide", false),
-          "export: no blended surface (the game would not draw it), the decor's collision from both sides");
+    bool walls_cut = glb.is_object() && glb.contains("materials"), glass_blended = false;
+    if (walls_cut)
+      for (const auto& m : glb["materials"]) {
+        const bool blend = m.value("alphaMode", std::string()) == "BLEND";
+        if (m.value("name", std::string()) == "glass")
+          glass_blended = blend && m.value("extras", json::object()).value("og_blend", std::string()) == "alpha";
+        else
+          walls_cut &= !blend;
+      }
+    check(walls_cut && glass_blended && level.value("double_sided_collide", false),
+          "export: a level's blended walls cut out, its glass in the builder's translucent tree (og_blend), the "
+          "decor's collision from both sides");
+    // the game's lighting: every mesh with the 8 palettes the builder reads, a node's own as it has
+    // them (the floor's), the new geometry's made from its color
+    {
+      bool all_lit = glb.contains("meshes"), floor_exact = false;
+      for (const auto& n : glb.value("nodes", json::array())) {
+        // (the game's collision is not drawn)
+        if (!n.contains("mesh") || n.value("extras", json::object()).value("set_invisible", 0)) continue;
+        for (const auto& p : glb["meshes"][n["mesh"].get<int>()]["primitives"])
+          for (const char* k : {"_SUNRISE", "_MORNING", "_NOON", "_AFTERNOON", "_SUNSET", "_TWILIGHT", "_EVENING", "_GREENSUN"})
+            all_lit &= p["attributes"].contains(k);
+      }
+      for (const auto& n : glb.value("nodes", json::array()))
+        if (n.value("name", std::string()) == "testlvl-floor" && n.contains("mesh")) {
+          const json& p = glb["meshes"][n["mesh"].get<int>()]["primitives"][0];
+          const auto noon = glb_accessor_bytes(dir / "my-test.glb", glb, p["attributes"]["_NOON"].get<int>());
+          floor_exact = noon.size() >= 4 && noon[0] == 12 && noon[1] == 22 && noon[2] == 32 && noon[3] == 255;
+        }
+      if (!all_lit || !floor_exact) std::printf("    all lit %d, the floor's exact %d\n", (int)all_lit, (int)floor_exact);
+      check(all_lit && floor_exact, "export: the 8 palettes of the game's lighting on every mesh, a piece's own exactly");
+    }
     (void)floor_id;
     (void)box_id;
 
@@ -1986,11 +2051,16 @@ int run_selftest() {
   // the guide's animations, drawn in a hidden window: each draws its scene (more than the clear
   // color) and names what it shows with a text of the translations; the Build panel's icons too
   if (SDL_Init(SDL_INIT_VIDEO)) {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    // OpenGL 4.3 like the editor (the game view's shaders), else 3.3
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_Window* window = SDL_CreateWindow("selftest", 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
     SDL_GLContext gl = window ? SDL_GL_CreateContext(window) : nullptr;
+    if (window && !gl) {
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+      gl = SDL_GL_CreateContext(window);
+    }
     ToolDemo demos;
     std::string err;
     if (gl && gladLoadGLLoader(reinterpret_cast<GLADloadproc>(SDL_GL_GetProcAddress)) && demos.init(&err)) {
@@ -2020,6 +2090,89 @@ int run_selftest() {
       check(bad.empty() && demos.draw("no-such-demo", 0, 160, 90, nullptr) == 0 && icons == shape_presets().size(),
             "guide: every tool's animation draws its scene and names what it shows; a shape's icon for each");
       demos.shutdown();
+
+      // the game view: a document made into the game's chunks (a ground lit by a palette of its
+      // own, a box of new geometry lit from its color) and drawn by the game's renderer; a piece
+      // moved makes its chunk again, alone; the game camera places things where the editor's does
+      GameView gv;
+      const char* base = SDL_GetBasePath();
+      std::string gerr;
+      if (gv.init(std::string(base ? base : "") + "game-shaders", &gerr)) {
+        Scene doc;
+        Texture white;
+        white.name = "white";
+        white.width = white.height = 2;
+        white.rgba.assign(16, 255);
+        Material ground_mat;
+        ground_mat.texture = doc.add_texture(white);
+        ground_mat.base_color = {2, 2, 2, 2};  // a game material
+        const int gm = doc.add_material(ground_mat);
+        auto quad = std::make_shared<Mesh>();
+        Primitive& qp = quad->prims.emplace_back();
+        qp.pos = {{-20, 0, -20}, {20, 0, -20}, {20, 0, 20}, {-20, 0, 20}};
+        qp.uv = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+        qp.idx = {0, 1, 2, 0, 2, 3};
+        qp.material = gm;
+        qp.compute_normals();
+        auto palette = std::make_shared<TodPalette>();
+        palette->rgba.assign(32, 0);
+        for (int ch = 0; ch < 4; ch++) palette->rgba[ch] = 128;  // the ambient light alone, 1.0
+        auto tod = std::make_shared<TodColors>();
+        tod->palette = palette;
+        tod->index = {{0, 0, 0, 0}};
+        Node ground;
+        ground.kind = NodeKind::Render;
+        ground.name = "ground";
+        ground.mesh = quad;
+        ground.tod = tod;
+        doc.add(ground);
+        ShapeParams sp;
+        Node box;
+        box.kind = NodeKind::Render;
+        box.name = "box";
+        box.mesh = make_shape(sp, -1);
+        box.local.t = {0, 1, 0};
+        const uint32_t box_id = doc.add(box);
+        doc.begin_frame();
+        OffscreenTarget target;
+        const int tw = 256, th = 144;
+        bool drew = false, moved_alone = false, placed = false;
+        if (target.create(tw, th)) {
+          Camera cam;
+          cam.pos = {0, 8, 25};
+          cam.look_at({0, 0, 0});
+          Mat4 clip;
+          gv.draw_opaque(doc, cam, 0, 0, tw, th, &clip);
+          gv.draw_translucent();
+          const auto px = target.read_rgba();
+          const GameMood& mood = gv.current_mood();
+          size_t lit = 0;
+          for (size_t i = 0; i + 3 < px.size(); i += 4)
+            lit += std::abs(px[i] - mood.sky_color[0]) + std::abs(px[i + 1] - mood.sky_color[1]) +
+                       std::abs(px[i + 2] - mood.sky_color[2]) > 24;
+          drew = gv.stats.chunks == 2 && gv.stats.error.empty() && lit > (size_t)tw * th / 4;
+          doc.find(box_id)->local.t.x += 1.f;
+          doc.begin_frame();
+          gv.draw_opaque(doc, cam, 0, 0, tw, th, &clip);
+          moved_alone = gv.stats.rebuilt == 1 && gv.stats.chunks == 2;
+          const Mat4 editor = cam.proj((float)tw / th) * cam.view();
+          placed = true;
+          for (const Vec3& p : {Vec3{5, 1, -3}, Vec3{-8, 4, 2}, Vec3{0, 0, 0}}) {
+            const Vec4 a = clip * Vec4(p, 1.f), b = editor * Vec4(p, 1.f);
+            placed &= a.w > 0 && std::fabs(a.x / a.w - b.x / b.w) < 1e-3f && std::fabs(a.y / a.w - b.y / b.w) < 1e-3f &&
+                      a.z / a.w > -1 && a.z / a.w < 1;
+          }
+          glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+        if (!drew || !gv.stats.error.empty())
+          std::printf("    chunks %zu, triangles %zu, error '%s'\n", gv.stats.chunks, gv.stats.triangles, gv.stats.error.c_str());
+        check(drew, "game view: the document drawn by the game's renderer, a chunk per palette");
+        check(moved_alone, "game view: a piece moved makes its chunk again, alone");
+        check(placed, "game view: the game's camera places the level where the editor's camera does");
+        gv.shutdown();
+      } else {
+        std::printf("  [skip] game view: %s\n", gerr.c_str());
+      }
     } else {
       std::printf("  [skip] guide animations: no OpenGL 3.3 (%s)\n", gl ? err.c_str() : SDL_GetError());
     }

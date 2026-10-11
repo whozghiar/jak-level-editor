@@ -972,14 +972,30 @@ goos::Object LinkedObjectFile::to_form_script_object(int seg,
         // .symbol xxxx
         result = pretty_print::to_symbol(word.symbol_name());
       } else if (word.kind() == LinkedWord::PLAIN_DATA) {
-        // .word xxxxx
-        result = pretty_print::to_symbol(std::to_string(word.data));
+        // an integer of a list is a fixnum, its value times 8 (ogle-extract: the word was
+        // printed, 1 came out as 8)
+        result = pretty_print::to_symbol((word.data & 7) == 0
+                                             ? std::to_string((s32)word.data >> 3)
+                                             : std::to_string(word.data));
       } else if (word.kind() == LinkedWord::PTR) {
         // might be a sub-list, or some other random pointer
         auto offset = labels.at(word.label_id()).offset;
+        const auto* tag = offset % 4 == 0 && offset >= 4
+                              ? &words_by_seg.at(seg).at(offset / 4 - 1)
+                              : nullptr;
         if ((offset & 7) == 2) {
           // list!
           result = to_form_script(seg, offset / 4, seen);
+        } else if (tag && tag->kind() == LinkedWord::TYPE_PTR && tag->symbol_name() == "bfloat") {
+          // a float of a list: a bfloat, its value after the type tag (ogle-extract: its label
+          // was printed)
+          float f;
+          memcpy(&f, &words_by_seg.at(seg).at(offset / 4).data, 4);
+          std::string text = fmt::format("{}", f);
+          if (text.find_first_of(".en") == std::string::npos) {
+            text += ".0";
+          }
+          result = pretty_print::to_symbol(text);
         } else {
           if (is_string(seg, offset)) {
             result = pretty_print::to_symbol(get_goal_string(seg, offset / 4 - 1));

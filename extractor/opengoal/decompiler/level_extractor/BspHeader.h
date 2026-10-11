@@ -959,6 +959,11 @@ struct BspHeader {
   // jak 3 only
   std::optional<HFragment> hfrag;
 
+  // (region-trees (array drawable-tree-region-prim) :offset 188), jak 3: where the game runs a
+  // script when Jak or the camera goes in or out (load the next level, show it...), as the
+  // level builder's "region_trees" json, in meters. Empty when the level has none.
+  std::string region_trees;
+
   void read_from_file(const decompiler::LinkedObjectFile& file,
                       const decompiler::DecompilerTypeSystem& dts,
                       GameVersion version,

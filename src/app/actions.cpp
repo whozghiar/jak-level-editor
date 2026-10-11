@@ -128,7 +128,8 @@ void remove_subtrees(Scene& scene, std::unordered_set<uint32_t> doomed) {
 }
 
 // What a level file brings, made ready for editing (scene.nodes[first..]): without its creatures
-// and logic actors (without any actor when not `actors`), the terrain locked, a model under each
+// and logic actors (without any actor when not `actors`), but with its particle effects (steam,
+// sparks, lights: part of its look, exported with it), the terrain locked, a model under each
 // actor.
 void prepare_level_nodes(Scene& scene, const AssetLibrary& library, const GameData* data, size_t first,
                          const std::string& group, bool actors = true) {
@@ -143,7 +144,7 @@ void prepare_level_nodes(Scene& scene, const AssetLibrary& library, const GameDa
         // around the level stay (a rope bridge to a hut is part of its shape, not a gameplay item)
         if (data && data->object_family(etype) == "platform") continue;
         doomed.insert(n.id);
-      } else if (data->role(etype) != ActorRole::Object) {
+      } else if (data->role(etype) != ActorRole::Object && !data->is_effect(etype)) {
         doomed.insert(n.id);
       }
     }
@@ -889,6 +890,7 @@ void App::open_project_file(const std::string& path) {
   frame_all();
   set_title();
   LOG_INFO(tr("log.project_opened"), path.c_str());
+  if (const size_t lit = restore_level_lighting()) LOG_INFO(tr("log.lighting_restored"), lit);
 }
 
 void App::save(bool save_as) {
@@ -1064,6 +1066,160 @@ void App::delete_selection() {
   history.push(c.commit(strf(tr("undo.delete"), roots.size())));
   selection.clear();
   primary = 0;
+}
+
+size_t App::restore_level_effects(size_t* left_out) {
+  const GameData* data = document_game_data();
+  if (left_out) *left_out = 0;
+  if (!data) return 0;
+  // the draw groups of an extracted level: <level>-tfrag-*, -tie-*, -shrub-*
+  auto in_decor = [](const Scene& s, const Node& n) {
+    for (const Node* p = n.parent ? s.find(n.parent) : nullptr; p; p = p->parent ? s.find(p->parent) : nullptr)
+      if (p->name.find("-tfrag-") != std::string::npos || p->name.find("-tie-") != std::string::npos ||
+          p->name.find("-shrub-") != std::string::npos)
+        return true;
+    return false;
+  };
+  NodeChange change(scene);
+  size_t added = 0;
+  for (const auto& level : document_levels()) {
+    if (level.reference || (level.role != DocumentLevel::Main && level.role != DocumentLevel::Added)) continue;
+    const LevelEntry* entry = library.level(level.name);
+    if (!entry) continue;
+    Scene original;
+    ImportResult r;
+    std::string err;
+    if (!import_gltf(original, entry->background, ImportOptions{}, &r, &err)) {
+      LOG_WARN("%s: %s", entry->background.c_str(), err.c_str());
+      continue;
+    }
+    // what the document has of that level: its actors by name, its decor where it is
+    std::unordered_set<std::string> actors;
+    std::unordered_map<std::string, AABB> decor;
+    uint32_t actors_group = 0;
+    for (const auto& n : scene.nodes) {
+      if (level_of_node(n.id) != level.group) continue;
+      if (n.kind == NodeKind::Actor) actors.insert(n.name);
+      else if (n.kind == NodeKind::Render && n.mesh && in_decor(scene, n)) decor[n.name] = scene.world_bounds(n);
+      else if (n.kind == NodeKind::Group && n.name == level.name + "-actors") actors_group = n.id;
+    }
+    if (!actors_group) actors_group = level.group;
+    // the decor of the level as the game has it, and whether the document still has each piece
+    struct Piece {
+      AABB box;
+      bool kept;
+    };
+    std::vector<Piece> pieces;
+    for (const auto& n : original.nodes) {
+      if (n.kind != NodeKind::Render || !n.mesh || !in_decor(original, n)) continue;
+      const AABB was = original.world_bounds(n);
+      auto it = decor.find(n.name);
+      const bool kept = it != decor.end() && length(it->second.lo - was.lo) < 0.05f && length(it->second.hi - was.hi) < 0.05f;
+      pieces.push_back({was, kept});
+    }
+    const Mat4 into = actors_group ? scene.world(actors_group).inverse() : Mat4::identity();
+    for (const auto& n : original.nodes) {
+      if (n.kind != NodeKind::Actor || actors.count(n.name)) continue;
+      if (!data->is_effect(n.extras.value("etype", std::string()))) continue;
+      const Mat4 world = original.world(n);
+      const Vec3 at = world.point({0, 0, 0});
+      // the decor it comes out of (within 1.5 m): taken out of the level, the effect goes with it
+      bool near = false, near_kept = false;
+      for (const auto& p : pieces)
+        if (p.box.expanded(1.5f).contains(at)) {
+          near = true;
+          near_kept |= p.kept;
+        }
+      if (near && !near_kept) {
+        if (left_out) (*left_out)++;
+        continue;
+      }
+      Node a = n;
+      a.id = 0;
+      a.parent = actors_group;
+      a.local = Transform::from_matrix(into * world);
+      const Transform w = Transform::from_matrix(world);
+      a.extras["og_origin"] = {w.t.x, w.t.y, w.t.z, w.r.x, w.r.y, w.r.z, w.r.w};
+      scene.add(std::move(a));
+      added++;
+    }
+  }
+  if (added) {
+    history.push(change.commit(strf(tr("undo.restore_effects"), added)));
+    story_document_changed();
+  }
+  return added;
+}
+
+size_t App::restore_level_lighting() {
+  // a piece's place in its level: the names from its draw group (<level>-tfrag-*, -tie-*,
+  // -shrub-*) down to it, and that level
+  auto place = [](const Scene& s, const Node& n, std::string* level) {
+    std::string path = n.name;
+    for (const Node* p = n.parent ? s.find(n.parent) : nullptr; p; p = p->parent ? s.find(p->parent) : nullptr) {
+      path = p->name + "/" + path;
+      for (const char* group : {"-tfrag-", "-tie-", "-shrub-"})
+        if (const size_t at = p->name.find(group); at != std::string::npos && at > 0) {
+          *level = p->name.substr(0, at);
+          return path;
+        }
+    }
+    return std::string();
+  };
+  std::map<std::string, std::vector<size_t>> missing;  // level -> the pieces without their lighting
+  for (size_t i = 0; i < scene.nodes.size(); i++) {
+    const Node& n = scene.nodes[i];
+    if (n.kind != NodeKind::Render || !n.mesh || (n.tod && n.tod->fits(*n.mesh))) continue;
+    std::string level;
+    if (!place(scene, n, &level).empty()) missing[level].push_back(i);
+  }
+  size_t restored = 0;
+  for (const auto& [level, pieces] : missing) {
+    const LevelEntry* entry = library.level(level);
+    if (!entry) continue;
+    Scene original;
+    ImportResult r;
+    std::string err;
+    if (!import_gltf(original, entry->background, ImportOptions{}, &r, &err)) {
+      LOG_WARN("%s: %s", entry->background.c_str(), err.c_str());
+      continue;
+    }
+    std::unordered_map<std::string, std::shared_ptr<const TodColors>> by_place;
+    for (const auto& n : original.nodes) {
+      std::string l;
+      if (n.tod) by_place.emplace(place(original, n, &l), n.tod);
+    }
+    std::unordered_map<std::string, const Node*> originals;
+    for (const auto& n : original.nodes) {
+      std::string l;
+      if (n.tod) originals.emplace(place(original, n, &l), &n);
+    }
+    std::set<int> materials_done;
+    for (size_t i : pieces) {
+      Node& n = scene.nodes[i];
+      std::string l;
+      auto it = by_place.find(place(scene, n, &l));
+      if (it != by_place.end() && it->second->fits(*n.mesh)) {
+        n.tod = it->second;
+        restored++;
+        // and how the game draws its materials, as extracted now (a wall blended with its depth
+        // written, a see-through surface), each material once
+        const Node* o = originals.at(it->first);
+        for (size_t p = 0; p < n.mesh->prims.size() && p < o->mesh->prims.size(); p++) {
+          const int dm = n.mesh->prims[p].material, om = o->mesh->prims[p].material;
+          if (dm < 0 || dm >= (int)scene.materials.size() || om < 0 || om >= (int)original.materials.size() ||
+              !materials_done.insert(dm).second)
+            continue;
+          Material& d = scene.materials[dm];
+          const Material& was = original.materials[om];
+          if (d.name != was.name || d.blend != was.blend) continue;
+          d.translucent = was.translucent;
+          if (d.alpha == AlphaMode::Blend && was.alpha == AlphaMode::Mask) d.alpha = AlphaMode::Mask;
+        }
+      }
+    }
+  }
+  return restored;
 }
 
 void App::copy_selection() {
@@ -1846,6 +2002,8 @@ bool App::export_for_game(const LevelExportOptions& in, LevelExportReport* repor
   LevelExportOptions o = in;
   o.navmeshes.clear();
   o.navmesh_names.clear();
+  // the game's lighting of the levels' decor, for a document made before the extraction kept it
+  if (const size_t lit = restore_level_lighting()) LOG_INFO(tr("log.lighting_restored"), lit);
   world_navmeshes(&o.navmeshes, &o.navmesh_names);
   // the levels as extracted (read once): the pieces of their decor deleted, moved or hidden take the
   // game's collision with them
@@ -1868,6 +2026,9 @@ bool App::export_for_game(const LevelExportOptions& in, LevelExportReport* repor
       }
       if (original) o.originals[level] = original;
     }
+  // the regions of the level replaced, as extracted
+  if (!o.replaces.empty() && o.region_trees.is_null())
+    if (const LevelEntry* entry = library.level(o.replaces)) o.region_trees = entry->region_trees;
   scene.begin_frame();  // the world matrices and what is shown, after the last changes
   LevelExportReport rep;
   if (!export_level_for_game(scene, document_game_data(), o, &rep, error)) return false;

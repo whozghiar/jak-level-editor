@@ -9,6 +9,8 @@
 #include "decompiler/util/Error.h"
 #include "decompiler/util/goal_data_reader.h"
 
+#include "third-party/json.hpp"
+
 namespace level_tools {
 
 void Vector::read_from_file(Ref ref) {
@@ -2109,6 +2111,123 @@ void AdgifShaderArray::read_from_file(TypedRef ref, const decompiler::Decompiler
                     sizeof(AdGifData) * length);
 }
 
+namespace {
+
+Ref at(Ref r, int byte) {
+  r.byte_offset += byte;
+  return r;
+}
+
+// the type tag of the basic a pointer word points to
+Ref basic_at(const Ref& word) {
+  return at(deref_label(word), -4);
+}
+
+float word_float(const Ref& r, int word) {
+  return deref_float(r, word);
+}
+
+s16 half_at(const Ref& r, int byte) {
+  const u32 w = deref_u32(r, byte / 4);
+  return (s16)(byte % 4 ? w >> 16 : w & 0xffff);
+}
+
+// a region's script: a list, as text (empty for #f)
+std::string region_script(const Ref& word_ref) {
+  const auto& word = word_ref.data->words_by_seg.at(word_ref.seg).at(word_ref.byte_offset / 4);
+  if (word.kind() != decompiler::LinkedWord::PTR) {
+    return "";
+  }
+  const auto& lab = word_ref.data->labels.at(word.label_id());
+  if ((lab.offset & 7) != 2) {
+    return "";
+  }
+  return word_ref.data->to_form_script(lab.target_segment, lab.offset / 4, nullptr).print();
+}
+
+nlohmann::json meters(const Ref& r, int word, int count) {
+  auto out = nlohmann::json::array();
+  for (int i = 0; i < count; i++) {
+    out.push_back(word_float(r, word + i) / 4096.f);
+  }
+  return out;
+}
+
+// a face: its plane (the normal, its offset in meters) and its points, a triangle strip
+nlohmann::json region_face(const Ref& data) {
+  auto normal = nlohmann::json::array();
+  for (int i = 0; i < 3; i++) {
+    normal.push_back(word_float(data, i));
+  }
+  normal.push_back(word_float(data, 3) / 4096.f);
+  const u32 n = deref_u32(data, 4);
+  auto points = nlohmann::json::array();
+  for (u32 i = 0; i < n; i++) {
+    points.push_back(meters(data, 8 + 4 * i, 3));
+  }
+  return {{"normal", normal}, {"points", points}};
+}
+
+std::string read_region_trees(const TypedRef& bsp, const decompiler::DecompilerTypeSystem& dts) {
+  if (get_word_kind_for_field(bsp, "region-trees", dts) != decompiler::LinkedWord::PTR) {
+    return "";
+  }
+  // an array: its length @4, a pointer per tree from @16
+  const Ref arr = basic_at(get_field_ref(bsp, "region-trees", dts));
+  const u32 ntrees = deref_u32(arr, 1);
+  nlohmann::json out = nlohmann::json::object();
+  for (u32 t = 0; t < ntrees; t++) {
+    // drawable-tree-region-prim: its length @6, its name @8, its sphere @16, its arrays from @32
+    const Ref tree = basic_at(at(arr, 16 + 4 * t));
+    const auto& name_word = tree.data->words_by_seg.at(tree.seg).at(tree.byte_offset / 4 + 2);
+    const int len = half_at(tree, 6);
+    if (name_word.kind() != decompiler::LinkedWord::SYM_PTR || len < 1) {
+      continue;
+    }
+    auto regions = nlohmann::json::array();
+    // the game reads the last array: the prims, 32 bytes each from @32
+    const Ref leaf = basic_at(at(tree, 32 + 4 * (len - 1)));
+    const int nprims = half_at(leaf, 6);
+    for (int j = 0; j < nprims; j++) {
+      const Ref prim = at(leaf, 32 + 32 * j);
+      const std::string type = get_type_of_basic(prim);
+      // the region it belongs to @8: its id, then its scripts
+      const Ref region = deref_label(at(prim, 8));
+      nlohmann::json r;
+      r["id"] = deref_u32(region, 0);
+      r["bsphere"] = meters(prim, 4, 4);
+      if (type == "drawable-region-face") {
+        r["shape"] = "face";
+        r["face"] = region_face(deref_label(at(prim, 12)));
+      } else if (type == "drawable-region-volume") {
+        r["shape"] = "volume";
+        // region-face-array: its length @4, its faces from @16, 32 bytes each, their data @12
+        const Ref faces = basic_at(at(prim, 12));
+        const u32 nfaces = deref_u32(faces, 1);
+        auto list = nlohmann::json::array();
+        for (u32 f = 0; f < nfaces; f++) {
+          list.push_back(region_face(deref_label(at(faces, 16 + 32 * f + 12))));
+        }
+        r["volume"] = {{"faces", list}};
+      } else {
+        r["shape"] = "sphere";
+      }
+      const char* scripts[3] = {"on-enter", "on-inside", "on-exit"};
+      for (int k = 0; k < 3; k++) {
+        const std::string text = region_script(at(region, 4 + 4 * k));
+        if (!text.empty()) {
+          r[scripts[k]] = text;
+        }
+      }
+      regions.push_back(r);
+    }
+    out[name_word.symbol_name()] = {{"bsphere", meters(tree, 4, 4)}, {"regions", regions}};
+  }
+  return out.empty() ? "" : out.dump();
+}
+
+}  // namespace
+
 void BspHeader::read_from_file(const decompiler::LinkedObjectFile& file,
                                const decompiler::DecompilerTypeSystem& dts,
                                GameVersion version,
@@ -2198,6 +2317,14 @@ void BspHeader::read_from_file(const decompiler::LinkedObjectFile& file,
       hfrag.emplace();
       hfrag->read_from_file(get_and_check_ref_to_basic(ref, "hfrag-drawable", "hfragment", dts),
                             dts);
+    }
+  }
+
+  if (version == GameVersion::Jak3) {
+    try {
+      region_trees = read_region_trees(ref, dts);
+    } catch (const std::exception& e) {
+      lg::warn("{}: regions not read: {}", name, e.what());
     }
   }
 }

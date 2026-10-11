@@ -3,7 +3,7 @@
 //   open-goal-level-editor [project.glb] [--library <folder>] [--lang en|fr]
 //   open-goal-level-editor --screenshot <level|disc|-> <image.png> [setup] [--size WxH] [--library <folder>]
 //                          [--lang code] [--camera x,y,z,yaw,pitch] [--story off|<step>|<node>]
-//                          [--select a,b,...] [--add a,b,...]
+//                          [--select a,b,...] [--add a,b,...] [--game <hour>]
 //   open-goal-level-editor --mcp [--remote-port <port>]
 //   open-goal-level-editor --selftest
 
@@ -69,7 +69,8 @@ void usage() {
       "                                       window and its report), extract (<in> = an .iso or a disc\n"
       "                                       folder), help; --story: every state, a step, or just after a task\n"
       "                                       node; --select: the elements select, scale and prefab use;\n"
-      "                                       --add: levels added to the one loaded\n"
+      "                                       --add: levels added to the one loaded; --game <hour>: the\n"
+      "                                       game view (the game's renderer) at that hour of the day\n"
       "  --mcp                                an MCP server (stdin/stdout) giving an assistant the editor's\n"
       "                                       tools; it starts the editor when none is running\n"
       "  --remote-port <port>                 the editor's port for the MCP server (47821; 0: none)\n"
@@ -111,6 +112,8 @@ int main(int argc, char** argv) {
       opts.select = next();
     } else if (a == "--add") {
       opts.add = next();
+    } else if (a == "--game") {
+      opts.game_hour = (float)std::atof(next().c_str());
     } else if (a == "--size") {
       std::string s = next();
       std::sscanf(s.c_str(), "%dx%d", &width, &height);

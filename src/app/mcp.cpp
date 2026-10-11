@@ -322,8 +322,12 @@ json tools() {
             {"pitch_deg", num("negative looks down")},
             {"frame", {{"description", "'all', 'selection' or a list of ids"}}}}),
       tool("capture_view",
-           "A picture of the 3D view from the editor's camera (PNG), to see the result of what was placed.",
-           {{"width", integer("pixels, 960 by default")}, {"height", integer("pixels, 600 by default")}}),
+           "A picture of the 3D view from the editor's camera (PNG), to see the result of what was placed. With "
+           "game_hour, the level as the game draws it (the game's renderer, its lighting at that hour of the day, its "
+           "fog): what the exported level will look like in the game.",
+           {{"width", integer("pixels, 960 by default")},
+            {"height", integer("pixels, 600 by default")},
+            {"game_hour", num("0..24: the game view at that hour (12: noon, 22: night)")}}),
       tool("select",
            "Selects elements in the editor, to show them to the user; or a whole level (level: its name), to move "
            "it with transform_nodes on the selection's ids.",
@@ -342,6 +346,10 @@ json tools() {
            {{"path", str("where to save")}}),
       tool("open_project", "Opens a project (.glb) saved before.",
            {{"path", str("the .glb file")}, {"discard_changes", discard}}, {"path"}),
+      tool("restore_effects",
+           "Adds back the particle effects of the document's levels as the game has them (steam, sparks, lights), "
+           "where the document has none (a project made before the editor kept them, effects deleted); not those "
+           "whose decor was taken out of the level. Returns how many were added and left out. Undoable."),
       tool("undo", "Undoes the last change of the document."),
       tool("redo", "Redoes the last change undone."),
   });

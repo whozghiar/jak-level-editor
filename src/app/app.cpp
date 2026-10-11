@@ -80,8 +80,13 @@ bool App::init_window(bool hidden, int w, int h) {
     return false;
   }
   m_hidden = hidden;
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  // OpenGL 4.3 (4.1 on macOS) for the game's renderer (the game view), else 3.3 without it
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+#ifdef __APPLE__
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+#else
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+#endif
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
@@ -98,6 +103,11 @@ bool App::init_window(bool hidden, int w, int h) {
     return false;
   }
   m_gl = SDL_GL_CreateContext(m_window);
+  if (!m_gl) {
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    m_gl = SDL_GL_CreateContext(m_window);
+  }
   if (!m_gl) {
     LOG_ERROR("no OpenGL 3.3 context: %s", SDL_GetError());
     return false;
@@ -123,10 +133,17 @@ bool App::init_window(bool hidden, int w, int h) {
     LOG_ERROR("renderer: %s", err.c_str());
     return false;
   }
+  // the game's renderer, its shaders next to the executable
+  const char* base = SDL_GetBasePath();
+  if (!game_view.init(std::string(base ? base : "") + "game-shaders", &game_view_error)) {
+    LOG_WARN(tr("log.game_view_unavailable"), game_view_error.c_str());
+    game_view_on = false;
+  }
   return true;
 }
 
 void App::shutdown_window() {
+  game_view.shutdown();
   thumbs.shutdown();
   demos.shutdown();
   renderer.shutdown();
@@ -162,6 +179,7 @@ void App::new_document() {
   m_prefab_meshes.clear();
   m_prefab_previews.clear();
   renderer.reset();
+  game_view.reset();
   m_ocean.reset();
   m_ocean_map.clear();
   story_steps.clear();
@@ -299,12 +317,28 @@ void App::frame(float dt) {
   if (history.revision() != m_frame_revision || gizmo.active() || ImGui::IsAnyItemActive()) scene.begin_frame();
   m_frame_revision = history.revision();
   set_ocean_backdrop();
-  renderer.begin(camera, px, py, pw, ph, rs, m_vp_w, m_vp_h);
-  renderer.draw_scene(scene, rs, selection, hovered);
+  // the game view: the decor drawn by the game's renderer, the editor's things over it with the
+  // game's camera and depth
+  const bool game = game_view_on && game_view.ready() && document_open();
+  RenderSettings view_rs = rs;
+  if (game) {
+    view_rs.game_view = true;
+    view_rs.show_grid = false;
+    view_rs.far_ocean = false;
+  }
+  renderer.begin(camera, px, py, pw, ph, view_rs, m_vp_w, m_vp_h);
+  if (game) {
+    Mat4 clip;
+    game_view.draw_opaque(scene, camera, px, py, pw, ph, &clip);
+    renderer.set_game_depth(&clip);
+  }
+  renderer.draw_scene(scene, view_rs, selection, hovered);
+  if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && !scene.nodes.empty())
-    renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, rs);
+    renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, view_rs);
   draw_navmesh_overlay();
   draw_tool_overlays();
+  renderer.set_game_depth(nullptr);
   glViewport(0, 0, fbw, fbh);
 
   ImGui::Render();
@@ -700,6 +734,8 @@ void App::handle_shortcuts() {
   } else if (pressed(ImGuiKey_F1)) {
     show_help = !show_help;
     guide_tab_request = 0;
+  } else if (!ctrl && pressed(ImGuiKey_G) && game_view.ready()) {
+    game_view_on = !game_view_on;
   }
 }
 
@@ -736,6 +772,10 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
     fs::remove_all(tmp, ec);
     apply_options(opts);
     new_document();
+    if (opts.game_hour >= 0) {
+      game_view_on = game_view.ready();
+      game_view.mood.hour = opts.game_hour;
+    }
     m_prefab_dir_override = (tmp / "prefabs").generic_string();
     refresh_prefabs();
     const bool project_in = in.size() > 4 && (in.compare(in.size() - 4, 4, ".glb") == 0 ||

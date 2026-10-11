@@ -46,6 +46,9 @@ struct LevelEntry {
   int actors = 0;          // level.json
   int collision_triangles = -1;  // level.json, -1 when it does not say
   json actor_types;        // level.json: per actor type, how many and the data of the first one
+  // level.json: where the game runs a script when Jak or the camera goes in or out (the levels it
+  // loads and shows around this one), as the level builder's "region_trees"; null when unknown
+  json region_trees;
   int64_t mtime = 0;       // date of the background file
   bool listed = true;      // shown in the Levels panel (see App::set_library)
 };

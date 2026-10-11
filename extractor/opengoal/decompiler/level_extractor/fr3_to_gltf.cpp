@@ -294,6 +294,80 @@ u8 lit_color(const tfrag3::PackedTimeOfDay& tod, int color, int channel) {
 }
 
 /*!
+ * Data in a buffer of its own, not a vertex attribute. Return the index of the accessor.
+ */
+int add_data_accessor(tinygltf::Model& model,
+                      const void* data,
+                      size_t bytes,
+                      size_t count,
+                      int component_type,
+                      int type) {
+  int buffer_idx = (int)model.buffers.size();
+  auto& buffer = model.buffers.emplace_back();
+  buffer.data.resize(bytes);
+  memcpy(buffer.data.data(), data, bytes);
+  int buffer_view_idx = (int)model.bufferViews.size();
+  auto& buffer_view = model.bufferViews.emplace_back();
+  buffer_view.buffer = buffer_idx;
+  buffer_view.byteOffset = 0;
+  buffer_view.byteLength = bytes;
+  int accessor_idx = (int)model.accessors.size();
+  auto& accessor = model.accessors.emplace_back();
+  accessor.bufferView = buffer_view_idx;
+  accessor.byteOffset = 0;
+  accessor.componentType = component_type;
+  accessor.count = count;
+  accessor.type = type;
+  return accessor_idx;
+}
+
+/*!
+ * The game's lighting (Jak II, Jak 3), for the editor and the level builder: the game mixes 8
+ * palettes per color (ambient, the sun's directions, the lamps of each area...) with weights it
+ * sets every frame. A tree's colors: 8 RGBA each, color c's palette k at c * 8 + k.
+ */
+int add_tod_palette(tinygltf::Model& model, const std::vector<u8>& rgba8) {
+  return add_data_accessor(model, rgba8.data(), rgba8.size(), rgba8.size() / 4,
+                           TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE, TINYGLTF_TYPE_VEC4);
+}
+
+std::vector<u8> tod_bytes(const tfrag3::PackedTimeOfDay& tod) {
+  const u32 colors = (u32)tod.data.size() / 32;
+  std::vector<u8> out(colors * 32);
+  for (u32 c = 0; c < colors; c++) {
+    for (int k = 0; k < 8; k++) {
+      for (int ch = 0; ch < 4; ch++) {
+        out[(c * 8 + k) * 4 + ch] = tod.read(c, k, ch);
+      }
+    }
+  }
+  return out;
+}
+
+int add_tod_index(tinygltf::Model& model, const std::vector<u16>& index) {
+  return add_data_accessor(model, index.data(), index.size() * sizeof(u16), index.size(),
+                           TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT, TINYGLTF_TYPE_SCALAR);
+}
+
+/*!
+ * A node's lighting: the palette color of each vertex of its mesh (an accessor of add_tod_index,
+ * aligned with the POSITION accessor of its primitives), as node extras og_tod: {"palette":
+ * accessor, "index": [an accessor per primitive]}.
+ */
+void set_node_tod(tinygltf::Model& model, int node_idx, int palette, int index, size_t prims) {
+  tinygltf::Value::Object tod;
+  tod["palette"] = tinygltf::Value(palette);
+  tod["index"] = tinygltf::Value(tinygltf::Value::Array(prims, tinygltf::Value(index)));
+  auto& node = model.nodes.at(node_idx);
+  tinygltf::Value::Object extras;
+  if (node.extras.IsObject()) {
+    extras = node.extras.Get<tinygltf::Value::Object>();
+  }
+  extras["og_tod"] = tinygltf::Value(std::move(tod));
+  node.extras = tinygltf::Value(std::move(extras));
+}
+
+/*!
  * Set up a buffer of vertex colors for tfrag (lit_color).
  */
 int make_color_buffer_accessor(const std::vector<tfrag3::PreloadedVertex>& vertices,
@@ -695,7 +769,12 @@ int add_material_for_tex(const tfrag3::Level& level,
   mat.pbrMetallicRoughness.baseColorTexture.index = add_gltf_texture(
       model, add_image_for_tex(level, model, tex_idx, tex_image_map, TexImageKind::RGBA),
       tex.debug_name, draw_mode);
-  mat.alphaMode = draw_mode.get_ab_enable() ? "BLEND" : "MASK";
+  // (Cs - Cs) * As + Cs blends nothing: the texture as it is, its texels under the reference cut
+  // out (ogle-extract)
+  mat.alphaMode = draw_mode.get_ab_enable() &&
+                          draw_mode.get_alpha_blend() != DrawMode::AlphaBlend::SRC_SRC_SRC_SRC
+                      ? "BLEND"
+                      : "MASK";
   // the foreground and background renderers both use this cutoff
   mat.alphaCutoff = (float)0x26 / 255.f;
   // glTF blends with the source alpha only: the other PS2 blends go to extras.og_blend
@@ -721,9 +800,22 @@ int add_material_for_tex(const tfrag3::Level& level,
         break;
     }
   }
-  if (og_blend) {
+  // the game blends most of a level's surfaces and writes their depth (the alpha test makes the
+  // holes): those are walls. The ones whose texels failing the alpha test are still drawn, without
+  // their depth (the translucent and water trees: afail FB_ONLY), are seen through (glass, water,
+  // light shafts): extras.og_translucent (ogle-extract)
+  const bool translucent =
+      mat.alphaMode == "BLEND" &&
+      (!draw_mode.get_depth_write_enable() ||
+       (draw_mode.get_at_enable() && draw_mode.get_alpha_fail() == GsTest::AlphaFail::FB_ONLY));
+  if (og_blend || translucent) {
     tinygltf::Value::Object extras;
-    extras["og_blend"] = tinygltf::Value(std::string(og_blend));
+    if (og_blend) {
+      extras["og_blend"] = tinygltf::Value(std::string(og_blend));
+    }
+    if (translucent) {
+      extras["og_translucent"] = tinygltf::Value(true);
+    }
     mat.extras = tinygltf::Value(extras);
   }
   // metallic is reserved for the envmap strength below
@@ -798,6 +890,15 @@ void add_tfrag(const tfrag3::Level& level,
   int position_buffer_accessor = make_position_buffer_accessor(tfrag.unpacked.vertices, model);
   int texture_buffer_accessor = make_tex_buffer_accessor(tfrag.unpacked.vertices, model, 1.f);
   int color_accessor = make_color_buffer_accessor(tfrag.unpacked.vertices, model, tfrag, 0);
+  const int tod_palette = add_tod_palette(model, tod_bytes(tfrag.colors));
+  int tod_index;
+  {
+    std::vector<u16> tod;
+    for (const auto& v : tfrag.unpacked.vertices) {
+      tod.push_back(v.color_index);
+    }
+    tod_index = add_tod_index(model, tod);
+  }
 
   std::vector<u32> unstripped, old_to_new;
   unstrip_tfrag_tie(tfrag.unpacked.indices, positions, unstripped, old_to_new);
@@ -944,6 +1045,7 @@ void add_tfrag(const tfrag3::Level& level,
       prim.attributes["COLOR_0"] = color_accessor;
       prim.mode = TINYGLTF_MODE_TRIANGLES;
     }
+    set_node_tod(model, c_node_idx, tod_palette, tod_index, by_draw.size());
   }
 }
 
@@ -2231,25 +2333,28 @@ struct ProtoInstance {
  * (in the prototype's space), and one node per instance with its matrix. The instances of a
  * prototype share its mesh: an editor selects and moves each one.
  */
-template <typename VertexFn, typename ColorFn>
+template <typename VertexFn, typename ColorFn, typename TodFn>
 void emit_instanced_proto(tinygltf::Model& model,
                           int parent,
                           const std::string& name,
                           const std::vector<ProtoInstance>& instances,
                           const std::vector<std::array<math::Vector4f, 4>>& matrices,
                           VertexFn&& packed_vertex,  // (u32 packed, float pos[3], float st[2])
-                          ColorFn&& unpacked_color) {  // (u32 unpacked, float rgba[4])
+                          ColorFn&& unpacked_color,  // (u32 unpacked, float rgba[4])
+                          int tod_palette,           // the tree's palettes (add_tod_palette)
+                          TodFn&& unpacked_tod) {    // (u32 unpacked) -> its color in them
   int group_idx = (int)model.nodes.size();
   model.nodes.emplace_back().name = name;
   model.nodes[parent].children.push_back(group_idx);
 
-  std::map<std::map<int, std::vector<u32>>, int> mesh_of_geometry;
+  // geometry -> its mesh, and the packed vertices of its vertex arrays in their order
+  std::map<std::map<int, std::vector<u32>>, std::pair<int, std::vector<u32>>> mesh_of_geometry;
   int count = 0;
   for (const auto& inst : instances) {
     auto found = mesh_of_geometry.find(inst.tris);
     int mesh_idx;
     if (found != mesh_of_geometry.end()) {
-      mesh_idx = found->second;
+      mesh_idx = found->second.first;
     } else {
       // the vertices this geometry uses, renumbered
       std::map<u32, u32> local;
@@ -2295,8 +2400,19 @@ void emit_instanced_proto(tinygltf::Model& model,
         prim.attributes["COLOR_0"] = col_acc;
         prim.mode = TINYGLTF_MODE_TRIANGLES;
       }
-      mesh_of_geometry.emplace(inst.tris, mesh_idx);
+      std::vector<u32> order;
+      for (const auto& [v, idx] : local) {
+        order.push_back(v);
+      }
+      mesh_of_geometry.emplace(inst.tris, std::make_pair(mesh_idx, std::move(order)));
     }
+    // the instance's own lighting: the instances of a prototype share its mesh, not their colors
+    std::vector<u16> tod;
+    for (u32 v : mesh_of_geometry.at(inst.tris).second) {
+      auto u = inst.unpacked_of.find(v);
+      tod.push_back(u != inst.unpacked_of.end() ? unpacked_tod(u->second) : 0);
+    }
+    const int tod_index = add_tod_index(model, tod);
     int node_idx = (int)model.nodes.size();
     auto& node = model.nodes.emplace_back();
     node.name = fmt::format("{}-{}", name, count++);
@@ -2305,6 +2421,7 @@ void emit_instanced_proto(tinygltf::Model& model,
       node.matrix = instance_matrix(matrices[inst.matrix_idx]);
     }
     model.nodes[group_idx].children.push_back(node_idx);
+    set_node_tod(model, node_idx, tod_palette, tod_index, inst.tris.size());
   }
 }
 
@@ -2323,6 +2440,7 @@ void add_tie_instanced(const tfrag3::Level& level,
   int node_idx = (int)model.nodes.size();
   model.nodes.emplace_back().name = fmt::format("{}-tie-{}", level.level_name, tree_idx);
   model.scenes.at(0).nodes.push_back(node_idx);
+  const int tod_palette = add_tod_palette(model, tod_bytes(tie.colors));
 
   // unpacked vertex -> the matrix group it was unpacked by (tie.unpack() walks them in order)
   const auto& groups = tie.packed_vertices.matrix_groups;
@@ -2424,7 +2542,8 @@ void add_tie_instanced(const tfrag3::Level& level,
             rgba[j] = lit_color(tie.colors, v.color_index, j) / 255.f;
           }
           rgba[3] = 1.f;
-        });
+        },
+        tod_palette, [&](u32 unpacked) { return tie.unpacked.vertices.at(unpacked).color_index; });
   }
 
   // wind instances: one node each, its primitives on the tree's vertex arrays
@@ -2469,6 +2588,15 @@ void add_tie_instanced(const tfrag3::Level& level,
         prim.mode = TINYGLTF_MODE_TRIANGLES;
       }
     }
+    std::vector<u16> tod;
+    for (const auto& v : tie.unpacked.vertices) {
+      tod.push_back(v.color_index);
+    }
+    const int tod_index = add_tod_index(model, tod);
+    for (int c : model.nodes[wind_group].children) {
+      set_node_tod(model, c, tod_palette, tod_index,
+                   model.meshes.at(model.nodes[c].mesh).primitives.size());
+    }
   }
 }
 
@@ -2487,6 +2615,11 @@ void add_shrub_instanced(const tfrag3::Level& level,
   int node_idx = (int)model.nodes.size();
   model.nodes.emplace_back().name = fmt::format("{}-shrub-{}", level.level_name, tree_idx);
   model.scenes.at(0).nodes.push_back(node_idx);
+  // the shrubs' lighting as tfrag's (the builder makes them tfrag): the shrub renderer multiplies
+  // a color of the tree's palettes by the vertex's own, and by 4 where tfrag doubles it
+  std::unordered_map<u64, u16> shrub_colors;
+  std::vector<u8> tod;
+  const int tod_palette = -1;  // set once every color is met
 
   // unpacked vertex -> the instance group it was unpacked by (shrub.unpack() walks them in order)
   const auto& groups = shrub.packed_vertices.instance_groups;
@@ -2547,7 +2680,41 @@ void add_shrub_instanced(const tfrag3::Level& level,
             rgba[j] = lit_color(shrub.time_of_day_colors, v.color_index, j) / 255.f;
           }
           rgba[3] = 1.f;
+        },
+        tod_palette, [&](u32 unpacked) {
+          // a color of the tree's palettes times the vertex's own, once per pair
+          const auto& v = shrub.unpacked.vertices.at(unpacked);
+          const u64 key = v.color_index | (u64)v.rgba_base[0] << 16 | (u64)v.rgba_base[1] << 24 |
+                          (u64)v.rgba_base[2] << 32;
+          auto [it, fresh] = shrub_colors.emplace(key, (u16)shrub_colors.size());
+          if (fresh) {
+            for (int k = 0; k < 8; k++) {
+              for (int ch = 0; ch < 4; ch++) {
+                const u32 c = shrub.time_of_day_colors.read(v.color_index, k, ch);
+                tod.push_back(ch == 3 ? (u8)c : (u8)std::min<u32>(255, c * v.rgba_base[ch] * 2 / 255));
+              }
+            }
+          }
+          return it->second;
         });
+  }
+  // the palettes of the colors met (written after the instances, which met them)
+  std::vector<int> palette_users;
+  for (int c : model.nodes[node_idx].children) {
+    for (int inst : model.nodes[c].children) {
+      palette_users.push_back(inst);
+    }
+  }
+  const int palette = add_tod_palette(model, tod);
+  for (int inst : palette_users) {
+    auto& extras = model.nodes[inst].extras;
+    if (extras.IsObject()) {
+      auto obj = extras.Get<tinygltf::Value::Object>();
+      auto tod_obj = obj["og_tod"].Get<tinygltf::Value::Object>();
+      tod_obj["palette"] = tinygltf::Value(palette);
+      obj["og_tod"] = tinygltf::Value(std::move(tod_obj));
+      extras = tinygltf::Value(std::move(obj));
+    }
   }
 }
 

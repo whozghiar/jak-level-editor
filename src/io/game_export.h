@@ -52,6 +52,9 @@ struct LevelExportOptions {
   // deleted, moved or hid lose the game's collision there (game_collision); a level without one
   // keeps all of its collision
   std::map<std::string, std::shared_ptr<const Scene>> originals;
+  // the regions of the level replaced (its level.json, region_trees): the game loads and shows the
+  // levels around it by them
+  json region_trees;
   // the document's nav meshes, in the game's space (origin: the center of their corners)
   std::vector<NavMeshData> navmeshes;
   std::vector<std::string> navmesh_names;
@@ -76,6 +79,7 @@ struct LevelExportReport {
   // the places of its floors where Jak would meet more collision than the game gathers at once
   // (461 triangles): he can fall through there
   size_t dense_places = 0;
+  size_t regions = 0;      // of the level replaced (region_trees)
   std::string code_file;  // that code, <name>-obs.gc ("" when none)
   std::vector<ExportNote> notes;
 };

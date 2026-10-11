@@ -69,6 +69,33 @@ file(GLOB OGLE_RECAST_SOURCES CONFIGURE_DEPENDS "${TP}/recast/Source/*.cpp")
 add_library(ogle_recast STATIC ${OGLE_RECAST_SOURCES})
 target_include_directories(ogle_recast PUBLIC "${TP}/recast/Include")
 
+# The game's renderer: OpenGOAL's, vendored in extractor/opengoal with jak-project's paths (ISC
+# license, extractor/opengoal/LICENSE): the background renderers the game view draws the level with
+# (src/game_view), and the common code they need. Its shaders are copied next to the editor.
+set(OG "${CMAKE_CURRENT_SOURCE_DIR}/extractor/opengoal")
+add_library(ogle_game_render STATIC
+  "${OG}/game/graphics/opengl_renderer/background/TFragment.cpp"
+  "${OG}/game/graphics/opengl_renderer/background/background_common.cpp"
+  "${OG}/game/graphics/opengl_renderer/BucketRenderer.cpp"
+  "${OG}/game/graphics/opengl_renderer/Shader.cpp"
+  "${OG}/game/graphics/opengl_renderer/dma_helpers.cpp"
+  "${OG}/common/custom_data/TFrag3Data.cpp"
+  "${OG}/common/dma/dma.cpp"
+  "${OG}/common/dma/gs.cpp"
+  "${OG}/common/util/Timer.cpp"
+  "${OG}/third-party/fmt/src/format.cc")
+# the editor's root: the vendored code includes third-party/glad and third-party/imgui from there
+target_include_directories(ogle_game_render PUBLIC "${OG}" "${OG}/third-party/fmt/include"
+                           "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(ogle_game_render PUBLIC ogle_glad ogle_imgui)
+if(WIN32)
+  target_compile_definitions(ogle_game_render PUBLIC NOMINMAX _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN)
+endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  # jak-project's own warnings stay its own; the time of day is mixed with SSE4.1 (like the game)
+  target_compile_options(ogle_game_render PRIVATE -w -msse4.1)
+endif()
+
 # ---------------------------------------------------------------------------------------------
 # The editor
 # ---------------------------------------------------------------------------------------------
@@ -81,7 +108,8 @@ target_include_directories(open-goal-level-editor PRIVATE
   "${TP}/tinygltf"
   "${TP}/json"
   "${TP}/stb")
-target_link_libraries(open-goal-level-editor PRIVATE ogle_imgui ogle_glad ogle_recast ${OGLE_SDL_TARGET})
+target_link_libraries(open-goal-level-editor PRIVATE ogle_imgui ogle_glad ogle_recast ogle_game_render
+                      ${OGLE_SDL_TARGET})
 # the default folder of the extracted games: library/ in the editor's source tree (ignored by git)
 target_compile_definitions(open-goal-level-editor PRIVATE OGLE_PROJECT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -104,10 +132,13 @@ set_target_properties(open-goal-level-editor PROPERTIES
 # at every build (not only when the editor is linked again), without the files removed since
 add_custom_target(ogle_resources ALL
   COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_BINARY_DIR}/bin/lang" "${CMAKE_BINARY_DIR}/bin/data"
+          "${CMAKE_BINARY_DIR}/bin/game-shaders"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/lang"
           "${CMAKE_BINARY_DIR}/bin/lang"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data"
-          "${CMAKE_BINARY_DIR}/bin/data")
+          "${CMAKE_BINARY_DIR}/bin/data"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${OG}/game/graphics/opengl_renderer/shaders"
+          "${CMAKE_BINARY_DIR}/bin/game-shaders")
 add_dependencies(open-goal-level-editor ogle_resources)
 
 # ---------------------------------------------------------------------------------------------

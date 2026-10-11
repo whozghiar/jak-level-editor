@@ -130,6 +130,64 @@ std::string guess_type(const json& v) {
   return "";
 }
 
+// --- regions -------------------------------------------------------------------------------------
+
+// A script of a region as the builder writes it: its integers as floats (the builder would make
+// them a basic, where the game has a fixnum; the commands read a float as well)
+std::string builder_script(const std::string& script) {
+  std::string out;
+  bool in_string = false;
+  for (size_t i = 0; i < script.size(); i++) {
+    const char c = script[i];
+    if (c == '"' && (i == 0 || script[i - 1] != '\\')) in_string = !in_string;
+    const bool start = !in_string && (std::isdigit((unsigned char)c) || (c == '-' && i + 1 < script.size() &&
+                                                                       std::isdigit((unsigned char)script[i + 1]))) &&
+                       (i == 0 || script[i - 1] == ' ' || script[i - 1] == '(');
+    if (!start) {
+      out += c;
+      continue;
+    }
+    size_t end = i + 1;
+    while (end < script.size() && script[end] != ' ' && script[end] != ')') end++;
+    std::string token = script.substr(i, end - i);
+    const bool integer = token.find_first_not_of("-0123456789") == std::string::npos;
+    out += integer ? token + ".0" : token;
+    i = end - 1;
+  }
+  return out;
+}
+
+// The regions for the builder: one prim per id (a region of the game with several faces gets a new
+// id for each other face, from `next_id`), the scripts as it writes them
+json builder_regions(const json& trees, uint32_t next_id, size_t* count) {
+  json out = json::object();
+  std::set<uint32_t> taken;
+  for (const auto& [name, tree] : trees.items())
+    if (tree.is_object() && tree.contains("regions"))
+      for (const auto& r : tree["regions"]) taken.insert(r.value("id", 0u));
+  std::set<uint32_t> seen;
+  for (const auto& [name, tree] : trees.items()) {
+    if (!tree.is_object() || !tree.contains("bsphere") || !tree.contains("regions")) continue;
+    json regions = json::array();
+    for (json r : tree["regions"]) {
+      uint32_t id = r.value("id", 0u);
+      if (!seen.insert(id).second) {
+        while (taken.count(next_id)) next_id++;
+        id = next_id++;
+        taken.insert(id);
+        seen.insert(id);
+      }
+      r["id"] = id;
+      for (const char* k : {"on-enter", "on-inside", "on-exit"})
+        if (r.contains(k) && r[k].is_string()) r[k] = builder_script(r[k].get<std::string>());
+      regions.push_back(r);
+    }
+    if (count) *count += regions.size();
+    out[name] = {{"bsphere", tree["bsphere"]}, {"regions", regions}};
+  }
+  return out;
+}
+
 // --- the level's definition in the game's code ---------------------------------------------------
 
 std::string meters(float v) { return "(meters " + num(v) + ")"; }
@@ -937,9 +995,28 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   size_t kill_masks = 0;
   std::string generated;                // the code of the level (<name>-obs.gc)
   std::vector<std::string> code_files;  // the code of the game the level needs, in order
+  // The code the game already has around the level replaced: the levels it shows with it (its
+  // neighbors, the levels of its continue points; an alias of a level, as ctywide-kg, is that
+  // level, ctywide). The DGO does not bring it again (the effects of the city draw particle
+  // groups of ctywide-part, which needs the code of the whole city).
+  std::set<std::string> loaded_around;
+  if (replaced && data) {
+    std::set<std::string> around(replaced->neighbors.begin(), replaced->neighbors.end());
+    for (const auto& c : replaced->continues) around.insert(c.shows.begin(), c.shows.end());
+    around.erase(o.replaces);
+    for (std::string name : around) {
+      const LevelInfo* l = data->level(name);
+      while ((!l || l->code.empty()) && name.find('-') != std::string::npos) {
+        name = name.substr(0, name.rfind('-'));
+        l = data->level(name);
+      }
+      if (l && name != o.replaces) loaded_around.insert(l->code.begin(), l->code.end());
+    }
+  }
   auto need = [&](const std::vector<std::string>& files) {
     for (const auto& f : files)
-      if (std::find(code_files.begin(), code_files.end(), f) == code_files.end()) code_files.push_back(f);
+      if (!loaded_around.count(f) && std::find(code_files.begin(), code_files.end(), f) == code_files.end())
+        code_files.push_back(f);
   };
   // the level replaced: its own code (its particles, its objects, what its missions spawn there)
   if (replaced) need(replaced->code);
@@ -1167,6 +1244,16 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     nav_line = "  \"nav_data\": \"" + install_dir + o.name + "-nav.json\",\n";
   }
 
+  // the regions of the level replaced: the levels the game loads and shows around it
+  std::string regions_line;
+  if (replacing && o.region_trees.is_object() && !o.region_trees.empty()) {
+    const json regions = builder_regions(o.region_trees, base_id + 2000, &rep.regions);
+    regions_line = "  // where the game loads and shows the levels around this one (the level replaced's)\n"
+                   "  \"region_trees\": " + regions.dump() + ",\n";
+  } else if (replacing) {
+    notes.add("export.note.regions_missing", o.replaces);
+  }
+
   // the level for the builder
   const bool auto_walls = rep.collision_from_decor > 0 || !o.game_collision;
   std::ostringstream j;
@@ -1187,7 +1274,7 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     << "  \"base_id\": " << base_id << ",\n"
     << "  \"base_region_id\": " << base_id << ",\n"
     << "  \"cameras\": [],\n"
-    << nav_line << "  \"custom_models\": [],\n"
+    << regions_line << nav_line << "  \"custom_models\": [],\n"
     << "  \"textures\": [],\n"
     << "  \"art_groups\": [";
   {
@@ -1324,6 +1411,15 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   if (rep.navmeshes)
     md << "- The nav meshes are in `" << o.name << "-nav.json` (`nav_data` of the level): OpenGOAL's level builder\n"
        << "  for Jak 3 writes them in the level only when it reads `nav_data` (see the editor's README).\n";
+  md << "- The lighting of the decor is the game's: the 8 palettes of each vertex (`_SUNRISE`...), which the\n"
+     << "  game mixes with the hour of the day and the level's lights; the pieces made in the editor are lit\n"
+     << "  like the level's from their color.\n"
+     << "- The surfaces seen through (stains, decals, glass, water, glows) are blended over what is behind\n"
+     << "  them by the level builder of the editor's jak-project branch (the translucent tree, and the PS2\n"
+     << "  blend of each material: `extras.og_blend`); OpenGOAL's own builder does not draw them.\n";
+  if (rep.regions)
+    md << "- The level's regions are the ones of " << o.replaces << " (" << rep.regions
+       << "): where the game loads and shows the levels around it as Jak or the camera goes by.\n";
   const fs::path md_path = dir / to_path("INSTALL.md");
   if (!write_text(md_path, md.str(), error)) return false;
   rep.files.push_back(from_path(md_path));

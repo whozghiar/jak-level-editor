@@ -33,7 +33,8 @@ jak-project checkout.
 <output>/jak3/<level>/decor/<level>-background.glb      decor (one node per instance), collision, actors
 <output>/jak3/<level>/models/<model>-lodN.glb           the models of the level (crates, doors, enemies...)
 <output>/jak3/<level>/textures/*.png                    the textures of the level (--textures)
-<output>/jak3/<level>/level.json                        what the folder holds (DGO, actors, models)
+<output>/jak3/<level>/level.json                        what the folder holds (DGO, actors, models,
+                                                       regions)
 ```
 
 In the decor, the level's shell (tfrag: ground, walls, floors, bridges) is split in pieces: the
@@ -43,10 +44,19 @@ down (at least half of it within about 45 degrees of horizontal) are the ground
 (`extras.og_terrain: true`): the editor locks them. A tall facade, a long wall or a door 60 m
 wide is not ground, and stays selectable. The vertex colors are, for each vertex, the
 brightest of the level's 8 palettes: the game mixes them each frame, and they are layers of
-light (palette 0 alone leaves the insides of buildings black).
+light (palette 0 alone leaves the insides of buildings black). The palettes themselves are kept
+for the game view and the export, in the node extras `og_tod`: `palette`, an accessor of the
+tree's colors (8 RGBA bytes each, as the game has them), and `index`, per primitive an accessor
+of the color of each vertex (per instance for TIE and shrub: the instances of a prototype share
+its mesh, not their lighting; a shrub's colors times its vertex colors, as tfrag's). A material
+the game draws without writing its depth (the translucent and water trees: stains, decals, glass)
+has `extras.og_translucent`; one that blends nothing (`(Cs - Cs) * As + Cs`) is `MASK`.
 
 `level.json` also lists the actors by type (`actor_types`: how many, the data of the first one
-and the art-names of all, `art_names`), the templates of the editor's catalog.
+and the art-names of all, `art_names`), the templates of the editor's catalog, and the level's
+regions (`region_trees`: per tree, `camera`, `target`..., its regions as the level builder reads
+them: their shape, sphere, face or volume in meters, and their scripts, `on-enter`, `on-inside`,
+`on-exit`). A region of several faces has one entry per face, with the same id.
 
 A level goes to the folder of its name. When a second DGO holds the same level (a copy of it), it
 goes to `<level>-<dgo>`.
@@ -89,6 +99,10 @@ Changes from jak-project:
   `subtract`, `half`) instead of turning opaque.
   The level's shell is split in pieces and its vertex colors are the brightest palette (see
   above); the original code wrote one mesh per texture over the whole level and the first palette.
+  The 8 palettes of every vertex are kept (`og_tod`), and the translucent materials marked.
+- `decompiler/level_extractor/BspHeader.*`: the region trees of a Jak 3 level, in `level.json`.
+- `decompiler/ObjectFile/LinkedObjectFile.cpp`: the scripts of a list print their integers
+  (fixnums, which came out times 8) and their floats (`bfloat`, which came out as a label).
 - `decompiler/level_extractor/extract_level.*`: the layout above, the common models, progress,
   levels extracted in parallel (as many as the processor has cores), the actors by type in
   `level.json`; no `.fr3` files for the game.
@@ -102,6 +116,13 @@ Changes from jak-project:
   checkout from the executable's path (the original code took a sibling `jak-project` folder for
   it when the path contained that name).
 - `stubs.cpp` (outside `opengoal/`): the only symbol of the code analysis the link needs.
+
+`opengoal/game/graphics/` is not part of the extractor: it is the game's background renderer
+(`TFragment`, `background_common`, `Shader`, `BucketRenderer` and the shaders `tfrag3.*`), copied from
+jak-project's `game/graphics` and built into the editor for its game view (`src/game_view`), with
+the editor's stand-ins for what the game's renderer takes from the running game (`Loader.h`,
+`Profiler.h`, `TexturePool.h`, `pipelines/opengl.h`: marked `ogle:`) and its shaders compiled when
+first used (`Shader.*`).
 
 `data/jak3/` (and `data/jak2/` for Jak II) holds the tables of jak-project the reading needs: type
 definitions (`all-types.gc`), the files of the disc and its levels (`inputs.json`), the textures some
