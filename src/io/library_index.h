@@ -26,6 +26,9 @@ struct LevelIndex {
   // first one
   std::map<std::string, std::map<std::string, int>> art_names;
   std::map<std::string, std::map<std::string, json>> art_lumps;
+  // the textures of its decor: how many pieces draw each (the textures used again and again by the
+  // levels make the palette of materials: io/texture_palette.h)
+  std::map<std::string, int> textures;
 };
 
 // A decor part of a level of the library, for the decor of all the levels.

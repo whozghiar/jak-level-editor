@@ -1,8 +1,11 @@
 #pragma once
 
-// Ray picking against the scene: meshes (BVH per primitive, local space) and actor markers.
+// Ray picking against the scene: meshes (BVH per primitive, local space) and actor markers. The
+// glows and light beams of the levels (additive blends) do not take the click from what is behind
+// them: they are hit only where nothing else is.
 
 #include <limits>
+#include <vector>
 
 #include "scene/scene.h"
 
@@ -28,5 +31,8 @@ struct PickHit {
 };
 
 PickHit pick(Scene& scene, const Ray& ray, const PickFilter& filter);
+// Every node along the ray, the nearest first (one hit each), the glows last: what a click at the
+// same place goes through, one after the other.
+std::vector<PickHit> pick_all(Scene& scene, const Ray& ray, const PickFilter& filter, size_t max = 32);
 
 }  // namespace ogle

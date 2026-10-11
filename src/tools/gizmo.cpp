@@ -1,6 +1,7 @@
 #include "tools/gizmo.h"
 
 #include <cmath>
+#include <cstdio>
 
 #include "imgui.h"
 
@@ -45,12 +46,22 @@ Vec3 perpendicular(const Vec3& v) {
   return normalize(cross(v, o));
 }
 
-float snap_value(float v, float step, bool enabled) {
-  if (!enabled || step <= 0) return v;
-  return std::round(v / step) * step;
+// an axis seen end-on, a plane seen edge-on: a drag along them would jump
+bool axis_usable(const Vec3& axis, const Vec3& view) { return std::fabs(dot(axis, view)) < 0.985f; }
+bool plane_usable(const Vec3& normal, const Vec3& view) { return std::fabs(dot(normal, view)) > 0.12f; }
+
+float wrap_angle(float a) {
+  while (a > kPi) a -= 2 * kPi;
+  while (a < -kPi) a += 2 * kPi;
+  return a;
 }
 
+constexpr float kAxisPick = 10.f;  // pixels from a handle that grab it
+constexpr float kCenterPick = 9.f;
+
 }  // namespace
+
+float snap_value(float v, float step) { return step > 0 ? std::round(v / step) * step : v; }
 
 bool Gizmo::ray_on_drag_plane(const Ray& ray, Vec3* p) const {
   float t;
@@ -59,16 +70,15 @@ bool Gizmo::ray_on_drag_plane(const Ray& ray, Vec3* p) const {
   return true;
 }
 
-int Gizmo::hit_test(const Camera& cam, const Renderer& r, const GizmoInput& in, const Mat4& f,
-                    float size) const {
+int Gizmo::hit_test(const Renderer& r, const GizmoInput& in, const Mat4& f, float size, const Vec3& view) const {
   Vec3 pivot = f.col3(3);
   Vec2 o;
   if (!r.project(pivot, &o)) return -1;
   const Vec2 m = in.mouse;
-  if ((m - o).length() < 10.f && op != GizmoOp::Rotate) return 6;
+  if ((m - o).length() < kCenterPick && op != GizmoOp::Rotate) return 6;
   if (op == GizmoOp::Rotate) {
     int best = -1;
-    float best_d = 9.f;
+    float best_d = kAxisPick;
     for (int i = 0; i < 3; i++) {
       Vec3 a = f.col3(i);
       Vec3 u = perpendicular(a), v = cross(a, u);
@@ -93,6 +103,7 @@ int Gizmo::hit_test(const Camera& cam, const Renderer& r, const GizmoInput& in, 
   }
   if (op == GizmoOp::Translate) {
     for (int k = 0; k < 3; k++) {
+      if (!plane_usable(f.col3(k), view)) continue;
       int i = (k + 1) % 3, j = (k + 2) % 3;
       Vec3 ai = f.col3(i), aj = f.col3(j);
       Vec2 q[4];
@@ -104,8 +115,9 @@ int Gizmo::hit_test(const Camera& cam, const Renderer& r, const GizmoInput& in, 
     }
   }
   int best = -1;
-  float best_d = 8.f;
+  float best_d = kAxisPick;
   for (int i = 0; i < 3; i++) {
+    if (!axis_usable(f.col3(i), view)) continue;
     Vec2 e;
     if (!r.project(pivot + f.col3(i) * size, &e)) continue;
     float d = dist_point_segment(m, o, e);
@@ -114,11 +126,10 @@ int Gizmo::hit_test(const Camera& cam, const Renderer& r, const GizmoInput& in, 
       best = i;
     }
   }
-  (void)cam;
   return best;
 }
 
-void Gizmo::draw(const Renderer& r, const GizmoInput& in, const Mat4& f, float size,
+void Gizmo::draw(const Renderer& r, const GizmoInput& in, const Mat4& f, float size, const Vec3& view,
                  ImDrawList* dl) const {
   if (!dl) return;
   Vec3 pivot = f.col3(3);
@@ -126,9 +137,17 @@ void Gizmo::draw(const Renderer& r, const GizmoInput& in, const Mat4& f, float s
   if (!r.project(pivot, &o)) return;
   auto S = [&](const Vec2& v) { return ImVec2(in.viewport_pos.x + v.x, in.viewport_pos.y + v.y); };
   int hot = m_active >= 0 ? m_active : m_hot;
+  // the axis being dragged along: a line through the pivot, to see where it goes
+  if (m_active >= 0 && m_active < 3 && op != GizmoOp::Rotate) {
+    Vec2 a, b;
+    const Vec3 dir = m_start_frame.col3(m_active);
+    if (r.project(pivot - dir * size * 40.f, &a) && r.project(pivot + dir * size * 40.f, &b))
+      dl->AddLine(S(a), S(b), (axis_color(m_active, false) & 0x00ffffff) | 0x90000000, 1.5f);
+  }
   if (op == GizmoOp::Scale) {
     // an axis with a square at its end for each direction, a square in the center for all
     for (int i = 0; i < 3; i++) {
+      if (!axis_usable(f.col3(i), view) && hot != i) continue;
       Vec2 e;
       if (!r.project(pivot + f.col3(i) * size, &e)) continue;
       ImU32 c = axis_color(i, hot == i);
@@ -151,11 +170,30 @@ void Gizmo::draw(const Renderer& r, const GizmoInput& in, const Mat4& f, float s
       }
       if (pts.size() > 1) dl->AddPolyline(pts.data(), (int)pts.size(), axis_color(i, hot == i), 0, hot == i ? 3.5f : 2.2f);
     }
+    // the turn so far: from where the ring was grabbed to where it is now
+    if (m_active >= 0 && m_active < 3 && std::fabs(m_angle) > 1e-4f) {
+      const Vec3 a = m_start_frame.col3(m_active);
+      Vec3 from = m_start_hit - m_start_frame.col3(3);
+      from = from - a * dot(from, a);
+      if (length2(from) > 1e-8f) {
+        from = normalize(from);
+        const Vec3 side = cross(a, from);
+        std::vector<ImVec2> fan{S(o)};
+        const int steps = std::max(2, (int)(std::fabs(m_angle) / kPi * 32));
+        for (int k = 0; k <= steps; k++) {
+          const float t = m_angle * k / steps;
+          Vec2 s;
+          if (r.project(pivot + (from * std::cos(t) + side * std::sin(t)) * size, &s)) fan.push_back(S(s));
+        }
+        if (fan.size() > 2) dl->AddConvexPolyFilled(fan.data(), (int)fan.size(), IM_COL32(255, 220, 70, 50));
+      }
+    }
     dl->AddCircleFilled(S(o), 3.f, IM_COL32(240, 240, 240, 220));
     return;
   }
   // plane handles
   for (int k = 0; k < 3; k++) {
+    if (!plane_usable(f.col3(k), view) && hot != 3 + k) continue;
     int i = (k + 1) % 3, j = (k + 2) % 3;
     Vec3 ai = f.col3(i), aj = f.col3(j);
     Vec2 q[4];
@@ -168,6 +206,7 @@ void Gizmo::draw(const Renderer& r, const GizmoInput& in, const Mat4& f, float s
     }
   }
   for (int i = 0; i < 3; i++) {
+    if (!axis_usable(f.col3(i), view) && hot != i) continue;
     Vec2 e;
     Vec3 a = f.col3(i);
     if (!r.project(pivot + a * size, &e)) continue;
@@ -207,15 +246,20 @@ GizmoResult Gizmo::update(const Camera& cam, const Renderer& r, const GizmoInput
   const Vec3 pivot = f.col3(3);
   float dist = std::max(length(pivot - cam.pos), 0.5f);
   float size = dist * std::tan(radians(cam.fov_deg) * 0.5f) * 0.24f;
+  const Vec3 view = normalize(pivot - cam.pos);
 
   if (m_active < 0) {
-    m_hot = in.mouse_in_viewport ? hit_test(cam, r, in, f, size) : -1;
+    m_readout.clear();
+    m_hot = in.mouse_in_viewport ? hit_test(r, in, f, size, view) : -1;
     if (in.pressed && m_hot >= 0) {
       m_active = m_hot;
       m_start_frame = f;
-      m_start_mouse = in.mouse;
+      m_start_mouse = m_last_mouse = in.mouse;
       m_plane_point = pivot;
-      Vec3 view = normalize(pivot - cam.pos);
+      m_raw_move = m_move = {0, 0, 0};
+      m_raw_angle = m_angle = 0;
+      m_raw_scale = m_scale = 1;
+      m_edge_on = false;
       if (op == GizmoOp::Rotate) {
         m_plane_normal = f.col3(m_active);
       } else if (op == GizmoOp::Scale && m_active == 6) {
@@ -230,61 +274,126 @@ GizmoResult Gizmo::update(const Camera& cam, const Renderer& r, const GizmoInput
         m_plane_normal = -cam.forward();
       }
       Ray ray = cam.ray(in.mouse.x, in.mouse.y, in.viewport_size.x, in.viewport_size.y);
-      if (!ray_on_drag_plane(ray, &m_start_hit)) {
+      if (op == GizmoOp::Rotate && std::fabs(dot(m_plane_normal, view)) < 0.25f) {
+        // a ring seen edge-on: the mouse runs along it on screen, where it was grabbed
+        const Vec3 a = m_plane_normal;
+        Vec3 radial = cam.pos - pivot;
+        radial = radial - a * dot(radial, a);
+        radial = length2(radial) > 1e-8f ? normalize(radial) : perpendicular(a);
+        Vec2 p0, p1, o;
+        const Vec3 at = pivot + radial * size;
+        if (r.project(at, &p0) && r.project(at + cross(a, radial) * size * 0.1f, &p1) && r.project(pivot, &o)) {
+          const Vec2 t = p1 - p0;
+          if (t.length() > 1e-3f) {
+            m_edge_on = true;
+            m_tangent = t * (1.f / t.length());
+            m_radius_px = std::max((p0 - o).length(), 20.f);
+            m_start_hit = m_last_hit = at;
+            res.started = true;
+          }
+        }
+        if (!m_edge_on) m_active = -1;
+      } else if (!ray_on_drag_plane(ray, &m_start_hit)) {
         m_active = -1;
       } else {
+        m_last_hit = m_start_hit;
         res.started = true;
       }
     }
   }
 
   if (m_active >= 0) {
+    const bool snapping = snap.enabled != in.snap_toggle;
+    const float k_fine = in.fine ? 0.1f : 1.f;
     if (in.down) {
       Ray ray = cam.ray(in.mouse.x, in.mouse.y, in.viewport_size.x, in.viewport_size.y);
       Vec3 p;
       const Mat4& sf = m_start_frame;
       const Vec3 sp = sf.col3(3);
       res.dragging = true;
-      if (ray_on_drag_plane(ray, &p)) {
-        Vec3 d = p - m_start_hit;
-        if (op == GizmoOp::Scale) {
-          // along an axis: how far the handle went, in sizes of the gizmo; all axes: the mouse
-          // going up (or right) grows, down shrinks
-          float k = 1.f;
-          if (m_active < 3) {
-            k = 1.f + dot(d, sf.col3(m_active)) / size;
-          } else {
-            const Vec2 md = in.mouse - m_start_mouse;
-            k = std::exp((md.x - md.y) * 0.01f);
-          }
-          if (snap.enabled && snap.scale > 0) k = std::round(k / snap.scale) * snap.scale;
-          k = std::max(k, 0.01f);
-          res.scale = m_active < 3 ? Vec3{m_active == 0 ? k : 1.f, m_active == 1 ? k : 1.f, m_active == 2 ? k : 1.f}
-                                   : Vec3{k, k, k};
-        } else if (op == GizmoOp::Translate) {
-          Vec3 offset{0, 0, 0};
-          if (m_active < 3) {
-            Vec3 a = sf.col3(m_active);
-            offset = a * snap_value(dot(d, a), snap.translate, snap.enabled);
-          } else if (m_active < 6) {
-            for (int i = 0; i < 3; i++) {
-              if (i == m_active - 3) continue;
-              Vec3 a = sf.col3(i);
-              offset += a * snap_value(dot(d, a), snap.translate, snap.enabled);
-            }
-          } else {
-            offset = {snap_value(d.x, snap.translate, snap.enabled),
-                      snap_value(d.y, snap.translate, snap.enabled),
-                      snap_value(d.z, snap.translate, snap.enabled)};
-          }
-          res.delta = Mat4::translate(offset);
+      const bool on_plane = !m_edge_on && ray_on_drag_plane(ray, &p);
+      char text[96] = "";
+      const char* names[] = {"X", "Y", "Z"};
+      if (op == GizmoOp::Scale && on_plane) {
+        // along an axis: how far the handle went, in sizes of the gizmo; all axes: the mouse
+        // going up (or right) grows, down shrinks
+        const Vec3 d = p - m_start_hit;
+        float raw = 1.f;
+        if (m_active < 3) {
+          raw = 1.f + dot(d, sf.col3(m_active)) / size;
         } else {
-          Vec3 a = sf.col3(m_active);
-          Vec3 v0 = normalize(m_start_hit - sp), v1 = normalize(p - sp);
-          float ang = std::atan2(dot(cross(v0, v1), a), dot(v0, v1));
-          ang = radians(snap_value(degrees(ang), snap.rotate_deg, snap.enabled));
-          res.delta = Mat4::translate(sp) * Mat4::rotate(Quat::axis_angle(a, ang)) * Mat4::translate(-sp);
+          const Vec2 md = in.mouse - m_start_mouse;
+          raw = std::exp((md.x - md.y) * 0.01f);
         }
+        m_scale += (raw - m_raw_scale) * k_fine;
+        m_raw_scale = raw;
+        float k = snapping ? snap_value(m_scale, snap.scale) : m_scale;
+        k = std::max(k, 0.01f);
+        res.scale = m_active < 3 ? Vec3{m_active == 0 ? k : 1.f, m_active == 1 ? k : 1.f, m_active == 2 ? k : 1.f}
+                                 : Vec3{k, k, k};
+        std::snprintf(text, sizeof(text), "%s x%.2f", m_active < 3 ? names[m_active] : "XYZ", k);
+      } else if (op == GizmoOp::Translate && on_plane) {
+        const Vec3 d = p - m_start_hit;
+        Vec3 raw{0, 0, 0};
+        if (m_active < 3) {
+          const Vec3 a = sf.col3(m_active);
+          raw = a * dot(d, a);
+        } else if (m_active < 6) {
+          for (int i = 0; i < 3; i++)
+            if (i != m_active - 3) raw += sf.col3(i) * dot(d, sf.col3(i));
+        } else {
+          raw = d;
+        }
+        m_move += (raw - m_raw_move) * k_fine;
+        m_raw_move = raw;
+        Vec3 offset = m_move;
+        if (snapping && snap.translate > 0) {
+          if (space == GizmoSpace::World) {
+            // the pivot on the grid, along the axes dragged
+            Vec3 to = sp + offset;
+            for (int i = 0; i < 3; i++) {
+              const bool moved = m_active == 6 || (m_active < 3 ? i == m_active : i != m_active - 3);
+              if (moved) to[i] = snap_value(to[i], snap.translate);
+              else to[i] = sp[i];
+            }
+            offset = to - sp;
+          } else {
+            Vec3 snapped{0, 0, 0};
+            for (int i = 0; i < 3; i++) snapped += sf.col3(i) * snap_value(dot(offset, sf.col3(i)), snap.translate);
+            offset = snapped;
+          }
+        }
+        res.delta = Mat4::translate(offset);
+        if (m_active < 3)
+          std::snprintf(text, sizeof(text), "%s %+.2f m", names[m_active], dot(offset, sf.col3(m_active)));
+        else
+          std::snprintf(text, sizeof(text), "%+.2f  %+.2f  %+.2f m", offset.x, offset.y, offset.z);
+      } else if (op == GizmoOp::Rotate) {
+        const Vec3 a = sf.col3(m_active);
+        float step = 0.f;
+        if (m_edge_on) {
+          // along the ring's tangent on screen: its radius in pixels makes a radian
+          const Vec2 md = in.mouse - m_last_mouse;
+          step = (md.x * m_tangent.x + md.y * m_tangent.y) / m_radius_px;
+        } else if (on_plane) {
+          // the angle swept since the last frame, so that going round more than half a turn goes on
+          const Vec3 v0 = m_last_hit - sp, v1 = p - sp;
+          if (length2(v0) > 1e-10f && length2(v1) > 1e-10f)
+            step = wrap_angle(std::atan2(dot(cross(v0, v1), a), dot(v0, v1)));
+          m_last_hit = p;
+        }
+        m_raw_angle += step;
+        m_angle += step * k_fine;
+        float ang = m_angle;
+        if (snapping) ang = radians(snap_value(degrees(ang), snap.rotate_deg));
+        res.delta = Mat4::translate(sp) * Mat4::rotate(Quat::axis_angle(a, ang)) * Mat4::translate(-sp);
+        std::snprintf(text, sizeof(text), "%s %+.1f deg", names[m_active], degrees(ang));
+      }
+      m_last_mouse = in.mouse;
+      if (text[0]) {
+        m_readout = text;
+        if (snapping) m_readout += "  [snap]";
+        if (in.fine) m_readout += "  [fine]";
       }
     }
     if (!in.down) {
@@ -293,7 +402,14 @@ GizmoResult Gizmo::update(const Camera& cam, const Renderer& r, const GizmoInput
       m_active = -1;
     }
   }
-  draw(r, in, f, size, dl);
+  draw(r, in, f, size, view, dl);
+  // the value next to the cursor
+  if (dl && m_active >= 0 && !m_readout.empty()) {
+    const ImVec2 at(in.viewport_pos.x + in.mouse.x + 18, in.viewport_pos.y + in.mouse.y + 14);
+    const ImVec2 sz = ImGui::CalcTextSize(m_readout.c_str());
+    dl->AddRectFilled(ImVec2(at.x - 4, at.y - 2), ImVec2(at.x + sz.x + 4, at.y + sz.y + 2), IM_COL32(12, 14, 16, 210), 3.f);
+    dl->AddText(at, IM_COL32(255, 225, 120, 255), m_readout.c_str());
+  }
   return res;
 }
 

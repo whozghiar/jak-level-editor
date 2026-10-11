@@ -62,6 +62,7 @@ json ShapeParams::to_json() const {
   json j = {{"kind", kind}, {"size", {size.x, size.y, size.z}}, {"tile", tile}};
   if (kind == "stairs") j["steps"] = steps;
   if (kind == "cylinder") j["sides"] = sides;
+  if (kind == "doorway" || kind == "window") j["opening"] = {opening.x, opening.y};
   return j;
 }
 
@@ -69,7 +70,8 @@ ShapeParams ShapeParams::from_json(const json& j) {
   ShapeParams p;
   if (!j.is_object()) return p;
   const std::string k = j.value("kind", std::string("box"));
-  if (k == "ramp" || k == "stairs" || k == "cylinder") p.kind = k;
+  for (const char* kind : {"ramp", "stairs", "cylinder", "roof", "roof-hip", "doorway", "window"})
+    if (k == kind) p.kind = k;
   if (j.contains("size") && j["size"].is_array() && j["size"].size() == 3)
     for (int i = 0; i < 3; i++)
       if (j["size"][i].is_number()) (&p.size.x)[i] = j["size"][i].get<float>();
@@ -77,6 +79,12 @@ ShapeParams ShapeParams::from_json(const json& j) {
   if (j.contains("tile") && j["tile"].is_number()) p.tile = std::clamp(j["tile"].get<float>(), 0.1f, 100.f);
   if (j.contains("steps") && j["steps"].is_number()) p.steps = std::clamp(j["steps"].get<int>(), 1, 64);
   if (j.contains("sides") && j["sides"].is_number()) p.sides = std::clamp(j["sides"].get<int>(), 3, 64);
+  if (j.contains("opening") && j["opening"].is_array() && j["opening"].size() == 2 && j["opening"][0].is_number() &&
+      j["opening"][1].is_number())
+    p.opening = {j["opening"][0].get<float>(), j["opening"][1].get<float>()};
+  // an opening within its wall: a post of 0.1 m at least on each side, a lintel above
+  p.opening.x = std::clamp(p.opening.x, 0.1f, std::max(0.1f, p.size.x - 0.2f));
+  p.opening.y = std::clamp(p.opening.y, 0.1f, std::max(0.1f, p.size.y - 0.1f));
   return p;
 }
 
@@ -92,8 +100,14 @@ const std::vector<ShapePreset>& shape_presets() {
     add("box", "box", {4, 4, 4});
     add("floor", "box", {8, 0.5f, 8});
     add("wall", "box", {8, 4, 0.5f});
+    add("doorway", "doorway", {4, 4, 0.5f});
+    add("window", "window", {4, 4, 0.5f});
+    v.back().params.opening = {1.6f, 1.4f};
+    add("pillar", "box", {1, 6, 1});
     add("ramp", "ramp", {4, 2, 8});
     add("stairs", "stairs", {4, 3, 6});
+    add("roof", "roof", {8, 3, 8});
+    add("roof-hip", "roof-hip", {8, 3, 10});
     add("cylinder", "cylinder", {2, 6, 2});
     return v;
   }();
@@ -122,6 +136,28 @@ std::shared_ptr<Mesh> make_shape(const ShapeParams& s, int material) {
     const int n = std::max(s.steps, 1);
     for (int i = 0; i < n; i++)
       add_box(p, {-w, 0, -d + 2 * d * i / n}, {w, h * (i + 1) / n, -d + 2 * d * (i + 1) / n}, t);
+  } else if (s.kind == "roof" || s.kind == "roof-hip") {
+    // two slopes meeting at a ridge along z, height h; a hip roof slopes at its ends too (its ridge
+    // shorter by its width, a pyramid when it is square)
+    const float r = s.kind == "roof-hip" ? std::max(0.f, d - w) : d;
+    add_face(p, {{-w, 0, -d}, {0, h, -r}, {0, h, r}, {-w, 0, d}}, {-h, w, 0}, t);
+    add_face(p, {{w, 0, -d}, {0, h, -r}, {0, h, r}, {w, 0, d}}, {h, w, 0}, t);
+    if (s.kind == "roof-hip") {
+      add_face(p, {{-w, 0, d}, {w, 0, d}, {0, h, r}}, {0, d - r, h}, t);
+      add_face(p, {{-w, 0, -d}, {w, 0, -d}, {0, h, -r}}, {0, d - r, -h}, t);
+    } else {
+      add_face(p, {{-w, 0, d}, {w, 0, d}, {0, h, d}}, {0, 0, 1}, t);
+      add_face(p, {{-w, 0, -d}, {w, 0, -d}, {0, h, -d}}, {0, 0, -1}, t);
+    }
+    add_face(p, {{-w, 0, -d}, {w, 0, -d}, {w, 0, d}, {-w, 0, d}}, {0, -1, 0}, t);
+  } else if (s.kind == "doorway" || s.kind == "window") {
+    // a wall around its opening: a door from the ground, a window in the middle of its height
+    const float ow = std::min(s.opening.x, s.size.x - 0.2f) / 2, oh = std::min(s.opening.y, h - 0.1f);
+    const float bottom = s.kind == "window" ? (h - oh) / 2 : 0.f, top = bottom + oh;
+    add_box(p, {-w, 0, -d}, {-ow, h, d}, t);
+    add_box(p, {ow, 0, -d}, {w, h, d}, t);
+    add_box(p, {-ow, top, -d}, {ow, h, d}, t);
+    if (bottom > 0) add_box(p, {-ow, 0, -d}, {ow, bottom, d}, t);
   } else if (s.kind == "cylinder") {
     const int n = std::max(s.sides, 3);
     const float rx = w, rz = d;
@@ -191,9 +227,13 @@ int texture_from_image(Scene& scene, const std::string& path, std::string* error
   t.height = h;
   t.rgba.assign(data, data + (size_t)w * h * 4);
   stbi_image_free(data);
+  return add_texture_once(scene, std::move(t));
+}
+
+int add_texture_once(Scene& scene, Texture t) {
   for (int i = 0; i < (int)scene.textures.size(); i++) {
     const Texture& d = scene.textures[i];
-    if (d.name == t.name && d.width == w && d.height == h && d.rgba == t.rgba) return i;
+    if (d.name == t.name && d.width == t.width && d.height == t.height && d.rgba == t.rgba) return i;
   }
   return scene.add_texture(std::move(t));
 }

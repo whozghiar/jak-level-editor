@@ -17,6 +17,7 @@ struct Prefs {
   std::string language;        // "" = the system's
   std::vector<std::string> recent_projects;
   std::string export_folder;   // where levels are exported
+  bool guide_seen = false;     // the guided tour was shown (at the first start)
   // the command line modes (captures, tests) read the preferences, never write them
   static inline bool read_only = false;
 

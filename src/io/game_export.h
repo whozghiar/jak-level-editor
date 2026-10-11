@@ -5,7 +5,9 @@
 //
 //   <name>.glb     what the view shows of the decor, in the game's space; the collision of the
 //                  game where the levels have it (exact: one node per surface), the rest made by
-//                  the builder from the decor (automatic walls)
+//                  the builder from the decor (automatic walls). Where a piece of a level's decor
+//                  was deleted, moved or hidden, the game's collision there is left out (the level
+//                  as the game has it, `originals`, tells which pieces are still in place)
 //   <name>.jsonc   the level: its names, the actors (their data as the builder writes res lumps),
 //                  the art groups of their models
 //   <name>.gd      the DGO: the art groups and the level
@@ -17,6 +19,8 @@
 // the materials and events it lacks become the nearest ones); the kill masks are dropped (the new
 // level has its own story). What the builder cannot write is left out, and said.
 
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -39,6 +43,15 @@ struct LevelExportOptions {
   bool actors = true;
   bool game_collision = true;  // the levels' own collision where they have it (else from the decor)
   Vec3 start{0, 0, 0};         // where the player starts (the continue point), meters
+  // a level of the game the level replaces ("ctyindb"), "" for a level of its own. The game then
+  // loads it instead of that level (its definition's nickname names this DGO): with that level's
+  // continue points, music and missions; only the document's own level is written (not the
+  // levels added next to it), and its DGO has that level's code
+  std::string replaces;
+  // the levels of the game as extracted, by name: the pieces of their decor that the document
+  // deleted, moved or hid lose the game's collision there (game_collision); a level without one
+  // keeps all of its collision
+  std::map<std::string, std::shared_ptr<const Scene>> originals;
   // the document's nav meshes, in the game's space (origin: the center of their corners)
   std::vector<NavMeshData> navmeshes;
   std::vector<std::string> navmesh_names;
@@ -60,6 +73,9 @@ struct LevelExportReport {
   size_t collision_from_decor = 0;  // the meshes whose collision the builder makes
   size_t actors = 0, art_groups = 0, navmeshes = 0;
   size_t behaviors = 0;   // actors whose behavior is the level's code
+  // the places of its floors where Jak would meet more collision than the game gathers at once
+  // (461 triangles): he can fall through there
+  size_t dense_places = 0;
   std::string code_file;  // that code, <name>-obs.gc ("" when none)
   std::vector<ExportNote> notes;
 };
@@ -69,8 +85,24 @@ struct LevelExportReport {
 std::string default_nickname(const std::string& name);
 std::string default_iso_name(const std::string& name);
 // "" when the names and the folder suit the builder and the game, else the text key of what is
-// wrong ("export.bad.name"...).
-std::string check_export_names(const LevelExportOptions& opts);
+// wrong ("export.bad.name"...). With the game's data: not the name or the nickname of one of its
+// levels (its DGO would be written over the game's), and a level to replace that the game has.
+std::string check_export_names(const LevelExportOptions& opts, const GameData* data = nullptr);
+
+// Where the player would start in a level, for each continue point of the game's level `level`:
+// the height of the ground under it in the document (NaN when there is none within a few meters).
+// The document's own level only: not the levels added next to it nor a reference.
+struct ContinueCheck {
+  std::string name;
+  Vec3 position;
+  float ground = 0;  // meters, NaN: nothing under it
+  bool ok() const { return ground == ground; }
+};
+std::vector<ContinueCheck> check_continues(const Scene& scene, const GameData* data, const std::string& level);
+
+// Whether the node at index `i` is part of the document's own level: not under a level added to it,
+// a companion, a mission layer, nor a reference.
+bool own_level_node(const Scene& scene, size_t i);
 
 // Writes the level. `data`: the game's data (may be null: then the actor types are not checked).
 bool export_level_for_game(const Scene& scene, const GameData* data, const LevelExportOptions& opts,

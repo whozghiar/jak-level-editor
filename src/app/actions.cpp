@@ -13,6 +13,7 @@
 #include "core/log.h"
 #include "core/prefs.h"
 #include "io/gltf_io.h"
+#include "io/jak2_import.h"
 #include "io/nav_export.h"
 #include "scene/story.h"
 
@@ -99,6 +100,19 @@ size_t attach_actor_models(Scene& scene, const AssetLibrary& library, const Game
   return attached;
 }
 
+// A piece of a level's shell is written in the level's space: its origin goes to the bottom center
+// of its geometry, so that it moves, turns and scales around itself (its own mesh only).
+void center_piece_origin(Node& n) {
+  if (!n.mesh || n.mesh.use_count() != 1 || length(n.local.t) != 0.f) return;
+  const AABB b = n.mesh->bounds();
+  if (!b.valid()) return;
+  const Vec3 origin{b.center().x, b.lo.y, b.center().z};
+  for (auto& prim : n.mesh->prims)
+    for (auto& p : prim.pos) p = p - origin;
+  n.mesh->touch();
+  n.local.t = origin;
+}
+
 // Removes the nodes of `doomed` and their descendants.
 void remove_subtrees(Scene& scene, std::unordered_set<uint32_t> doomed) {
   if (doomed.empty()) return;
@@ -159,19 +173,10 @@ void prepare_level_nodes(Scene& scene, const AssetLibrary& library, const GameDa
       n.mesh->extras["og_backdrop"] = true;
     auto terrain = n.extras.find("og_terrain");
     if (terrain != n.extras.end() && terrain->is_boolean()) {
-      n.locked = terrain->get<bool>();
-      // a piece is written in the level's space: its origin goes to the bottom center of its
-      // geometry, so that it moves and turns around itself
-      if (!n.locked && n.mesh && n.mesh.use_count() == 1 && length(n.local.t) == 0.f) {
-        const AABB b = n.mesh->bounds();
-        if (b.valid()) {
-          const Vec3 origin{b.center().x, b.lo.y, b.center().z};
-          for (auto& prim : n.mesh->prims)
-            for (auto& p2 : prim.pos) p2 = p2 - origin;
-          n.mesh->touch();
-          n.local.t = origin;
-        }
-      }
+      // the extractor marks every piece 60 m across; only the ground stays locked (a facade or a
+      // door of the shell as large is selected like the rest)
+      n.locked = terrain->get<bool>() && n.mesh && ground_piece(*n.mesh);
+      if (!n.locked) center_piece_origin(n);
       continue;
     }
     if (p != index.end() && scene.nodes[p->second].name.find("-tfrag-") != std::string::npos) n.locked = true;
@@ -233,7 +238,15 @@ bool open_project(Scene& scene, const std::string& path, std::string* error) {
   ImportOptions o;
   o.read_settings = true;
   ImportResult r;
-  return import_gltf(scene, path, o, &r, error);
+  if (!import_gltf(scene, path, o, &r, error)) return false;
+  // projects saved before the ground alone was locked: their large walls and doors are freed
+  for (auto& n : scene.nodes) {
+    if (!n.locked || n.kind != NodeKind::Render || !n.mesh || !n.extras.contains("og_terrain") || ground_piece(*n.mesh))
+      continue;
+    n.locked = false;
+    center_piece_origin(n);
+  }
+  return true;
 }
 
 bool save_project(const Scene& scene, const std::string& path, std::string* error) {
@@ -301,13 +314,14 @@ bool level_listed(const LevelEntry& level, const GameData* data) {
 
 Clipboard copy_nodes(const Scene& scene, const std::vector<uint32_t>& roots) {
   Clipboard clip;
-  for (auto root : roots) {
-    const Node* n = scene.find(root);
+  const auto below = scene.descendants_of(roots);
+  for (size_t r = 0; r < roots.size(); r++) {
+    const Node* n = scene.find(roots[r]);
     if (!n) continue;
-    clip.roots.push_back(root);
-    clip.root_worlds[root] = scene.world(*n);
+    clip.roots.push_back(roots[r]);
+    clip.root_worlds[roots[r]] = scene.world(*n);
     clip.nodes.push_back(*n);
-    for (auto d : scene.descendants(root))
+    for (auto d : below[r])
       if (const Node* dn = scene.find(d)) clip.nodes.push_back(*dn);
   }
   return clip;
@@ -346,7 +360,8 @@ std::vector<uint32_t> paste_nodes(Scene& scene, const Clipboard& clip) {
     }
     const uint32_t id = scene.add(std::move(n));
     if (is_root) {
-      scene.set_world(*scene.find(id), clip.root_worlds.at(src.id));
+      // the node just added (looking it up by its new id would index the whole scene again)
+      scene.set_world(scene.nodes.back(), clip.root_worlds.at(src.id));
       roots.push_back(id);
     }
   }
@@ -361,6 +376,7 @@ void App::set_library(const std::string& root) {
   library_root = root.empty() ? std::string() : library_root_of(root);
   store.clear();
   library.clear();
+  m_export_originals.clear();
   if (const std::string folder = game_folder(library_root); !folder.empty()) {
     std::string err;
     if (library.scan(folder, &err)) {
@@ -372,6 +388,21 @@ void App::set_library(const std::string& root) {
   }
   library_index.start(library, Prefs::dir() + "index/jak3", !Prefs::read_only);
   m_index_applied = false;
+  palette.clear();
+  palette_textures.clear();
+  // Jak II's structures, extracted to import them (<library>/jak2): the levels the game has, none of
+  // its actors (Jak 3's game data says nothing of them)
+  library_jak2.clear();
+  if (!library_root.empty()) {
+    std::error_code ec;
+    const std::string jak2 = library_root + "/jak2";
+    std::string err;
+    if (fs::exists(to_path(jak2 + "/library.json"), ec) && library_jak2.scan(jak2, &err))
+      library_jak2.set_listed([](const LevelEntry& l) { return level_listed(l, nullptr); });
+  }
+  library_index_jak2.start(library_jak2, Prefs::dir() + "index/jak2", !Prefs::read_only);
+  m_index_jak2_applied = false;
+  all_parts_jak2.clear();
   rebuild_catalog();
   m_all_parts_shown.clear();
   m_all_parts_filter = "";
@@ -402,9 +433,27 @@ void App::rebuild_catalog() {
 }
 
 void App::apply_library_index() {
+  if (!m_index_jak2_applied && library_index_jak2.ready()) {
+    m_index_jak2_applied = true;
+    all_parts_jak2 = all_decor(library_index_jak2, library_jak2);
+    all_parts_jak2.erase(std::remove_if(all_parts_jak2.begin(), all_parts_jak2.end(),
+                                        [](const DecorEntry& e) { return !jak2_structure(e.part); }),
+                         all_parts_jak2.end());
+  }
   if (m_index_applied || !library_index.ready()) return;
   m_index_applied = true;
   rebuild_catalog();
+  palette_textures = recurring_textures(library_index, library);
+}
+
+int App::palette_texture(const PaletteTexture& t, bool wait) {
+  const Texture* img = palette.image(t);
+  std::vector<Texture> read;
+  if (!img && wait) {
+    std::string err;
+    if (read_level_textures(t.background, {t.name}, &read, &err) && !read.empty()) img = &read[0];
+  }
+  return img ? add_texture_once(scene, *img) : -1;
 }
 
 std::shared_ptr<const GameData> App::game_data() {
@@ -590,6 +639,7 @@ std::vector<App::DocumentLevel> App::document_levels() const {
       l.role = role;
       l.group = n.id;
       l.host = role == DocumentLevel::Added ? 0 : host_of(n);
+      l.reference = role == DocumentLevel::Added && n.extras.value("og_reference", false);
       out.push_back(l);
     }
   }
@@ -598,31 +648,39 @@ std::vector<App::DocumentLevel> App::document_levels() const {
 
 bool App::level_in_document(const std::string& name) const {
   for (const auto& l : document_levels())
-    if (l.name == name && l.role != DocumentLevel::Layer) return true;
+    if (l.name == name && l.role != DocumentLevel::Layer && !l.reference) return true;
   return false;
 }
 
-bool App::add_level_to_document(const LevelEntry& level, std::string* error) {
+bool App::add_level_to_document(const LevelEntry& level, std::string* error, bool reference) {
   auto fail = [&](const char* key) {
     if (error) *error = strf(tr(key), level.name.c_str());
     return false;
   };
   if (!document_open()) return fail("levels.add.no_document");
   if (m_add_future.valid() || m_level_future.valid()) return fail("levels.add.busy");
-  if (level_in_document(level.name)) return fail("levels.add.already");
+  // a level is in the document once; the reference of the level replaced may join a document made
+  // from that very level
+  for (const auto& l : document_levels())
+    if (l.name == level.name && l.role != DocumentLevel::Layer && (reference ? l.reference : !l.reference))
+      return fail("levels.add.already");
+  if (!reference && level_in_document(level.name)) return fail("levels.add.already");
   stop_placement();
   m_adding_level = level.name;
+  m_adding_reference = reference;
   AssetLibrary lib = library;  // the worker reads its own copy
   LevelEntry entry = level;
   auto data = game_data();
   const bool actors = load_actors;
-  m_add_future = std::async(std::launch::async, [lib, entry, data, actors]() -> std::unique_ptr<Scene> {
+  m_add_future = std::async(std::launch::async, [lib, entry, data, actors, reference]() -> std::unique_ptr<Scene> {
     auto s = std::make_unique<Scene>();
     std::string err;
-    if (!add_level(*s, lib, data.get(), entry, &err, actors)) {
+    const uint32_t group = add_level(*s, lib, data.get(), entry, &err, actors);
+    if (!group) {
       LOG_ERROR("%s", err.c_str());
       return nullptr;
     }
+    if (reference) s->find(group)->extras["og_reference"] = true;
     return s;
   });
   LOG_INFO(tr("log.level_adding"), level.name.c_str());
@@ -703,6 +761,52 @@ std::vector<uint32_t> App::document_level_roots(uint32_t group) const {
   for (const auto& n : scene.nodes)
     if (!n.parent && n.kind != NodeKind::NavMesh && !n.extras.contains("og_level")) out.push_back(n.id);
   return out;
+}
+
+std::vector<uint32_t> App::own_level_roots() const { return document_level_roots(0); }
+
+AABB App::own_level_bounds() const { return document_level_bounds(0); }
+
+bool App::align_to_replaced(std::string* error) {
+  const std::string level = scene.settings.replaces;
+  auto fail = [&](const char* key) {
+    if (error) *error = strf(tr(key), level.c_str());
+    return false;
+  };
+  if (level.empty()) return fail("replace.none");
+  // where the level replaced is: the reference shown (the game's level as it is)
+  AABB target;
+  for (const auto& l : document_levels())
+    if (l.reference && l.name == level) target = document_level_bounds(l.group);
+  if (!target.valid()) return fail("replace.show_first");
+  const AABB own = own_level_bounds();
+  const auto roots = own_level_roots();
+  if (!own.valid() || roots.empty()) return fail("replace.empty");
+  const Vec3 offset{target.center().x - own.center().x, target.lo.y - own.lo.y, target.center().z - own.center().z};
+  NodeChange c(scene);
+  for (auto id : roots)
+    if (Node* n = scene.find(id)) {
+      c.save(id);
+      scene.set_world(*n, Mat4::translate(offset) * scene.world(*n));
+    }
+  history.push(c.commit(strf(tr("undo.align_replaced"), level.c_str())));
+  LOG_INFO(tr("log.aligned_replaced"), level.c_str(), offset.x, offset.y, offset.z);
+  return true;
+}
+
+void App::turn_own_level(float degrees) {
+  const AABB own = own_level_bounds();
+  const auto roots = own_level_roots();
+  if (!own.valid() || roots.empty()) return;
+  const Vec3 c = own.center();
+  const Mat4 turn = Mat4::translate(c) * Mat4::rotate(Quat::axis_angle({0, 1, 0}, radians(degrees))) * Mat4::translate(-c);
+  NodeChange change(scene);
+  for (auto id : roots)
+    if (Node* n = scene.find(id)) {
+      change.save(id);
+      scene.set_world(*n, turn * scene.world(*n));
+    }
+  history.push(change.commit(tr("undo.turn_level")));
 }
 
 uint32_t App::level_of_node(uint32_t id) const {
@@ -825,28 +929,86 @@ void App::toggle_select(uint32_t id) {
 }
 
 std::vector<uint32_t> App::selection_roots() const {
+  // each selected node, unless one of its ancestors is selected too: a walk up from each, not a
+  // test of every pair (thousands of elements are selected with a box)
+  const SceneCache& c = scene.cache();
   std::vector<uint32_t> out;
+  out.reserve(selection.size());
   for (auto id : selection) {
-    if (!scene.find(id)) continue;
-    bool has_selected_ancestor = false;
-    for (auto other : selection)
-      if (other != id && scene.is_ancestor(other, id)) has_selected_ancestor = true;
-    if (!has_selected_ancestor) out.push_back(id);
+    const int i = scene.index_of(id);
+    if (i < 0) continue;
+    bool under_selected = false;
+    if ((size_t)i < c.count && c.parent.size() == c.count) {
+      for (int32_t p = c.parent[i], guard = 0; p >= 0 && !under_selected && guard < 1000; p = c.parent[p], guard++)
+        under_selected = selection.count(scene.nodes[p].id) != 0;
+    } else {
+      for (const Node* n = &scene.nodes[i]; n->parent && !under_selected; n = scene.find(n->parent)) {
+        under_selected = selection.count(n->parent) != 0;
+        if (!scene.find(n->parent)) break;
+      }
+    }
+    if (!under_selected) out.push_back(id);
   }
   return out;
 }
 
-Vec3 App::group_center(uint32_t id, const std::vector<uint32_t>& descendants) const {
+size_t App::subtree_size(uint32_t id) const {
+  const SceneCache& c = scene.cache();
+  const int i = scene.index_of(id);
+  if (i < 0 || (size_t)i >= c.count) return 0;
+  static thread_local std::vector<uint32_t> nodes;
+  nodes.clear();
+  scene.subtree((size_t)i, nodes);
+  return nodes.size() - 1;
+}
+
+AABB App::subtree_bounds(uint32_t id, size_t* count) const {
+  // down the cache's tree (which node is under which: no walk of the whole scene per element),
+  // with the matrices as they are now (a change made this frame counts)
+  const SceneCache& c = scene.cache();
+  AABB b;
+  const int i = scene.index_of(id);
+  if (i < 0 || (size_t)i >= c.count) return b;
+  struct Item {
+    uint32_t index;
+    Mat4 world;
+  };
+  std::vector<Item> stack{{(uint32_t)i, scene.world(scene.nodes[i])}};
+  size_t n = 0;
+  while (!stack.empty()) {
+    const Item it = stack.back();
+    stack.pop_back();
+    n++;
+    const Node& node = scene.nodes[it.index];
+    if (node.mesh) {
+      b.add(node.mesh->bounds().transformed(it.world));
+    } else if (node.kind == NodeKind::Actor) {
+      const Vec3 p = it.world.col3(3);
+      b.add(p - Vec3{kMarkerRadius, kMarkerRadius, kMarkerRadius});
+      b.add(p + Vec3{kMarkerRadius, kMarkerRadius, kMarkerRadius});
+    } else {
+      b.add(it.world.col3(3));
+    }
+    for (uint32_t k = c.kid_start[it.index]; k < c.kid_start[it.index + 1]; k++)
+      stack.push_back({c.kids[k], it.world * scene.nodes[c.kids[k]].local.matrix()});
+  }
+  if (count) *count = n - 1;
+  return b;
+}
+
+Vec3 App::group_center(uint32_t id) const {
   auto it = m_group_centers.find(id);
   const Mat4 world = scene.world(id);
   if (it != m_group_centers.end() && it->second.first == history.revision()) return world.point(it->second.second);
+  const SceneCache& c = scene.cache();
   std::vector<AABB> boxes;
-  boxes.reserve(descendants.size());
-  for (auto d : descendants)
-    if (const Node* dn = scene.find(d); dn && dn->kind != NodeKind::Group) {
-      const AABB b = scene.world_bounds(*dn);
-      if (b.valid()) boxes.push_back(b);
-    }
+  if (const int i = scene.index_of(id); i >= 0 && (size_t)i < c.count) {
+    std::vector<uint32_t> nodes;
+    scene.subtree((size_t)i, nodes);
+    boxes.reserve(nodes.size());
+    for (size_t k = 1; k < nodes.size(); k++)
+      if (c.bounds[nodes[k]].valid()) boxes.push_back(c.bounds[nodes[k]]);
+  }
   const AABB focus = focus_box(boxes);
   const Vec3 center = focus.valid() ? focus.center() : world.col3(3);
   m_group_centers[id] = {history.revision(), world.inverse().point(center)};
@@ -854,29 +1016,36 @@ Vec3 App::group_center(uint32_t id, const std::vector<uint32_t>& descendants) co
 }
 
 Mat4 App::selection_frame() const {
+  // once per frame: the gizmo, the orbit and the panels ask for it
+  const uint64_t key = scene.cache().version;
+  if (m_selection_frame_key == key && m_selection_frame_sel == selection && m_selection_frame_primary == primary)
+    return m_selection_frame;
   auto roots = selection_roots();
-  if (roots.empty()) return Mat4::identity();
-  Vec3 p{0, 0, 0};
-  for (auto id : roots) {
-    const Node* n = scene.find(id);
-    Vec3 origin = scene.world(id).col3(3);
-    const auto descendants = scene.descendants(id);
-    if (descendants.size() > 64) {
-      // a large group (a whole level): the middle of most of it, a stray piece far away left out
-      p += group_center(id, descendants);
-      continue;
+  Mat4 frame = Mat4::identity();
+  if (!roots.empty()) {
+    Vec3 p{0, 0, 0};
+    for (auto id : roots) {
+      const Vec3 origin = scene.world(id).col3(3);
+      if (subtree_size(id) > 64) {
+        // a large group (a whole level): the middle of most of it, a stray piece far away left out
+        p += group_center(id);
+        continue;
+      }
+      const AABB b = subtree_bounds(id);
+      // the node's origin, unless it is far from its geometry (meshes in world space have their
+      // origin at 0,0,0): then the center of its box
+      p += (b.valid() && !b.expanded(1.f).contains(origin)) ? b.center() : origin;
     }
-    // the node's origin, unless it is far from its geometry (meshes in world space have their
-    // origin at 0,0,0): then the center of its box
-    AABB b = n ? scene.world_bounds(*n) : AABB{};
-    for (auto d : descendants)
-      if (const Node* dn = scene.find(d)) b.add(scene.world_bounds(*dn));
-    p += (b.valid() && !b.expanded(1.f).contains(origin)) ? b.center() : origin;
+    p = p / (float)roots.size();
+    uint32_t ref = selection.count(primary) ? primary : roots.front();
+    Transform t = Transform::from_matrix(scene.world(ref));
+    frame = Mat4::translate(p) * Mat4::rotate(t.r);
   }
-  p = p / (float)roots.size();
-  uint32_t ref = selection.count(primary) ? primary : roots.front();
-  Transform t = Transform::from_matrix(scene.world(ref));
-  return Mat4::translate(p) * Mat4::rotate(t.r);
+  m_selection_frame_key = key;
+  m_selection_frame_sel = selection;
+  m_selection_frame_primary = primary;
+  m_selection_frame = frame;
+  return frame;
 }
 
 PickHit App::pick_surface(const Vec2& mouse_vp) {
@@ -890,7 +1059,7 @@ void App::delete_selection() {
   auto roots = selection_roots();
   if (roots.empty()) return;
   NodeChange c(scene);
-  for (auto id : roots) c.save_subtree(id);
+  c.save_subtrees(roots);
   scene.remove(roots);
   history.push(c.commit(strf(tr("undo.delete"), roots.size())));
   selection.clear();
@@ -935,6 +1104,70 @@ std::string App::prefab_folder() const {
 void App::refresh_prefabs() {
   const std::string folder = prefab_folder();
   prefabs = folder.empty() ? std::vector<PrefabInfo>{} : list_prefabs(folder);
+  // the game's prefabs made so far, in the order of their recipes
+  if (prefab_recipes.empty()) {
+    std::string err;
+    prefab_recipes = load_prefab_recipes(prefab_recipes_path(), &err);
+  }
+  game_prefabs.clear();
+  if (folder.empty()) return;
+  std::error_code ec;
+  for (const auto& r : prefab_recipes) {
+    const std::string path = folder + "/game/" + r.file;
+    if (!fs::is_regular_file(to_path(path), ec)) continue;
+    PrefabInfo p;
+    p.name = r.name;
+    p.path = path;
+    p.mtime = (int64_t)fs::last_write_time(to_path(path), ec).time_since_epoch().count();
+    p.category = r.category;
+    p.description = r.description;
+    game_prefabs.push_back(std::move(p));
+  }
+}
+
+void App::start_game_prefabs(bool rebuild) {
+  const std::string folder = prefab_folder();
+  if (m_game_prefab_work.valid() || library.empty() || folder.empty()) return;
+  refresh_prefabs();
+  std::error_code ec;
+  std::vector<PrefabRecipe> todo;
+  for (const auto& r : prefab_recipes)
+    if (rebuild || !fs::is_regular_file(to_path(folder + "/game/" + r.file), ec)) todo.push_back(r);
+  if (todo.empty()) return;
+  m_game_prefab_total = (int)todo.size();
+  auto done = m_game_prefab_done;
+  *done = 0;
+  AssetLibrary lib = library;  // the worker reads its own copy
+  auto data = game_data();
+  LOG_INFO(tr("log.game_prefabs_started"), todo.size());
+  m_game_prefab_work = std::async(std::launch::async, [lib, data, todo, folder, done]() {
+    // each level opened once (without its actors) for all its recipes
+    std::map<std::string, std::vector<const PrefabRecipe*>> by_level;
+    for (const auto& r : todo) by_level[r.level].push_back(&r);
+    size_t built = 0;
+    for (const auto& [name, recipes] : by_level) {
+      Scene level;
+      std::string err;
+      const LevelEntry* entry = lib.level(name);
+      const bool opened = entry && open_level(level, lib, data.get(), *entry, &err, false);
+      for (const PrefabRecipe* r : recipes) {
+        size_t elements = 0;
+        if (opened && save_recipe_prefab(level, *r, folder + "/game/" + r->file, &elements, &err)) built++;
+        else LOG_WARN("%s: %s", r->name.c_str(), err.empty() ? name.c_str() : err.c_str());
+        (*done)++;
+      }
+    }
+    return built;
+  });
+}
+
+void App::poll_game_prefabs() {
+  using namespace std::chrono_literals;
+  if (!m_game_prefab_work.valid() || m_game_prefab_work.wait_for(0s) != std::future_status::ready) return;
+  const size_t built = m_game_prefab_work.get();
+  m_game_prefab_runs++;
+  refresh_prefabs();
+  LOG_INFO(tr("log.game_prefabs_done"), built, (size_t)m_game_prefab_total);
 }
 
 void App::create_prefab(const std::string& name) {
@@ -1016,6 +1249,7 @@ void App::start_part_placement(const std::string& level_background, const Catalo
   placement.path = level_background;
   placement.name = part.name;
   placement.part = part;
+  placement.game = library_jak2.level_of(level_background) ? "jak2" : "";
   placement.once = once;
   tool = ToolMode::Place;
   store.level(level_background, true);
@@ -1052,7 +1286,16 @@ std::shared_ptr<Mesh> App::placement_mesh() {
                                          ? m_decor_scene
                                          : store.level(placement.path, true);
       if (!level) break;
-      if (auto part = part_mesh(*level, placement.part)) mesh = merge_mesh(scene, *part, level->textures, level->materials);
+      if (auto part = part_mesh(*level, placement.part)) {
+        if (placement.game == "jak2") {
+          // a structure of Jak II: its textures renamed, what could break checked (kept with the mesh)
+          json checks;
+          mesh = import_jak2_mesh(scene, *part, level->textures, level->materials, &checks);
+          mesh->extras["og_import_checks"] = checks;
+        } else {
+          mesh = merge_mesh(scene, *part, level->textures, level->materials);
+        }
+      }
       break;
     }
     case Placement::Kind::Shape:
@@ -1115,10 +1358,19 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
       std::string base = placement.part.name;
       if (base.size() > 3 && base.compare(base.size() - 3, 3, ".mb") == 0) base.resize(base.size() - 3);
       Node n;
-      n.name = unique_name(base, names);
       n.kind = NodeKind::Render;
       n.mesh = mesh;
       n.local = Transform::from_matrix(m);
+      if (placement.game == "jak2") {
+        // named apart from Jak 3's parts of the same name; where it comes from and what was checked
+        base = "jak2-" + base;
+        const LevelEntry* from = library_jak2.level_of(placement.path);
+        n.extras = json{{"og_import", {{"game", "jak2"},
+                                       {"level", from ? from->name : std::string()},
+                                       {"part", placement.part.name},
+                                       {"checks", mesh->extras.value("og_import_checks", json::array())}}}};
+      }
+      n.name = unique_name(base, names);
       roots.push_back(scene.add(std::move(n)));
     }
     if (!m_batch_change) history.push(c.commit(strf(tr("undo.place"), placement.name.c_str())));
@@ -1370,14 +1622,7 @@ std::vector<uint32_t> App::navmesh_nodes() const {
 }
 
 AABB App::navmesh_region_of_selection() const {
-  AABB b;
-  for (auto id : selection) {
-    const Node* n = scene.find(id);
-    if (!n) continue;
-    b.add(scene.world_bounds(*n));
-    for (auto d : scene.descendants(id))
-      if (const Node* dn = scene.find(d)) b.add(scene.world_bounds(*dn));
-  }
+  const AABB b = selection_bounds();
   return b.valid() ? b.expanded(1.f) : b;
 }
 
@@ -1386,12 +1631,16 @@ std::vector<Vec3> App::navmesh_points_of_selection() const {
   for (auto id : selection) {
     const Node* n = scene.find(id);
     if (!n || n->kind == NodeKind::NavMesh) continue;
-    AABB b = scene.world_bounds(*n);
-    for (auto d : scene.descendants(id))
-      if (const Node* dn = scene.find(d)) b.add(scene.world_bounds(*dn));
+    const AABB b = subtree_bounds(id);
     if (b.valid()) out.push_back({b.center().x, b.lo.y, b.center().z});
   }
   return out;
+}
+
+AABB App::selection_bounds() const {
+  AABB b;
+  for (auto id : selection_roots()) b.add(subtree_bounds(id));
+  return b;
 }
 
 bool App::start_navmesh_generation(const AABB& region_in, std::string* error, std::vector<Vec3> keep_from) {
@@ -1412,7 +1661,7 @@ bool App::start_navmesh_generation(const AABB& region_in, std::string* error, st
   AABB all;
   for (size_t i = 0; i < scene.nodes.size(); i++) {
     const Node& n = scene.nodes[i];
-    if (n.kind != NodeKind::Render || !n.mesh || !cache.visible[i] || cache.actor[i]) continue;
+    if (n.kind != NodeKind::Render || !n.mesh || !cache.visible[i] || cache.actor[i] || cache.reference[i]) continue;
     const AABB& nb = cache.bounds[i];
     if (reach.valid() && (nb.hi.x < reach.lo.x || nb.lo.x > reach.hi.x || nb.hi.z < reach.lo.z ||
                           nb.lo.z > reach.hi.z || nb.hi.y < reach.lo.y || nb.lo.y > reach.hi.y))
@@ -1538,9 +1787,25 @@ Vec3 App::export_start_point() {
   return hit.hit() ? hit.point + Vec3{0, 1, 0} : Vec3{top.x, b.lo.y + 2.f, top.z};
 }
 
+std::string App::untaken_nickname(const std::string& nickname) {
+  // a DGO named like one of the game's would be built over the game's own
+  const GameData* data = game_data().get();
+  auto taken = [&](const std::string& nick) {
+    if (!data) return false;
+    for (const auto& [level, info] : data->levels())
+      if (!info.dgo.empty() && info.nickname == nick) return true;
+    return false;
+  };
+  std::string out = nickname;
+  const char* digits = "abcdefghijklmnopqrstuvwxyz0123456789";
+  for (int k = 0; taken(out) && k < 36 * 36; k++) out = std::string("m") + digits[(k / 36) % 36] + digits[k % 36];
+  return out;
+}
+
 LevelExportOptions App::default_export_options() {
   LevelExportOptions o;
-  std::string base = scene.settings.level;
+  o.replaces = scene.settings.replaces;
+  std::string base = !o.replaces.empty() ? o.replaces : scene.settings.level;
   if (base.empty() || base == "custom-level") base = "level";
   // a name the game does not have: "my-" and the level's, 10 characters at most
   std::string name = "my-";
@@ -1549,7 +1814,7 @@ LevelExportOptions App::default_export_options() {
   if (name.size() > 10) name.resize(10);
   while (name.back() == '-') name.pop_back();
   o.name = name;
-  o.nickname = default_nickname(name);
+  o.nickname = untaken_nickname(default_nickname(name));
   o.iso_name = default_iso_name(name);
   o.base_id = kDefaultBaseId;
   o.folder = Prefs::get().export_folder;
@@ -1582,6 +1847,27 @@ bool App::export_for_game(const LevelExportOptions& in, LevelExportReport* repor
   o.navmeshes.clear();
   o.navmesh_names.clear();
   world_navmeshes(&o.navmeshes, &o.navmesh_names);
+  // the levels as extracted (read once): the pieces of their decor deleted, moved or hidden take the
+  // game's collision with them
+  if (o.game_collision)
+    for (const auto& n : scene.nodes) {
+      const std::string suffix = "-collision";
+      if (n.kind != NodeKind::Group || n.name.size() <= suffix.size() ||
+          n.name.compare(n.name.size() - suffix.size(), suffix.size(), suffix) != 0)
+        continue;
+      const std::string level = n.name.substr(0, n.name.size() - suffix.size());
+      if (o.originals.count(level)) continue;
+      auto& original = m_export_originals[level];
+      const LevelEntry* entry = library.level(level);
+      if (!original && entry) {
+        auto read = std::make_shared<Scene>();
+        ImportResult r;
+        std::string err;
+        if (import_gltf(*read, entry->background, ImportOptions{}, &r, &err)) original = read;
+        else LOG_WARN("%s: %s", entry->background.c_str(), err.c_str());
+      }
+      if (original) o.originals[level] = original;
+    }
   scene.begin_frame();  // the world matrices and what is shown, after the last changes
   LevelExportReport rep;
   if (!export_level_for_game(scene, document_game_data(), o, &rep, error)) return false;

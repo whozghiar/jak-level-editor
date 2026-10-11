@@ -642,12 +642,22 @@ def game_data(goal_src):
         if family is None:
             family = next((f for word, f in FAMILY_WORDS if word in t), 'other')
         objects[t] = family
+    # what the catalog makes of each object (tools/object_categories.json, read in the game's code
+    # type by type): static props and doors in its Objects, interactive objects apart, collectibles
+    # and technical types left out; the living ones the ancestry misses (riders, animals, NPCs,
+    # metal head growths, killable turrets) are creatures
+    with open(os.path.join(HERE, 'object_categories.json'), encoding='utf-8') as f:
+        categories = {t: v[0] for t, v in json.load(f).items() if not t.startswith('_')}
+    for t, cat in categories.items():
+        if cat == 'living' and t in objects:
+            roles[t] = 'creature'
+            del objects[t]
     out['actors'] = {'roles': dict(sorted(roles.items())), 'creature_suffixes': CREATURE_SUFFIXES,
                      'water_types': sorted(t for t in parent if 'water-anim' in lineage(t)),
                      'objects': dict(sorted(objects.items()))}
 
     # --- water looks -----------------------------------------------------------------------------
-    skel_models = {}
+    skel_models, model_art = {}, {}
     for _, form in forms_matching(everything, r'^\(defskelgroup ', '(defskelgroup'):
         # (defskelgroup skel-x x x-lod0-jg -1 ((x-lod0-mg (meters 999999))) ...); Jak 3 names the
         # meshes by their index in the art group: the model is then named after the group
@@ -657,6 +667,9 @@ def game_data(goal_src):
                 skel_models[str(form[1])] = re.sub(r'-lod\d+$', '', str(mg)[:-3])
             elif len(form) > 2:
                 skel_models[str(form[1])] = re.sub(r'^skel-|^\*|-sg\*$', '', str(form[1]))
+            # the art group holding the model (the skill's is in "collectables")
+            if str(form[1]) in skel_models and isinstance(form[2], Sym):
+                model_art.setdefault(skel_models[str(form[1])], str(form[2]))
 
     # --- the models of each type: the skeleton groups its methods, states and behaviors load
     # ("skel-x"), in the order of the code (the first one is usually what init-from-entity!
@@ -735,12 +748,18 @@ def game_data(goal_src):
     for t in list(out['actors']['objects']):
         if t in roles or t in placeholders:
             del out['actors']['objects'][t]
+    out['actors']['catalog'] = {t: categories[t] for t in out['actors']['objects'] if t in categories}
     out['actors']['models'] = {t: ms for t, ms in sorted(type_models.items())
                                if (t in parent or t in own_models) and t not in placeholders}
     # the models of the skeleton groups by name, for the actors that choose theirs by name
     # (art-name: "skel-" + its value)
     out['actors']['skeletons'] = {re.sub(r'^skel-', '', k): v for k, v in sorted(skel_models.items())
                                   if k.startswith('skel-') and re.sub(r'^skel-', '', k) != v}
+    # the art group of the models not in one of their own name, and the art groups of the common
+    # code (GAME.CGO, always loaded): a level's DGO leaves those out
+    out['actors']['art_groups'] = {m: a for m, a in sorted(model_art.items()) if a != m}
+    out['actors']['common_art_groups'] = sorted(set(re.findall(
+        r'"([^"]+)-ag\.go"', read(os.path.join(root, 'dgos', 'game.gd')))))
     # what configures each object and logic actor: the res lumps its code reads; where its code is
     actor_types = [t for t in parent if t in out['actors']['objects'] or roles.get(t) == 'logic']
     out['actors']['params'] = actor_params(everything, lineage, actor_types)
@@ -833,6 +852,15 @@ def game_data(goal_src):
 
     # --- levels ----------------------------------------------------------------------------------
     task_bits = enum_values(engine, 'task-mask')
+    # the code of each DGO beyond the common code (GAME.CGO): what a level brings with it, that a
+    # level made to replace it needs in its own DGO
+    dgo_code = {}
+    common_code = set(re.findall(r'"([^"]+)\.o"', read(os.path.join(root, 'dgos', 'game.gd'))))
+    for gd in sorted(glob.glob(os.path.join(root, 'dgos', '*.gd'))):
+        text = read(gd)
+        m = re.match(r'\s*\(\s*"([^"]+)"', text)
+        if m:
+            dgo_code[m.group(1).upper()] = [f for f in re.findall(r'"([^"]+)\.o"', text) if f not in common_code]
     levels = {}
     info_path = os.path.join(root, 'engine', 'level', 'level-info.gc')
     info_text = read(info_path)
@@ -845,6 +873,16 @@ def game_data(goal_src):
         lev = {'taskname': str(unquote(kw['taskname'])) if kw.get('taskname') else name,
                'base_mask': bits_value(kw.get('base-task-mask', 0), task_bits),
                'ocean': str(ocean) if isinstance(ocean, Sym) and str(ocean) in oceans else None}
+        # its DGO (the game loads <nickname>.DGO), when the game builds one (not a custom level's),
+        # and the code in it
+        nickname = unquote(kw.get('nickname'))
+        if isinstance(nickname, Sym):
+            lev['nickname'] = str(nickname)
+            dgo = str(nickname).upper() + '.DGO'
+            if dgo in dgo_code:
+                lev['dgo'] = dgo
+                if dgo_code[dgo]:
+                    lev['code'] = dgo_code[dgo]
         if lev['ocean']:  # the height of its ocean
             lev['ocean_height'] = round(float(kw.get('ocean-height', 0.0)) / 4096.0, 4)
         # the far ocean (the sea to the horizon): the level flag

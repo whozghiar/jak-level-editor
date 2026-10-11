@@ -73,6 +73,11 @@ struct ContinuePoint {
 
 struct LevelInfo {
   std::string taskname;  // the task level of its task mask
+  // its DGO: the game loads <nickname>.DGO for it ("" for a custom level: the game's code does not
+  // build its DGO); the code in it beyond the common code (.o stems), which a level replacing it
+  // brings in its own DGO
+  std::string nickname, dgo;
+  std::vector<std::string> code;
   uint32_t base_mask = 0;
   std::string ocean;     // its ocean map, "" without one
   std::optional<float> ocean_height;  // set by the level (Jak 3), else the map's
@@ -128,12 +133,19 @@ class GameData {
   // the object types (drawn, neither creatures nor logic) and their family: crate, platform...
   const std::unordered_map<std::string, std::string>& objects() const { return m_objects; }
   std::string object_family(const std::string& etype) const;
+  // what the catalog makes of an object type (tools/object_categories.json): "static" (a prop that
+  // only stands there), "door", "interactive", "collectible", "technical" (shots, vehicles,
+  // controllers...), "" when unknown
+  std::string catalog_category(const std::string& etype) const;
   // the models a type loads (its code), the one it draws first; null when the game data has none
   const std::vector<std::string>* type_models(const std::string& etype) const;
   // the model of a skeleton group named `name` (without "skel-"), "" when it has the same name:
   // the actors that choose their model by name (art-name) give the group's
   std::string skeleton_model(const std::string& name) const;
   std::string skeleton_of_model(const std::string& model) const;  // the reverse, "" when none
+  // the art group a level's DGO needs for a model ("x" for x-ag.go), "" when the common code
+  // (GAME.CGO) has it: the skill's model is in "collectables", always loaded
+  std::string level_art_group(const std::string& model) const;
   const std::unordered_map<std::string, std::vector<std::string>>& all_type_models() const { return m_type_models; }
   // whether the game has an actor type of that name (known by its role, family, models...), not a
   // placeholder its type table keeps for an older game's entities
@@ -161,6 +173,7 @@ class GameData {
   std::vector<std::string> effect_code_files(const std::string& group) const;
 
   const LevelInfo* level(const std::string& name) const;
+  const std::map<std::string, LevelInfo>& levels() const { return m_levels; }
   const OceanMap* ocean(const std::string& name) const;
 
   // The story, in steps: at step s the nodes before s are closed (1: the start of the game,
@@ -192,9 +205,10 @@ class GameData {
   std::unordered_map<std::string, bool> m_water_types;
   std::set<std::string> m_effects, m_unlisted, m_placeholders;
   std::vector<std::string> m_water_looks;
-  std::unordered_map<std::string, std::string> m_objects;
+  std::unordered_map<std::string, std::string> m_objects, m_catalog;
   std::unordered_map<std::string, std::vector<std::string>> m_type_models;
-  std::unordered_map<std::string, std::string> m_skeletons;
+  std::unordered_map<std::string, std::string> m_skeletons, m_art_groups;
+  std::set<std::string> m_common_art_groups;
   std::unordered_map<std::string, std::string> m_parents, m_code, m_effect_code;
   std::unordered_map<std::string, std::vector<std::string>> m_code_needs;
   std::unordered_map<std::string, std::vector<Param>> m_params;

@@ -13,6 +13,7 @@
 #include "imgui.h"
 #include "imgui_stdlib.h"
 #include "io/behaviors.h"
+#include "io/decor_behaviors.h"
 
 namespace ogle {
 
@@ -231,6 +232,131 @@ void App::ui_actor_behavior(Node& n) {
   if (changed) {
     n.extras["og_behavior"] = b;
     commit_node_edit(before, tr("undo.behavior"));
+  }
+}
+
+// --- what the game does with an element of the decor (io/decor_behaviors.h) -----------------------
+
+void App::ui_decor_behavior(Node& n) {
+  if (n.kind != NodeKind::Render || !n.mesh || scene.actor_of(n)) return;
+  ImGui::SeparatorText(tr("decor.title"));
+  // every selected piece of decor gets what is set here
+  std::vector<uint32_t> targets;
+  for (auto id : selection)
+    if (const Node* s = scene.find(id); s && s->kind == NodeKind::Render && s->mesh && !scene.actor_of(*s))
+      targets.push_back(id);
+  if (std::find(targets.begin(), targets.end(), n.id) == targets.end()) targets.push_back(n.id);
+  DecorBehavior b = decor_behavior_of(n.extras);
+  bool changed = false, dragging = false;
+  auto combo = [&](const char* id, const char* prefix, std::string& value, const std::vector<std::string>& options) {
+    bool edited = false;
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::BeginCombo(id, tr((std::string(prefix) + value).c_str()), ImGuiComboFlags_HeightLarge)) {
+      for (const auto& o : options)
+        if (ImGui::Selectable(tr((std::string(prefix) + o).c_str()), o == value) && o != value) {
+          value = o;
+          edited = true;
+        }
+      ImGui::EndCombo();
+    }
+    return edited;
+  };
+  // its collision
+  {
+    std::string kind = b.collision.set ? b.collision.kind : "shape";
+    ImGui::TextUnformatted(tr("decor.collision"));
+    guide_tip("collision");
+    if (combo("##decor-kind", "decor.kind.", kind, {"shape", "none", "invisible"})) {
+      b.collision.set = true;
+      b.collision.kind = kind;
+      changed = true;
+    }
+    tooltip(tr(("decor.kind." + kind + ".tip").c_str()));
+    if (kind != "none") {
+      ImGui::TextUnformatted(tr("decor.material"));
+      std::string material = b.collision.material;
+      if (combo("##decor-material", "decor.material.", material, collision_materials())) {
+        b.collision.set = true;
+        b.collision.material = material;
+        changed = true;
+      }
+      tooltip(tr("decor.material.tip"));
+      ImGui::TextUnformatted(tr("decor.event"));
+      std::string event = b.collision.event;
+      if (combo("##decor-event", "decor.event.", event, collision_events())) {
+        b.collision.set = true;
+        b.collision.event = event;
+        changed = true;
+      }
+      tooltip(tr("decor.event.tip"));
+      if (ImGui::TreeNode(tr_id("decor.more").c_str())) {
+        std::string mode = b.collision.mode;
+        ImGui::TextUnformatted(tr("decor.mode"));
+        if (combo("##decor-mode", "decor.mode.", mode, {"auto", "ground", "wall", "obstacle"})) {
+          b.collision.set = true;
+          b.collision.mode = mode;
+          changed = true;
+        }
+        tooltip(tr("decor.mode.tip"));
+        for (auto [key, flag] : {std::pair{"noedge", &b.collision.noedge}, {"nocamera", &b.collision.nocamera},
+                                 {"noentity", &b.collision.noentity}, {"nolineofsight", &b.collision.nolineofsight}}) {
+          if (ImGui::Checkbox(tr_id((std::string("decor.flag.") + key).c_str()).c_str(), flag)) {
+            b.collision.set = true;
+            changed = true;
+          }
+          tooltip(tr((std::string("decor.flag.") + key + ".tip").c_str()));
+        }
+        ImGui::TreePop();
+      }
+    }
+    if (b.collision.set && ImGui::SmallButton(tr_id("decor.collision.reset").c_str())) {
+      b.collision = DecorCollision{};
+      changed = true;
+    }
+  }
+  // what it does to Jak
+  if (ImGui::Checkbox(tr_id("decor.bounce").c_str(), &b.bounce.set)) changed = true;
+  guide_tip("bounce");
+  if (b.bounce.set) {
+    ImGui::SetNextItemWidth(-160);
+    if (ImGui::DragFloat(tr_id("decor.bounce.height").c_str(), &b.bounce.height, 0.1f, 0.5f, 200.f, "%.1f m"))
+      dragging = true;
+  }
+  if (ImGui::Checkbox(tr_id("decor.launch").c_str(), &b.launch.set)) changed = true;
+  guide_tip("launch");
+  if (b.launch.set) {
+    ImGui::PushItemWidth(-160);
+    dragging |= ImGui::DragFloat(tr_id("decor.launch.distance").c_str(), &b.launch.distance, 0.2f, 0.f, 500.f, "%.1f m");
+    dragging |= ImGui::DragFloat(tr_id("decor.launch.height").c_str(), &b.launch.height, 0.1f, -200.f, 200.f, "%.1f m");
+    dragging |= ImGui::DragFloat(tr_id("decor.launch.yaw").c_str(), &b.launch.yaw, 1.f, -180.f, 180.f, "%.0f deg");
+    dragging |= ImGui::DragFloat(tr_id("decor.launch.time").c_str(), &b.launch.time, 0.02f, 0.2f, 10.f, "%.2f s");
+    ImGui::PopItemWidth();
+    tooltip(tr("decor.launch.values.tip"));
+  }
+  // the same on every target: one undo step for a change, one per drag (when it ends)
+  const json value = decor_behavior_json(b);
+  auto write = [&]() {
+    for (auto id : targets)
+      if (Node* t = scene.find(id)) {
+        if (value.is_null()) t->extras.erase("og_decor");
+        else t->extras["og_decor"] = value;
+      }
+  };
+  if (changed) {
+    NodeChange c(scene);
+    for (auto id : targets) c.save(id);
+    write();
+    history.push(c.commit(tr("undo.decor")));
+  } else if (dragging) {
+    if (!m_decor_edit) {
+      m_decor_edit = std::make_unique<NodeChange>(scene);
+      for (auto id : targets) m_decor_edit->save(id);
+    }
+    write();
+  }
+  if (m_decor_edit && !dragging && !ImGui::IsAnyItemActive()) {
+    history.push(m_decor_edit->commit(tr("undo.decor")));
+    m_decor_edit.reset();
   }
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds the demo level of the tutorial (docs/captures/README.md): two decks of the industrial
-zone, a canal bridge stretched to cross the water of Spargus' palace between them, lamps, orbs,
-crates, barrels of the Hip Hog and a fountain of the slums. It drives the editor through its remote control, the
+zone, a canal bridge stretched to cross the water of Spargus' palace between them, lamps, crates,
+barrels of the Hip Hog and a fountain of the slums. It drives the editor through its remote control, the
 connection the MCP server forwards an assistant's tool calls to, with the same tools: this is what
 an assistant does when asked to build a level.
 
@@ -82,12 +82,10 @@ def build(e):
     e.call('place', kind='object', name='water-anim-waspala-thronesec', position=[0, -1.5, 0])
     bridge = e.call('place', kind='decor', name='city-canal-bridge-span', position=[0, 0.83, 0])
     e.call('transform_nodes', ids=[bridge['result']['nodes'][0]['id']], scale_by=[2.5, 1, 1])
-    # lamps at the ends of the bridge, orbs along it
+    # lamps at the ends of the bridge
     for x in (-22, 22):
         for z in (-5, 5):
             e.call('place', kind='decor', name='city-groundlamp-01', position=[x, 1.08, z])
-    for x in (-12, -6, 0, 6, 12):
-        e.call('place', kind='object', name='skill', position=[x, 2, 0])
     # crates, and a corner of barrels and a market crate, on the first deck
     for i, (x, z) in enumerate([(-46, 10), (-43.5, 10), (-46, 12.5)]):
         e.call('place', kind='object', name='crate', position=[x, 10, z], on_ground=True, yaw_deg=12 * i)

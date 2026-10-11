@@ -1,22 +1,27 @@
 #include "io/game_export.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <set>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "core/i18n.h"
 #include "core/log.h"
 #include "io/behaviors.h"
+#include "io/decor_behaviors.h"
 #include "io/game_data.h"
 #include "io/gltf_io.h"
 #include "io/nav_export.h"
+#include "scene/bvh.h"
 
 namespace ogle {
 
@@ -200,6 +205,177 @@ bool see_through(const Scene& scene, const Mesh& mesh) {
   return any;
 }
 
+// The point of triangle abc nearest to p (Ericson, Real-Time Collision Detection, 5.1.5)
+Vec3 closest_on_triangle(const Vec3& p, const Vec3& a, const Vec3& b, const Vec3& c) {
+  const Vec3 ab = b - a, ac = c - a, ap = p - a;
+  const float d1 = dot(ab, ap), d2 = dot(ac, ap);
+  if (d1 <= 0 && d2 <= 0) return a;
+  const Vec3 bp = p - b;
+  const float d3 = dot(ab, bp), d4 = dot(ac, bp);
+  if (d3 >= 0 && d4 <= d3) return b;
+  const float vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) return a + ab * (d1 / (d1 - d3));
+  const Vec3 cp = p - c;
+  const float d5 = dot(ab, cp), d6 = dot(ac, cp);
+  if (d6 >= 0 && d5 <= d6) return c;
+  const float vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) return a + ac * (d2 / (d2 - d6));
+  const float va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
+  const float k = 1.f / (va + vb + vc);
+  return a + ab * (vb * k) + ac * (vc * k);
+}
+
+// Triangles of the game's space hashed on a grid of `cell` meters: the distance from a point to the
+// nearest, how many meet a box.
+struct TriGrid {
+  explicit TriGrid(float cell_size) : cell(cell_size) {}
+  float cell;
+  std::vector<std::array<Vec3, 3>> tris;
+  std::vector<AABB> boxes;
+  std::unordered_map<uint64_t, std::vector<uint32_t>> cells;
+  mutable std::vector<uint32_t> seen;  // the last query that met each triangle
+  mutable uint32_t query = 0;
+
+  static uint64_t key(int x, int y, int z) {
+    return ((uint64_t)(uint32_t)(x + (1 << 20)) << 42) | ((uint64_t)(uint32_t)(y + (1 << 20)) << 21) |
+           (uint64_t)(uint32_t)(z + (1 << 20));
+  }
+  int at(float v) const { return (int)std::floor(v / cell); }
+  bool empty() const { return tris.empty(); }
+  void add(const Vec3& a, const Vec3& b, const Vec3& c) {
+    AABB box;
+    box.add(a);
+    box.add(b);
+    box.add(c);
+    const uint32_t t = (uint32_t)tris.size();
+    tris.push_back({a, b, c});
+    boxes.push_back(box);
+    for (int x = at(box.lo.x); x <= at(box.hi.x); x++)
+      for (int y = at(box.lo.y); y <= at(box.hi.y); y++)
+        for (int z = at(box.lo.z); z <= at(box.hi.z); z++) cells[key(x, y, z)].push_back(t);
+  }
+  // f(t) once for each triangle in the cells the box covers
+  template <typename F>
+  void each_near(const AABB& box, F&& f) const {
+    if (seen.size() < tris.size()) seen.resize(tris.size(), 0);
+    query++;
+    for (int x = at(box.lo.x); x <= at(box.hi.x); x++)
+      for (int y = at(box.lo.y); y <= at(box.hi.y); y++)
+        for (int z = at(box.lo.z); z <= at(box.hi.z); z++) {
+          auto it = cells.find(key(x, y, z));
+          if (it == cells.end()) continue;
+          for (uint32_t t : it->second)
+            if (seen[t] != query) {
+              seen[t] = query;
+              f(t);
+            }
+        }
+  }
+  // the distance to the nearest triangle, `limit` when none is nearer
+  float distance(const Vec3& p, float limit) const {
+    float best = limit;
+    AABB box;
+    box.add(p - Vec3{limit, limit, limit});
+    box.add(p + Vec3{limit, limit, limit});
+    each_near(box, [&](uint32_t t) {
+      const auto& tr = tris[t];
+      best = std::min(best, length(closest_on_triangle(p, tr[0], tr[1], tr[2]) - p));
+    });
+    return best;
+  }
+  size_t count(const AABB& box) const {
+    size_t n = 0;
+    each_near(box, [&](uint32_t t) { n += boxes[t].overlaps(box); });
+    return n;
+  }
+  // at least count(box): the triangles of the cells it covers, a triangle over several cells
+  // counted in each (cheap)
+  size_t bound(const AABB& box) const {
+    size_t n = 0;
+    for (int x = at(box.lo.x); x <= at(box.hi.x); x++)
+      for (int y = at(box.lo.y); y <= at(box.hi.y); y++)
+        for (int z = at(box.lo.z); z <= at(box.hi.z); z++)
+          if (auto it = cells.find(key(x, y, z)); it != cells.end()) n += it->second.size();
+    return n;
+  }
+};
+
+// The level whose decor a node is part of: <level> of its outermost ancestor <level>-tfrag-*,
+// -tie-* or -shrub-* (the draw groups of an extracted level), and that group's parent (which copy
+// of the level, in a document); "" for none
+std::pair<uint32_t, std::string> piece_level(const Scene& scene, const Node& n) {
+  std::pair<uint32_t, std::string> found{0, ""};
+  int guard = 0;
+  for (const Node* p = n.parent ? scene.find(n.parent) : nullptr; p && guard++ < 1000;
+       p = p->parent ? scene.find(p->parent) : nullptr)
+    for (const char* kind : {"-tfrag-", "-tie-", "-shrub-"})
+      if (const size_t at = p->name.find(kind); at != std::string::npos && at > 0) found = {p->parent, p->name.substr(0, at)};
+  return found;
+}
+
+// The parts of triangle abc to keep, `gone(point)` saying where the collision has no piece left:
+// all of it, none, or (when its corners and its middle disagree) its quarters, each decided again,
+// down to 1 m
+template <typename Gone, typename Out>
+void keep_parts(const Vec3& a, const Vec3& b, const Vec3& c, int depth, Gone& gone, Out& out) {
+  const bool middle = gone((a + b + c) * (1.f / 3.f));
+  const float longest = std::max(std::max(length2(b - a), length2(c - b)), length2(a - c));
+  if (depth < 6 && longest > 1.f && (gone(a) != middle || gone(b) != middle || gone(c) != middle)) {
+    const Vec3 ab = (a + b) * 0.5f, bc = (b + c) * 0.5f, ca = (c + a) * 0.5f;
+    keep_parts(a, ab, ca, depth + 1, gone, out);
+    keep_parts(ab, b, bc, depth + 1, gone, out);
+    keep_parts(ca, bc, c, depth + 1, gone, out);
+    keep_parts(ab, bc, ca, depth + 1, gone, out);
+    return;
+  }
+  if (!middle) out(a, b, c);
+}
+
+// Jak 3 gathers the collision around Jak in a cache of 461 triangles (collide-cache-h.gc); beyond
+// it, the triangles of the place are dropped and Jak can fall through the floor. The box it fills,
+// around his feet: his root sphere (2.2 m, 1.2 m up) and 1 m more (fill-cache-for-shape).
+constexpr size_t kCollideCacheTris = 460;
+// the pieces of decor colliding by their shape are 4 m across at least (walls, floors, catwalks,
+// stairs); the smaller ones (unless given a collision in the editor, or shapes of the editor) none
+constexpr float kSmallPiece = 4.f;
+const Vec3 kCacheBoxLo{-3.2f, -2.f, -3.2f}, kCacheBoxHi{3.2f, 4.4f, 3.2f};
+
+// The places of the floors (the faces up, a point every 3 m) where the cache would get more
+// triangles than it holds (`sides`: 2 when the builder doubles every face): how many, and where,
+// the densest first
+std::vector<std::pair<size_t, Vec3>> collision_hot_spots(const TriGrid& all, size_t sides) {
+  std::unordered_map<uint64_t, Vec3> floors;
+  auto sample = [&](const Vec3& p) {
+    floors.emplace(TriGrid::key((int)std::floor(p.x / 3.f), (int)std::floor(p.y), (int)std::floor(p.z / 3.f)), p);
+  };
+  for (const auto& t : all.tris) {
+    const Vec3 n = cross(t[1] - t[0], t[2] - t[0]);
+    const float len = length(n);
+    if (len <= 0.f || n.y < 0.7f * len) continue;  // facing up
+    const float longest = std::sqrt(std::max(std::max(length2(t[1] - t[0]), length2(t[2] - t[1])), length2(t[0] - t[2])));
+    const int steps = std::min(64, (int)std::ceil(longest / 3.f));
+    if (steps <= 1) {
+      sample((t[0] + t[1] + t[2]) * (1.f / 3.f));
+      continue;
+    }
+    for (int i = 0; i <= steps; i++)
+      for (int j = 0; i + j <= steps; j++)
+        sample(t[0] + (t[1] - t[0]) * ((float)i / steps) + (t[2] - t[0]) * ((float)j / steps));
+  }
+  std::vector<std::pair<size_t, Vec3>> out;
+  for (const auto& [key, at] : floors) {
+    AABB box;
+    box.add(at + kCacheBoxLo);
+    box.add(at + kCacheBoxHi);
+    if (all.bound(box) * sides <= kCollideCacheTris) continue;
+    const size_t n = all.count(box) * sides;
+    if (n > kCollideCacheTris) out.push_back({n, at});
+  }
+  std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+  return out;
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -221,7 +397,7 @@ std::string default_iso_name(const std::string& name) {
   return out.empty() ? "CUSTOM" : out;
 }
 
-std::string check_export_names(const LevelExportOptions& o) {
+std::string check_export_names(const LevelExportOptions& o, const GameData* data) {
   auto symbol_ok = [](const std::string& s) {
     if (s.empty() || !std::islower((unsigned char)s[0])) return false;
     for (char c : s)
@@ -234,7 +410,72 @@ std::string check_export_names(const LevelExportOptions& o) {
   for (char c : o.iso_name)
     if (!(std::isupper((unsigned char)c) || std::isdigit((unsigned char)c))) return "export.bad.iso_name";
   if (o.folder.empty()) return "export.bad.folder";
+  if (data) {
+    // the game's own levels (the ones whose DGO the game builds): their files would be written over
+    for (const auto& [name, info] : data->levels()) {
+      if (info.dgo.empty()) continue;
+      if (name == o.name) return "export.bad.name_taken";
+      if (info.nickname == o.nickname) return "export.bad.nickname_taken";
+    }
+    if (!o.replaces.empty()) {
+      const LevelInfo* info = data->level(o.replaces);
+      if (!info || info->dgo.empty() || info->layer) return "export.bad.replaces";
+    }
+  }
   return {};
+}
+
+bool own_level_node(const Scene& scene, size_t i) {
+  const SceneCache& c = scene.cache();
+  if (i >= scene.nodes.size()) return false;
+  auto marked = [](const Node& n) {
+    return n.kind == NodeKind::Group && !n.extras.empty() &&
+           (n.extras.contains("og_level") || n.extras.contains("og_companion") || n.extras.contains("og_layer") ||
+            n.extras.contains("og_reference"));
+  };
+  if (c.parent.size() == c.count && i < c.count) {
+    for (int32_t k = (int32_t)i, guard = 0; k >= 0 && guard < 1000; k = c.parent[k], guard++)
+      if (marked(scene.nodes[k])) return false;
+    return true;
+  }
+  int guard = 0;
+  for (const Node* n = &scene.nodes[i]; n && guard < 1000; n = n->parent ? scene.find(n->parent) : nullptr, guard++)
+    if (marked(*n)) return false;
+  return true;
+}
+
+std::vector<ContinueCheck> check_continues(const Scene& scene, const GameData* data, const std::string& level) {
+  std::vector<ContinueCheck> out;
+  const LevelInfo* info = data ? data->level(level) : nullptr;
+  if (!info) return out;
+  const SceneCache& cache = scene.cache();
+  const size_t count = std::min(scene.nodes.size(), cache.count);
+  std::vector<size_t> ground;  // the document's own decor shown
+  for (size_t i = 0; i < count; i++)
+    if (scene.nodes[i].kind == NodeKind::Render && scene.nodes[i].mesh && cache.visible[i] && own_level_node(scene, i))
+      ground.push_back(i);
+  for (const auto& cp : info->continues) {
+    ContinueCheck c;
+    c.name = cp.name;
+    c.position = cp.position;
+    c.ground = std::numeric_limits<float>::quiet_NaN();
+    // from a little above the point, down to a few meters below it
+    const Ray ray{cp.position + Vec3{0, 2.f, 0}, {0, -1, 0}};
+    float best = 8.f;
+    for (size_t i : ground) {
+      if (!ray_aabb(ray, cache.bounds[i].expanded(0.01f), best)) continue;
+      const Node& n = scene.nodes[i];
+      const Ray local = transform_ray(cache.worlds[i].inverse(), ray);
+      for (size_t p = 0; p < n.mesh->prims.size(); p++) {
+        float t;
+        uint32_t tri;
+        if (n.mesh->bvh(p).raycast(local, n.mesh->prims[p].pos, n.mesh->prims[p].idx, best, &t, &tri)) best = t;
+      }
+    }
+    if (best < 8.f) c.ground = ray.at(best).y;
+    out.push_back(std::move(c));
+  }
+  return out;
 }
 
 bool BuilderSurface::operator<(const BuilderSurface& o) const {
@@ -354,10 +595,14 @@ json builder_lump_value(const json& value, const std::string& type_in) {
 bool export_level_for_game(const Scene& scene, const GameData* data, const LevelExportOptions& o,
                            LevelExportReport* report, std::string* error) {
   LevelExportReport rep;
-  if (const std::string bad = check_export_names(o); !bad.empty()) {
+  if (const std::string bad = check_export_names(o, data); !bad.empty()) {
     if (error) *error = tr(bad.c_str());
     return false;
   }
+  // a level replacing one of the game's: the document's own level alone (the levels added next to
+  // it are the game's, loaded by the game as they are); never a level shown for reference
+  const bool replacing = !o.replaces.empty();
+  const LevelInfo* replaced = replacing && data ? data->level(o.replaces) : nullptr;
   const fs::path dir = to_path(o.folder) / to_path(o.name);
   std::error_code ec;
   fs::create_directories(dir, ec);
@@ -372,6 +617,11 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
 
   const SceneCache& cache = scene.cache();
   const size_t count = std::min(scene.nodes.size(), cache.visible.size());
+  auto exported_part = [&](size_t i) {
+    if (replacing) return own_level_node(scene, i);
+    return !(i < cache.reference.size() && cache.reference[i]);
+  };
+  size_t left_out = 0;  // the elements of the levels next to it (replacing)
   std::unordered_map<uint32_t, size_t> index;
   for (size_t i = 0; i < count; i++) index[scene.nodes[i].id] = i;
   auto parent_index = [&](const Node& n) -> int {
@@ -380,10 +630,11 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   };
 
   // the levels with the game's collision: the parent of their "<level>-collision" group, and <level>
+  // (a level is told from another copy of it, a reference, by that parent)
   std::set<std::pair<uint32_t, std::string>> with_collision;
   for (size_t i = 0; i < count; i++) {
     const Node& n = scene.nodes[i];
-    if (n.kind != NodeKind::Collision || !n.mesh) continue;
+    if (n.kind != NodeKind::Collision || !n.mesh || !exported_part(i)) continue;
     const int p = parent_index(n);
     if (p < 0) continue;
     const Node& g = scene.nodes[p];
@@ -391,27 +642,81 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     if (g.name.size() > suffix.size() && g.name.compare(g.name.size() - suffix.size(), suffix.size(), suffix) == 0)
       with_collision.insert({g.parent, g.name.substr(0, g.name.size() - suffix.size())});
   }
-  // an ancestor is one of the draw groups of a level (<level>-tfrag-*, -tie-*, -shrub-*) whose
-  // level has its collision
-  auto covered_by_game = [&](size_t i) {
-    for (int p = parent_index(scene.nodes[i]); p >= 0; p = parent_index(scene.nodes[p])) {
-      const Node& g = scene.nodes[p];
-      for (const char* kind : {"-tfrag-", "-tie-", "-shrub-"}) {
-        const size_t at = g.name.find(kind);
-        if (at != std::string::npos && with_collision.count({g.parent, g.name.substr(0, at)})) return true;
+  // The pieces of a level's decor still where the game has them: its collision holds for them. The
+  // game's collision of the others (deleted, moved, hidden, or given a collision of their own in
+  // the editor) is taken out where they were: the level as extracted (o.originals) tells them apart.
+  struct Pieces {
+    bool known = false;  // compared with the level as extracted
+    std::unordered_set<std::string> kept;
+    TriGrid kept_tris{1.f}, removed_tris{1.f};
+    size_t removed = 0;
+  };
+  std::map<std::pair<uint32_t, std::string>, Pieces> pieces;
+  if (o.game_collision) {
+    for (const auto& level : with_collision) {
+      auto orig_it = o.originals.find(level.second);
+      if (orig_it == o.originals.end() || !orig_it->second) continue;
+      const Scene& orig = *orig_it->second;
+      // the document's pieces of that level, shown, where they are
+      std::unordered_map<std::string, AABB> here;
+      for (size_t i = 0; i < count; i++) {
+        const Node& n = scene.nodes[i];
+        if (n.kind != NodeKind::Render || !n.mesh || cache.actor[i] || !cache.visible[i]) continue;
+        if (decor_behavior_of(n.extras).collision.set) continue;
+        if (piece_level(scene, n) == level) here[n.name] = cache.bounds[i];
       }
+      Pieces& ps = pieces[level];
+      ps.known = true;
+      std::vector<const Node*> kept, removed;
+      for (const Node& n : orig.nodes) {
+        if (n.kind != NodeKind::Render || !n.mesh || piece_level(orig, n).second != level.second) continue;
+        const AABB was = orig.world_bounds(n);
+        auto h = here.find(n.name);
+        const bool same =
+            h != here.end() && length(h->second.lo - was.lo) < 0.05f && length(h->second.hi - was.hi) < 0.05f;
+        if (same) {
+          ps.kept.insert(n.name);
+          kept.push_back(&n);
+        } else {
+          removed.push_back(&n);
+        }
+      }
+      ps.removed = removed.size();
+      if (removed.empty()) continue;  // nothing to take out
+      auto add = [&](TriGrid& grid, const Node& n) {
+        const Mat4 w = orig.world(n);
+        for (const auto& prim : n.mesh->prims)
+          for (size_t t = 0; t + 2 < prim.idx.size(); t += 3)
+            grid.add(w.point(prim.pos[prim.idx[t]]), w.point(prim.pos[prim.idx[t + 1]]),
+                     w.point(prim.pos[prim.idx[t + 2]]));
+      };
+      for (const Node* n : removed) add(ps.removed_tris, *n);
+      for (const Node* n : kept) add(ps.kept_tris, *n);
     }
-    return false;
+  }
+  // the game's collision holds for a piece of a level that has it, still in place
+  auto covered_by_game = [&](size_t i) {
+    const Node& n = scene.nodes[i];
+    const auto level = piece_level(scene, n);
+    if (level.second.empty() || !with_collision.count(level)) return false;
+    auto it = pieces.find(level);
+    return it == pieces.end() || !it->second.known || it->second.kept.count(n.name) != 0;
   };
 
   // --- the decor -------------------------------------------------------------------------------
   ExportOptions eo;
   eo.mode = ExportMode::Builder;
   size_t hidden = 0;
+  std::vector<size_t> decor_actions;  // the elements that bounce or launch Jak: actors of the level's code
+  std::vector<size_t> by_shape;       // the elements whose collision the builder makes from their shape
   AABB bounds;
   for (size_t i = 0; i < count; i++) {
     const Node& n = scene.nodes[i];
     if (n.kind != NodeKind::Render || !n.mesh || cache.actor[i]) continue;
+    if (!exported_part(i)) {
+      left_out += replacing && cache.visible[i] && !cache.reference[i];
+      continue;
+    }
     if (!cache.visible[i]) {
       hidden++;
       continue;
@@ -425,35 +730,68 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
       bounds.add(cache.bounds[i].hi);
     }
     // the game's collision there, or none for see-through surfaces (water, glass): the builder
-    // makes the collision of the others from their shape
-    if ((o.game_collision && covered) || see_through(scene, *n.mesh)) {
+    // makes the collision of the others from their shape; a collision set in the editor (its
+    // surface, an invisible wall, none) where the game's does not already hold it
+    const DecorBehavior decor = decor_behavior_of(n.extras);
+    if (decor.collision.set && !(o.game_collision && covered)) {
+      eo.node_extras[n.id] = collision_extras(decor.collision);
+      if (decor.collision.kind != "none") {
+        rep.collision_from_decor++;
+        by_shape.push_back(i);
+      }
+    } else if ((o.game_collision && covered) || see_through(scene, *n.mesh)) {
       eo.node_extras[n.id] = json{{"set_collision", 1}, {"ignore", 1}};
+      if (decor.collision.set) notes.add("export.note.decor_collision_game", n.name);
+    } else if (!n.extras.contains("og_shape") && i < cache.bounds.size() && cache.bounds[i].valid() &&
+               std::max({cache.bounds[i].size().x, cache.bounds[i].size().y, cache.bounds[i].size().z}) < kSmallPiece) {
+      // a small piece (a pipe, a lamp, a window, a decal): the game gives most of its details no
+      // collision, and theirs would fill the cache around Jak (he falls through the floor there)
+      eo.node_extras[n.id] = json{{"set_collision", 1}, {"ignore", 1}};
+      notes.add("export.note.collision_small", n.name);
     } else {
       rep.collision_from_decor++;
+      by_shape.push_back(i);
     }
+    if (decor.bounce.set || decor.launch.set) decor_actions.push_back(i);
   }
   if (rep.collision_from_decor) notes.add("export.note.collision_from_decor", "", rep.collision_from_decor);
 
   // --- the game's collision: one mesh per surface, in the game's space ---------------------------
+  std::vector<std::shared_ptr<Mesh>> game_collision;
   if (o.game_collision) {
     std::map<BuilderSurface, std::shared_ptr<Mesh>> surfaces;
-    size_t approximated = 0;
+    size_t approximated = 0, taken_out = 0;
     for (size_t i = 0; i < count; i++) {
       const Node& n = scene.nodes[i];
-      if (n.kind != NodeKind::Collision || !n.mesh) continue;
+      if (n.kind != NodeKind::Collision || !n.mesh || !exported_part(i)) continue;
       const int p = parent_index(n);
       if (p >= 0 && !cache.visible[p]) continue;  // its level is hidden
+      // the pieces of its level that were taken out: their collision with them
+      const Pieces* level_pieces = nullptr;
+      if (p >= 0) {
+        const Node& g = scene.nodes[p];
+        const std::string suffix = "-collision";
+        if (g.name.size() > suffix.size()) {
+          auto it = pieces.find({g.parent, g.name.substr(0, g.name.size() - suffix.size())});
+          if (it != pieces.end() && !it->second.removed_tris.empty()) level_pieces = &it->second;
+        }
+      }
+      // nearer to a piece taken out than to the pieces in place, by 5 cm at least (0.75 m at most:
+      // the game's collision follows its decor that closely)
+      constexpr float kNear = 0.75f;
+      auto gone = [&](const Vec3& at) {
+        const float to_removed = level_pieces->removed_tris.distance(at, kNear);
+        return to_removed < kNear && to_removed + 0.05f < level_pieces->kept_tris.distance(at, kNear);
+      };
       const Mat4& w = cache.worlds[i];
       for (const auto& prim : n.mesh->prims) {
         const bool normals = prim.nrm.size() == prim.pos.size();
         for (size_t t = 0; t + 2 < prim.idx.size(); t += 3) {
+          if (prim.idx[t] >= prim.pos.size() || prim.idx[t + 1] >= prim.pos.size() || prim.idx[t + 2] >= prim.pos.size())
+            continue;
           const uint32_t pat = t / 3 < prim.tri_pat.size() ? prim.tri_pat[t / 3] : 0;
           std::string loss;
           const BuilderSurface s = builder_surface(pat, &loss);
-          if (!loss.empty()) {
-            approximated++;
-            notes.add("export.note.surfaces", loss);
-          }
           auto& mesh = surfaces[s];
           if (!mesh) {
             mesh = std::make_shared<Mesh>();
@@ -463,15 +801,33 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
             mesh->prims.emplace_back();
           }
           Primitive& out = mesh->prims[0];
+          Vec3 v[3], nrm{0, 0, 0};
           for (int k = 0; k < 3; k++) {
-            const uint32_t v = prim.idx[t + k];
-            if (v >= prim.pos.size()) break;
-            out.idx.push_back((uint32_t)out.pos.size());
-            out.pos.push_back(w.point(prim.pos[v]));
+            v[k] = w.point(prim.pos[prim.idx[t + k]]);
             // the game's normals: the builder turns the triangles that face the other way
-            out.nrm.push_back(normals ? normalize(w.dir(prim.nrm[v])) : Vec3{0, 1, 0});
+            if (normals) nrm += w.dir(prim.nrm[prim.idx[t + k]]);
           }
-          rep.collision_triangles++;
+          nrm = normals && length2(nrm) > 0 ? normalize(nrm) : Vec3{0, 1, 0};
+          size_t written = 0;
+          auto write = [&](const Vec3& a, const Vec3& b, const Vec3& c) {
+            for (const Vec3& q : {a, b, c}) {
+              out.idx.push_back((uint32_t)out.pos.size());
+              out.pos.push_back(q);
+              out.nrm.push_back(nrm);
+            }
+            written++;
+          };
+          if (level_pieces) keep_parts(v[0], v[1], v[2], 0, gone, write);
+          else write(v[0], v[1], v[2]);
+          if (!written) {
+            taken_out++;
+            continue;
+          }
+          rep.collision_triangles += written;
+          if (!loss.empty()) {
+            approximated++;
+            notes.add("export.note.surfaces", loss);
+          }
         }
       }
     }
@@ -482,6 +838,7 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
       bool flat = true;
       for (const auto& nrm : p.nrm) flat &= nrm.x == 0 && nrm.y == 1 && nrm.z == 0;
       if (flat) p.compute_normals();
+      game_collision.push_back(mesh);
       eo.extra_meshes.push_back({mesh, json{{"set_collision", 1},
                                             {"set_invisible", 1},
                                             {"collide_material", s.material},
@@ -492,7 +849,38 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
                                             {"noedge", (int)s.noedge},
                                             {"nolineofsight", (int)s.nolineofsight}}});
     }
+    size_t pieces_out = 0;
+    for (const auto& [level, ps] : pieces) pieces_out += ps.removed;
+    if (taken_out) {
+      notes.add("export.note.collision_taken_out", std::to_string(pieces_out));
+      if (taken_out > 1) notes.add("export.note.collision_taken_out", "", taken_out - 1);
+    }
     (void)approximated;
+  }
+
+  // --- where Jak would meet more collision than the game gathers at once -----------------------
+  {
+    TriGrid all(2.f);
+    for (const auto& mesh : game_collision)
+      for (const auto& prim : mesh->prims)
+        for (size_t t = 0; t + 2 < prim.idx.size(); t += 3)
+          all.add(prim.pos[prim.idx[t]], prim.pos[prim.idx[t + 1]], prim.pos[prim.idx[t + 2]]);
+    for (size_t i : by_shape) {
+      const Mat4& w = cache.worlds[i];
+      for (const auto& prim : scene.nodes[i].mesh->prims)
+        for (size_t t = 0; t + 2 < prim.idx.size(); t += 3)
+          all.add(w.point(prim.pos[prim.idx[t]]), w.point(prim.pos[prim.idx[t + 1]]), w.point(prim.pos[prim.idx[t + 2]]));
+    }
+    const size_t sides = rep.collision_from_decor > 0 ? 2 : 1;  // the builder doubles every face then
+    const auto dense = collision_hot_spots(all, sides);
+    for (size_t k = 0; k < dense.size() && k < 3; k++) {
+      char at[96];
+      std::snprintf(at, sizeof(at), "(%.0f, %.0f, %.0f): %zu", dense[k].second.x, dense[k].second.y, dense[k].second.z,
+                    dense[k].first);
+      notes.add("export.note.collision_dense", at);
+    }
+    if (dense.size() > 3) notes.add("export.note.collision_dense", "", dense.size() - 3);
+    rep.dense_places = dense.size();
   }
 
   // --- the actors ------------------------------------------------------------------------------
@@ -516,6 +904,10 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
       // without actors: decor alone, but the platforms and bridges needed to get around stay
       // (the same rule the document itself loads a level by)
       if (!o.actors && !(data && data->object_family(etype) == "platform")) continue;
+      if (!exported_part(i)) {
+        left_out += replacing && cache.visible[i] && !cache.reference[i];
+        continue;
+      }
       if (!cache.visible[i]) {
         hidden++;
         continue;
@@ -549,6 +941,8 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     for (const auto& f : files)
       if (std::find(code_files.begin(), code_files.end(), f) == code_files.end()) code_files.push_back(f);
   };
+  // the level replaced: its own code (its particles, its objects, what its missions spawn there)
+  if (replaced) need(replaced->code);
   for (const auto& [i, type, name] : exported) {
     const Node& n = scene.nodes[i];
     // the code of its type, and of the particle group it draws (a part-spawner's art-name)
@@ -691,9 +1085,64 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     // the models its type draws: their art groups, from the game's DGOs
     if (data)
       if (const auto* models = data->type_models(type))
-        for (const auto& m : *models) art_groups.insert(m + "-ag");
+        for (const auto& m : *models)
+          if (auto ag = data->level_art_group(m); !ag.empty()) art_groups.insert(ag + "-ag");
+  }
+  // the decor that bounces or launches Jak: an actor of the level's code on its top
+  {
+    std::set<std::string> taken;
+    for (const auto& e : exported) taken.insert(e.name);
+    for (size_t i : decor_actions) {
+      const Node& n = scene.nodes[i];
+      const DecorBehavior decor = decor_behavior_of(n.extras);
+      const AABB& b = cache.bounds[i];
+      if (!b.valid()) continue;
+      const Vec3 top{b.center().x, b.hi.y, b.center().z};
+      const float radius = std::clamp(std::max(b.size().x, b.size().z) * 0.5f, 1.f, 20.f);
+      auto add_actor = [&](const char* what, const std::string& code_of_type, const json& lump_in, std::string type) {
+        std::string name = n.name + "-" + what;
+        for (int k = 2; taken.count(name); k++) name = n.name + "-" + what + "-" + std::to_string(k);
+        taken.insert(name);
+        generated += code_of_type + "\n";
+        rep.behaviors++;
+        json lump = lump_in;
+        lump["name"] = name;
+        std::ostringstream a;
+        a << "{\"trans\": [" << num(top.x) << ", " << num(top.y) << ", " << num(top.z) << "], \"etype\": \"" << type
+          << "\", \"game_task\": 0, \"quat\": [0.0, 0.0, 0.0, 1.0], \"bsphere\": [" << num(top.x) << ", " << num(top.y)
+          << ", " << num(top.z) << ", " << num(radius) << "], \"lump\": " << lump.dump() << "}";
+        actor_lines.push_back(a.str());
+        rep.actors++;
+      };
+      if (decor.bounce.set) {
+        const std::string type = behavior_type_name(o.name, n.name + "-bounce");
+        add_actor("bounce", bounce_code(type, radius, n.name + ": throws Jak up " + num(decor.bounce.height) + " m"),
+                  json{{"spring-height", json::array({"float", decor.bounce.height * 4096.f})}}, type);
+      }
+      if (decor.launch.set) {
+        // where Jak lands: `distance` along the element's facing turned by `yaw`, `height` above
+        const Transform t = Transform::from_matrix(cache.worlds[i]);
+        Vec3 facing = t.r.rotate({0, 0, 1});
+        facing.y = 0;
+        facing = length2(facing) > 1e-6f ? normalize(facing) : Vec3{0, 0, 1};
+        const Vec3 dir = Quat::axis_angle({0, 1, 0}, radians(decor.launch.yaw)).rotate(facing);
+        const Vec3 to = top + dir * decor.launch.distance + Vec3{0, decor.launch.height, 0};
+        const float to_units[3] = {to.x * 4096.f, to.y * 4096.f, to.z * 4096.f};
+        const std::string type = behavior_type_name(o.name, n.name + "-launch");
+        add_actor("launch",
+                  launch_code(type, radius, to_units, decor.launch.time,
+                              n.name + ": throws Jak " + num(decor.launch.distance) + " m away, " + num(decor.launch.height) +
+                                  " m up"),
+                  json::object(), type);
+      }
+    }
   }
   if (kill_masks) notes.add("export.note.kill_masks", "", kill_masks);
+  if (left_out) notes.add("export.note.replace_left_out", "", left_out);
+  // where the game starts the player in the level replaced: on the ground of the new one?
+  if (replaced)
+    for (const auto& c : check_continues(scene, data, o.replaces))
+      if (!c.ok()) notes.add("export.note.continue_no_ground", c.name);
   if (absent) notes.add("export.note.absent", "", absent);
   if (hidden) notes.add("export.note.hidden", "", hidden);
   rep.art_groups = art_groups.size();
@@ -792,15 +1241,26 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   // the level's definition in the game's code
   const float bottom = (bounds.valid() ? bounds.lo.y : o.start.y) - 20.f;
   const fs::path info_path = dir / to_path("level-info.gc");
-  if (!write_text(info_path, ";; add this to goal_src/jak3/engine/level/level-info.gc\n\n" + level_info(o, bottom), error))
-    return false;
+  std::string info_text;
+  if (replaced) {
+    // the game's own definition stays (continue points, music, missions...): its nickname names the
+    // DGO the game loads for it
+    info_text = ";; " + o.name + " replaces " + o.replaces + " in the game. In goal_src/jak3/engine/level/level-info.gc,\n" +
+                ";; in (define " + o.replaces + " ...), the game loads <nickname>.DGO for the level: change its\n" +
+                ";; nickname so that it loads " + nick_upper + ".DGO, this level (put '" + replaced->nickname +
+                " back to play the game's own " + o.replaces + "):\n;;\n;;   :nickname '" + replaced->nickname +
+                "\n;; becomes\n    :nickname '" + o.nickname + "\n";
+  } else {
+    info_text = ";; add this to goal_src/jak3/engine/level/level-info.gc\n\n" + level_info(o, bottom);
+  }
+  if (!write_text(info_path, info_text, error)) return false;
   rep.files.push_back(from_path(info_path));
 
   rep.notes = notes.list();
 
   // how to add it to the game
   std::ostringstream md;
-  md << "# " << o.name << " for Jak 3\n\n"
+  md << "# " << o.name << " for Jak 3" << (replaced ? ", in place of " + o.replaces : std::string()) << "\n\n"
      << "Exported by the OpenGOAL Level Editor from " << (scene.settings.level.empty() ? "a new level" : scene.settings.level)
      << ": " << rep.meshes << " meshes (" << rep.triangles << " triangles), "
      << rep.collision_triangles << " collision triangles of the game, " << rep.actors << " actors, "
@@ -823,21 +1283,37 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     md << ")\n";
   }
   md << "   (custom-level-cgo \"" << nick_upper << ".DGO\" \"" << o.name << "/" << o.name << ".gd\")\n"
-     << "   ```\n\n"
-     << "3. In `goal_src/jak3/engine/level/level-info.gc`, add the definition of `level-info.gc`\n"
-     << "   (next to this file) and give it an `:index` no other level has. The player starts at\n"
-     << "   (" << num(o.start.x) << ", " << num(o.start.y) << ", " << num(o.start.z) << ") m.\n"
-     << "4. Build the game (`(mi)` in the REPL), then go there:\n"
-     << "   `(start 'play (get-continue-by-name *game-info* \"" << o.name << "-start\"))`.\n"
-     << "   (`bg` loads it next to the levels already there: from the city, no memory is left.)\n\n";
+     << "   ```\n\n";
+  if (replaced) {
+    const std::string first = replaced->continues.empty() ? o.replaces + "-start" : replaced->continues.front().name;
+    md << "3. In `goal_src/jak3/engine/level/level-info.gc`, in `(define " << o.replaces << " ...)`, change\n"
+       << "   `:nickname '" << replaced->nickname << "` to `:nickname '" << o.nickname << "` (see `level-info.gc` next to this\n"
+       << "   file). The game loads `<nickname>.DGO` for a level: it now loads " << nick_upper << ".DGO, this level,\n"
+       << "   wherever it loads " << o.replaces << ", and keeps everything else of " << o.replaces
+       << " (its continue points, its music,\n"
+       << "   its missions, the levels around it). The game's own `" << replaced->dgo
+       << "` is still built: put the nickname\n"
+       << "   back to play the game's " << o.replaces << " again.\n"
+       << "4. Build the game (`(mi)` in the REPL), then go there as in the game (from a level next to it), or:\n"
+       << "   `(start 'play (get-continue-by-name *game-info* \"" << first << "\"))`.\n\n";
+  } else {
+    md << "3. In `goal_src/jak3/engine/level/level-info.gc`, add the definition of `level-info.gc`\n"
+       << "   (next to this file) and give it an `:index` no other level has. The player starts at\n"
+       << "   (" << num(o.start.x) << ", " << num(o.start.y) << ", " << num(o.start.z) << ") m.\n"
+       << "4. Build the game (`(mi)` in the REPL), then go there:\n"
+       << "   `(start 'play (get-continue-by-name *game-info* \"" << o.name << "-start\"))`.\n"
+       << "   (`bg` loads it next to the levels already there: from the city, no memory is left.)\n\n";
+  }
   if (!rep.notes.empty()) {
     md << "## What the export changed\n\n";
     for (const auto& note : rep.notes) md << "- " << strf(tr_en(note.key.c_str()), note.count, note.detail.c_str()) << "\n";
     md << "\n";
   }
   md << "## Good to know\n\n"
-     << "- The collision of the levels' own decor is the game's: a piece of it moved or deleted keeps its\n"
-     << "  collision where the game had it. Export with the collision made from the decor to change that.\n"
+     << "- The collision of the levels' own decor is the game's where the decor is still in place (exact,\n"
+     << "  and light enough for the game: Jak 3 gathers at most 461 collision triangles around Jak, more\n"
+     << "  and he falls through the floor); where a piece was deleted, moved or hidden, it is taken out.\n"
+     << "  The pieces placed or moved collide by their shape, made by the builder.\n"
      << "- The code of the game's objects that live in a level's own files is in `" << o.name << ".gd`, with\n"
      << "  the files before it in that level's DGO (`goal_src/jak3/dgos/`).\n"
      << "- The paths of the actors move with them; the other positions inside their data (targets) are\n"

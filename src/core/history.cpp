@@ -72,9 +72,12 @@ void NodeChange::save(uint32_t id) {
   m_before[id] = n ? std::optional<Node>(*n) : std::nullopt;
 }
 
-void NodeChange::save_subtree(uint32_t id) {
-  save(id);
-  for (auto d : m_scene.descendants(id)) save(d);
+void NodeChange::save_subtree(uint32_t id) { save_subtrees({id}); }
+
+void NodeChange::save_subtrees(const std::vector<uint32_t>& ids) {
+  for (auto id : ids) save(id);
+  for (const auto& below : m_scene.descendants_of(ids))
+    for (auto d : below) save(d);
 }
 
 HistoryEntry NodeChange::commit(const std::string& label, std::function<void()> after_apply) {

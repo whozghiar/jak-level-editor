@@ -4,6 +4,7 @@
 #include <atomic>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "scene/bvh.h"
 
@@ -115,13 +116,16 @@ size_t Mesh::tri_count() const {
 // ------------------------------------------------------------------------------------------------
 
 json LevelSettings::to_json() const {
-  return json{{"level", level}, {"source_group", source_group}};
+  json j{{"level", level}, {"source_group", source_group}};
+  if (!replaces.empty()) j["replaces"] = replaces;
+  return j;
 }
 
 LevelSettings LevelSettings::from_json(const json& j) {
   LevelSettings s;
   s.level = j.value("level", std::string());
   s.source_group = j.value("source_group", std::string());
+  s.replaces = j.value("replaces", std::string());
   return s;
 }
 
@@ -142,16 +146,27 @@ const Node* Scene::find(uint32_t id) const {
 int Scene::index_of(uint32_t id) const {
   if (id == 0) return -1;
   // fast path: a cache keyed by id, checked against the vector
-  static thread_local std::unordered_map<const Scene*, std::unordered_map<uint32_t, int>> cache;
-  auto& map = cache[this];
-  auto it = map.find(id);
-  if (it != map.end() && it->second < (int)nodes.size() && nodes[it->second].id == id) {
+  struct Map {
+    std::unordered_map<uint32_t, int> index;
+    uint64_t ids = ~0ull;  // the node ids the map was made from (a sum and the count)
+  };
+  static thread_local std::unordered_map<const Scene*, Map> cache;
+  Map& map = cache[this];
+  auto it = map.index.find(id);
+  if (it != map.index.end() && it->second < (int)nodes.size() && nodes[it->second].id == id) {
     return it->second;
   }
-  map.clear();
-  for (int i = 0; i < (int)nodes.size(); i++) map[nodes[i].id] = i;
-  it = map.find(id);
-  return it == map.end() ? -1 : it->second;
+  // an id that is not there (a node deleted): the map is made again only when the nodes changed,
+  // not for every question about a missing node (that rebuild walks a whole city each time)
+  uint64_t ids = nodes.size();
+  for (const auto& n : nodes) ids = ids * 1099511628211ull + n.id;
+  if (it == map.index.end() && ids == map.ids) return -1;
+  map.index.clear();
+  map.index.reserve(nodes.size());
+  for (int i = 0; i < (int)nodes.size(); i++) map.index[nodes[i].id] = i;
+  map.ids = ids;
+  it = map.index.find(id);
+  return it == map.index.end() ? -1 : it->second;
 }
 
 uint32_t Scene::add(Node node) {
@@ -163,11 +178,8 @@ uint32_t Scene::add(Node node) {
 }
 
 void Scene::remove(const std::vector<uint32_t>& ids) {
-  std::set<uint32_t> doomed;
-  for (auto id : ids) {
-    doomed.insert(id);
-    for (auto d : descendants(id)) doomed.insert(d);
-  }
+  std::unordered_set<uint32_t> doomed(ids.begin(), ids.end());
+  for (const auto& d : descendants_of(ids)) doomed.insert(d.begin(), d.end());
   nodes.erase(std::remove_if(nodes.begin(), nodes.end(),
                              [&](const Node& n) { return doomed.count(n.id) != 0; }),
               nodes.end());
@@ -180,20 +192,50 @@ std::vector<uint32_t> Scene::children(uint32_t id) const {
   return out;
 }
 
-std::vector<uint32_t> Scene::descendants(uint32_t id) const {
-  std::vector<uint32_t> out;
-  std::vector<uint32_t> stack{id};
-  while (!stack.empty()) {
-    uint32_t cur = stack.back();
-    stack.pop_back();
-    for (const auto& n : nodes) {
-      if (n.parent == cur && n.id != id) {
-        out.push_back(n.id);
-        stack.push_back(n.id);
-      }
+std::vector<uint32_t> Scene::descendants(uint32_t id) const { return std::move(descendants_of({id})[0]); }
+
+std::vector<std::vector<uint32_t>> Scene::descendants_of(const std::vector<uint32_t>& roots) const {
+  std::vector<std::vector<uint32_t>> out(roots.size());
+  if (roots.empty() || nodes.empty()) return out;
+  // id -> index (ids are small and dense)
+  uint32_t max_id = 0;
+  for (const auto& n : nodes) max_id = std::max(max_id, n.id);
+  std::vector<int32_t> index(max_id + 1, -1);
+  for (size_t i = 0; i < nodes.size(); i++) index[nodes[i].id] = (int32_t)i;
+  auto parent_index = [&](size_t i) {
+    const uint32_t p = nodes[i].parent;
+    return p && p <= max_id ? index[p] : -1;
+  };
+  // which root is each node a root of; the nearest root strictly above each node (-1: none, -2: not
+  // known yet), found walking up once per node: what is above a node is known when it is reached
+  std::vector<int32_t> root_of(nodes.size(), -1), above(nodes.size(), -2);
+  for (size_t r = 0; r < roots.size(); r++)
+    if (roots[r] <= max_id && index[roots[r]] >= 0) root_of[index[roots[r]]] = (int32_t)r;
+  std::vector<int32_t> chain;
+  for (size_t i = 0; i < nodes.size(); i++) {
+    if (above[i] != -2) continue;
+    chain.clear();
+    for (int32_t cur = (int32_t)i; cur >= 0 && above[cur] == -2 && chain.size() < 1000; cur = parent_index(cur))
+      chain.push_back(cur);
+    for (size_t k = chain.size(); k-- > 0;) {
+      const int32_t p = parent_index(chain[k]);
+      above[chain[k]] = p < 0 ? -1 : root_of[p] >= 0 ? root_of[p] : std::max(above[p], -1);
     }
   }
+  for (size_t i = 0; i < nodes.size(); i++)
+    if (above[i] >= 0) out[above[i]].push_back(nodes[i].id);
   return out;
+}
+
+void Scene::subtree(size_t index, std::vector<uint32_t>& out) const {
+  const SceneCache& c = cache();
+  if (index >= c.count) return;
+  const size_t first = out.size();
+  out.push_back((uint32_t)index);
+  for (size_t k = first; k < out.size(); k++) {
+    const uint32_t i = out[k];
+    for (uint32_t j = c.kid_start[i]; j < c.kid_start[i + 1]; j++) out.push_back(c.kids[j]);
+  }
 }
 
 bool Scene::is_ancestor(uint32_t ancestor, uint32_t id) const {
@@ -247,12 +289,14 @@ const SceneCache& Scene::cache() const {
   const bool same_nodes = c.count == n && (!n || (c.first_id == nodes.front().id && c.last_id == nodes.back().id));
   if (c.frame == m_frame && same_nodes) return c;
   c.frame = m_frame;
+  c.version++;
   c.count = n;
   c.first_id = n ? nodes.front().id : 0;
   c.last_id = n ? nodes.back().id : 0;
   c.worlds.resize(n);
   c.visible.assign(n, 0);
   c.actor.assign(n, 0);
+  c.reference.assign(n, 0);
   c.bounds.assign(n, AABB{});
   c.meshes.resize(n, nullptr);
   bool meshes_changed = false;  // a node given another mesh (a new texture, a shape resized, undo)
@@ -278,9 +322,11 @@ const SceneCache& Scene::cache() const {
       const Node& node = nodes[j];
       const int32_t p = node.parent && node.parent <= max_id ? index[node.parent] : -1;
       Mat4 local = node.local.matrix();
+      const bool reference = node.kind == NodeKind::Group && !node.extras.empty() && node.extras.contains("og_reference");
       if (p >= 0 && done[p]) {
         c.worlds[j] = c.worlds[p] * local;
         c.visible[j] = c.visible[p] && node.visible && !node.story_hidden;
+        c.reference[j] = c.reference[p] || reference;
         if (node.kind == NodeKind::Render)
           c.actor[j] = nodes[p].kind == NodeKind::Actor ? nodes[p].id : c.actor[p];
         else if (node.kind != NodeKind::Actor)
@@ -288,6 +334,7 @@ const SceneCache& Scene::cache() const {
       } else {
         c.worlds[j] = local;
         c.visible[j] = node.visible && !node.story_hidden;
+        c.reference[j] = reference;
       }
       if (node.mesh) c.bounds[j] = node.mesh->bounds().transformed(c.worlds[j]);
       if (c.meshes[j] != node.mesh.get()) {
@@ -296,6 +343,24 @@ const SceneCache& Scene::cache() const {
       }
       done[j] = 1;
     }
+  }
+  // the tree by index, made again when a node came, went or changed parent
+  uint64_t parents_hash = n;
+  for (size_t i = 0; i < n; i++) parents_hash = parents_hash * 1099511628211ull + nodes[i].parent;
+  if (!same_nodes || parents_hash != c.parents_hash || c.kid_start.size() != n + 1) {
+    c.parents_hash = parents_hash;
+    c.parent.assign(n, -1);
+    c.kid_start.assign(n + 1, 0);
+    for (size_t i = 0; i < n; i++) {
+      const uint32_t p = nodes[i].parent;
+      c.parent[i] = p && p <= max_id ? index[p] : -1;
+      if (c.parent[i] >= 0) c.kid_start[c.parent[i] + 1]++;
+    }
+    for (size_t i = 0; i < n; i++) c.kid_start[i + 1] += c.kid_start[i];
+    c.kids.assign(c.kid_start[n], 0);
+    std::vector<uint32_t> fill(c.kid_start.begin(), c.kid_start.end() - 1);
+    for (size_t i = 0; i < n; i++)
+      if (c.parent[i] >= 0) c.kids[fill[c.parent[i]]++] = (uint32_t)i;
   }
   // instances of a prototype (a decor piece, an actor's model) keep the same index in `nodes`
   // while only transforms change (a drag): regrouping by mesh, with its many small allocations,
@@ -342,12 +407,36 @@ AABB Scene::world_bounds(const Node& n) const {
   return b;
 }
 
+namespace {
+
+// the world box of each node but the groups and the collision, from the cache (a city is 150 000
+// nodes: their world matrices are not made again for this)
+std::vector<AABB> drawn_boxes(const Scene& scene) {
+  const SceneCache& c = scene.cache();
+  std::vector<AABB> boxes;
+  boxes.reserve(c.count);
+  for (size_t i = 0; i < c.count && i < scene.nodes.size(); i++) {
+    const Node& n = scene.nodes[i];
+    if (n.kind == NodeKind::Group || n.kind == NodeKind::Collision) continue;
+    if (c.bounds[i].valid()) {
+      boxes.push_back(c.bounds[i]);
+    } else {
+      const Vec3 p = c.worlds[i].col3(3);
+      const float r = n.kind == NodeKind::Actor ? kMarkerRadius : 0.f;
+      AABB b;
+      b.add(p - Vec3{r, r, r});
+      b.add(p + Vec3{r, r, r});
+      boxes.push_back(b);
+    }
+  }
+  return boxes;
+}
+
+}  // namespace
+
 AABB Scene::bounds() const {
   AABB b;
-  for (const auto& n : nodes) {
-    if (n.kind == NodeKind::Group || n.kind == NodeKind::Collision) continue;
-    b.add(world_bounds(n));
-  }
+  for (const AABB& box : drawn_boxes(*this)) b.add(box);
   return b;
 }
 
@@ -366,22 +455,40 @@ AABB focus_box(const std::vector<AABB>& boxes) {
   AABB out;
   Vec3 l, h;
   for (int a = 0; a < 3; a++) {
-    std::sort(lo[a].begin(), lo[a].end());
-    std::sort(hi[a].begin(), hi[a].end());
-    l[a] = lo[a][lo[a].size() * 2 / 100];
-    h[a] = hi[a][hi[a].size() * 98 / 100];
+    // the two percentiles alone, not the whole order
+    auto l_at = lo[a].begin() + lo[a].size() * 2 / 100, h_at = hi[a].begin() + hi[a].size() * 98 / 100;
+    std::nth_element(lo[a].begin(), l_at, lo[a].end());
+    std::nth_element(hi[a].begin(), h_at, hi[a].end());
+    l[a] = *l_at;
+    h[a] = *h_at;
   }
   out.add(l);
   out.add(h);
   return out.valid() ? out : all;
 }
 
+bool ground_piece(Mesh& mesh) {
+  const AABB b = mesh.bounds();
+  if (!b.valid() || std::max(b.size().x, b.size().z) < 60.f) return false;
+  double flat = 0, all = 0;
+  for (const auto& p : mesh.prims)
+    for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+      const Vec3& a = p.pos[p.idx[t]];
+      const Vec3 n = cross(p.pos[p.idx[t + 1]] - a, p.pos[p.idx[t + 2]] - a);
+      const float area = length(n);
+      all += area;
+      if (std::fabs(n.y) > 0.7f * area) flat += area;
+    }
+  return all > 0 && flat >= 0.5 * all;
+}
+
 AABB Scene::focus_bounds() const {
-  std::vector<AABB> boxes;
-  for (const auto& n : nodes)
-    if (n.kind != NodeKind::Group && n.kind != NodeKind::Collision) boxes.push_back(world_bounds(n));
+  const std::vector<AABB> boxes = drawn_boxes(*this);
   const AABB b = focus_box(boxes);
-  return b.valid() ? b : bounds();
+  if (b.valid()) return b;
+  AABB all;
+  for (const AABB& box : boxes) all.add(box);
+  return all;
 }
 
 int Scene::add_material(Material m) {

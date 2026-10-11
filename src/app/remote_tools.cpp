@@ -11,6 +11,8 @@
 
 #include "app/app.h"
 #include "io/behaviors.h"
+#include "io/decor_behaviors.h"
+#include "io/jak2_import.h"
 #include "core/i18n.h"
 #include "core/log.h"
 #include "core/prefs.h"
@@ -99,9 +101,7 @@ json App::remote_node_json(const Node& n) {
   json j = {{"id", n.id}, {"name", n.name}, {"kind", kind_word(n.kind)}};
   if (n.kind == NodeKind::Actor) j["etype"] = n.extras.value("etype", std::string());
   j["position"] = vec3_json(scene.world(n).col3(3));
-  AABB b = scene.world_bounds(n);
-  for (auto d : scene.descendants(n.id))
-    if (const Node* dn = scene.find(d)) b.add(scene.world_bounds(*dn));
+  const AABB b = subtree_bounds(n.id);
   if (b.valid()) j["size"] = vec3_json(b.size());
   if (n.locked) j["locked"] = true;
   if (!scene.effectively_visible(n)) j["hidden"] = true;
@@ -160,7 +160,17 @@ json App::remote_status() {
               {"forward", vec3_json(camera.forward())}}},
             {"selection", std::vector<uint32_t>(selection.begin(), selection.end())},
             {"can_undo", history.can_undo()},
-            {"can_redo", history.can_redo()}};
+            {"can_redo", history.can_redo()},
+            // the time the editor takes for a frame (interface, tools, drawing), averaged, and the
+            // last drawing's steps
+            {"frame_ms", round3(m_frame_ms)},
+            {"draw",
+             {{"draws", renderer.stats.draws},
+              {"triangles", renderer.stats.triangles},
+              {"cull_ms", round3((float)renderer.stats.ms_cull)},
+              {"instances_ms", round3((float)renderer.stats.ms_instances)},
+              {"draw_ms", round3((float)renderer.stats.ms_draw)},
+              {"overlays_ms", round3((float)renderer.stats.ms_overlays)}}}};
   if (const GameData* data = document_game_data(); data && data->has_story()) {
     json s = {{"enabled", story.enabled}, {"step", story.step}, {"steps", data->step_count()}};
     if (story.step > 1) s["after_node"] = data->node(story.step - 1).name;
@@ -272,7 +282,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     std::string err;
     const bool with_actors = load_actors;
     load_actors = args.value("actors", true);
-    const bool started = add_level_to_document(*level, &err);
+    const bool started = add_level_to_document(*level, &err, args.value("reference", false));
     load_actors = with_actors;
     if (!started) return reply(fail(err));
     const uint64_t before = m_levels_added;
@@ -285,9 +295,10 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "remove_level") {
     const std::string name = args.value("name", std::string());
+    const bool reference = args.value("reference", false);
     uint32_t group = 0;
     for (const auto& l : document_levels())
-      if (l.name == name && l.role == DocumentLevel::Added) group = l.group;
+      if (l.name == name && l.role == DocumentLevel::Added && l.reference == reference) group = l.group;
     if (!group) return reply(fail("no level '" + name + "' added to the document (the level opened stays)"));
     std::string err;
     if (!remove_document_level(group, &err)) return reply(fail(err));
@@ -298,7 +309,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     ShapeParams p;
     if (!n || !node_shape(*n, &p)) return reply(fail("id: a shape (place kind 'shape')"));
     json j = p.to_json();
-    for (const char* k : {"size", "tile", "steps", "sides"})
+    for (const char* k : {"size", "tile", "steps", "sides", "opening"})
       if (args.contains(k)) j[k] = args[k];
     NodeChange c(scene);
     c.save(n->id);
@@ -314,6 +325,9 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (!tex.empty()) {
       for (int i = 0; i < (int)scene.textures.size() && texture < 0; i++)
         if (scene.textures[i].name == tex) texture = i;
+      // a texture of the palette (the textures Jak 3's levels use again and again), read now
+      for (const auto& t : palette_textures)
+        if (texture < 0 && t.name == tex) texture = palette_texture(t, true);
       std::string err;
       if (texture < 0) texture = texture_from_image(scene, tex, &err);
       if (texture < 0) return reply(fail("texture: no texture '" + tex + "' in the document (list_textures), nor an image file (" + err + ")"));
@@ -342,10 +356,19 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
     json list = json::array();
     int matching = 0;
-    for (const auto& t : scene.textures) {
-      if (!f.empty() && lower(t.name).find(f) == std::string::npos) continue;
-      if (matching++ < offset || (int)list.size() >= limit) continue;
-      list.push_back({{"name", t.name}, {"size", {t.width, t.height}}});
+    if (args.value("palette", false)) {
+      // the textures Jak 3's levels use again and again, the most shared first
+      for (const auto& t : palette_textures) {
+        if (!f.empty() && lower(t.name).find(f) == std::string::npos && t.theme != f) continue;
+        if (matching++ < offset || (int)list.size() >= limit) continue;
+        list.push_back({{"name", t.name}, {"theme", t.theme}, {"levels", t.levels}, {"pieces", t.uses}});
+      }
+    } else {
+      for (const auto& t : scene.textures) {
+        if (!f.empty() && lower(t.name).find(f) == std::string::npos) continue;
+        if (matching++ < offset || (int)list.size() >= limit) continue;
+        list.push_back({{"name", t.name}, {"size", {t.width, t.height}}});
+      }
     }
     reply(ok({{"total", matching}, {"offset", offset}, {"textures", list}}));
 
@@ -465,13 +488,16 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const std::string f = lower(args.value("filter", std::string()));
     const int offset = std::max(0, args.value("offset", 0));
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
+    // the objects that make up a place (props, doors, water, effects), or the interactive ones
+    const std::string group = args.value("group", std::string());
     json objects = json::array();
     int matching = 0;
     for (const auto& o : catalog) {
       if (!family.empty() && o.family != family) continue;
+      if ((group == "objects" && o.interactive) || (group == "interactive" && !o.interactive)) continue;
       if (!f.empty() && o.name.find(f) == std::string::npos && o.etype.find(f) == std::string::npos) continue;
       if (matching++ < offset || (int)objects.size() >= limit) continue;
-      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family}};
+      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family}, {"group", o.interactive ? "interactive" : "objects"}};
       if (!o.model.empty()) j["model"] = o.model;
       else j["drawn_without_model"] = true;
       if (o.count) j["in_game"] = o.count;
@@ -496,17 +522,20 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     reply(ok({{"total", matching}, {"offset", offset}, {"models", models}}));
 
   } else if (tool == "list_decor") {
+    // Jak II's structures (game: "jak2"), brought into Jak 3 levels, or Jak 3's decor
+    const bool jak2 = args.value("game", std::string()) == "jak2";
+    if (jak2 && library_jak2.empty()) return reply(fail("Jak II was not extracted (File > Extract game assets with a Jak II disc)"));
     const std::string name = args.value("level", std::string());
     const std::string f = lower(args.value("filter", std::string()));
     const int offset = std::max(0, args.value("offset", 0));
     const int limit = std::clamp(args.value("limit", 100), 1, 1000);
     if (name.empty() || name == "all") {
       // the decor of every level: once the editor has read them
-      m_remote_waits.push_back([this, reply, f, offset, limit]() {
-        if (!m_index_applied) return false;
+      m_remote_waits.push_back([this, reply, f, offset, limit, jak2]() {
+        if (!(jak2 ? m_index_jak2_applied : m_index_applied)) return false;
         json parts = json::array();
         int matching = 0;
-        for (const auto& e : all_parts) {
+        for (const auto& e : jak2 ? all_parts_jak2 : all_parts) {
           if (!f.empty() && e.key.find(f) == std::string::npos) continue;
           if (matching++ < offset || (int)parts.size() >= limit) continue;
           json j = {{"name", e.part.name},
@@ -521,7 +550,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       });
       return;
     }
-    const LevelEntry* level = library.level(name);
+    const LevelEntry* level = (jak2 ? library_jak2 : library).level(name);
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
     const std::string background = level->background;
     m_remote_waits.push_back([this, reply, background, f, offset, limit, name]() {
@@ -535,6 +564,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       int matching = 0;
       for (const auto& p : list_parts(*scene_ptr)) {
         if (!f.empty() && lower(p.name).find(f) == std::string::npos) continue;
+        if (library_jak2.level_of(background) && !jak2_structure(p)) continue;
         if (matching++ < offset || (int)parts.size() >= limit) continue;
         json j = {{"name", p.name},
                   {"kind", p.kind == CatalogPart::Kind::Prototype ? "prototype" : "piece"},
@@ -548,9 +578,20 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "list_prefabs") {
     refresh_prefabs();
-    json list = json::array();
-    for (const auto& p : prefabs) list.push_back(p.name);
-    reply(ok({{"prefabs", list}}));
+    // the game's prefabs made from the extracted levels first when some are missing (waits)
+    const bool rebuild = args.value("rebuild", false);
+    if (rebuild || game_prefabs.size() < prefab_recipes.size()) start_game_prefabs(rebuild);
+    const uint64_t runs = m_game_prefab_runs;
+    const bool waiting = game_prefabs_busy();
+    m_remote_waits.push_back([this, reply, runs, waiting]() {
+      if (waiting && m_game_prefab_runs == runs) return false;
+      json mine = json::array(), game = json::array();
+      for (const auto& p : prefabs) mine.push_back(p.name);
+      for (const auto& p : game_prefabs)
+        game.push_back({{"name", p.name}, {"category", p.category}, {"description", p.description}});
+      reply(ok({{"prefabs", mine}, {"game_prefabs", game}}));
+      return true;
+    });
 
   } else if (tool == "place") {
     remote_place(args, reply);
@@ -636,12 +677,98 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (!export_navmeshes(path, first, &err)) return reply(fail(err));
     reply(ok({{"path", path}, {"meshes", navmesh_nodes().size()}, {"first_id", first}}));
 
+  } else if (tool == "set_decor") {
+    // what the game does with elements of the decor: their collision, bounce, launch; a part given
+    // false goes back to the game's
+    const auto ids = ids_arg(args);
+    if (ids.empty()) return reply(fail("ids: elements of the decor"));
+    NodeChange c(scene);
+    json changed = json::array();
+    for (auto id : ids) {
+      Node* n = scene.find(id);
+      if (!n || n->kind != NodeKind::Render || !n->mesh || scene.actor_of(*n)) continue;
+      c.save(id);
+      json d = n->extras.value("og_decor", json::object());
+      if (!d.is_object()) d = json::object();
+      for (const char* part : {"collision", "bounce", "launch"}) {
+        if (!args.contains(part)) continue;
+        if (args[part].is_object()) d[part] = args[part];
+        else d.erase(part);
+      }
+      // read back as the editor keeps them (names checked, values clamped)
+      const json clean = decor_behavior_json(decor_behavior_of(json{{"og_decor", d}}));
+      if (clean.is_null()) n->extras.erase("og_decor");
+      else n->extras["og_decor"] = clean;
+      changed.push_back({{"id", id}, {"decor", clean}});
+    }
+    if (changed.empty()) return reply(fail("ids: elements of the decor (not actors)"));
+    history.push(c.commit(tr("undo.decor")));
+    reply(ok({{"nodes", changed}}));
+
+  } else if (tool == "replace_level") {
+    if (!document_open()) return reply(fail("no level open: open_level, open_project or new_level first"));
+    const GameData* data = document_game_data();
+    if (args.contains("level")) {
+      const std::string level = args.value("level", std::string());
+      const LevelInfo* info = data ? data->level(level) : nullptr;
+      if (!level.empty() && (!info || info->dgo.empty() || info->layer))
+        return reply(fail("level: a level of the game (see list_levels), or \"\" to replace none"));
+      const std::string before = scene.settings.replaces;
+      if (before != level) {
+        scene.settings.replaces = level;
+        LevelSettings* s = &scene.settings;
+        history.push({tr("undo.replaces"), [s, before]() { s->replaces = before; }, [s, level]() { s->replaces = level; }});
+        m_export_level.clear();
+      }
+    }
+    const std::string level = scene.settings.replaces;
+    // what is asked once the original is there: placed where it is, turned
+    auto finish = [this, args, reply, level]() {
+      std::string err;
+      if (args.value("align", false) && !align_to_replaced(&err)) return reply(fail(err));
+      if (args.contains("turn_deg") && args["turn_deg"].is_number()) turn_own_level(args["turn_deg"].get<float>());
+      json checks = json::array();
+      for (const auto& c : check_continues(scene, document_game_data(), level)) {
+        json e = {{"name", c.name}, {"position", vec3_json(c.position)}};
+        e["ground"] = c.ok() ? json(round3(c.ground)) : json();
+        checks.push_back(e);
+      }
+      json r = {{"replaces", level}, {"continues", checks}};
+      const AABB own = own_level_bounds();
+      if (own.valid()) r["bounds"] = {{"min", vec3_json(own.lo)}, {"max", vec3_json(own.hi)}};
+      for (const auto& l : document_levels())
+        if (l.reference && l.name == level) {
+          const AABB b = document_level_bounds(l.group);
+          if (b.valid()) r["original_bounds"] = {{"min", vec3_json(b.lo)}, {"max", vec3_json(b.hi)}};
+        }
+      reply(ok(r));
+    };
+    bool shown = false;
+    for (const auto& l : document_levels()) shown |= l.reference && l.name == level;
+    if (args.value("show_original", false) && !level.empty() && !shown) {
+      const LevelEntry* entry = library.level(level);
+      if (!entry) return reply(fail("the level " + level + " is not in the library"));
+      std::string err;
+      if (!add_level_to_document(*entry, &err, true)) return reply(fail(err));
+      const uint64_t before = m_levels_added;
+      m_remote_waits.push_back([this, before, finish, reply]() {
+        if (m_levels_added == before) return false;
+        if (!m_add_error.empty()) reply(fail(m_add_error));
+        else finish();
+        return true;
+      });
+      return;
+    }
+    finish();
+
   } else if (tool == "export_level") {
     if (!document_open()) return reply(fail("no level open: open_level or open_project first"));
     LevelExportOptions o = default_export_options();
     o.name = args.value("name", std::string());
-    o.nickname = args.value("nickname", default_nickname(o.name));
+    // the default nickname is one no level of the game has
+    o.nickname = args.contains("nickname") ? args.value("nickname", std::string()) : untaken_nickname(default_nickname(o.name));
     o.iso_name = args.value("iso_name", default_iso_name(o.name));
+    o.replaces = args.value("replaces", scene.settings.replaces);
     if (args.contains("base_id") && args["base_id"].is_number_integer()) o.base_id = args["base_id"].get<uint32_t>();
     o.folder = args.value("folder", o.folder);
     o.actors = args.value("actors", true);
@@ -649,7 +776,8 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (collision != "game" && collision != "decor") return reply(fail("collision: 'game' or 'decor'"));
     o.game_collision = collision == "game";
     vec3_arg(args, "start", &o.start);
-    if (const std::string bad = check_export_names(o); !bad.empty()) return reply(fail(tr_en(bad.c_str())));
+    if (const std::string bad = check_export_names(o, document_game_data()); !bad.empty())
+      return reply(fail(tr_en(bad.c_str())));
     LevelExportReport r;
     std::string err;
     if (!export_for_game(o, &r, &err)) return reply(fail(err));
@@ -728,6 +856,10 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     }
     ShapeParams shape;
     if (node_shape(*n, &shape)) j["shape"] = shape.to_json();
+    // a structure of Jak II: where it comes from and what was checked when it came in
+    if (auto im = n->extras.find("og_import"); im != n->extras.end()) j["import"] = *im;
+    // what the game does with it (collision, bounce, launch)
+    if (auto d = n->extras.find("og_decor"); d != n->extras.end()) j["decor"] = *d;
     if (n->kind == NodeKind::Actor) {
       j["game_data"] = n->extras;
       // what configures it: the lumps its type's code reads (set_actor), and its behavior
@@ -866,12 +998,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       } else {
         auto ids = f.is_array() ? ids_arg(args, "frame") : std::vector<uint32_t>(selection.begin(), selection.end());
         AABB b;
-        for (auto id : ids)
-          if (const Node* n = scene.find(id)) {
-            b.add(scene.world_bounds(*n));
-            for (auto d : scene.descendants(id))
-              if (const Node* dn = scene.find(d)) b.add(scene.world_bounds(*dn));
-          }
+        for (auto id : ids) b.add(subtree_bounds(id));
         if (b.valid()) camera.frame(b.expanded(2.f));
       }
     }
@@ -1034,9 +1161,9 @@ void App::remote_place(const json& args, RemoteReply reply) {
     start_model_placement(*found, false);
   } else if (kind == "shape") {
     const ShapePreset* preset = shape_preset(name);
-    if (!preset) return reply(fail("name: box, floor, wall, ramp, stairs or cylinder"));
+    if (!preset) return reply(fail("name: box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip or cylinder"));
     json j = preset->params.to_json();
-    for (const char* k : {"size", "tile", "steps", "sides"})
+    for (const char* k : {"size", "tile", "steps", "sides", "opening"})
       if (args.contains(k)) j[k] = args[k];
     ShapePreset p = *preset;
     p.params = ShapeParams::from_json(j);
@@ -1053,37 +1180,41 @@ void App::remote_place(const json& args, RemoteReply reply) {
   } else if (kind == "prefab") {
     refresh_prefabs();
     const PrefabInfo* found = nullptr;
-    for (const auto& p : prefabs)
-      if (p.name == name) found = &p;
+    for (const auto* list : {&prefabs, &game_prefabs})
+      for (const auto& p : *list)
+        if (p.name == name) found = &p;
     if (!found) return reply(fail("no prefab '" + name + "' (see list_prefabs)"));
     start_placement(found->path, found->name, false);
   } else if (kind == "decor") {
+    // a structure of Jak II (game: "jak2"): converted for Jak 3 (io/jak2_import.h)
+    const bool jak2 = args.value("game", std::string()) == "jak2";
+    const AssetLibrary& lib = jak2 ? library_jak2 : library;
     std::string level_name = args.value("level", std::string());
     if (level_name.empty()) {
       // the first level with a part of that name
-      if (!m_index_applied) {
-        m_remote_waits.push_back([this, args, reply]() {
-          if (!m_index_applied) return false;
+      if (!(jak2 ? m_index_jak2_applied : m_index_applied)) {
+        m_remote_waits.push_back([this, args, reply, jak2]() {
+          if (!(jak2 ? m_index_jak2_applied : m_index_applied)) return false;
           remote_place(args, reply);
           return true;
         });
         return;
       }
-      for (const auto& e : all_parts)
+      for (const auto& e : jak2 ? all_parts_jak2 : all_parts)
         if (e.part.name == name || e.part.name == name + ".mb") {
           level_name = e.level;
           break;
         }
       if (level_name.empty()) return reply(fail("no decor part '" + name + "' in the levels (see list_decor)"));
     }
-    const LevelEntry* level = library.level(level_name);
+    const LevelEntry* level = lib.level(level_name);
     if (!level) return reply(fail("level: the level the decor part comes from (see list_decor)"));
     auto source = store.level(level->background, true);
     if (!source) {
       if (store.failed_level(level->background)) return reply(fail("the decor of that level cannot be read"));
       // loading: try again next frame
-      m_remote_waits.push_back([this, args, reply, level_name]() {
-        const LevelEntry* level = library.level(level_name);
+      m_remote_waits.push_back([this, args, reply, level_name, jak2]() {
+        const LevelEntry* level = (jak2 ? library_jak2 : library).level(level_name);
         if (level && !store.level(level->background, true) && !store.failed_level(level->background)) return false;
         remote_place(args, reply);
         return true;

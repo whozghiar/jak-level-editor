@@ -24,9 +24,12 @@
 #include "io/game_data.h"
 #include "io/game_export.h"
 #include "io/library_index.h"
+#include "io/prefab_recipes.h"
 #include "io/prefabs.h"
 #include "render/camera.h"
 #include "render/renderer.h"
+#include "render/texture_palette.h"
+#include "render/tool_demo.h"
 #include "render/thumbnails.h"
 #include "scene/pick.h"
 #include "scene/scene.h"
@@ -68,6 +71,7 @@ struct Placement {
   std::string name;
   CatalogObject object;  // Object
   CatalogPart part;      // Part
+  std::string game;      // Part: "jak2" for a structure of Jak II (io/jak2_import.h), else Jak 3's
   ShapeParams shape;     // Shape
   float yaw = 0.f;    // radians (R, Ctrl + wheel)
   bool once = false;  // dragged from a panel: one placement, then back to selecting
@@ -173,6 +177,9 @@ class App {
   void update_camera(float dt);
   void viewport_interaction();
   void select_tool(bool clicked, bool released);
+  // what a click on `node` selects: the actor of an actor's model, nothing on the locked ground
+  // (unless select_terrain)
+  uint32_t selectable(uint32_t node) const;
   void place_tool(bool clicked);
   void draw_tool_overlays();
   void draw_navmesh_overlay();
@@ -194,11 +201,13 @@ class App {
   // the document's nav meshes where they are now, each around the center of its corners
   void world_navmeshes(std::vector<NavMeshData>* meshes, std::vector<std::string>* names) const;
 
-  // File > Export for the game (actions.cpp, io/game_export.h): what the view shows, as a custom
+  // Level > Export for the game (actions.cpp, io/game_export.h): what the view shows, as a custom
   // level of OpenGOAL for Jak 3
   bool export_for_game(const LevelExportOptions& opts, LevelExportReport* report, std::string* error);
   // the export's options for the document (names, folder, where the player starts)
   LevelExportOptions default_export_options();
+  // `nickname`, or one like it that no level of the game has
+  std::string untaken_nickname(const std::string& nickname);
   // where the player starts: a continue point of the level opened (moved with it), else the ground
   // at the middle of the document
   Vec3 export_start_point();
@@ -214,11 +223,22 @@ class App {
     Role role = Main;
     uint32_t group = 0;  // its group; 0 for the level opened
     uint32_t host = 0;   // companions and layers: the group of the level they come with, 0 the one opened
+    bool reference = false;  // Added: shown to compare with (the game's level a new one replaces)
   };
   std::vector<DocumentLevel> document_levels() const;
   bool level_in_document(const std::string& name) const;
-  // a level of the library added on a worker thread, then to the document (undoable) when ready
-  bool add_level_to_document(const LevelEntry& level, std::string* error);
+  // a level of the library added on a worker thread, then to the document (undoable) when ready;
+  // `reference`: shown to compare with, washed in blue, not selected nor exported (the level the
+  // document replaces, as the game has it)
+  bool add_level_to_document(const LevelEntry& level, std::string* error, bool reference = false);
+  bool m_adding_reference = false;
+  // replacing a level of the game (scene.settings.replaces): the document's own level moved so that
+  // its middle and its bottom are where the replaced level's are (the reference shown, else its
+  // continue points); turned by a quarter turn around its middle
+  bool align_to_replaced(std::string* error);
+  void turn_own_level(float degrees);
+  std::vector<uint32_t> own_level_roots() const;  // the root elements of the document's own level
+  AABB own_level_bounds() const;
   // levels are opened and added with their actors (the objects: the creatures never come), or
   // with their decor alone (Levels panel)
   bool load_actors = false;
@@ -258,10 +278,18 @@ class App {
   void select_only(uint32_t id);
   void toggle_select(uint32_t id);
   std::vector<uint32_t> selection_roots() const;  // selected nodes without selected ancestors
-  Mat4 selection_frame() const;                   // gizmo pivot and orientation
+  Mat4 selection_frame() const;                   // gizmo pivot and orientation (once per frame)
+  mutable uint64_t m_selection_frame_key = ~0ull;
+  mutable std::set<uint32_t> m_selection_frame_sel;
+  mutable uint32_t m_selection_frame_primary = 0;
+  mutable Mat4 m_selection_frame;
+  // the world box of a node and its descendants (from the scene's cache), how many descendants
+  AABB subtree_bounds(uint32_t id, size_t* descendants = nullptr) const;
+  size_t subtree_size(uint32_t id) const;  // its descendants
+  AABB selection_bounds() const;  // of the selection and what it holds
   // the middle of most of a large group's geometry (a whole level), in the world; kept in the
   // group's space until the document changes
-  Vec3 group_center(uint32_t id, const std::vector<uint32_t>& descendants) const;
+  Vec3 group_center(uint32_t id) const;
   mutable std::unordered_map<uint32_t, std::pair<uint64_t, Vec3>> m_group_centers;
   PickHit pick_surface(const Vec2& mouse_vp);     // what is under a viewport point
   void delete_selection();
@@ -320,6 +348,8 @@ class App {
   std::optional<LevelExportReport> m_export_report;  // the window's last export
   std::string m_export_error;
   std::string m_export_level;  // the level export_options were made for
+  // the levels as extracted, read for the export (which pieces of their decor were taken out)
+  std::map<std::string, std::shared_ptr<const Scene>> m_export_originals;
 
   // interface (panels.cpp)
   void draw_ui();
@@ -328,7 +358,7 @@ class App {
   void ui_left_panel(float x, float y, float w, float h);
   void ui_levels_panel();
   void ui_catalog_panel();
-  void ui_catalog_objects();
+  void ui_catalog_objects(bool interactive);  // the Objects, or the Interactive ones
   void ui_catalog_models();
   void ui_catalog_decor();
   void ui_catalog_decor_all();  // the decor of every level, searched by name
@@ -338,6 +368,7 @@ class App {
   void ui_prefabs_panel();
   void ui_inspector(float x, float y, float w, float h);
   void ui_node_inspector(Node& n);
+  void ui_replace_section(const std::vector<DocumentLevel>& levels);
   // an actor's behavior and parameters (behavior_panel.cpp); a condition's widgets (true: changed)
   void ui_actor_behavior(Node& n);
   void ui_actor_params(Node& n);
@@ -345,6 +376,10 @@ class App {
   // a shape's size and a surface's materials (surface_panel.cpp)
   void ui_shape_inspector(Node& n);
   void ui_material_inspector(Node& n);
+  void ui_import_inspector(Node& n);  // a structure of Jak II: what was checked when it came in
+  // what the game does with an element of the decor: its collision, bounce, launch (io/decor_behaviors.h)
+  void ui_decor_behavior(Node& n);
+  std::unique_ptr<NodeChange> m_decor_edit;  // a value being dragged: the elements before
   struct TextureTarget {
     std::vector<uint32_t> ids;
     int material = -1;
@@ -382,12 +417,38 @@ class App {
   AssetStore store;
   Thumbnails thumbs{store};
   std::vector<PrefabInfo> prefabs;
+  // the game's prefabs (io/prefab_recipes.h): made from the extracted levels into <prefabs>/game/,
+  // on a worker thread, the first time the Prefabs panel shows them (or `rebuild`)
+  std::vector<PrefabRecipe> prefab_recipes;
+  std::vector<PrefabInfo> game_prefabs;
+  void start_game_prefabs(bool rebuild = false);
+  void poll_game_prefabs();
+  bool game_prefabs_busy() const { return m_game_prefab_work.valid(); }
+  std::future<size_t> m_game_prefab_work;
+  std::shared_ptr<std::atomic<int>> m_game_prefab_done = std::make_shared<std::atomic<int>>(0);
+  int m_game_prefab_total = 0;
+  uint64_t m_game_prefab_runs = 0;  // counts the builds finished (the remote waits on it)
   std::vector<CatalogObject> catalog;        // the objects of the game
   std::vector<CatalogModel> catalog_models;  // its other models (props)
   // what the catalog reads of every level on a worker thread: their decor, the art-names of their
   // actors (all the variants and effects); merged into the catalog once ready
   LibraryIndex library_index;
   std::vector<DecorEntry> all_parts;  // the decor of every level
+  // Jak II's levels extracted next to Jak 3's (<library>/jak2): their structures, brought into Jak 3
+  // levels (io/jak2_import.h); empty when Jak II was not extracted
+  AssetLibrary library_jak2;
+  LibraryIndex library_index_jak2;
+  std::vector<DecorEntry> all_parts_jak2;
+  bool m_index_jak2_applied = false;
+  bool m_decor_jak2 = false;  // the Decor catalog shows Jak II's structures
+  // the palette of materials: the textures Jak 3's levels use again and again (render/texture_palette.h)
+  TexturePalette palette;
+  std::vector<PaletteTexture> palette_textures;
+  // a texture of the palette made a texture of the document (-1 while its image is read; `wait`:
+  // read now, for the remote control)
+  int palette_texture(const PaletteTexture& t, bool wait = false);
+  // the palette's grid: a click gives the texture to `ids` (their material `material`, -1 all)
+  void ui_palette(const std::vector<uint32_t>& ids, int material, float width = 430.f);
   void apply_library_index();  // the index, once it just became ready
   void rebuild_catalog();      // catalog, catalog_models and all_parts
   Placement placement;
@@ -404,14 +465,27 @@ class App {
 
   // windows and panels
   bool show_log = false;
-  bool show_help = false;
+  bool show_help = false;  // the guide (F1): the guided tour, every tool, the keys
+  int guide_tab_request = -1;  // 0 the tour, 1 every tool, 2 the keys
+  int guide_step = 0;          // of the tour
   bool show_labels = true;
   bool show_navmesh = true;          // the nav meshes drawn over the level
-  bool show_navmesh_window = false;  // Tools > Nav meshes
+  bool select_terrain = false;       // the ground (locked) can be clicked and box-selected
+  bool show_navmesh_window = false;  // Level > Nav meshes
   NavParams nav_params;
   bool nav_keep_selected = false;    // keep only the ground the selected elements stand on
   uint32_t nav_first_aid = 60000;    // the ids the exported nav meshes take
-  int left_tab_request = -1;  // select this tab of the left panel next frame
+  int left_tab_request = -1;  // select this tab of the left panel next frame (0 levels, 1 catalog, 2 prefabs, 3 build)
+  // the short animations of the tools (guide, tooltips) and the Build panel's icons
+  ToolDemo demos;
+  // A tooltip of the guide on the last item: what it does, its keys, a concrete example and its
+  // animation (the keys guide.<id>.title/.text/.example/.keys of the translations)
+  void guide_tip(const char* id);
+  // demo `name` at `t` seconds, w x h of the window's room, with its cursor and labels
+  void ui_demo(const std::string& name, float w, float h, double t);
+  void ui_guide_window();
+  void ui_build_panel();
+  bool m_scroll_to_replace = false;  // Level > Replace: the inspector shows its section
 
  private:
   SDL_Window* m_window = nullptr;
@@ -437,6 +511,10 @@ class App {
   // select tool
   bool m_box_selecting = false;
   Vec2 m_box_start;
+  // the last click (a click again there goes to the next element under the cursor)
+  Vec2 m_last_click{-1e9f, -1e9f};
+  Vec3 m_last_click_cam;
+  float m_last_click_yaw = 0, m_last_click_pitch = 0;
   std::unique_ptr<NodeChange> m_drag_change;
   std::map<uint32_t, Mat4> m_drag_start;
   std::map<uint32_t, Vec3> m_drag_scale;  // local scale of the roots when a scale drag began
@@ -459,7 +537,7 @@ class App {
   std::string m_levels_filter;
   std::string m_selected_level;
   // catalog panel: its objects, or the decor of a level
-  int m_catalog_tab = 0;  // 0 objects, 1 models, 2 decor
+  int m_catalog_tab = 0;  // 0 objects, 1 models, 2 decor, 3 the interactive objects
   std::string m_catalog_filter;
   std::string m_catalog_family;  // "" for every family
   std::string m_decor_level;     // the level whose decor is shown, "" for every level
@@ -507,6 +585,7 @@ class App {
   double m_last_backup_time = 0;
   uint64_t m_backup_revision = 0;
   double m_time = 0;
+  float m_frame_ms = 0;               // the CPU time of a frame, averaged (get_status)
   uint64_t m_frame_revision = ~0ull;  // history revision the scene cache was computed at
   uint64_t m_story_revision = ~0ull;  // history revision the story view was applied at
   // the game's data, once read

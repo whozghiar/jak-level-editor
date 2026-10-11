@@ -272,7 +272,9 @@ void App::ui_extract_window() {
   if (ImGui::Button(tr_id("extract.folder").c_str())) open_dialog(DialogAction::ExtractSourceFolder);
   ImGui::EndDisabled();
   const bool recognized = !extract.detected_game.empty() && extract.detected_source == extract.source;
-  const bool matches = recognized && extract.detected_game == "jak3";
+  // Jak 3, or Jak II for its structures (brought into Jak 3 levels: Catalog > Decor > Jak II)
+  const bool jak2 = recognized && extract.detected_game == "jak2";
+  const bool matches = recognized && (extract.detected_game == "jak3" || jak2);
   if (running && extract.detecting) {
     ImGui::TextDisabled("%s", tr("extract.detecting"));
   } else if (recognized) {
@@ -280,6 +282,7 @@ void App::ui_extract_window() {
     ImGui::SameLine();
     ImGui::TextDisabled("%s  -  %s", extract.detected_version.c_str(), extract.detected_serial.c_str());
     if (!matches) ImGui::TextColored(kBad, "%s", tr("extract.wrong_game"));
+    if (jak2) ImGui::TextWrapped("%s", tr("extract.jak2"));
   } else if (!extract.detect_error.empty() && extract.detected_source == extract.source) {
     ImGui::TextColored(kBad, "%s", extract.detect_error.c_str());
   } else if (extract.source.empty()) {

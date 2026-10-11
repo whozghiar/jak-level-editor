@@ -1,6 +1,7 @@
 #include "fr3_to_gltf.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <tuple>
 #include <unordered_map>
@@ -769,14 +770,15 @@ std::string texture_name(const tfrag3::Level& level, s32 tree_tex_id) {
 
 constexpr int kMaxColor = 1;
 
-// A tfrag piece this wide or deep (meters) is the terrain: the editor locks it.
+// A tfrag piece this wide or deep (meters), mostly flat, is the ground: the editor locks it.
 constexpr float kTerrainExtent = 60.f;
 
 /*!
  * Add a tfrag tree under a node "<level>-tfrag-<kind>". Its triangles are split in pieces: the
  * triangles their vertices connect (vertices at the same place are one), so that a building, a
  * wall or a bridge of the level's shell is a node of its own. A piece has one primitive per draw
- * (texture) and extras.og_terrain, true for the pieces kTerrainExtent across or more.
+ * (texture) and extras.og_terrain, true for the ground: the pieces kTerrainExtent across or
+ * more whose surface mostly faces up or down.
  */
 void add_tfrag(const tfrag3::Level& level,
                const tfrag3::TfragTree& tfrag_in,
@@ -886,6 +888,7 @@ void add_tfrag(const tfrag3::Level& level,
   for (const auto& [piece, by_draw] : pieces) {
     // its extent and its main texture
     float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+    double flat_area = 0, area = 0;  // the part of its surface facing up or down
     size_t main_draw = by_draw.begin()->first, main_count = 0;
     for (const auto& [d, indices] : by_draw) {
       for (u32 v : indices) {
@@ -894,12 +897,26 @@ void add_tfrag(const tfrag3::Level& level,
           hi[k] = std::max(hi[k], positions[v][k] / 4096.f);
         }
       }
+      for (size_t t = 0; t + 2 < indices.size(); t += 3) {
+        const auto& a = positions[indices[t]];
+        const auto& b = positions[indices[t + 1]];
+        const auto& c = positions[indices[t + 2]];
+        const double e1[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+        const double e2[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+        const double nx = e1[1] * e2[2] - e1[2] * e2[1], ny = e1[2] * e2[0] - e1[0] * e2[2],
+                     nz = e1[0] * e2[1] - e1[1] * e2[0];
+        const double len = std::sqrt(nx * nx + ny * ny + nz * nz);
+        area += len;
+        if (std::abs(ny) > 0.7 * len) flat_area += len;
+      }
       if (indices.size() > main_count) {
         main_count = indices.size();
         main_draw = d;
       }
     }
-    const bool terrain = hi[0] - lo[0] >= kTerrainExtent || hi[2] - lo[2] >= kTerrainExtent;
+    // the ground: large, and mostly flat (a facade, a wall or a door as large stays selectable)
+    const bool terrain = (hi[0] - lo[0] >= kTerrainExtent || hi[2] - lo[2] >= kTerrainExtent) &&
+                         area > 0 && flat_area >= 0.5 * area;
 
     int c_node_idx = (int)model.nodes.size();
     auto& c_node = model.nodes.emplace_back();

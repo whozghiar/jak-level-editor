@@ -38,8 +38,10 @@ jak-project checkout.
 
 In the decor, the level's shell (tfrag: ground, walls, floors, bridges) is split in pieces: the
 triangles their vertices connect, vertices at the same place counting as one, so that a building
-or a bridge is a node of its own. The pieces 60 m across or more are the terrain
-(`extras.og_terrain: true`): the editor locks them. The vertex colors are, for each vertex, the
+or a bridge is a node of its own. The pieces 60 m across or more whose surface mostly faces up or
+down (at least half of it within about 45 degrees of horizontal) are the ground
+(`extras.og_terrain: true`): the editor locks them. A tall facade, a long wall or a door 60 m
+wide is not ground, and stays selectable. The vertex colors are, for each vertex, the
 brightest of the level's 8 palettes: the game mixes them each frame, and they are layers of
 light (palette 0 alone leaves the insides of buildings black).
 
@@ -49,7 +51,10 @@ and the art-names of all, `art_names`), the templates of the editor's catalog.
 A level goes to the folder of its name. When a second DGO holds the same level (a copy of it), it
 goes to `<level>-<dgo>`.
 
-A disc of another game than Jak 3 is recognized (`--detect` says which) but not extracted
+A disc of **Jak II** is extracted too, to `<output>/jak2/`, in the same layout and with the same
+writer: the editor offers its structures (buildings, the palace, pillars, cables) to Jak 3 levels
+and converts them when they are placed (see the editor's README, *Structures of Jak II*). Its tables
+are in `data/jak2/`. A disc of another game is recognized (`--detect` says which) but not extracted
 (`not_jak3`). Nothing of the game is in this repository: everything written comes from the user's
 disc.
 
@@ -98,6 +103,7 @@ Changes from jak-project:
   it when the path contained that name).
 - `stubs.cpp` (outside `opengoal/`): the only symbol of the code analysis the link needs.
 
-`data/jak3/` holds the tables of jak-project the reading needs: type definitions
-(`all-types.gc`), the files of the disc and its levels (`inputs.json`), the textures some levels miss (`missing_textures.json`), and the level
-names of each DGO (`levels.json`, from `level-info.gc`).
+`data/jak3/` (and `data/jak2/` for Jak II) holds the tables of jak-project the reading needs: type
+definitions (`all-types.gc`), the files of the disc and its levels (`inputs.json`), the textures some
+levels miss (`missing_textures.json`), and the level names of each DGO (`levels.json`, from
+`level-info.gc`).

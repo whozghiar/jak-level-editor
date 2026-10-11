@@ -15,9 +15,11 @@
 namespace ogle {
 
 struct PrefabInfo {
-  std::string name;  // file name without .glb
+  std::string name;  // file name without .glb (a game prefab: its recipe's name)
   std::string path;
   int64_t mtime = 0;
+  // a prefab of the game (io/prefab_recipes.h): its category and what it is
+  std::string category, description;
 };
 std::vector<PrefabInfo> list_prefabs(const std::string& folder);
 

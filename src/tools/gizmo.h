@@ -3,6 +3,14 @@
 // Transform gizmo, written from scratch: move (axes, planes, view plane), rotate (rings) and scale
 // (along an axis of the selection, or all of them from the center). Math in 3D, drawing in 2D
 // with the ImGui draw list over the viewport.
+//
+// While dragging: Shift moves ten times finer, Ctrl turns the snap on (or off when it is on). In
+// world space the snap puts the gizmo's pivot on the grid (absolute), in local space it moves by
+// steps (relative). An axis seen end-on and a plane seen edge-on cannot be grabbed (they would
+// jump), and a ring seen edge-on turns with the mouse along it instead of around its center. The
+// value of the drag is written next to the cursor.
+
+#include <string>
 
 #include "render/camera.h"
 #include "render/renderer.h"
@@ -29,6 +37,8 @@ struct GizmoInput {
   bool pressed = false;   // left button went down this frame
   bool down = false;
   bool released = false;
+  bool fine = false;         // Shift: ten times finer
+  bool snap_toggle = false;  // Ctrl: the snap the other way
 };
 
 struct GizmoResult {
@@ -53,20 +63,32 @@ class Gizmo {
                      const Mat4& frame, ImDrawList* dl);
   bool hovering() const { return m_hot >= 0; }
   bool active() const { return m_active >= 0; }
+  // what the drag going on did, in words ("X +1.50 m", "Y +45.0 deg"...), "" when none
+  const std::string& readout() const { return m_readout; }
 
  private:
   // handle ids: 0-2 axes (rings when rotating), 3-5 planes (yz, xz, xy), 6 view plane (all axes
   // when scaling)
-  int hit_test(const Camera& cam, const Renderer& r, const GizmoInput& in, const Mat4& f, float size) const;
-  void draw(const Renderer& r, const GizmoInput& in, const Mat4& f, float size, ImDrawList* dl) const;
+  int hit_test(const Renderer& r, const GizmoInput& in, const Mat4& f, float size, const Vec3& view) const;
+  void draw(const Renderer& r, const GizmoInput& in, const Mat4& f, float size, const Vec3& view, ImDrawList* dl) const;
   bool ray_on_drag_plane(const Ray& ray, Vec3* p) const;
 
   int m_hot = -1;
   int m_active = -1;
   Mat4 m_start_frame;
   Vec3 m_plane_point, m_plane_normal;
-  Vec3 m_start_hit;
-  Vec2 m_start_mouse;
+  Vec3 m_start_hit, m_last_hit;
+  Vec2 m_start_mouse, m_last_mouse;
+  bool m_edge_on = false;  // a ring seen edge-on: turned along its tangent on screen
+  Vec2 m_tangent;          // that tangent (unit, screen), and the ring's radius on screen
+  float m_radius_px = 1.f;
+  // what the mouse did since the drag began (raw), and what it does (Shift: a tenth of it)
+  Vec3 m_raw_move{0, 0, 0}, m_move{0, 0, 0};
+  float m_raw_angle = 0, m_angle = 0, m_raw_scale = 1, m_scale = 1;
+  std::string m_readout;
 };
+
+// The value of a drag snapped: `v` to the nearest multiple of `step` (no snap when step <= 0).
+float snap_value(float v, float step);
 
 }  // namespace ogle

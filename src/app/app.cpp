@@ -119,7 +119,7 @@ bool App::init_window(bool hidden, int w, int h) {
   ImGui_ImplSDL3_InitForOpenGL(m_window, m_gl);
   ImGui_ImplOpenGL3_Init("#version 330");
   std::string err;
-  if (!renderer.init(&err) || !thumbs.init(&err)) {
+  if (!renderer.init(&err) || !thumbs.init(&err) || !demos.init(&err)) {
     LOG_ERROR("renderer: %s", err.c_str());
     return false;
   }
@@ -128,6 +128,7 @@ bool App::init_window(bool hidden, int w, int h) {
 
 void App::shutdown_window() {
   thumbs.shutdown();
+  demos.shutdown();
   renderer.shutdown();
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplSDL3_Shutdown();
@@ -176,15 +177,7 @@ void App::frame_all() {
 }
 
 void App::frame_selection() {
-  AABB b;
-  for (auto id : selection) {
-    const Node* n = scene.find(id);
-    if (n) b.add(scene.world_bounds(*n));
-    for (auto d : scene.descendants(id)) {
-      const Node* dn = scene.find(d);
-      if (dn) b.add(scene.world_bounds(*dn));
-    }
-  }
+  const AABB b = selection_bounds();
   if (b.valid()) camera.frame(b);
 }
 
@@ -231,6 +224,12 @@ int App::run(const AppOptions& opts) {
   remote_start(opts.remote_port);
   new_document();
   if (!opts.open_path.empty()) open_project_file(opts.open_path);
+  // the guided tour, the first time the editor starts
+  if (!opts.hidden && !Prefs::read_only && !Prefs::get().guide_seen) {
+    Prefs::get().guide_seen = true;
+    show_help = true;
+    guide_tab_request = 0;
+  }
   uint64_t last = SDL_GetTicksNS();
   while (m_running) {
     SDL_Event e;
@@ -252,6 +251,12 @@ int App::run(const AppOptions& opts) {
 
 // One frame into the bound framebuffer: interface, input, tools, thumbnails, viewport.
 void App::frame(float dt) {
+  const uint64_t frame_start = SDL_GetTicksNS();
+  struct Timer {
+    const uint64_t& start;
+    float& ms;
+    ~Timer() { ms = ms * 0.9f + (SDL_GetTicksNS() - start) / 1e6f * 0.1f; }
+  } timer{frame_start, m_frame_ms};
   m_time += dt;
   // the scene cache (world matrices...) is kept while nothing changes: the history did not move,
   // no gizmo drag, no field being dragged (nodes added or removed are detected by the cache)
@@ -261,10 +266,12 @@ void App::frame(float dt) {
   if (history.revision() != m_story_revision) apply_story_view();
   process_dialog_results();
   store.update();
+  palette.update();
   apply_library_index();
   poll_level_opening();
   poll_level_adding();
   poll_navmesh_generation();
+  poll_game_prefabs();
   remote_poll();
   extract_poll();
 
@@ -433,18 +440,13 @@ void App::viewport_interaction() {
 void App::select_tool(bool clicked, bool released) {
   ImGuiIO& io = ImGui::GetIO();
   ImDrawList* dl = ImGui::GetBackgroundDrawList();
+  PickFilter pf;
+  pf.actors = rs.show_actors;
+  pf.navmesh = show_navmesh;
+  pf.include_locked = true;
   // hover
   if (m_mouse_in_vp && !gizmo.active() && !m_box_selecting) {
-    PickFilter f;
-    f.actors = rs.show_actors;
-    f.navmesh = show_navmesh;
-    f.include_locked = true;
-    hovered = pick(scene, camera.ray(m_mouse_vp.x, m_mouse_vp.y, m_vp_w, m_vp_h), f).node;
-    // a locked node (the terrain) hides what is behind it but is not chosen
-    if (const Node* hn = scene.find(hovered); hn && hn->locked) hovered = 0;
-    // an actor's model selects the actor
-    if (const Node* hn = scene.find(hovered))
-      if (uint32_t actor = scene.actor_of(*hn)) hovered = actor;
+    hovered = selectable(pick(scene, camera.ray(m_mouse_vp.x, m_mouse_vp.y, m_vp_w, m_vp_h), pf).node);
   } else if (!m_mouse_in_vp) {
     hovered = 0;
   }
@@ -459,6 +461,8 @@ void App::select_tool(bool clicked, bool released) {
     gi.pressed = clicked;
     gi.down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
     gi.released = released;
+    gi.fine = io.KeyShift;
+    gi.snap_toggle = io.KeyCtrl;
     GizmoResult res = gizmo.update(camera, renderer, gi, selection_frame(), dl);
     if (res.started) {
       m_drag_change = std::make_unique<NodeChange>(scene);
@@ -515,28 +519,59 @@ void App::select_tool(bool clicked, bool released) {
         const Node& n = scene.nodes[i];
         if ((n.kind != NodeKind::Render && n.kind != NodeKind::Actor &&
              (n.kind != NodeKind::NavMesh || !show_navmesh)) ||
-            n.locked || !cache.visible[i])
+            (n.locked && !select_terrain) || !cache.visible[i] || cache.reference[i])
           continue;
         if (cache.actor[i]) continue;  // an actor's model: the actor is selected instead
         if (n.kind == NodeKind::Actor && !rs.show_actors) continue;
-        AABB b = scene.world_bounds(n);
+        const Vec3 center = cache.bounds[i].valid() ? cache.bounds[i].center() : cache.worlds[i].col3(3);
         Vec2 s;
-        if (!b.valid() || !renderer.project(b.center(), &s)) continue;
+        if (!renderer.project(center, &s)) continue;
         if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) {
           selection.insert(n.id);
           primary = n.id;
         }
       }
     } else if (m_mouse_in_vp) {
-      if (hovered) {
-        if (io.KeyShift || io.KeyCtrl) toggle_select(hovered);
-        else select_only(hovered);
+      uint32_t target = hovered;
+      // a click again where the last one was, the camera still: the next element under the cursor
+      // (what stands behind, inside or under the one selected)
+      const bool again = (m_mouse_vp - m_last_click).length() < 4.f && length(camera.pos - m_last_click_cam) < 1e-4f &&
+                         std::fabs(camera.yaw - m_last_click_yaw) < 1e-5f &&
+                         std::fabs(camera.pitch - m_last_click_pitch) < 1e-5f;
+      if (again && !io.KeyShift && !io.KeyCtrl && selection.size() == 1) {
+        std::vector<uint32_t> under;
+        for (const PickHit& h : pick_all(scene, camera.ray(m_mouse_vp.x, m_mouse_vp.y, m_vp_w, m_vp_h), pf)) {
+          const Node* hn = scene.find(h.node);
+          if (hn && hn->locked && !select_terrain) break;  // the ground hides what is under it
+          const uint32_t id = selectable(h.node);
+          if (id && std::find(under.begin(), under.end(), id) == under.end()) under.push_back(id);
+        }
+        auto it = std::find(under.begin(), under.end(), primary);
+        if (it != under.end() && under.size() > 1) target = under[(it - under.begin() + 1) % under.size()];
+      }
+      m_last_click = m_mouse_vp;
+      m_last_click_cam = camera.pos;
+      m_last_click_yaw = camera.yaw;
+      m_last_click_pitch = camera.pitch;
+      if (target) {
+        if (io.KeyShift || io.KeyCtrl) toggle_select(target);
+        else select_only(target);
       } else if (!io.KeyShift && !io.KeyCtrl) {
         select_only(0);
       }
     }
     m_box_selecting = false;
   }
+}
+
+uint32_t App::selectable(uint32_t node) const {
+  const Node* n = scene.find(node);
+  if (!n) return 0;
+  // the ground (locked) hides what is behind it but is not chosen, unless asked
+  if (n->locked && !select_terrain) return 0;
+  // an actor's model selects the actor
+  if (uint32_t actor = scene.actor_of(*n)) return actor;
+  return n->id;
 }
 
 void App::place_tool(bool clicked) {
@@ -664,6 +699,7 @@ void App::handle_shortcuts() {
     gizmo.op = GizmoOp::Scale;
   } else if (pressed(ImGuiKey_F1)) {
     show_help = !show_help;
+    guide_tab_request = 0;
   }
 }
 
@@ -710,7 +746,8 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
     const bool with_level = !with_project && (setup == "levels" || setup == "select" || setup == "scale" ||
                                               setup == "prefab" || setup == "catalog" || setup == "models" ||
                                               setup == "decor" || setup == "decor-all" || setup == "navmesh" ||
-                                              setup == "export");
+                                              setup == "export" || setup == "guide" || setup == "tools" ||
+                                              setup == "build");
     if (with_project) open_project_file(in);  // the preferences are not written in this mode
     if (setup == "project") left_tab_request = 1;
     if (with_level) {
@@ -727,7 +764,12 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
       extract.source = in;
       extract_detect(in);
     }
-    if (setup == "help") show_help = true;
+    if (setup == "help" || setup == "guide" || setup == "tools") {
+      show_help = true;
+      guide_tab_request = setup == "help" ? 2 : setup == "tools" ? 1 : 0;
+      guide_step = 4;  // the gizmo: four animations
+    }
+    if (setup == "build") left_tab_request = 3;
     if (setup == "catalog" || setup == "models" || setup == "decor" || setup == "decor-all") {
       left_tab_request = 1;
       m_catalog_tab = setup == "decor" || setup == "decor-all" ? 2 : setup == "models" ? 1 : 0;
@@ -755,7 +797,7 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         frame(1.f / 60.f);
         // loading, or the catalog not complete yet (the index of the library)
         bool loading = m_level_future.valid() || store.pending() > 0 || thumbs.pending() > 0 || extract.process ||
-                       !m_index_applied || navmesh_busy() ||
+                       !m_index_applied || navmesh_busy() || palette.busy() ||
                        level_adding() || !to_add.empty();
         // the levels added to it (--add), one after the other once it is loaded
         if (!to_add.empty() && !m_level_future.valid() && !level_adding() && frame_index > 1) {

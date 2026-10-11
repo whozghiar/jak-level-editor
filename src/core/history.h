@@ -49,6 +49,7 @@ class NodeChange {
   explicit NodeChange(Scene& scene);
   void save(uint32_t id);
   void save_subtree(uint32_t id);
+  void save_subtrees(const std::vector<uint32_t>& ids);  // in one pass over the scene
   HistoryEntry commit(const std::string& label, std::function<void()> after_apply = {});
 
  private:

@@ -1,6 +1,6 @@
 #pragma once
 
-// The shapes made in the editor (Create menu): blocks, floors, walls, ramps, stairs, cylinders, to
+// The shapes made in the editor (Build panel and menu): blocks, floors, walls, ramps, stairs, cylinders, to
 // build what the game's decor has not. A shape keeps its kind and size in its node's extras
 // (og_shape): the inspector changes them and the mesh is made again, its texture repeating every
 // `tile` meters instead of stretching. Its origin is the middle of its base.
@@ -15,18 +15,22 @@
 namespace ogle {
 
 struct ShapeParams {
-  std::string kind = "box";  // box, ramp, stairs, cylinder (floors and walls are boxes)
+  // box, ramp, stairs, cylinder (floors, walls and pillars are boxes); roof (two slopes meeting at
+  // a ridge along z), roof-hip (four slopes); doorway and window (a wall with an opening)
+  std::string kind = "box";
   Vec3 size{4, 2, 4};        // meters: width (x), height (y), depth (z); a cylinder's x and z are its diameters
   float tile = 2.f;          // meters of the shape per repeat of its texture
   int steps = 8;             // stairs
   int sides = 16;            // cylinder
+  Vec2 opening{2.f, 3.f};    // doorway, window: the opening's width and height (meters)
 
   json to_json() const;
   static ShapeParams from_json(const json& j);  // clamped to sensible values
 };
 
-// What the Create menu offers: a name ("box", "floor", "wall", "ramp", "stairs", "cylinder") and
-// its starting size
+// What the Build panel and menu offer: a name ("box", "floor", "wall", "doorway", "window", "pillar", "ramp",
+// "stairs", "roof", "roof-hip", "cylinder") and its starting size: walls of 4 m by 4 m, the grid of
+// modular building (with the snap's 0.5 m)
 struct ShapePreset {
   const char* name;
   ShapeParams params;
@@ -49,6 +53,8 @@ void reshape(Scene& scene, Node& n, const ShapeParams& p);
 // An image file (PNG, JPG, TGA, BMP) as a texture of the scene (the same image once); -1 when
 // unreadable
 int texture_from_image(Scene& scene, const std::string& path, std::string* error);
+// A texture of the scene: the one it has with the same name and image, else this one added
+int add_texture_once(Scene& scene, Texture t);
 
 // Gives the Render nodes among `ids` that draw material `material` (-1: every material of theirs) a
 // new material made by `edit` from it (an identical one is shared). Their meshes are copied (shared

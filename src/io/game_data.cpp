@@ -86,9 +86,12 @@ bool GameData::load(const std::string& path, std::string* error) {
   for (const auto& t : at(actors, "placeholders")) m_placeholders.insert(str(t));
   for (const auto& m : at(actors, "water_looks")) m_water_looks.push_back(str(m));
   for (const auto& [type, family] : at(actors, "objects").items()) m_objects[type] = str(family);
+  for (const auto& [type, category] : at(actors, "catalog").items()) m_catalog[type] = str(category);
   for (const auto& [type, models] : at(actors, "models").items())
     for (const auto& m : models) m_type_models[type].push_back(str(m));
   for (const auto& [name, model] : at(actors, "skeletons").items()) m_skeletons[name] = str(model);
+  for (const auto& [model, art] : at(actors, "art_groups").items()) m_art_groups[model] = str(art);
+  for (const auto& a : at(actors, "common_art_groups")) m_common_art_groups.insert(str(a));
   for (const auto& [type, up] : at(actors, "parents").items()) m_parents[type] = str(up);
   for (const auto& [type, stem] : at(actors, "code").items()) m_code[type] = str(stem);
   for (const auto& [group, stem] : at(actors, "effect_code").items()) m_effect_code[group] = str(stem);
@@ -135,6 +138,9 @@ bool GameData::load(const std::string& path, std::string* error) {
     info.layer = l.value("layer", false);
     info.ocean_far = l.value("ocean_far", false);
     info.traffic = l.value("traffic", false);
+    info.nickname = str(at(l, "nickname"));
+    info.dgo = str(at(l, "dgo"));
+    for (const auto& c : at(l, "code")) info.code.push_back(str(c));
     for (const auto& c : at(l, "companions")) info.companions.push_back(str(c));
     for (const auto& c : at(l, "neighbors")) info.neighbors.push_back(str(c));
     for (const auto& c : at(l, "continues")) {
@@ -285,6 +291,12 @@ std::string GameData::skeleton_of_model(const std::string& model) const {
   return best;
 }
 
+std::string GameData::level_art_group(const std::string& model) const {
+  auto it = m_art_groups.find(model);
+  const std::string& art = it == m_art_groups.end() ? model : it->second;
+  return m_common_art_groups.count(art) ? std::string() : art;
+}
+
 bool GameData::has_type(const std::string& etype) const {
   if (m_placeholders.count(etype)) return false;
   return m_roles.count(etype) || m_objects.count(etype) || m_type_models.count(etype) || m_effects.count(etype) ||
@@ -333,6 +345,11 @@ std::vector<std::string> GameData::code_files(const std::string& etype) const {
 std::string GameData::object_family(const std::string& etype) const {
   auto it = m_objects.find(etype);
   return it != m_objects.end() && !it->second.empty() ? it->second : std::string("other");
+}
+
+std::string GameData::catalog_category(const std::string& etype) const {
+  auto it = m_catalog.find(etype);
+  return it != m_catalog.end() ? it->second : std::string();
 }
 
 const std::string& GameData::water_model(int look) const {

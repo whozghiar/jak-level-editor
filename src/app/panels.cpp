@@ -14,6 +14,7 @@
 #include "core/prefs.h"
 #include "imgui.h"
 #include "imgui_stdlib.h"
+#include "io/jak2_import.h"
 
 namespace ogle {
 
@@ -136,7 +137,6 @@ void App::ui_menu() {
     if (ImGui::MenuItem(tr("menu.file.save_as"), "Ctrl+Shift+S", false, document_open())) save(true);
     ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.file.import_model"), nullptr, false, document_open())) open_dialog(DialogAction::ImportModel);
-    if (ImGui::MenuItem(tr("menu.file.export_game"), nullptr, false, document_open())) open_export_window();
     ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.file.quit"))) request_quit();
     ImGui::EndMenu();
@@ -166,6 +166,8 @@ void App::ui_menu() {
     ImGui::MenuItem(tr("menu.view.labels"), nullptr, &show_labels);
     ImGui::MenuItem(tr("menu.view.grid"), nullptr, &rs.show_grid);
     ImGui::MenuItem(tr("menu.view.textures"), nullptr, &rs.textures);
+    ImGui::MenuItem(tr("menu.view.select_terrain"), nullptr, &select_terrain);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.view.select_terrain.tip"));
     ImGui::MenuItem(tr("menu.view.log"), nullptr, &show_log);
     ImGui::Separator();
     if (ImGui::BeginMenu(tr_id("menu.view.language").c_str())) {
@@ -175,19 +177,38 @@ void App::ui_menu() {
     }
     ImGui::EndMenu();
   }
+  // Build: the shapes, the palette of materials, a model of one's own
   if (ImGui::BeginMenu(tr_id("menu.create").c_str(), document_open())) {
     for (const auto& p : shape_presets())
       if (ImGui::MenuItem(tr(("menu.create." + std::string(p.name)).c_str()))) start_shape_placement(p, false);
     ImGui::Separator();
+    if (ImGui::MenuItem(tr("menu.create.materials"))) left_tab_request = 3;
     if (ImGui::MenuItem(tr("menu.file.import_model"))) open_dialog(DialogAction::ImportModel);
     ImGui::EndMenu();
   }
-  if (ImGui::BeginMenu(tr_id("menu.tools").c_str())) {
-    if (ImGui::MenuItem(tr("menu.tools.navmesh"), nullptr, show_navmesh_window)) show_navmesh_window = !show_navmesh_window;
+  // Level: the levels of the document, the one it replaces in the game, nav meshes, the export
+  if (ImGui::BeginMenu(tr_id("menu.level").c_str(), document_open())) {
+    if (ImGui::MenuItem(tr("menu.level.add"))) left_tab_request = 0;
+    if (ImGui::MenuItem(tr("menu.level.select"), "Ctrl+L")) select_level(0);
+    if (ImGui::MenuItem(tr("menu.level.replace"))) {
+      select_only(0);
+      m_scroll_to_replace = true;
+    }
+    guide_tip("replace");
+    if (ImGui::MenuItem(tr("menu.level.navmesh"), nullptr, show_navmesh_window)) show_navmesh_window = !show_navmesh_window;
+    ImGui::Separator();
+    if (ImGui::MenuItem(tr("menu.file.export_game"))) open_export_window();
+    guide_tip("export");
     ImGui::EndMenu();
   }
   if (ImGui::BeginMenu(tr_id("menu.help").c_str())) {
-    if (ImGui::MenuItem(tr("menu.help.getting_started"), "F1")) show_help = true;
+    const char* items[] = {"menu.help.tour", "menu.help.tools", "menu.help.keys"};
+    for (int i = 0; i < 3; i++)
+      if (ImGui::MenuItem(tr(items[i]), i == 0 ? "F1" : nullptr)) {
+        show_help = true;
+        guide_tab_request = i;
+        if (i == 0) guide_step = 0;
+      }
     ImGui::EndMenu();
   }
   ImGui::EndMainMenuBar();
@@ -203,31 +224,60 @@ void App::ui_toolbar(float y, float h) {
                    ImGuiWindowFlags_NoBringToFrontOnFocus);
   const float bh = ImGui::GetFrameHeight() + 8.f;
   const bool sel = !selection.empty();
-  auto button = [&](const char* key, const char* tip_key, bool active, bool enabled) {
+  // a tip of the guide (its animation) for the tools, a plain one for the others
+  auto button = [&](const char* key, const char* tip_key, bool active, bool enabled, const char* guide = nullptr) {
     if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.6f, 0.66f, 1.f));
     ImGui::BeginDisabled(!enabled);
     bool pressed = ImGui::Button(tr_id(key).c_str(), ImVec2(0, bh));
     ImGui::EndDisabled();
     if (active) ImGui::PopStyleColor();
-    if (tip_key) tooltip(tr(tip_key));
+    if (guide) guide_tip(guide);
+    else if (tip_key) tooltip(tr(tip_key));
     ImGui::SameLine();
     return pressed;
   };
-  if (button("toolbar.move", "toolbar.move.tip", gizmo.op == GizmoOp::Translate, true)) {
+  if (button("toolbar.move", nullptr, gizmo.op == GizmoOp::Translate, true, "move")) {
     stop_placement();
     gizmo.op = GizmoOp::Translate;
   }
-  if (button("toolbar.rotate", "toolbar.rotate.tip", gizmo.op == GizmoOp::Rotate, true)) {
+  if (button("toolbar.rotate", nullptr, gizmo.op == GizmoOp::Rotate, true, "rotate")) {
     stop_placement();
     gizmo.op = GizmoOp::Rotate;
   }
-  if (button("toolbar.scale", "toolbar.scale.tip", gizmo.op == GizmoOp::Scale, true)) {
+  if (button("toolbar.scale", nullptr, gizmo.op == GizmoOp::Scale, true, "scale")) {
     stop_placement();
     gizmo.op = GizmoOp::Scale;
   }
   ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4);
+  bool local = gizmo.space == GizmoSpace::Local;
+  if (ImGui::Checkbox(tr_id("toolbar.local").c_str(), &local)) gizmo.space = local ? GizmoSpace::Local : GizmoSpace::World;
+  guide_tip("local");
+  ImGui::SameLine();
   ImGui::Checkbox(tr_id("toolbar.snap").c_str(), &gizmo.snap.enabled);
-  tooltip(tr("toolbar.snap.tip"));
+  guide_tip("snap");
+  ImGui::SameLine(0, 2);
+  if (ImGui::ArrowButton("##snap-steps", ImGuiDir_Down)) ImGui::OpenPopup("snap-steps");
+  tooltip(tr("toolbar.snap.steps.tip"));
+  if (ImGui::BeginPopup("snap-steps")) {
+    // the steps of the snap: the grid of modular building (walls of 4 m on a 0.5 m grid...)
+    ImGui::TextDisabled("%s", tr("toolbar.snap.steps"));
+    ImGui::SetNextItemWidth(140);
+    ImGui::DragFloat(tr_id("toolbar.snap.move").c_str(), &gizmo.snap.translate, 0.05f, 0.05f, 64.f, "%.2f m");
+    for (float s : {0.1f, 0.25f, 0.5f, 1.f, 2.f, 4.f}) {
+      ImGui::SameLine();
+      if (ImGui::SmallButton(strf("%g##m%g", s, s).c_str())) gizmo.snap.translate = s;
+    }
+    ImGui::SetNextItemWidth(140);
+    ImGui::DragFloat(tr_id("toolbar.snap.turn").c_str(), &gizmo.snap.rotate_deg, 0.5f, 1.f, 180.f, "%.0f deg");
+    for (float s : {5.f, 15.f, 45.f, 90.f}) {
+      ImGui::SameLine();
+      if (ImGui::SmallButton(strf("%g##r%g", s, s).c_str())) gizmo.snap.rotate_deg = s;
+    }
+    ImGui::SetNextItemWidth(140);
+    ImGui::DragFloat(tr_id("toolbar.snap.scale").c_str(), &gizmo.snap.scale, 0.01f, 0.01f, 10.f, "%.2f");
+    ImGui::TextDisabled("%s", tr("toolbar.snap.keys"));
+    ImGui::EndPopup();
+  }
   ImGui::SameLine();
   ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4);
   ImGui::TextDisabled("|");
@@ -237,7 +287,7 @@ void App::ui_toolbar(float y, float h) {
   if (button("toolbar.delete", "toolbar.delete.tip", false, sel)) delete_selection();
   ImGui::TextDisabled("|");
   ImGui::SameLine();
-  if (button("toolbar.prefab", "toolbar.prefab.tip", false, sel)) m_show_new_prefab = true;
+  if (button("toolbar.prefab", nullptr, false, sel, "prefab")) m_show_new_prefab = true;
   ImGui::TextDisabled("|");
   ImGui::SameLine();
   if (button("toolbar.undo", nullptr, false, history.can_undo())) history.undo();
@@ -253,13 +303,18 @@ void App::ui_left_panel(float x, float y, float w, float h) {
                                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus);
   m_left_w = ImGui::GetWindowWidth();
   if (ImGui::BeginTabBar("panels")) {
-    const char* tabs[] = {"tab.levels", "tab.catalog", "tab.prefabs"};
-    for (int i = 0; i < 3; i++) {
+    // shown in this order: Levels, Build, Catalog, Prefabs (left_tab_request: 0, 3, 1, 2)
+    const char* tabs[] = {"tab.levels", "tab.catalog", "tab.prefabs", "tab.build"};
+    const char* guides[] = {"levels", "catalog", "game_prefabs", "build"};
+    for (int i : {0, 3, 1, 2}) {
       ImGuiTabItemFlags flags = left_tab_request == i ? ImGuiTabItemFlags_SetSelected : 0;
-      if (ImGui::BeginTabItem(tr_id(tabs[i]).c_str(), nullptr, flags)) {
+      const bool open = ImGui::BeginTabItem(tr_id(tabs[i]).c_str(), nullptr, flags);
+      guide_tip(guides[i]);
+      if (open) {
         if (i == 0) ui_levels_panel();
         else if (i == 1) ui_catalog_panel();
-        else ui_prefabs_panel();
+        else if (i == 2) ui_prefabs_panel();
+        else ui_build_panel();
         ImGui::EndTabItem();
       }
     }
@@ -387,14 +442,17 @@ void App::ui_catalog_panel() {
     return;
   }
   if (ImGui::RadioButton(tr_id("catalog.objects").c_str(), m_catalog_tab == 0)) m_catalog_tab = 0;
-  tooltip(tr("catalog.objects.tip"));
+  guide_tip("catalog");
+  ImGui::SameLine();
+  if (ImGui::RadioButton(tr_id("catalog.interactive").c_str(), m_catalog_tab == 3)) m_catalog_tab = 3;
+  guide_tip("interactive");
   ImGui::SameLine();
   if (ImGui::RadioButton(tr_id("catalog.models").c_str(), m_catalog_tab == 1)) m_catalog_tab = 1;
-  tooltip(tr("catalog.models.tip"));
+  guide_tip("models");
   ImGui::SameLine();
   if (ImGui::RadioButton(tr_id("catalog.decor").c_str(), m_catalog_tab == 2)) m_catalog_tab = 2;
-  tooltip(tr("catalog.decor.tip"));
-  if (m_catalog_tab == 0) ui_catalog_objects();
+  guide_tip("decor");
+  if (m_catalog_tab == 0 || m_catalog_tab == 3) ui_catalog_objects(m_catalog_tab == 3);
   else if (m_catalog_tab == 1) ui_catalog_models();
   else ui_catalog_decor();
 }
@@ -429,11 +487,12 @@ void thumbnail_grid(int count, float size, const std::function<void(int)>& cell)
 
 }  // namespace
 
-void App::ui_catalog_objects() {
+void App::ui_catalog_objects(bool interactive) {
   // the family, the filter
   std::vector<std::string> families;
   for (const auto& o : catalog)
-    if (families.empty() || families.back() != o.family) families.push_back(o.family);
+    if (o.interactive == interactive && (families.empty() || families.back() != o.family)) families.push_back(o.family);
+  if (std::find(families.begin(), families.end(), m_catalog_family) == families.end()) m_catalog_family.clear();
   ImGui::SetNextItemWidth(-1);
   const std::string current = m_catalog_family.empty() ? tr("catalog.all_families") : tr(("family." + m_catalog_family).c_str());
   if (ImGui::BeginCombo("##family", current.c_str())) {
@@ -446,14 +505,17 @@ void App::ui_catalog_objects() {
   ImGui::InputTextWithHint("##catalog-filter", tr("catalog.filter"), &m_catalog_filter);
   const std::string f = lower(m_catalog_filter);
   std::vector<const CatalogObject*> shown;
+  size_t total = 0;
   for (const auto& o : catalog) {
+    if (o.interactive != interactive) continue;
+    total++;
     if (!m_catalog_family.empty() && o.family != m_catalog_family) continue;
     if (!f.empty() && o.name.find(f) == std::string::npos && o.etype.find(f) == std::string::npos &&
         o.model.find(f) == std::string::npos)
       continue;
     shown.push_back(&o);
   }
-  ImGui::TextDisabled(tr("catalog.count"), shown.size(), catalog.size());
+  ImGui::TextDisabled(tr("catalog.count"), shown.size(), total);
   if (catalog.empty()) {
     ImGui::TextWrapped("%s", tr("catalog.empty"));
     return;
@@ -602,6 +664,23 @@ void App::ui_decor_cell(const std::string& background, int64_t stamp, const Cata
 }
 
 void App::ui_catalog_decor() {
+  // the decor of Jak 3's levels, or Jak II's structures when Jak II was extracted too
+  if (!library_jak2.empty()) {
+    const bool before = m_decor_jak2;
+    if (ImGui::RadioButton(tr_id("catalog.decor.jak3").c_str(), !m_decor_jak2)) m_decor_jak2 = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(tr_id("catalog.decor.jak2").c_str(), m_decor_jak2)) m_decor_jak2 = true;
+    guide_tip("jak2");
+    if (m_decor_jak2 != before) {
+      m_decor_level.clear();
+      m_decor_scene.reset();
+      m_decor_parts.clear();
+      m_all_parts_filter = "\x01";  // the search made again
+    }
+  } else {
+    m_decor_jak2 = false;
+  }
+  const AssetLibrary& lib = m_decor_jak2 ? library_jak2 : library;
   // the level whose decor is shown, or every level
   ImGui::SetNextItemWidth(-1);
   if (ImGui::BeginCombo("##decor-level", m_decor_level.empty() ? tr("catalog.all_levels") : m_decor_level.c_str(),
@@ -611,7 +690,7 @@ void App::ui_catalog_decor() {
       m_decor_scene.reset();
       m_decor_parts.clear();
     }
-    for (const auto& l : library.levels()) {
+    for (const auto& l : lib.levels()) {
       if (!l.listed) continue;
       if (ImGui::Selectable(l.name.c_str(), l.name == m_decor_level) && l.name != m_decor_level) {
         m_decor_level = l.name;
@@ -621,7 +700,7 @@ void App::ui_catalog_decor() {
     }
     ImGui::EndCombo();
   }
-  const LevelEntry* level = library.level(m_decor_level);
+  const LevelEntry* level = lib.level(m_decor_level);
   if (!level) {
     m_decor_level.clear();
     ui_catalog_decor_all();
@@ -630,6 +709,10 @@ void App::ui_catalog_decor() {
   if (!m_decor_scene) {
     m_decor_scene = store.level(level->background, true);
     if (m_decor_scene) m_decor_parts = list_parts(*m_decor_scene);
+    if (m_decor_jak2)
+      m_decor_parts.erase(std::remove_if(m_decor_parts.begin(), m_decor_parts.end(),
+                                         [](const CatalogPart& p) { return !jak2_structure(p); }),
+                          m_decor_parts.end());
   }
   if (!m_decor_scene) {
     if (store.failed_level(level->background)) ImGui::TextWrapped("%s", tr("catalog.decor.failed"));
@@ -655,9 +738,11 @@ void App::ui_catalog_decor() {
 }
 
 void App::ui_catalog_decor_all() {
+  const LibraryIndex& index = m_decor_jak2 ? library_index_jak2 : library_index;
+  const std::vector<DecorEntry>& parts = m_decor_jak2 ? all_parts_jak2 : all_parts;
   // the levels are read once (then from the cache)
-  if (!library_index.ready()) {
-    const int done = library_index.done(), total = library_index.total();
+  if (!index.ready()) {
+    const int done = index.done(), total = index.total();
     ImGui::TextDisabled(tr("catalog.indexing"), done, total);
     ImGui::ProgressBar(total > 0 ? (float)done / total : 0.f, ImVec2(-1, 0), "");
     return;
@@ -666,20 +751,24 @@ void App::ui_catalog_decor_all() {
   ImGui::InputTextWithHint("##decor-all-filter", tr("catalog.decor.filter"), &m_catalog_filter);
   const std::string f = lower(m_catalog_filter);
   if (f.empty()) {
-    ImGui::TextWrapped(tr("catalog.decor.search"), m_all_prototypes, m_all_pieces);
+    if (m_decor_jak2) {
+      ImGui::TextWrapped(tr("catalog.decor.jak2.search"), parts.size(), library_jak2.levels().size());
+    } else {
+      ImGui::TextWrapped(tr("catalog.decor.search"), m_all_prototypes, m_all_pieces);
+    }
     return;
   }
   if (f != m_all_parts_filter) {
     m_all_parts_filter = f;
     m_all_parts_shown.clear();
-    for (size_t i = 0; i < all_parts.size(); i++)
-      if (all_parts[i].key.find(f) != std::string::npos) m_all_parts_shown.push_back(i);
+    for (size_t i = 0; i < parts.size(); i++)
+      if (parts[i].key.find(f) != std::string::npos) m_all_parts_shown.push_back(i);
   }
-  ImGui::TextDisabled(tr("catalog.parts_count"), m_all_parts_shown.size(), all_parts.size());
+  ImGui::TextDisabled(tr("catalog.parts_count"), m_all_parts_shown.size(), parts.size());
   ImGui::BeginChild("all-parts");
   const float size = 80.f;
   thumbnail_grid((int)m_all_parts_shown.size(), size, [&](int i) {
-    const DecorEntry& e = all_parts[m_all_parts_shown[i]];
+    const DecorEntry& e = parts[m_all_parts_shown[i]];
     ui_decor_cell(e.background, e.stamp, e.part, e.level, e.levels, size);
   });
   ImGui::EndChild();
@@ -696,20 +785,99 @@ void App::ui_prefabs_panel() {
     return;
   }
   const bool sel = !selection.empty();
-  ImGui::BeginDisabled(!sel);
-  if (ImGui::Button(tr_id("prefabs.create").c_str(), ImVec2(-1, 34))) m_show_new_prefab = true;
-  ImGui::EndDisabled();
-  tooltip(tr("prefabs.create.tip"));
-  ImGui::Separator();
-  if (prefabs.empty()) {
-    ImGui::TextWrapped("%s", tr("prefabs.empty"));
-    return;
-  }
   ImGui::BeginChild("prefabs");
   const float size = 96.f;
   const float cell_w = size + 6 + ImGui::GetStyle().ItemSpacing.x;
   const int per_row = std::max(1, (int)((ImGui::GetContentRegionAvail().x + ImGui::GetStyle().ItemSpacing.x) / cell_w));
   std::string to_delete;
+
+  // the game's: ready-made assemblies of its decor, by category, made from the extracted levels
+  if (ImGui::CollapsingHeader(tr_id("prefabs.game").c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+    guide_tip("game_prefabs");
+    // made the first time they are shown (a few seconds: each level read once)
+    static bool asked = false;
+    if (!asked && !library.empty() && game_prefabs.size() < prefab_recipes.size()) {
+      asked = true;
+      start_game_prefabs();
+    }
+    if (game_prefabs_busy()) {
+      ImGui::ProgressBar(m_game_prefab_total ? (float)*m_game_prefab_done / m_game_prefab_total : 0.f, ImVec2(-1, 0),
+                         strf(tr("prefabs.game.making"), (int)*m_game_prefab_done, m_game_prefab_total).c_str());
+    } else if (game_prefabs.size() < prefab_recipes.size()) {
+      if (ImGui::Button(tr_id("prefabs.game.make").c_str(), ImVec2(-1, 0))) start_game_prefabs();
+      tooltip(tr("prefabs.game.make.tip"));
+    }
+    static std::string category;
+    std::vector<std::string> categories;
+    for (const auto& p : game_prefabs)
+      if (std::find(categories.begin(), categories.end(), p.category) == categories.end()) categories.push_back(p.category);
+    if (!categories.empty()) {
+      ImGui::SetNextItemWidth(-1);
+      const std::string all = tr("prefabs.game.all");
+      if (ImGui::BeginCombo("##prefab-category",
+                            category.empty() ? all.c_str() : tr(("prefabs.category." + category).c_str()))) {
+        if (ImGui::Selectable(all.c_str(), category.empty())) category.clear();
+        for (const auto& c : categories)
+          if (ImGui::Selectable(tr(("prefabs.category." + c).c_str()), category == c)) category = c;
+        ImGui::EndCombo();
+      }
+    }
+    size_t shown = 0;
+    for (const PrefabInfo& p : game_prefabs) {
+      if (!category.empty() && p.category != category) continue;
+      ImGui::PushID(p.path.c_str());
+      if (shown++ % per_row) ImGui::SameLine();
+      ImGui::BeginGroup();
+      ThumbRequest req;
+      req.kind = ThumbRequest::Kind::Model;
+      req.path = p.path;
+      req.stamp = p.mtime;
+      unsigned tex = thumbs.get(req);
+      const bool placing = tool == ToolMode::Place && placement.path == p.path;
+      if (placing) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+      ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(3, 3));
+      const bool clicked = tex ? ImGui::ImageButton("##img", (ImTextureID)(uint64_t)tex, ImVec2(size, size))
+                               : ImGui::Button(thumbs.failed(req) ? "?" : "...", ImVec2(size + 6, size + 6));
+      ImGui::PopStyleVar();
+      if (placing) ImGui::PopStyleColor();
+      if (ImGui::BeginItemTooltip()) {
+        ImGui::TextUnformatted(p.name.c_str());
+        ImGui::TextDisabled("%s", tr(("prefabs.category." + p.category).c_str()));
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
+        if (!p.description.empty()) ImGui::TextUnformatted(p.description.c_str());
+        ImGui::TextDisabled("%s", tr("prefabs.cell_tip"));
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+      }
+      if (clicked) start_placement(p.path, p.name, false);
+      if (ImGui::BeginDragDropSource()) {
+        if (!m_drag_from_panel) {
+          m_drag_from_panel = true;
+          start_placement(p.path, p.name, true);
+        }
+        int dummy = 0;
+        ImGui::SetDragDropPayload("OGLE_PREFAB", &dummy, sizeof(dummy));
+        ImGui::TextUnformatted(p.name.c_str());
+        ImGui::EndDragDropSource();
+      }
+      ImGui::TextUnformatted(fit_text(p.name, size + 6).c_str());
+      ImGui::EndGroup();
+      ImGui::PopID();
+    }
+  }
+
+  // the user's own
+  const bool mine_open = ImGui::CollapsingHeader(tr_id("prefabs.mine").c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+  guide_tip("prefab");
+  if (!mine_open) {
+    ImGui::EndChild();
+    return;
+  }
+  ImGui::BeginDisabled(!sel);
+  if (ImGui::Button(tr_id("prefabs.create").c_str(), ImVec2(-1, 34))) m_show_new_prefab = true;
+  ImGui::EndDisabled();
+  tooltip(tr("prefabs.create.tip"));
+  if (prefabs.empty()) ImGui::TextWrapped("%s", tr("prefabs.empty"));
   for (size_t i = 0; i < prefabs.size(); i++) {
     const PrefabInfo& p = prefabs[i];
     ImGui::PushID(p.path.c_str());
@@ -833,7 +1001,7 @@ void App::ui_inspector(float x, float y, float w, float h) {
         if (ImGui::SmallButton(tr_id("inspector.added_levels.select").c_str())) select_level(0);
         tooltip(tr("inspector.added_levels.select.tip"));
         for (const auto& l : levels) {
-          if (l.role != DocumentLevel::Added) continue;
+          if (l.role != DocumentLevel::Added || l.reference) continue;
           Node* g = scene.find(l.group);
           if (!g) continue;
           ImGui::PushID((int)l.group);
@@ -872,6 +1040,7 @@ void App::ui_inspector(float x, float y, float w, float h) {
           ImGui::PopID();
         }
       }
+      ui_replace_section(levels);
       // the levels around it in the game, to add
       if (!neighbors.empty()) {
         ImGui::SeparatorText(tr("inspector.neighbors"));
@@ -931,6 +1100,120 @@ void App::ui_inspector(float x, float y, float w, float h) {
   ImGui::End();
 }
 
+// Replacing a level of the game with the document's: which one, the original shown to compare
+// with, the document's level placed and turned where it goes, where the game starts the player.
+void App::ui_replace_section(const std::vector<DocumentLevel>& levels) {
+  const GameData* data = document_game_data();
+  if (!data) return;
+  ImGui::SeparatorText(tr("replace.title"));
+  if (m_scroll_to_replace) {  // Level > Replace a level of the game
+    ImGui::SetScrollHereY(0.f);
+    m_scroll_to_replace = false;
+  }
+  const std::string& current = scene.settings.replaces;
+  const std::string source = scene.settings.level;
+  auto set_replaced = [this](const std::string& level) {
+    const std::string before = scene.settings.replaces;
+    if (before == level) return;
+    scene.settings.replaces = level;
+    LevelSettings* s = &scene.settings;
+    history.push({tr("undo.replaces"), [s, before]() { s->replaces = before; }, [s, level]() { s->replaces = level; }});
+    m_export_level.clear();  // the export's options are made again for it
+  };
+  ImGui::SetNextItemWidth(-1);
+  if (ImGui::BeginCombo("##replaces", current.empty() ? tr("replace.none_chosen") : current.c_str(),
+                        ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::Selectable(tr("replace.none_chosen"), current.empty())) set_replaced("");
+    // the level the document comes from first, then the game's levels the Levels panel lists
+    const LevelInfo* own = data->level(source);
+    if (own && !own->dgo.empty() && !own->layer &&
+        ImGui::Selectable(strf(tr("replace.source"), source.c_str()).c_str(), current == source))
+      set_replaced(source);
+    for (const auto& l : library.levels()) {
+      const LevelInfo* info = data->level(l.name);
+      if (!l.listed || !info || info->dgo.empty() || l.name == source) continue;
+      if (ImGui::Selectable(l.name.c_str(), current == l.name)) set_replaced(l.name);
+    }
+    ImGui::EndCombo();
+  }
+  guide_tip("replace");
+  if (current.empty()) return;
+  // the original, as the game has it, shown to compare with
+  const DocumentLevel* original = nullptr;
+  for (const auto& l : levels)
+    if (l.reference && l.name == current) original = &l;
+  ImGui::BeginDisabled(level_adding() || m_level_future.valid());
+  if (!original) {
+    if (ImGui::Button(tr_id("replace.show").c_str(), ImVec2(-1, 0)))
+      if (const LevelEntry* e = library.level(current)) {
+        std::string err;
+        if (!add_level_to_document(*e, &err, true)) LOG_WARN("%s", err.c_str());
+      }
+    tooltip(tr("replace.show.tip"));
+  } else if (Node* g = scene.find(original->group)) {
+    const Node before = *g;
+    bool shown = g->visible;
+    if (ImGui::Checkbox(tr_id("replace.shown").c_str(), &shown)) {
+      g->visible = shown;
+      commit_node_edit(before, tr("undo.visibility"));
+    }
+    tooltip(tr("replace.shown.tip"));
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr_id("replace.remove").c_str())) {
+      std::string err;
+      if (!remove_document_level(original->group, &err)) LOG_WARN("%s", err.c_str());
+    }
+  }
+  ImGui::EndDisabled();
+  if (level_adding() && m_adding_reference) ImGui::TextDisabled(tr("inspector.neighbors.adding"), m_adding_level.c_str());
+  // the document's own level, where the original is
+  ImGui::BeginDisabled(!original);
+  if (ImGui::Button(tr_id("replace.align").c_str(), ImVec2(-1, 0))) {
+    std::string err;
+    if (!align_to_replaced(&err)) LOG_WARN("%s", err.c_str());
+  }
+  ImGui::EndDisabled();
+  tooltip(strf(tr(original ? "replace.align.tip" : "replace.align.disabled"), current.c_str()).c_str());
+  if (ImGui::SmallButton(tr_id("replace.turn_left").c_str())) turn_own_level(90.f);
+  tooltip(tr("replace.turn.tip"));
+  ImGui::SameLine();
+  if (ImGui::SmallButton(tr_id("replace.turn_right").c_str())) turn_own_level(-90.f);
+  tooltip(tr("replace.turn.tip"));
+  ImGui::SameLine();
+  // the same text as the levels' Select above, another id (one id per button of the window)
+  if (ImGui::SmallButton((std::string(tr("inspector.added_levels.select")) + "###replace-select").c_str()))
+    select_level(0);
+  tooltip(tr("replace.select.tip"));
+  // where the game starts the player there: on the ground of the new level? (checked again when the
+  // document changes)
+  static uint64_t checked_rev = ~0ull;
+  static std::string checked_level;
+  static std::vector<ContinueCheck> checks;
+  if (checked_rev != history.revision() || checked_level != current) {
+    checked_rev = history.revision();
+    checked_level = current;
+    checks = check_continues(scene, data, current);
+  }
+  if (!checks.empty()) {
+    ImGui::TextDisabled(tr("replace.continues"), current.c_str());
+    tooltip(tr("replace.continues.tip"));
+    for (const auto& c : checks) {
+      ImGui::PushID(c.name.c_str());
+      if (ImGui::SmallButton(tr_id("replace.go").c_str())) {
+        camera.pos = c.position + Vec3{0, 6.f, 9.f};
+        camera.look_at(c.position);
+      }
+      ImGui::SameLine();
+      if (c.ok()) ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.5f, 1.f), "%s", c.name.c_str());
+      else ImGui::TextColored(ImVec4(1.f, 0.6f, 0.3f, 1.f), "%s", c.name.c_str());
+      tooltip(c.ok() ? strf(tr("replace.continue.ok"), c.position.y - c.ground).c_str() : tr("replace.continue.none"));
+      ImGui::PopID();
+    }
+  }
+  if (ImGui::Button(strf(tr("replace.export"), current.c_str()).c_str(), ImVec2(-1, 0))) open_export_window();
+  tooltip(tr("replace.export.tip"));
+}
+
 void App::ui_node_inspector(Node& n) {
   ImGui::SeparatorText(kind_label(n.kind));
   ImGui::TextWrapped("%s", n.name.c_str());
@@ -972,6 +1255,16 @@ void App::ui_node_inspector(Node& n) {
     ImGui::PopItemWidth();
     ImGui::Checkbox(tr_id("inspector.scale.uniform").c_str(), &m_scale_uniform);
     tooltip(tr("inspector.scale.uniform.tip"));
+    if (n.kind == NodeKind::Render) {
+      // locked: clicks go through it to what is on it (the ground is, from the start)
+      ImGui::SameLine();
+      bool locked = n.locked;
+      if (ImGui::Checkbox(tr_id("inspector.locked").c_str(), &locked)) {
+        n.locked = locked;
+        commit_node_edit(snap, tr("undo.lock"));
+      }
+      tooltip(tr("inspector.locked.tip"));
+    }
     if (n.kind == NodeKind::Actor && (n.local.s.x != 1.f || n.local.s.y != 1.f || n.local.s.z != 1.f)) {
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0.75f, 0.35f, 1));
       ImGui::TextWrapped("%s", tr("inspector.scale.actor"));
@@ -984,7 +1277,9 @@ void App::ui_node_inspector(Node& n) {
     ui_actor_params(n);
   }
   ui_shape_inspector(n);
+  ui_import_inspector(n);
   ui_material_inspector(n);
+  ui_decor_behavior(n);
   ImGui::Spacing();
   if (ImGui::Button(tr_id("inspector.copy").c_str())) copy_selection();
   ImGui::SameLine();
@@ -1334,6 +1629,20 @@ void App::ui_export_window() {
   text_field("export.iso_name", o.iso_name, 8);
   ImGui::InputScalar(tr_id("export.base_id").c_str(), ImGuiDataType_U32, &o.base_id);
   tooltip(tr("export.base_id.tip"));
+  // in place of a level of the game, or a level of its own
+  {
+    const std::string none = tr("export.replaces.none");
+    if (ImGui::BeginCombo(tr_id("export.replaces").c_str(), o.replaces.empty() ? none.c_str() : o.replaces.c_str())) {
+      if (ImGui::Selectable(none.c_str(), o.replaces.empty())) o.replaces.clear();
+      for (const std::string& l : {scene.settings.replaces, scene.settings.level}) {
+        const GameData* data = document_game_data();
+        const LevelInfo* info = data ? data->level(l) : nullptr;
+        if (!l.empty() && info && !info->dgo.empty() && ImGui::Selectable(l.c_str(), o.replaces == l)) o.replaces = l;
+      }
+      ImGui::EndCombo();
+    }
+    tooltip(tr("export.replaces.tip"));
+  }
 
   ImGui::SeparatorText(tr("export.content"));
   ImGui::Checkbox(tr_id("export.actors").c_str(), &o.actors);
@@ -1345,11 +1654,16 @@ void App::ui_export_window() {
   ImGui::RadioButton(tr_id("export.collision.decor").c_str(), &collision, 1);
   tooltip(tr("export.collision.decor.tip"));
   o.game_collision = collision == 0;
-  ImGui::DragFloat3(tr_id("export.start").c_str(), &o.start.x, 0.1f, 0.f, 0.f, "%.1f");
-  tooltip(tr("export.start.tip"));
-  ImGui::SameLine();
-  if (ImGui::SmallButton(tr_id("export.start.reset").c_str())) o.start = export_start_point();
-  tooltip(tr("export.start.reset.tip"));
+  if (o.replaces.empty()) {
+    ImGui::DragFloat3(tr_id("export.start").c_str(), &o.start.x, 0.1f, 0.f, 0.f, "%.1f");
+    tooltip(tr("export.start.tip"));
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr_id("export.start.reset").c_str())) o.start = export_start_point();
+    tooltip(tr("export.start.reset.tip"));
+  } else {
+    // the game starts the player at the continue points of the level replaced
+    ImGui::TextWrapped(tr("export.replaces.start"), o.replaces.c_str());
+  }
 
   ImGui::SeparatorText(tr("export.folder"));
   text_field("export.folder_path", o.folder, 250);
@@ -1359,7 +1673,7 @@ void App::ui_export_window() {
   ImGui::PopItemWidth();
 
   ImGui::Spacing();
-  const std::string bad = check_export_names(o);
+  const std::string bad = check_export_names(o, document_game_data());
   if (!bad.empty()) ImGui::TextColored(ImVec4(1, 0.6f, 0.3f, 1), "%s", tr(bad.c_str()));
   ImGui::BeginDisabled(!bad.empty() || !document_open());
   if (ImGui::Button(tr_id("export.button").c_str(), ImVec2(-1, 34))) {
@@ -1399,29 +1713,7 @@ void App::ui_export_window() {
 void App::ui_windows() {
   ui_navmesh_window();
   ui_export_window();
-  if (show_help) {
-    ImGui::SetNextWindowSize(ImVec2(600, 560), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin(tr_id("help.title").c_str(), &show_help)) {
-      ImGui::SeparatorText(tr("help.start"));
-      for (const char* k : {"help.start.1", "help.start.2", "help.start.3", "help.start.4", "help.start.5", "help.start.6",
-                            "help.start.7"})
-        ImGui::TextWrapped("%s", tr(k));
-      // a bullet whose text wraps at the edge of the window
-      auto bullet = [](const char* text) {
-        ImGui::Bullet();
-        ImGui::TextWrapped("%s", text);
-      };
-      ImGui::SeparatorText(tr("help.camera"));
-      for (const char* k : {"help.camera.1", "help.camera.2", "help.camera.3", "help.camera.4"}) bullet(tr(k));
-      ImGui::SeparatorText(tr("help.story"));
-      for (const char* k : {"help.story.1", "help.story.2", "help.story.3"}) bullet(tr(k));
-      ImGui::SeparatorText(tr("help.editing"));
-      for (const char* k : {"help.editing.1", "help.editing.2", "help.editing.3", "help.editing.4", "help.editing.5",
-                            "help.editing.6", "help.editing.7", "help.editing.8", "help.editing.9"})
-        bullet(tr(k));
-    }
-    ImGui::End();
-  }
+  ui_guide_window();
 
   if (show_log) {
     ImGui::SetNextWindowSize(ImVec2(760, 360), ImGuiCond_FirstUseEver);

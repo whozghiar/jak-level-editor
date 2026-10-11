@@ -10,8 +10,10 @@
 //
 // It is built from the parts of OpenGOAL's decompiler that read game data (extractor/opengoal,
 // ISC license), without the decompiler's code analysis, and reads the game's tables from
-// extractor/data/jak3/ (copied next to the executable as ogle-extract-data/). A disc of another
-// game is detected (--detect says which) but not extracted.
+// extractor/data/<game>/ (copied next to the executable as ogle-extract-data/). Jak 3 is the game
+// the editor edits; a disc of Jak II is extracted too, to <output>/jak2/, for its structures
+// (imported into Jak 3 levels); a disc of another game is detected (--detect says which) but not
+// extracted.
 //
 //   ogle-extract <game.iso | extracted disc folder> <output folder> [--levels ATO,CIB] [--textures]
 //   ogle-extract --detect <game.iso | folder>     game and version, as json
@@ -89,7 +91,7 @@ std::string upper(std::string s) {
 
 void usage() {
   std::printf(
-      "ogle-extract: extracts the levels of Jak 3 to .glb files\n"
+      "ogle-extract: extracts the levels of Jak 3 (or Jak II, for its structures) to .glb files\n"
       "  ogle-extract <game.iso | disc folder> <output folder> [--levels ATO,CIB] [--textures]\n"
       "  ogle-extract --detect <game.iso | folder>   game and version (json)\n"
       "  ogle-extract --list <game.iso | folder>     levels of the disc (json)\n"
@@ -313,9 +315,10 @@ int main(int argc, char** argv) {
   emit("OGLE_GAME " + json{{"game", info.game}, {"version", info.version}, {"name", info.name},
                            {"serial", info.serial}, {"iso", disc.is_iso()}}.dump());
   if (mode == "--detect") return 0;
-  if (info.game != "jak3") return fail("not_jak3", info.name);
+  // Jak 3, and Jak II for its structures (imported into Jak 3 levels): to <output>/<game>/
+  if (info.game != "jak3" && info.game != "jak2") return fail("not_jak3", info.name);
 
-  const fs::path tables = data / "jak3";
+  const fs::path tables = data / info.game;
   std::error_code ec;
   if (!fs::exists(tables / "all-types.gc", ec)) return fail("tables_missing", tables.string());
   json inputs, names;

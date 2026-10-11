@@ -18,6 +18,15 @@ object is there at all, and every parameter its code reads), and **exports the l
 game**: the files of OpenGOAL's level builder for Jak 3, with the level's own code generated for
 those behaviors.
 
+Building goes beyond the game's own pieces. The **Build** panel makes walls (with a door or a
+window), floors, roofs and stairs, and gives them the textures Jak 3's levels use again and again;
+**prefabs of the game** (buildings, houses, bridges, platforms, vents, tanks) are made from your
+levels, ready to place; the **structures of Jak II** (its buildings, the palace, pillars, cables) can
+be brought into Jak 3 levels, checked and converted; a piece of decor can **collide** in other ways,
+**bounce** Jak up or **launch** Jak away; and a level can **replace a level of the game** at its
+place (a `ctyindbis` made from `ctyindb`, which the game loads instead of it). A **guided tour**,
+with an animation of each tool, opens at the first start (F1).
+
 - No game data comes with the editor: everything is read from the user's disc.
 - It needs nothing but this repository and your disc: it does not use jak-project to build, to
   extract or to run. The repository holds the editor and `ogle-extract`, the extractor it runs,
@@ -58,6 +67,7 @@ step: from your disc to a level built by hand or by an assistant.
   you like): it is ignored by git, and where **File > Extract game assets...** looks first.
 - Disk space for all the levels of the game: 3.7 GB (272 levels); and about 5 GB of free memory
   while they are extracted.
+- Optionally your copy of Jak II, for its structures (see [Structures of Jak II](#structures-of-jak-ii)).
 
 **To build it**
 
@@ -101,7 +111,8 @@ glad, tinygltf, nlohmann json, stb and Recast (the nav mesh generator) are in `t
 1. **File > Extract game assets...** (or the button of the Levels panel on the first start).
 2. **Your Jak 3 disc**: choose your `.iso` file (**.iso file...**) or the folder of your disc
    (**Folder...**). The editor reads the disc and shows its game, version and serial (for
-   example *Jak 3 - ntsc_v1 - SCUS-97330*); it tells you if the disc is not Jak 3.
+   example *Jak 3 - ntsc_v1 - SCUS-97330*); it tells you if the disc is another game. A disc of
+   **Jak II** is extracted too, to `library/jak2/`, for its structures.
    The disc can be anywhere: nothing has to be copied to a particular folder, but both dialogs
    open on `iso_data/` in the editor's own folder by default, ready if that is where you put yours.
 3. **Where to write the levels**: by default `library/` in the editor's own folder (the
@@ -130,6 +141,8 @@ library/jak3/<level>/decor/<level>-background.glb      the level: decor (one nod
 library/jak3/<level>/models/<model>-lodN.glb           the models of its actors (crates, doors...)
 library/jak3/<level>/level.json                        what the folder holds (DGO, actors, models)
 library/jak3/prefabs/*.glb                             your prefabs
+library/jak3/prefabs/game/*.glb                        the game's prefabs, made from these levels
+library/jak2/...                                       Jak II's levels, the same way (when extracted)
 ```
 
 These files come from your copy of the game: keep them on your computer, do not share them.
@@ -150,17 +163,41 @@ PNG files. The details (options, messages read by the editor, origin of the code
 
 ```text
 +----------------------------------------------------------------------+
-| File Edit View Tools Help                                            |
-| [Move W] [Rotate E] [Snap] | [Copy] [Paste] [Delete] | [Create a prefab] | [Undo] [Redo] |
+| File Edit View Build Level Help                                      |
+| [Move W] [Rotate E] [Scale R] [Local] [Snap v] | [Copy] [Paste] [Delete] | [Create a prefab] | [Undo] [Redo] |
 +----------------+-----------------------------------+-----------------+
-| Levels|Catalog |                                   | Inspector       |
-| |Prefabs       |              3D view              | (the selection  |
-|                |                                   |  or the level)  |
+| Levels|Build   |                                   | Inspector       |
+| |Catalog       |              3D view              | (the selection  |
+| |Prefabs       |                                   |  or the level)  |
 |                | [Story] < ======o========= >      |                 |
 +----------------+-----------------------------------+-----------------+
 | hints                   |  last message                              |
 +----------------------------------------------------------------------+
 ```
+
+The menus follow the work: **File** (extract, new, open, save, import a model), **Edit**, **View**,
+**Build** (the shapes, the materials of Jak 3), **Level** (add a level next to it, select it whole,
+replace a level of the game, nav meshes, export for the game) and **Help**. The left panel has the
+same steps: **Levels** to open, **Build** to make, **Catalog** and **Prefabs** to place.
+
+### The guide
+
+**Help > Guided tour** (F1) opens the guide, by itself the first time the editor starts:
+
+- **Guided tour**: eleven steps, from your disc to the game (extract, open a level, look around,
+  select, move and turn, build, place the game's objects, prefabs, make the decor act, replace a
+  level, save and play). Each has its animation and a button that shows where it is (the panel,
+  the window, the inspector's section).
+- **Every tool**: the animation of each tool, what it does, its keys and a concrete example (*lift
+  a platform by 2 m so that Jak needs a double jump*, *a ctyindbis made from ctyindb replaces
+  ctyindb*...).
+- **Keys**: the camera, the story and the editing keys.
+
+Hovering a tool shows the same as a tooltip: the toolbar's tools, the panels' tabs, the catalog's
+kinds, the Build panel, the prefabs, the decor's behaviors, the replacement of a level. The
+animations are small scenes of the editor's own shapes, drawn as they play (nothing of the game).
+
+![The guided tour at its fifth step: the animations of the move, rotate, scale and snap tools](docs/captures/12-help.png)
 
 ### Loading a level
 
@@ -258,11 +295,22 @@ layers its missions lend it, and its own point of the story (the list of the sto
 
 - **Click** an element to select it: each decor element is its own object (a click on a pipe
   selects that pipe, not every copy of it). **Shift or Ctrl + click** adds to the selection;
-  **dragging** in an empty spot selects everything in the rectangle.
+  **dragging** in an empty spot selects everything in the rectangle. **Click again at the same
+  place** to select what is behind or under the selection, one element after the other.
 - The level's shell is split in pieces: a wall, a staircase or a bridge is selected on its own.
-  Only the large pieces, the terrain, are locked, so that clicks go to what is on them.
-- **Move (W)** and **Rotate (E)**: drag an arrow, a square or a ring of the gizmo. **Snap** moves
-  by 0.5 m and turns by 15 degrees. The inspector gives the exact position and rotation.
+  Only the ground is locked, so that clicks go to what stands on it: the pieces 60 m across or more
+  whose surface mostly faces up. A door, a tall facade or a long wall stays selectable (they were
+  locked before, being large too). **View > Select the ground** unlocks it, for clicks and boxes.
+  Glows and light shafts do not take the clicks meant for what is behind them.
+- **Move (W)** and **Rotate (E)**: drag an arrow, a square or a ring of the gizmo. While dragging,
+  the value is written next to the cursor (the distance, the angle), **Shift** makes the move ten
+  times finer and **Ctrl** snaps (or stops snapping, with **Snap** on). **Snap** moves by 0.5 m
+  in world space (the gizmo's pivot lands on the grid, so modular walls meet), turns by 15 degrees
+  and scales by 0.1; the arrow next to it changes these steps (0.1 to 4 m and 5 to 90 degrees in
+  a click, or any value).
+  **Local** moves and turns along the selection's own axes. The handles seen edge-on are hidden
+  (they could not be dragged precisely), and a ring seen edge-on turns with the cursor along it.
+  The inspector gives the exact position and rotation.
 - **Scale (R)**: drag the square at the end of an axis to stretch the selection along it (a
   catwalk of the industrial zone made longer, a wall made higher), or the square in the middle to
   make it bigger or smaller. The axes are the element's own, and each selected element scales
@@ -273,6 +321,9 @@ layers its missions lend it, and its own point of the story (the list of the sto
 - **Copy** (Ctrl+C) then **Paste** (Ctrl+V) puts copies where the originals were, selected: move
   them with the gizmo. **Duplicate** (Ctrl+D) does both at once.
 - **Delete** (Del) removes the selection. **Undo** (Ctrl+Z) and **Redo** (Ctrl+Y) go back and forth.
+- **Large selections** stay smooth: with 1,000 elements selected among 19,874 (`ctyinda`,
+  `ctyindb` and `ctywide`), a frame takes 13 ms (120 ms before this version), moving them 14 ms
+  (171 ms), duplicating them 27 ms (1.35 s); a whole level selected, 13 ms a frame (87 ms).
 
 ![A piece of Spargus' wall selected, with the gizmo and the inspector](docs/captures/03-selection.png)
 
@@ -289,33 +340,48 @@ layers its missions lend it, and its own point of the story (the list of the sto
 
 Right-click a prefab to delete it.
 
+**The game's prefabs**, at the top of the panel, are ready-made assemblies of Jak 3's decor, taken
+as the game put them: 32 of them, by category (10 industrial structures: tanks, scaffolding, a
+conveyor, pipes; 6 houses of the slums, Spargus and the gun course; 5 vents and fans; 4 buildings;
+4 platforms; 2 bridges; a generator). They are described by recipes (`data/jak3/prefabs.json`:
+a level, an element of its decor and how much around it to take; names only) and made from your
+extracted levels the first time the panel shows them (each level read once, on a worker thread),
+into
+`library/jak3/prefabs/game/`. They are placed like your own, and their pieces can then be changed
+one by one.
+
 ![A prefab made of barrels and a crate, and a copy of it placed in front](docs/captures/04-prefabs.png)
 
 ### The catalog
 
 The **Catalog** panel lists what else can be put in a level, placed like prefabs:
 
-- **Objects** (978), by family, with a filter:
-  - every object of the game (504): crates, collectables, platforms and elevators, doors,
-    buttons, jump pads, breakables, lights, turrets, vehicles, the water and lava of the levels
-    (with the type of that level's water: its ripples and color)... one entry per model for the
-    objects that choose theirs by name. The few the game draws without a model are markers in the
-    editor;
-  - the **particle effects** of the levels (451): one per particle group their actors use, the
-    lights, neon signs, steam, sparks, drips... drawn by the game, markers in the editor;
-  - the **logic** of the levels (23): the boats of the port, the crowds, the formations and
-    spawners of a level... The rest is left out: what does nothing in the game, cutscenes.
+- **Objects** (541): what makes up a place, by family, with a filter: the props that only stand
+  there (41: flags, windmills, a parked hellcat...), the doors and airlocks (44), water, dark eco
+  and lava (5, with the type of that level's water: its ripples and color), and the **particle
+  effects** of the levels (451: one per particle group their actors use, the lights, neon signs,
+  steam, sparks, drips... drawn by the game, markers in the editor).
+- **Interactive** (206): the objects that do something: crates (15), platforms and elevators (56),
+  moving parts (14), buttons (7), hazards (4), breakables (8), turrets (4), door-like objects (8),
+  and others (90). Their behavior is set in the inspector.
 
-  A new object takes the data of an object of its type found in the game's levels (the pickup of
-  a crate, the particle group of an effect...), without what ties that one to its level (its
-  name, its story, the actors and paths it refers to).
-- **Models** (275): every other model of the game but the characters (parts of objects, debris,
-  props, the statues of the museum), placed as decor: the game draws them, they do nothing.
+  Never offered: the living (enemies, characters, animals, riders), the collectibles (precursor
+  orbs, gems, health, eco, ammo) and the technical types (logic, cameras, managers). The
+  families come from the game's code (`tools/gen_game_data.py`, with `tools/object_categories.json`
+  for the choices the code does not make). A new object takes the data of an object of its type
+  found in the game's levels (the data of a crate, the particle group of an effect...), without
+  what ties that one to its level (its name, its story, the actors and paths it refers to). One
+  entry per model for the objects that choose theirs by name; the few the game draws without a
+  model are markers in the editor.
+- **Models** (218): every other model of the game but the characters and the collectibles (parts
+  of objects, debris, props, the statues of the museum), placed as decor: the game draws them, they
+  do nothing.
 - **Decor**: the decor of the levels, to reuse in another: their prototypes (a pillar, an arch, a
   catwalk, a lamp post) and the pieces of their shell (a wall, a bridge). **All levels** searches
   the 31,077 parts of the game's levels by name (`catwalk` finds the 10 catwalks of the industrial
   zone and the factory), each prototype once; choosing a level shows its whole decor. A part sits
-  on the point it is placed at.
+  on the point it is placed at. **Jak 3 / Jak II** switches to the structures of Jak II when its
+  disc was extracted (see [Structures of Jak II](#structures-of-jak-ii)).
 
 The first time a library is shown, the editor reads what the catalog needs of every level (their
 decor and the data of their actors, not their geometry) in the background, a few seconds, and
@@ -334,29 +400,68 @@ or drag it into the view.
 it from the decor and objects of the catalog and from your prefabs. There is no ground at first:
 elements placed in the void go to height 0.
 
-![A new level built from the catalog: two decks, a stretched bridge over water, lamps, crates, orbs and a fountain](docs/captures/10-new-level.png)
+![A new level built from the catalog: two decks, a stretched bridge over water, lamps, crates and a fountain](docs/captures/10-new-level.png)
 
-### Shapes and textures of your own
+### Building: shapes and the materials of Jak 3
 
-To build what the game's decor has not, **Create** makes new shapes: a block, a floor, a wall, a
-ramp, stairs or a cylinder, placed like the other elements (click where it goes). The inspector
-sets a shape's **Size** in meters, its steps or sides, and **Texture every**: how many meters one
-repeat of its texture covers, so that a larger wall repeats its texture instead of stretching it
-(a shape stretched with the scale tool: **Make the scale its size**). New shapes have a grey grid
-whose cells are one repeat of the texture.
+To build what the game's decor has not, the **Build** panel (or the Build menu) makes new shapes,
+in the spirit of a building mode: a block, a floor, a wall, a **wall with a door**, a **wall with a
+window**, a pillar, a ramp, stairs, a **roof** (two slopes), a **hip roof** (four slopes) or a
+cylinder. Click one (its picture), then click in the view to place it, again and again (R or
+Ctrl + wheel turns it, Esc stops). Walls start at 4 m by 4 m, the grid of modular building: with
+**Snap to the grid** (0.5 m), walls placed side by side meet edge to edge. The inspector sets a
+shape's **Size** in meters, its opening (the door's or the window's width and height), its steps or
+sides, and **Texture every**: how many meters one repeat of its texture covers, so that a larger
+wall repeats its texture instead of stretching it (a shape stretched with the scale tool: **Make
+the scale its size**). New shapes have a grey grid whose cells are one repeat of the texture.
+
+Under the shapes, **Materials of Jak 3** is a palette of the 600 textures the game's levels use
+again and again (city walls, metal floors, Spargus' sandstone, wood, the sewers, the mines...), the
+most shared first, by theme (the first word of their names: `city`, `wascity`, `des`...) and
+searchable by name. Select shapes or pieces of decor (a prefab, a whole group), then click a
+texture: they all take it, at once, undone at once. The textures come from the extracted levels
+(the library's index counts which pieces draw which texture; their images are read from the levels'
+files alone, without their geometry), so the palette needs no level open.
+
+![The Build panel: the shapes and the materials of Jak 3](docs/captures/20-build.png)
 
 The **Material** section of the inspector gives any element (a shape, a model, a decor part) an
-**Image...** (PNG, JPG, TGA, BMP), a texture of the levels opened (**Game textures...**) or a
-**Color** that multiplies its texture. It changes the elements selected that draw that material,
+**Image...** (PNG, JPG, TGA, BMP), a texture of the levels opened (**Game textures...**), one of the
+palette (**Jak 3 materials...**) or a **Color** that multiplies its texture. It changes the elements selected that draw that material,
 not the other copies in the level; the image is saved in the project and in the level exported
 for the game. For a shape too complex for these, model it elsewhere (Blender...) and bring it in
 with **File > Import a model (.glb)**: it is placed like a model of the catalog, with its own
 textures.
 
+### Structures of Jak II
+
+Jak II's levels hold structures Jak 3 has not: the buildings and the palace of Haven City as it
+was, its pillars, its cables... Extract your Jak II disc as you did Jak 3's (**File > Extract game
+assets...**: it goes to `library/jak2/`), then in **Catalog > Decor**, choose **Jak II**: its
+structures are listed and searched like Jak 3's decor (the low-detail scenery a level draws far away,
+its `-lowres` parts, is left out), and placed the same way.
+
+The two games' files are alike (the same extractor writes both: meters, the same axes, vertex
+colors, materials and collision), so a structure keeps its geometry as it is. What could break is
+checked and converted when it is placed, and the inspector's **From Jak II** section says it for
+each:
+
+| Check | What is done |
+|---|---|
+| Names | its textures are renamed `jak2-<name>` unless the document has the same image under that name: the two games share most texture names with slightly different pixels, and one name for two images would make the level builder (and texture packs) mix them |
+| Mesh | its triangles, indices and texture coordinates checked; vertex colors where the game has them |
+| Lighting | its vertex colors (the brightest of its level's light palettes) against those of the document's Jak 3 decor: more than a quarter brighter or darker is said, and **Match the lighting** scales them (undone like any change) |
+| Materials | the alpha and blend modes the export writes for Jak 3 (blended: cut out) |
+| Textures | 8-bit RGBA, power-of-two sizes up to 256, as the game's |
+| Metadata | no actor, no story, no collision of its own: the level builder makes its collision from its shape |
+
+A structure placed keeps where it comes from in its extras (`og_import`: the game, the level, the
+part and its checks), in the project and in prefabs.
+
 ### Nav meshes
 
 The enemies and citizens of Jak 3 walk on **nav meshes**: flat polygons over the ground
-of a level, on which the game finds their way. **Tools > Nav meshes** makes them from the level's
+of a level, on which the game finds their way. **Level > Nav meshes** makes them from the level's
 walkable surfaces:
 
 1. Set **the creature**: its radius (how far it keeps from the walls), its height (the room it
@@ -433,6 +538,34 @@ them by as much); the game's scripts are shown, and left out.
 
 Every change is undone and redone like the others, and kept in the project.
 
+### What the decor does
+
+The decor is not an actor, but the game can still do something with it. With a piece of decor
+selected (a part of a level, a model, a shape, a structure of Jak II), the inspector's **In the
+game** section sets, for every piece selected:
+
+- its **collision**: by its shape (the default), **none** (Jak walks through it: cables, light
+  shafts, foliage) or **invisible** (not drawn, solid: an invisible wall); its **surface** (stone,
+  ice, sand, wood, metal, grass, lava... the sound and the dust of the steps; ice slides), what it
+  does (**deadly**, **burns**, **endless fall**, **melts**, or deadly and burning while throwing Jak
+  up), its **mode** (ground, wall, obstacle; walls are found from the slope anyway) and its flags
+  (Jak cannot hang from its edges, the camera, the creatures or the line of sight go through it).
+  The export writes them as the level builder's own fields: no code.
+- **Bounce**: Jak landing on its top is thrown up so many meters, on foot, in a dive and on the
+  jetboard. The export writes a bouncer of the game without a model of its own (as the board vents
+  of the Industrial Zone are) on top of the piece, as the level's code.
+- **Propulsion**: Jak stepping on its top is thrown along an arc to a point so many meters away,
+  so high, turned so many degrees from the piece's facing, in so many seconds: the game's own
+  directed launch (the Metal Head puffers'), written as the level's code (the jetboard ignores it,
+  as in the game).
+
+Breaking, squashing, dipping or swaying need a model of its own that the game draws as an actor;
+the decor the level builder makes cannot do them. [`docs/behaviors.md`](docs/behaviors.md) is the
+study of the game's code behind these choices: the builder's collision fields and what Jak 3 does
+with them, every bouncer, launcher, breakable and deformable object of the game, how each works,
+and how a later version could make a piece breakable (an actor of its own, made with OpenGOAL's
+actor builder).
+
 ### Saving
 
 **File > Save** (Ctrl+S) writes the level as a project: a standard `.glb` file that Blender also
@@ -441,19 +574,20 @@ opens. Backups are kept next to it (`<project>.glb.backups/`), and **File > Open
 
 ### Exporting for the game
 
-**File > Export for the game...** writes what the view shows (the levels and elements hidden, or
+**Level > Export for the game...** writes what the view shows (the levels and elements hidden, or
 not there at the point of the story shown, are left out) as a **custom level of OpenGOAL**: the
 files its level builder (`goalc/build_level`) takes for Jak 3.
 
 - **Name** (the level's name in the game, 3 to 10 lower case letters, digits or `-`, not a level of
   the game), **Nickname** (3 letters: its DGO file), **ISO name** (8 letters at most), **First
   actor id** (above the game's own actors' ids: 90,000 by default).
-- **With the actors**, and the collision: **The game's collision** (the levels' own collision,
-  exact, where they have it; the builder makes the rest from the shape of the decor: the elements
-  placed, the new levels) or **Made from the decor** (all of it from the decor's shape, with
-  automatic walls: for levels whose own decor was moved or deleted).
+- **With the actors**, and the collision: **The game's collision** (the default: see below) or
+  **Made from the decor** (all of it from the decor's shape, with automatic walls: far denser
+  than the game's, Jak can fall through the floor where the decor is detailed).
 - **Start**: where the player starts, a continue point of the level opened by default (moved with
   it).
+- **Replaces**: a level of the game this one replaces (see
+  [Replacing a level of the game](#replacing-a-level-of-the-game)); none by default.
 - **Written in**: the level goes to a folder of its name there; by default `exports/` next to the
   extracted game, then the last folder used. OpenGOAL reads its custom levels from
   `custom_assets/jak3/levels/` of its checkout.
@@ -469,6 +603,26 @@ files its level builder (`goalc/build_level`) takes for Jak 3.
 | `<name>-nav.json` | the document's nav meshes (`nav_data`) |
 | `level-info.gc` | the level's definition for `goal_src/jak3/engine/level/level-info.gc`, made from the test-zone's, with its start |
 | `INSTALL.md` | how to add it to the game, and what the export changed |
+
+**The collision.** Jak 3 gathers the collision around Jak in a cache of 461 triangles
+(`collide-cache-h.gc`), filled from a box of about 6 m around him (his root sphere, 2.2 m in
+radius, and 1 m more, `fill-cache-for-shape`); beyond 461, the triangles of the place are dropped and Jak
+falls through the floor. The game's own collision is made for it (`ctyindb`'s: 24,000 triangles,
+at most 156 around Jak on any floor), the decor's shape is not (`ctyindb`'s decor: 451,000
+triangles, more than 461 around Jak on a fifth of its floors). So the export writes:
+
+- the game's collision where the levels' own decor is still in place (exact, light);
+- none of it where a piece of that decor was deleted, moved or hidden: the level as extracted
+  tells which pieces are still where the game has them, and the collision nearer to a piece taken
+  out than to the pieces in place goes with it (a triangle that spans both is cut). A facade taken
+  away leaves its passage open in the game too;
+- the collision of the pieces placed or moved, made by the builder from their shape (from both
+  sides), when they are 4 m across or more (walls, floors, catwalks, stairs, models of your own),
+  and of the shapes of the editor whatever their size. The smaller pieces (pipes, lamps, windows,
+  decals) have none, as the game gives none to most of its details; give one to those that should
+  stop Jak in the inspector (**In the game > Collision**);
+- and the report says the places of the floors where Jak would still meet more than 461
+  triangles, the densest first.
 
 What the export changes:
 
@@ -505,6 +659,39 @@ To add the level to the game (also in `INSTALL.md`):
 4. Build the game (`(mi)` in the REPL) and go there:
    `(start 'play (get-continue-by-name *game-info* "<name>-start"))`. This unloads the other
    levels first; `(bg '<name>-vis)` does not, and crashes when the city is loaded.
+
+### Replacing a level of the game
+
+A level made from one of the game's, say `ctyindbis` made from `ctyindb`, can take its place: the
+game then loads it wherever it loaded `ctyindb`, at the same coordinates, with `ctyindb`'s continue
+points, music and missions, and the levels around it as they are.
+
+1. **Level > Replace a level of the game...** (or the inspector, nothing selected): choose the level
+   it replaces; the level the document comes from is offered first.
+2. **Show the original, to compare**: the game's level is added as it is, a see-through blue ghost
+   over the document. It is never selected nor exported, and shows where your level must meet the
+   levels around it: where your level kept the original's surfaces, they are drawn as they are;
+   where it changed them, the original shows in blue around your own.
+3. Put your level in its place: **Place it where the original is** moves your whole level (not the
+   levels added next to it) so that its middle and its bottom are where the original's are; **Turn
+   +90** and **Turn -90** turn it around its middle; **Select** selects it whole, to move or turn it
+   with the gizmo (Snap: by steps; Shift: finer).
+4. **Where the game starts the player**: each continue point of the level replaced (a new game, a
+   mission, a death) is listed, green when your level has ground under it, orange when the player
+   would fall; **Go** flies there.
+5. **Export in place of ctyindb...**: the export writes the document's own level only (not the
+   levels added next to it, which the game loads as they are), its DGO with the code of the level
+   replaced (its objects, its particles, what its missions spawn there), and, in `level-info.gc`
+   and `INSTALL.md`, the one line to change in the game: in `(define ctyindb ...)` of
+   `goal_src/jak3/engine/level/level-info.gc`, the game loads `<nickname>.DGO` for the level, so its
+   `:nickname` becomes your level's. Put it back to play the game's own `ctyindb` again (its DGO is
+   still built). The report says the elements of the levels next to it that were left out and the
+   continue points without ground.
+
+The MCP tool `replace_level` does the same (`show_original`, `align`, `turn_deg`) and answers
+where the game starts the player there; `export_level` takes `replaces`.
+
+![ctyindbis: ctyindb with a factory block taken down and tanks in its place, the original in blue around them, and the inspector's replacement](docs/captures/21-replace.png)
 
 ## 5. Building levels with an assistant (MCP)
 
@@ -554,18 +741,20 @@ python tools/build_industrial_district.py --out build/demo/ironworks.glb --views
 
 | Tool | What it does |
 |---|---|
-| `get_status` | the library and its number of levels, the document (its levels too), the story view (each level's states), the camera, the selection |
+| `get_status` | the library and its number of levels, the document (its levels too), the story view (each level's states), the camera, the selection, the time of a frame |
 | `list_levels`, `open_level`, `new_level` | the levels of the game (`near`: the ones the game displays with a level); open one (`actors: false`: its decor alone); start an empty one |
-| `add_level`, `remove_level`, `get_level_info` | several levels side by side: add one at its place in the game's world (`actors` too), take it out; a level's neighbors, continue points (positions in meters), role, bounds and root elements in the document |
-| `list_catalog`, `list_models`, `list_decor`, `list_prefabs` | what can be placed: objects and effects, models, the decor of every level (searched by name) or of one, prefabs |
-| `place`, `place_many` | puts an object, a model (or a `.glb` file, `path`), a decor part, a prefab or a new shape (`shape`: box, floor, wall, ramp, stairs, cylinder, with its `size`) at a position (meters, Y up), turned (`yaw_deg`, or `rotation_deg` on the three axes) and scaled, dropped to the ground if asked; `place_many` places up to 2,000 at once, undone at once |
+| `add_level`, `remove_level`, `get_level_info` | several levels side by side: add one at its place in the game's world (`actors` too; `reference`: the original a level replaces, shown in blue), take it out; a level's neighbors, continue points (positions in meters), role, bounds and root elements in the document |
+| `replace_level` | the document replaces a level of the game: which one, its original shown, the document's level placed where it is or turned; answers where the game starts the player there (the ground under each continue point) |
+| `list_catalog`, `list_models`, `list_decor`, `list_prefabs` | what can be placed: objects and effects (`group`: `objects` or `interactive`), models, the decor of every level (searched by name) or of one (`game: jak2`: Jak II's structures), prefabs (yours and the game's, made the first time) |
+| `place`, `place_many` | puts an object, a model (or a `.glb` file, `path`), a decor part (`game: jak2`: converted for Jak 3), a prefab or a new shape (`shape`: box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip, cylinder, with its `size`) at a position (meters, Y up), turned (`yaw_deg`, or `rotation_deg` on the three axes) and scaled, dropped to the ground if asked; `place_many` places up to 2,000 at once, undone at once |
 | `find_nodes`, `get_node`, `raycast` | what the level holds and where: by name, type, kind (nav meshes too) or distance; an actor's data, behavior and parameters (what its type's code reads, their kind and default); the ground under a point |
-| `set_shape`, `set_material`, `list_textures` | a shape's size and texture repeat; a texture (an image file or a texture of the document) or a color for elements; the textures of the document |
+| `set_shape`, `set_material`, `list_textures` | a shape's size and texture repeat; a texture (an image file, a texture of the document or of the palette) or a color for elements; the textures of the document, or the palette of Jak 3's recurring textures (`palette`) |
 | `set_actor` | what an object does: its behavior (`open`, `active`, `leave`, `present`: see [Behaviors and parameters](#behaviors-and-parameters)) and its parameters (tag -> value, null: the game's) |
+| `set_decor` | what the game does with pieces of decor: their collision, bounce, propulsion (see [What the decor does](#what-the-decor-does)) |
 | `transform_nodes`, `duplicate_nodes`, `delete_nodes`, `select`, `set_visibility` | move, turn, scale or stretch (`scale`, `scale_by`), copy, delete, show to the user (`level`: a whole level, to move it), show or hide (a level's group: the whole level) |
 | `set_camera`, `capture_view` | look somewhere, or frame elements, a level or the junction of two levels; a picture of the view, given to the assistant |
 | `set_story` | the story view, each level at its own point: `level`, then `state` (1 to its number of states), `step` or `after_node` |
-| `export_level` | the document as a custom level of OpenGOAL for Jak 3 (`name`, `folder`...): the files written and what changed (`notes`) |
+| `export_level` | the document as a custom level of OpenGOAL for Jak 3 (`name`, `folder`, `replaces`...): the files written and what changed (`notes`) |
 | `generate_navmesh`, `export_navmesh` | nav meshes for the whole level, the selection or a box, with the creature's size; only the ground connected to given points (`from`); written for the game |
 | `create_prefab`, `save_project`, `open_project`, `undo`, `redo` | the other actions of the editor |
 
@@ -579,6 +768,8 @@ turns it off. The status bar shows **Assistant connected** while the MCP server 
 |---|---|
 | W, E, R | Move, rotate, scale |
 | Click, Shift/Ctrl + click, drag | Select, add to the selection, box selection |
+| Click again at the same place | Select what is behind or under the selection |
+| Shift, Ctrl (while dragging the gizmo) | Ten times finer; snap, or stop snapping |
 | Ctrl+C, Ctrl+V, Ctrl+D, Del | Copy, paste, duplicate, delete |
 | Ctrl+L | Select the whole level of the selection |
 | Ctrl+Z, Ctrl+Y | Undo, redo |
@@ -586,7 +777,7 @@ turns it off. The status bar shows **Assistant connected** while the MCP server 
 | R, Ctrl + wheel (while placing) | Turn what is being placed |
 | Esc | Stop placing, then clear the selection |
 | Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S | New level, open, save, save as |
-| F1 | Getting started |
+| F1 | The guide: the guided tour, every tool, the keys |
 
 ## 7. Languages
 
@@ -622,7 +813,10 @@ fan of triangles as its mesh. An
 actor keeps the data of the game (`etype`, `aid`, `game_task`, `bsphere`, `lump`, and the type of
 each tag of its lump in `lump_types`), and its model is a `render` child marked `og_actor_visual`. The surface of each collision triangle is kept
 (`og_tri_pat_views` in the mesh extras). The level the project comes from is in
-`asset.extras.ogle.settings`.
+`asset.extras.ogle.settings`, with the level of the game it replaces (`replaces`); the original
+shown to compare is a group marked `og_level` and `og_reference`. What a piece of decor does is in
+its `og_decor`, a shape's kind and size in `og_shape`, and where a structure of Jak II comes from
+and its checks in `og_import`.
 
 ### Nav meshes for the game (`.json`)
 
@@ -706,7 +900,9 @@ open-goal-level-editor --selftest
   the library), `project` (`<in>` is a project; `select`, `scale`, `prefab` and `navmesh` take one
   too), `navmesh` (the nav meshes and their window; made for the whole level when there are none),
   `export` (the level exported for the game to a temporary folder: the window and its report),
-  `extract` (`<in>` is an `.iso` or a disc folder: it is extracted to a temporary folder), `help`.
+  `extract` (`<in>` is an `.iso` or a disc folder: it is extracted to a temporary folder),
+  `guide` (the guided tour at its fifth step), `tools` (its Every tool), `help` (its keys) and
+  `build` (the Build panel), over the level `<in>`.
   `--story` shows the level with every state (`off`), at a step, or just after a task node
   (`tower-destroy-resolution`); `--select` names the elements `select`, `scale` and `prefab`
   use (a level added: `select` selects it whole); `--add` adds levels to the one loaded, one after
@@ -724,7 +920,7 @@ on Linux).
 
 ## 10. What was tested
 
-- `--selftest`: 70 checks (math, rotations read back as angles even at a quarter turn around y, a
+- `--selftest`: 89 checks (math, rotations read back as angles even at a quarter turn around y, a
   library written like the extractor writes one, opening its level: locked terrain, decor instances,
   actor with its model, collision surfaces; copy and paste with undo; prefab file names, saving,
   pivot, placing twice with shared meshes, the actors of a prefab named apart; project round trip,
@@ -752,10 +948,21 @@ on Linux).
   surface, the shell not colliding twice, a placed box colliding by its shape, the behaviors as the
   level's code, its DGO with the code of the game its objects need); the behaviors: the parameters
   of a type, what it derives from, the code it needs; doors, bouncers, elevators and presence as the
-  game's code, conditions made safe in a script).
+  game's code, conditions made safe in a script). Added with this version: the move gizmo driven
+  like the mouse (Shift ten times finer, Ctrl snapping the pivot to the grid); the descendants of
+  500 selected groups of a 100,000-node scene found in one pass; the ground of a level locked but
+  not a facade as wide; a glow in front not taking the click; the export in place of a level of the
+  game (its own level only, the replaced level's code in its DGO, the nickname to change, the
+  continue points without ground); the decor's collision, bounce and propulsion exported; the
+  catalog's categories (no creature, no collectible); the game's prefab recipes; the doors,
+  windows and roofs of the shapes; a structure of Jak II brought in (a texture shared, another
+  renamed, the lighting matched); the guide's animations, drawn in a hidden window (each draws its
+  scene and says what it shows) and the Build panel's icons; the game's collision taken out with
+  the pieces of decor deleted or moved, and a place denser than the collide cache said.
 - Jak 3 NTSC (SCUS-97330), from the folder of the disc: `ogle-extract` writes the 272 levels in 1
-  minute 10 to 1 minute 20 seconds (3.7 GB), and the editor lists 105 of them; a disc of Jak II is
-  recognized and refused (`not_jak3`). `tools/gen_game_data.py`, run again on jak-project's
+  minute 10 to 1 minute 20 seconds (3.7 GB), and the editor lists 105 of them. Jak II PAL
+  (SCES-51608): the outside of its palace (`PALOUT`) extracted with `--levels PALOUT`, four of its
+  largest structures placed in `ctyinda` through the remote control, their checks read back. `tools/gen_game_data.py`, run again on jak-project's
   `goal_src/jak3`, writes the same `data/jak3/game-data.json`, byte for byte.
 - The export for the game, through `--mcp` against a hidden editor: the slums of Haven City
   (`ctysluma`, 13,193 meshes, 42,494 collision triangles of the game) and Spargus (`wascitya`,
@@ -781,6 +988,26 @@ on Linux).
   `capture_view`, `set_story`, `generate_navmesh`, `export_level`, `save_project`, `open_project`.
 - The screenshots of [the tour](docs/captures/README.md), made with `--screenshot` and the demo
   level built by `tools/build_demo_level.py` through the remote control.
+- The viewport, measured through the remote control against a hidden editor, before and after this
+  version: `ctyinda` with `ctyindb` and `ctywide` added (19,874 elements), 1,000 elements selected:
+  a frame 120 ms then 13 ms, moving them 171 ms then 14 ms, duplicating them 1.35 s then 27 ms, a
+  whole level selected 87 ms then 13 ms a frame; a document of 50,810 elements at rest, 29 ms then
+  11 ms a frame.
+- The catalog through `--mcp`: 541 objects and 206 interactive ones, none of the living nor of the
+  collectibles (`skill`, `gem`, `health`, `ammo`, eco...), 218 models; the palette (600 textures by
+  theme) given to a small house made of the shapes; the 32 game prefabs made from the levels and
+  each looked at (pictures of each, in a few seconds for all).
+- The collision of a level made from `ctyindb` (its east facade opened, a district with a 285 m
+  tower added), as played: exported with the collision made from the decor, 451,162 triangles
+  doubled, more than the collide cache holds around Jak on 18.9 % of its floors (the game's own
+  collision of `ctyindb`: 0 %). Exported again with the game's collision: 24,568 of its triangles
+  kept, 117 taken out with the 49 pieces deleted or moved, 805 pieces colliding by their shape,
+  1,764 small ones without collision: 10 places over the cache (482 triangles at most), on the
+  tower and the top of the facades. Not played yet.
+- The replacement of a level: a `ctyindbis` made from `ctyindb`, replacing it with the original
+  shown, exported (`level-info.gc`, its DGO with `ctyindb`'s code, `INSTALL.md`); the demo of
+  [the tour](docs/captures/README.md#17-replace-a-level-of-the-game) built by
+  `tools/build_replace_demo.py`.
 
 - The behaviors, end to end: through the remote control, on `ctyinda` with its actors, its board
   vents set (after a step of the story and 30 m high, never, there once another vent is gone) and
@@ -791,7 +1018,8 @@ on Linux).
   before this version, the scripts of the game's doors made it fail). The inspector's Behavior and
   Parameters, and a project keeping them.
 
-Not tested yet: the behaviors played in the game; the full `.iso` of a disc; the MCP server from Claude Code itself (it was driven by
+Not tested yet: the behaviors played in the game (and the code of the decor's bounce and
+propulsion compiled by OpenGOAL's compiler); a level replacing one of the game's, built and played; the full `.iso` of a disc; the MCP server from Claude Code itself (it was driven by
 test clients speaking the same protocol); a level exported by the editor, built by OpenGOAL's
 level builder and played in the game (the files follow the builder's code, read for this), and so
 nav meshes followed by creatures in the game.
@@ -816,8 +1044,11 @@ nav meshes followed by creatures in the game.
   even those the game only draws in the cutscenes played there.
 - **Actor models are found by file name** (the type's name, `<type>-...` or `...-<type>`); the
   actors without one are drawn as a marker.
-- **Collision does not follow moved elements**: it is kept as the level had it (the export's
-  **Made from the decor** makes it from the decor as it is).
+- **Collision**: the game's collision of a piece moved goes away with it, and the piece collides
+  by its shape where it is (not as the game's simpler collision for it would); the pieces under
+  4 m placed or moved collide only when told to; a dense model of your own (thousands of
+  triangles in a few meters) can still fill the game's collide cache: the export's report says
+  where.
 - **Several levels**: each is loaded whole (Haven City is many levels: add the ones you work on); an added level is shown along the story as when the player is in it, not as the game
   mixes the levels it has loaded; one ocean map is drawn (the level opened's, else the first level
   shown with one); the game's load boundaries (where it loads and unloads levels) are not shown.
@@ -832,12 +1063,26 @@ nav meshes followed by creatures in the game.
   loads). A condition on another object names it: an object renamed after being chosen is not
   found. The code of a type defined in another level's code (the board vents of `ctyinda`) goes
   into the level's DGO, and is loaded twice when that level is loaded at the same time.
-- **The export for the game** has not been built with OpenGOAL's level builder nor played yet.
-  What it does not do: the code of the objects that live in a level's own files (particle effects,
-  a level's logic) is not added to the DGO (`INSTALL.md` says where to find it); the positions
-  inside the actors' data (paths, targets) stay the game's when an actor or a level is moved; the
-  collision of the levels' own decor is the game's as extracted (a piece moved or deleted keeps its
-  collision: export with **Made from the decor**); the builder cannot write all of Jak 3's own
+- **The decor's behaviors**: bounce and propulsion are objects of the level's code placed on the
+  piece's top, as wide as the piece (1 to 20 m): a long or slanted piece throws Jak from around its
+  middle only. Breaking and bending are not offered (see [`docs/behaviors.md`](docs/behaviors.md)).
+- **Replacing a level**: the game is told through one line of its own code (the nickname of the
+  level replaced), to change by hand as `INSTALL.md` says; the actors and paths of the level
+  replaced that the document left out are gone from the game too; its continue points stay where
+  the game has them (the inspector says those without ground).
+- **Structures of Jak II** have no collision of their own (the builder makes it from their shape)
+  and no behavior; their lighting is compared and scaled as a whole, not relit.
+- **The game's prefabs** are taken around an element of a level: one may hold a piece of its
+  neighbors, or miss a piece the game placed farther.
+- **The guide's animations** use the editor's own shapes, not the game's: they show the gesture,
+  not the result in a real level.
+- **The export for the game**: a level made with the editor (`ctyindbis`, with the collision made
+  from the decor) was built and played: Jak fell through some of its floors, which the collision
+  of the export now avoids (see [Exporting for the game](#exporting-for-the-game)); exported so,
+  it has not been played yet. What it does not do: the code of the objects that live in a level's
+  own files (particle effects, a level's logic) is not added to the DGO (`INSTALL.md` says where to
+  find it); the positions inside the actors' data (paths, targets) stay the game's when an actor or
+  a level is moved; the builder cannot write all of Jak 3's own
   surfaces (see [Exporting for the game](#exporting-for-the-game)); the scripts kept (`pair` data)
   need a level builder that reads them; the level's definition keeps the test-zone's `:index`, to
   change; the regions, cameras and ambient sounds of the levels are not exported.
@@ -847,26 +1092,33 @@ nav meshes followed by creatures in the game.
 ```text
 src/core/      math, log, preferences, translations, undo history
 src/scene/     the document, picking (BVH), the story view
-src/io/        glTF import and export, the library of extracted levels, prefabs, game data, the
-               catalog, loading threads, the nav meshes for the game (nav_export), the export of a
-               level for the game (game_export)
-src/render/    camera, OpenGL renderer, thumbnails, offscreen captures
+src/io/        glTF import and export, the library of extracted levels, prefabs and the game's
+               prefabs (prefab_recipes), game data, the catalog, loading threads, the nav meshes for
+               the game (nav_export), the export of a level for the game (game_export), the decor's
+               behaviors (decor_behaviors), the structures of Jak II (jak2_import)
+src/render/    camera, OpenGL renderer, thumbnails, offscreen captures, the palette of materials
+               (texture_palette), the guide's animations (tool_demo)
 src/tools/     the gizmo, the nav mesh generator (navmesh: Recast, then the game's limits)
-src/app/       window and main loop, document actions, interface panels, extraction window, the
-               remote control and MCP server (remote*, mcp.cpp), tests
+src/app/       window and main loop, document actions, interface panels (panels, the guide and the
+               Build panel: guide_panel, behaviors, surfaces), extraction window, the remote control
+               and MCP server (remote*, mcp.cpp), tests
 lang/          translations of the interface (en.json, fr.json)
-data/          what the editor knows of the game (jak3/game-data.json, made by tools/gen_game_data.py)
-tools/         gen_game_data.py: writes data/ from OpenGOAL's decompiled code; build_demo_level.py:
-               builds the tour's demo level through the editor's remote control;
-               build_industrial_district.py: builds the tour's district through the MCP server
+data/          what the editor knows of the game (jak3/game-data.json, made by tools/gen_game_data.py;
+               jak3/prefabs.json, the recipes of the game's prefabs)
+tools/         gen_game_data.py: writes data/ from OpenGOAL's decompiled code (with
+               object_categories.json, the catalog's choices); build_demo_level.py and
+               build_replace_demo.py: build the tour's demo level and its replacement of ctyindb
+               through the editor's remote control; build_industrial_district.py: builds the tour's
+               district through the MCP server
 library/       the levels extracted from your game (created by the extraction, ignored by git);
                library/projects/ is where a new project is saved by default
 iso_data/      put your own disc images or disc folders here for the extraction to read (ignored
                by git, only a .gitignore of its own is kept)
-extractor/     ogle-extract: main.cpp, the game's tables (data/jak3/) and the data readers of OpenGOAL's
+extractor/     ogle-extract: main.cpp, the games' tables (data/jak3/, data/jak2/) and the data readers of OpenGOAL's
                decompiler it is built from (opengoal/, ISC license)
 third-party/   Dear ImGui, glad, tinygltf, nlohmann json, stb, Recast
-docs/captures/ the guided tour and its screenshots, and how to make them again
+docs/          behaviors.md: the study of what the decor can do in the game; captures/: the guided
+               tour and its screenshots, and how to make them again
 .mcp.json      the MCP server, for Claude Code started in this folder
 ```
 

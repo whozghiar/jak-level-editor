@@ -1,6 +1,8 @@
 build/
 # the levels extracted from the user's game (never in the repository)
 library/
+# projects made from the levels: they hold the game's decor (never in the repository)
+projects/
 .cache/
 *.backups/
 *.tmp

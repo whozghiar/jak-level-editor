@@ -23,15 +23,19 @@
 #include "app/remote.h"
 #include "core/i18n.h"
 #include "core/log.h"
+#include "glad/glad.h"
 #include "io/asset_library.h"
 #include "io/behaviors.h"
 #include "io/catalog.h"
 #include "io/game_data.h"
 #include "io/game_export.h"
+#include "io/jak2_import.h"
 #include "io/gltf_io.h"
 #include "io/library_index.h"
 #include "io/nav_export.h"
+#include "io/prefab_recipes.h"
 #include "io/prefabs.h"
+#include "scene/bvh.h"
 #include "scene/shapes.h"
 #include "scene/story.h"
 #include "stb_image_write.h"
@@ -1099,6 +1103,105 @@ int run_selftest() {
     step(at({size * 1.37f, 0, 0}), false, false);
     check(axis && center && std::fabs(f.scale.x - 1.8f) < 1e-4f,
           "scale gizmo: an axis stretches along it, the center scales the three, snap by 0.1");
+
+    // the move gizmo: Shift ten times finer, the snap putting the pivot on the grid (world), Ctrl
+    // snapping while the snap is off
+    g = Gizmo{};
+    g.op = GizmoOp::Translate;
+    const Mat4 pivot = Mat4::translate({0.3f, 0, 0});
+    auto move = [&](const Vec2& mouse, bool pressed, bool down, bool fine, bool ctrl) {
+      GizmoInput in;
+      in.mouse = mouse;
+      in.viewport_size = {800, 600};
+      in.mouse_in_viewport = true;
+      in.pressed = pressed;
+      in.down = down;
+      in.fine = fine;
+      in.snap_toggle = ctrl;
+      return g.update(cam, r, in, pivot, nullptr);
+    };
+    auto dx = [](const GizmoResult& res) { return res.delta.col3(3).x; };
+    move(at({0.3f + size * 0.6f, 0, 0}), true, true, false, false);
+    const float plain = dx(move(at({0.3f + size * 0.6f + 2.f, 0, 0}), false, true, false, false));
+    move(at({0.3f + size * 0.6f + 2.f, 0, 0}), false, false, false, false);
+    move(at({0.3f + size * 0.6f, 0, 0}), true, true, true, false);
+    const float fine = dx(move(at({0.3f + size * 0.6f + 2.f, 0, 0}), false, true, true, false));
+    move(at({0.3f + size * 0.6f + 2.f, 0, 0}), false, false, true, false);
+    move(at({0.3f + size * 0.6f, 0, 0}), true, true, false, true);
+    const float snapped = dx(move(at({0.3f + size * 0.6f + 1.1f, 0, 0}), false, true, false, true));
+    move(at({0.3f + size * 0.6f + 1.1f, 0, 0}), false, false, false, true);
+    check(std::fabs(plain - 2.f) < 0.02f && std::fabs(fine - 0.2f) < 0.01f && std::fabs(0.3f + snapped - 1.5f) < 1e-4f,
+          "move gizmo: Shift ten times finer, Ctrl snaps the pivot to the grid (0.3 + 1.1 m lands on 1.5 m)");
+  }
+
+  // a large selection: the descendants of thousands of roots in one pass, right and fast; the
+  // ground of a level locked, not its large walls; the glows do not take the click
+  {
+    Scene s;
+    std::vector<uint32_t> groups, leaves;
+    for (int g = 0; g < 1000; g++) {
+      Node group{};
+      group.name = "g" + std::to_string(g);
+      const uint32_t gid = s.add(group);
+      groups.push_back(gid);
+      for (int k = 0; k < 99; k++) {
+        Node leaf{};
+        leaf.parent = gid;
+        leaf.kind = NodeKind::Render;
+        leaves.push_back(s.add(leaf));
+      }
+    }
+    std::vector<uint32_t> roots(groups.begin(), groups.begin() + 500);
+    roots.push_back(leaves[700 * 99]);  // a leaf of a group not among the roots
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto below = s.descendants_of(roots);
+    std::vector<uint32_t> tree;
+    for (size_t g = 0; g < 1000; g++) {
+      tree.clear();
+      s.subtree((size_t)s.index_of(groups[g]), tree);
+    }
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    bool right = below.size() == 501 && below[500].empty();
+    for (size_t r = 0; r < 500 && right; r++) right = below[r].size() == 99 && s.find(below[r][0])->parent == groups[r];
+    check(right && tree.size() == 100 && ms < 500.0,
+          strf("large selection: the descendants of 500 groups of a 100,000-node scene in one pass (%.0f ms)", ms).c_str());
+
+    auto quad = [](float w, float h, bool upright) {
+      auto mesh = std::make_shared<Mesh>();
+      Primitive p;
+      p.pos = upright ? std::vector<Vec3>{{0, 0, 0}, {w, 0, 0}, {w, h, 0}, {0, h, 0}}
+                      : std::vector<Vec3>{{0, 0, 0}, {w, 0, 0}, {w, 0, h}, {0, 0, h}};
+      p.idx = {0, 1, 2, 0, 2, 3};
+      mesh->prims.push_back(p);
+      return mesh;
+    };
+    check(ground_piece(*quad(100, 100, false)) && !ground_piece(*quad(81, 30, true)) && !ground_piece(*quad(20, 20, false)),
+          "level pieces: a large flat piece is ground (locked), a facade as wide is not, nor a small slab");
+
+    // a box behind a glow (an additive light beam): the click goes to the box, a second click to the glow
+    Scene ps;
+    Material glow_mat;
+    glow_mat.alpha = AlphaMode::Blend;
+    glow_mat.blend = BlendMode::Add;
+    const int glow_material = ps.add_material(glow_mat);
+    Node box{};
+    box.kind = NodeKind::Render;
+    box.mesh = make_box("box", -1);
+    const uint32_t box_id = ps.add(box);
+    Node beam{};
+    beam.kind = NodeKind::Render;
+    beam.mesh = quad(4, 4, true);
+    beam.mesh->prims[0].material = glow_material;
+    beam.local.t = {-2, 0, 3};
+    const uint32_t beam_id = ps.add(beam);
+    ps.begin_frame();
+    const Ray ray{{0, 1, 10}, {0, 0, -1}};
+    const PickHit hit = pick(ps, ray, PickFilter{});
+    const auto all = pick_all(ps, ray, PickFilter{});
+    const PickHit beam_alone = pick(ps, Ray{{1.5f, 3.5f, 10}, {0, 0, -1}}, PickFilter{});
+    check(hit.node == box_id && all.size() == 2 && all[0].node == box_id && all[1].node == beam_id &&
+              beam_alone.node == beam_id,
+          "picking: a glow in front does not take the click, a second click reaches it, alone it is picked");
   }
 
   // the remote control of the MCP server: a request and its answer, one line each
@@ -1250,7 +1353,14 @@ int run_selftest() {
     box.kind = NodeKind::Render;
     box.mesh = make_box("box", mat);
     box.local.t = {10, 0, 0};
+    box.local.s = {3, 3, 3};  // 6 m: a piece that collides by its shape
     const uint32_t box_id = s.add(box);
+    Node lamp;  // 2 m: a detail, without collision
+    lamp.name = "lamp-1";
+    lamp.kind = NodeKind::Render;
+    lamp.mesh = make_box("lamp", mat);
+    lamp.local.t = {20, 0, 0};
+    s.add(lamp);
     auto actor = [&](const std::string& name, const std::string& etype, uint32_t aid, json lump, json types,
                      bool visible = true) {
       Node a;
@@ -1347,23 +1457,25 @@ int run_selftest() {
           "export: the behaviors as the level's code, its DGO with the game's code its objects need");
     const json glb = read_glb_json(dir / "my-test.glb");
     size_t surfaces = 0;
-    bool floor_ignored = false, box_collides = false;
+    bool floor_ignored = false, box_collides = false, lamp_ignored = false;
     if (glb.is_object())
       for (const auto& n : glb["nodes"]) {
         const json e = n.value("extras", json::object());
         if (e.value("set_invisible", 0) == 1) surfaces++;
         if (n.value("name", std::string()) == "testlvl-floor") floor_ignored = e.value("ignore", 0) == 1;
         if (n.value("name", std::string()) == "box-1") box_collides = !e.contains("set_collision");
+        if (n.value("name", std::string()) == "lamp-1") lamp_ignored = e.value("ignore", 0) == 1;
       }
     std::set<std::string> keys;
     for (const auto& note : r.notes) keys.insert(note.key);
     const bool notes_ok = keys.count("export.note.types_missing") && keys.count("export.note.surfaces") &&
                           keys.count("export.note.kill_masks") && keys.count("export.note.hidden") &&
                           keys.count("export.note.scripts_dropped") && keys.count("export.note.lumps_widened") &&
-                          keys.count("export.note.absent") &&
-                          r.collision_triangles == 2 && r.collision_from_decor == 1;
-    check(surfaces == 2 && floor_ignored && box_collides && notes_ok,
-          "export: the game's collision one node per surface, the shell not colliding twice, the box by its shape");
+                          keys.count("export.note.absent") && keys.count("export.note.collision_small") &&
+                          r.collision_triangles == 2 && r.collision_from_decor == 1 && r.dense_places == 0;
+    check(surfaces == 2 && floor_ignored && box_collides && lamp_ignored && notes_ok,
+          "export: the game's collision one node per surface, the shell not colliding twice, a 6 m box by its "
+          "shape, a 2 m lamp without collision");
     // the game draws the builder's one tree of surfaces: blended ones cut out instead; the decor
     // faces either way, its collision holds from both sides
     bool none_blended = glb.is_object() && glb.contains("materials");
@@ -1373,6 +1485,326 @@ int run_selftest() {
           "export: no blended surface (the game would not draw it), the decor's collision from both sides");
     (void)floor_id;
     (void)box_id;
+
+    // the same level in place of ctyindb: a level of the game next to it and the original shown for
+    // reference are left out; ground under ctyindb-start only
+    {
+      LevelExportOptions bad = o;
+      bad.name = "ctyindb";
+      const bool name_refused = check_export_names(bad, &data) == "export.bad.name_taken";
+      bad = o;
+      bad.nickname = "cib";
+      const bool nick_refused = check_export_names(bad, &data) == "export.bad.nickname_taken";
+      bad = o;
+      bad.replaces = "no-such-level";
+      const bool replaces_refused = check_export_names(bad, &data) == "export.bad.replaces";
+      auto group = [&](const char* name, const char* key) {
+        Node g;
+        g.name = name;
+        g.extras = json{{"og_level", name}};
+        if (key) g.extras[key] = true;
+        const uint32_t gid = s.add(g);
+        Node b;
+        b.name = std::string(name) + "-box";
+        b.kind = NodeKind::Render;
+        b.mesh = make_box("box", mat);
+        b.parent = gid;
+        s.add(b);
+      };
+      group("ctyinda", nullptr);
+      group("ctyindb", "og_reference");
+      Node ground;
+      ground.name = "start-ground";
+      ground.kind = NodeKind::Render;
+      ground.mesh = make_floor(mat);
+      ground.local.t = {971.42f, 7.f, 546.11f};
+      s.add(ground);
+      s.begin_frame();
+      const auto checks = check_continues(s, &data, "ctyindb");
+      bool start_ok = false;
+      size_t falling = 0;
+      for (const auto& c : checks) {
+        if (c.name == "ctyindb-start") start_ok = c.ok() && std::fabs(c.ground - 7.f) < 1e-3f;
+        else falling += !c.ok();
+      }
+      LevelExportOptions ro = o;
+      ro.name = "my-ctyb";
+      ro.nickname = "mcy";
+      ro.replaces = "ctyindb";
+      ro.folder = (tmp / "export-replace").generic_string();
+      LevelExportReport rr;
+      const bool replaced = check_export_names(ro, &data).empty() && export_level_for_game(s, &data, ro, &rr, &err);
+      const fs::path rdir = tmp / "export-replace" / "my-ctyb";
+      const std::string info = read_text_file(rdir / "level-info.gc"), rgd = read_text_file(rdir / "my-ctyb.gd"),
+                        rinstall = read_text_file(rdir / "INSTALL.md");
+      const json rglb = read_glb_json(rdir / "my-ctyb.glb");
+      bool own_only = rglb.is_object(), ground_kept = false;
+      if (own_only)
+        for (const auto& n : rglb["nodes"]) {
+          const std::string name = n.value("name", std::string());
+          own_only &= name != "ctyinda-box" && name != "ctyindb-box";
+          ground_kept |= name == "start-ground";
+        }
+      std::map<std::string, size_t> counts;
+      for (const auto& note : rr.notes) counts[note.key] = note.count;
+      const size_t at_part = rgd.find("\"ctyindb-part.o\""), at_obs = rgd.find("\"ctyindb-obs.o\"");
+      // the floor of 100 m under ctyindb-start also holds ctyindb-hijack-vehicle; the three others fall
+      check(name_refused && nick_refused && replaces_refused && start_ok && checks.size() == 5 && falling == 3 &&
+                replaced && own_only && ground_kept && info.find("level-load-info") == std::string::npos &&
+                info.find(":nickname 'cib") != std::string::npos && info.find(":nickname 'mcy") != std::string::npos &&
+                at_part != std::string::npos && at_part < at_obs &&
+                rinstall.find("(get-continue-by-name *game-info* \"ctyindb-start\")") != std::string::npos &&
+                counts["export.note.replace_left_out"] == 1 && counts["export.note.continue_no_ground"] == falling,
+            "export in place of a level of the game: its own level only, the replaced level's code in its DGO, the "
+            "nickname to change, the continue points without ground said, a game's name refused");
+    }
+
+    // the decor's behaviors: a slab of deadly ice, a cable Jak goes through, a pad that bounces, a
+    // ramp that launches
+    {
+      Scene d;
+      auto piece = [&](const char* name, Vec3 at, json decor) {
+        Node n;
+        n.name = name;
+        n.kind = NodeKind::Render;
+        n.mesh = make_box(name, -1);
+        n.local.t = at;
+        n.extras = json{{"og_decor", decor}};
+        d.add(n);
+      };
+      piece("ice-slab", {0, 0, 0}, {{"collision", {{"material", "ice"}, {"event", "deadly"}, {"noedge", true}}}});
+      piece("cable", {5, 0, 0}, {{"collision", {{"kind", "none"}}}});
+      piece("pad", {10, 0, 0}, {{"bounce", {{"height", 15}}}});
+      piece("ramp", {15, 0, 0}, {{"launch", {{"distance", 30}, {"height", 5}, {"yaw", 90}, {"time", 1.5}}}});
+      d.begin_frame();
+      LevelExportOptions dop = o;
+      dop.name = "my-decor";
+      dop.nickname = "mdc";
+      dop.folder = (tmp / "export-decor").generic_string();
+      LevelExportReport dr;
+      const bool done = export_level_for_game(d, &data, dop, &dr, &err);
+      const fs::path dd = tmp / "export-decor" / "my-decor";
+      const json dglb = read_glb_json(dd / "my-decor.glb");
+      std::map<std::string, json> extras;
+      if (dglb.is_object())
+        for (const auto& n : dglb["nodes"]) extras[n.value("name", std::string())] = n.value("extras", json::object());
+      const json dlevel = read_jsonc_file(dd / "my-decor.jsonc");
+      std::map<std::string, json> actors;
+      if (dlevel.is_object())
+        for (const auto& a : dlevel["actors"]) actors[a["lump"].value("name", std::string())] = a;
+      const std::string dgc = read_text_file(dd / "my-decor-obs.gc");
+      const bool ice = extras["ice-slab"].value("collide_material", -1) == 1 && extras["ice-slab"].value("collide_event", -1) == 1 &&
+                       extras["ice-slab"].value("noedge", 0) == 1;
+      const bool through = extras["cable"].value("ignore", 0) == 1;
+      const bool pad = actors.count("pad-bounce") && actors["pad-bounce"]["etype"] == "my-decor-pad-bounce" &&
+                       actors["pad-bounce"]["lump"]["spring-height"] == json::array({"float", 15 * 4096.0}) &&
+                       std::fabs(actors["pad-bounce"]["trans"][1].get<float>() - 2.f) < 1e-3f;
+      const bool ramp = actors.count("ramp-launch") && actors["ramp-launch"]["etype"] == "my-decor-ramp-launch";
+      // the ramp faces +z: turned 90 degrees, Jak lands toward +x, 30 m away, 5 m above its top
+      const bool landing = dgc.find("(set-vector! (-> this landing) 184320.0 28672.0 0.0 1.0)") != std::string::npos;
+      const bool code = dgc.find("(deftype my-decor-pad-bounce (bouncer) ())") != std::string::npos &&
+                        dgc.find("(deftype my-decor-ramp-launch (process-drawable)") != std::string::npos &&
+                        dgc.find("'launch-dir") != std::string::npos && dgc.find("450") != std::string::npos;
+      check(done && ice && through && pad && ramp && landing && code && dr.behaviors == 2,
+            "export: the decor's collision (deadly ice, none), a bounce and a launch as actors of the level's code");
+    }
+
+    // the game's collision follows its decor: a level as extracted (a floor, a wall, a block, their
+    // collision), and the document made from it, the wall deleted and the block moved 30 m
+    {
+      auto level_scene = [&](bool edited) {
+        auto sc = std::make_shared<Scene>();
+        Node tfrag;
+        tfrag.name = "lvx-tfrag-normal";
+        const uint32_t tfrag_g = sc->add(tfrag);
+        auto piece = [&](const char* name, std::shared_ptr<Mesh> mesh, Vec3 at, Vec3 scale) {
+          Node n;
+          n.name = name;
+          n.kind = NodeKind::Render;
+          n.parent = tfrag_g;
+          n.mesh = mesh;
+          n.local.t = at;
+          n.local.s = scale;
+          sc->add(n);
+        };
+        piece("lvx-floor", make_floor(-1), {0, 0, 0}, {1, 1, 1});
+        if (!edited) piece("lvx-wall", make_box("wall", -1), {-20, 0, 0}, {5, 5, 0.5f});
+        piece("lvx-block", make_box("block", -1), edited ? Vec3{20, 0, 30} : Vec3{20, 0, 0}, {3, 3, 3});
+        Node colg;
+        colg.name = "lvx-collision";
+        const uint32_t colg_id = sc->add(colg);
+        // the game's collision: the floor, and the wall and the block as they were
+        Node col;
+        col.name = "lvx-collision-0";
+        col.kind = NodeKind::Collision;
+        col.parent = colg_id;
+        col.mesh = make_floor(-1);
+        Primitive& cp = col.mesh->prims[0];
+        cp.uv.clear();
+        auto add_box = [&](Vec3 at, Vec3 scale) {
+          const Primitive b = make_box("c", -1)->prims[0];
+          const uint32_t base = (uint32_t)cp.pos.size();
+          for (size_t k = 0; k < b.pos.size(); k++) {
+            cp.pos.push_back(Vec3{b.pos[k].x * scale.x, b.pos[k].y * scale.y, b.pos[k].z * scale.z} + at);
+            cp.nrm.push_back(b.nrm[k]);
+          }
+          for (uint32_t v : b.idx) cp.idx.push_back(base + v);
+        };
+        add_box({-20, 0, 0}, {5, 5, 0.5f});
+        add_box({20, 0, 0}, {3, 3, 3});
+        cp.tri_pat.assign(cp.idx.size() / 3, 0);
+        sc->add(col);
+        sc->begin_frame();
+        return sc;
+      };
+      auto original = level_scene(false);
+      auto doc = level_scene(true);
+      LevelExportOptions fo = o;
+      fo.name = "my-follow";
+      fo.nickname = "mfl";
+      fo.folder = (tmp / "export-follow").generic_string();
+      fo.originals["lvx"] = original;
+      LevelExportReport fr;
+      const bool done = export_level_for_game(*doc, &data, fo, &fr, &err);
+      size_t taken_out = 0;
+      for (const auto& note : fr.notes)
+        if (note.key == "export.note.collision_taken_out") taken_out = note.count;
+      std::map<std::string, json> extras;
+      const json fglb = read_glb_json(tmp / "export-follow" / "my-follow" / "my-follow.glb");
+      if (fglb.is_object())
+        for (const auto& n : fglb["nodes"]) extras[n.value("name", std::string())] = n.value("extras", json::object());
+      // the floor's collision kept (and the bottoms of the wall and the block, on it), the rest of
+      // theirs taken out; the floor still the game's, the block colliding by its shape where it is
+      const bool follows = done && fr.collision_triangles >= 2 && fr.collision_triangles <= 8 && taken_out >= 16 &&
+                           extras["lvx-floor"].value("ignore", 0) == 1 && !extras["lvx-block"].contains("set_collision");
+      // and a dense piece (5 m, 3,200 triangles) on the floor: said as a place where Jak would fall
+      auto dense = std::make_shared<Mesh>();
+      Primitive dp;
+      for (int z = 0; z <= 40; z++)
+        for (int x = 0; x <= 40; x++) dp.pos.push_back({x * 0.125f - 2.5f, 0.3f + 0.01f * ((x + z) % 2), z * 0.125f - 2.5f});
+      for (int z = 0; z < 40; z++)
+        for (int x = 0; x < 40; x++) {
+          const uint32_t a = z * 41 + x;
+          dp.idx.insert(dp.idx.end(), {a, a + 41, a + 1, a + 1, a + 41, a + 42});
+        }
+      dp.compute_normals();
+      dense->prims.push_back(dp);
+      Node dn;
+      dn.name = "grating";
+      dn.kind = NodeKind::Render;
+      dn.mesh = dense;
+      dn.local.t = {0, 0, -30};
+      doc->add(dn);
+      doc->begin_frame();
+      LevelExportReport fr2;
+      fo.name = "my-dense";
+      fo.nickname = "mdn";
+      const bool done2 = export_level_for_game(*doc, &data, fo, &fr2, &err);
+      bool dense_said = false;
+      for (const auto& note : fr2.notes) dense_said |= note.key == "export.note.collision_dense";
+      if (!(follows && done2 && fr2.dense_places >= 1 && dense_said))
+        std::printf("    follow: done %d, collision %zu, taken out %zu, floor ignored %d, block extras %s; dense %d %zu %d (%s)\n",
+                    (int)done, fr.collision_triangles, taken_out, (int)(extras["lvx-floor"].value("ignore", 0) == 1),
+                    extras["lvx-block"].dump().c_str(), (int)done2, fr2.dense_places, (int)dense_said, err.c_str());
+      check(follows && done2 && fr2.dense_places >= 1 && dense_said,
+            "export: the game's collision taken out with the pieces deleted or moved, a moved piece colliding by its "
+            "shape; a place denser than Jak 3 gathers (461 triangles) said");
+    }
+  }
+
+  // the game's prefabs: their recipes shipped with the editor, what one takes around its anchor
+  {
+    std::string err;
+    const auto recipes = load_prefab_recipes(prefab_recipes_path(), &err);
+    std::set<std::string> categories;
+    for (const auto& r : recipes) categories.insert(r.category);
+    Scene lvl;
+    Node proto{};
+    proto.name = "fan.mb";
+    const uint32_t proto_id = lvl.add(proto);
+    auto put = [&](const std::string& name, uint32_t parent, Vec3 at, float size) {
+      Node n{};
+      n.name = name;
+      n.kind = NodeKind::Render;
+      n.parent = parent;
+      n.mesh = make_box(name, -1);
+      n.local.t = at;
+      n.local.s = {size, size, size};
+      return lvl.add(n);
+    };
+    put("fan.mb-0", proto_id, {50, 0, 0}, 1);  // the first fan elsewhere
+    const uint32_t anchor = put("fan.mb-1", proto_id, {0, 0, 0}, 1);
+    const uint32_t bolt = put("bolt", 0, {1.5f, 0.5f, 0}, 0.2f);
+    put("far-crate", 0, {10, 0, 0}, 1);
+    put("street-dirt", 0, {0.5f, 0, 0.5f}, 0.2f);
+    put("huge-wall", 0, {0, 0, 0.5f}, 40);
+    PrefabRecipe r;
+    r.level = "test";
+    r.anchor = "fan.mb";
+    r.index = 1;
+    r.margin = 1.f;
+    r.exclude = {"dirt"};
+    const auto members = recipe_members(lvl, r, &err);
+    check(recipes.size() >= 25 && categories.count("house") && categories.count("bridge") && categories.count("platform") &&
+              categories.count("vent") && categories.count("generator") && categories.count("industrial") &&
+              members == std::vector<uint32_t>{anchor, bolt},
+          "game prefabs: the recipes shipped by category; a recipe takes its anchor and what is on it, not what is far, "
+          "too large or left out by name");
+  }
+
+  // a structure of Jak II brought into a Jak 3 level: the image Jak 3 has shared, another renamed,
+  // its lighting compared with the level's and matched
+  {
+    Scene doc;
+    Texture wall;
+    wall.name = "wall";
+    wall.width = wall.height = 2;
+    wall.rgba.assign(16, 100);
+    Material wm;
+    wm.name = "wall";
+    wm.texture = doc.add_texture(wall);
+    const int doc_mat = doc.add_material(wm);
+    Node decor;
+    decor.kind = NodeKind::Render;
+    decor.mesh = make_box("jak3-box", doc_mat);
+    decor.mesh->prims[0].col.assign(decor.mesh->prims[0].pos.size(), Vec4{0.3f, 0.3f, 0.3f, 1});
+    doc.add(decor);
+    // the Jak II part: the same "wall" image, a "roof" Jak 3 has under that name with other pixels
+    Texture roof = wall;
+    roof.name = "roof";
+    roof.rgba.assign(16, 200);
+    Texture doc_roof = wall;
+    doc_roof.name = "roof";
+    doc.add_texture(doc_roof);
+    std::vector<Texture> textures{wall, roof};
+    Material m0, m1;
+    m0.name = "wall";
+    m0.texture = 0;
+    m1.name = "roof";
+    m1.texture = 1;
+    m1.alpha = AlphaMode::Blend;
+    std::vector<Material> materials{m0, m1};
+    Mesh part;
+    part.name = "palace-pillar";
+    Primitive a = make_box("p", 0)->prims[0], b = make_box("p", 1)->prims[0];
+    for (Primitive* p : {&a, &b}) {
+      p->uv.assign(p->pos.size(), Vec2{0, 0});
+      p->col.assign(p->pos.size(), Vec4{0.6f, 0.6f, 0.6f, 1});
+    }
+    part.prims = {a, b};
+    json checks;
+    auto mesh = import_jak2_mesh(doc, part, textures, materials, &checks);
+    std::set<std::string> names;
+    for (const auto& p : mesh->prims) names.insert(doc.textures[doc.materials[p.material].texture].name);
+    std::map<std::string, json> by;
+    for (const auto& c : checks) by[c.value("check", std::string())] = c;
+    const bool converted = mesh->name == "jak2-palace-pillar" && names == std::set<std::string>{"wall", "jak2-roof"} &&
+                           doc.textures.size() == 3 && by["textures"].value("renamed", 0) == 1 &&
+                           by["materials"].value("blended", 0) == 1 && by["mesh"].value("ok", false) &&
+                           std::fabs(by["lighting"].value("ratio", 0.0) - 2.0) < 1e-6 && !by["lighting"].value("ok", true);
+    const float matched = lighting_ratio(*scaled_colors(*mesh, 0.5f), doc);
+    check(converted && std::fabs(matched - 1.f) < 1e-4f && !jak2_structure(CatalogPart{CatalogPart::Kind::Prototype, "palcab-lowres-city.mb"}),
+          "Jak II import: an image Jak 3 has shared, another renamed jak2-..., the lighting compared then matched");
   }
 
   // this editor's own tree: never jak-project's, which it neither builds against nor runs
@@ -1419,6 +1851,31 @@ int run_selftest() {
               make_shape(ramp, 0)->tri_count() == 8 && make_shape(cyl, 0)->tri_count() == 60 && odd.kind == "box" &&
               odd.size.x == 0.05f && odd.tile == 0.1f,
           "shapes: stairs, ramp and cylinder; sizes read back kept sensible");
+    // modular building: a door and a window go through their wall, a roof's ridge in its middle
+    auto through = [](const std::shared_ptr<Mesh>& m, Vec3 at) {
+      const Ray r{{at.x, at.y, at.z - 5}, {0, 0, 1}};
+      float t;
+      uint32_t tri;
+      return !m->bvh(0).raycast(r, m->prims[0].pos, m->prims[0].idx, 100.f, &t, &tri);
+    };
+    const ShapeParams door = ShapeParams::from_json({{"kind", "doorway"}, {"size", {4, 4, 0.5}}, {"opening", {2, 3}}});
+    const ShapeParams window = ShapeParams::from_json({{"kind", "window"}, {"size", {4, 4, 0.5}}, {"opening", {2, 2}}});
+    const auto dm = make_shape(door, 0), wm = make_shape(window, 0);
+    ShapeParams roof, hip;
+    roof.kind = "roof", roof.size = {8, 3, 8};
+    hip.kind = "roof-hip", hip.size = {8, 3, 10};
+    const auto rm = make_shape(roof, 0), hm = make_shape(hip, 0);
+    float ridge = 0;
+    for (const auto& v : rm->prims[0].pos)
+      if (std::fabs(v.y - 3.f) < 1e-4f) ridge = std::max(ridge, std::fabs(v.x));
+    float hip_ridge = 0;
+    for (const auto& v : hm->prims[0].pos)
+      if (std::fabs(v.y - 3.f) < 1e-4f) hip_ridge = std::max(hip_ridge, std::fabs(v.z));
+    check(through(dm, {0, 1, 0}) && !through(dm, {1.5f, 1, 0}) && !through(dm, {0, 3.5f, 0}) && through(wm, {0, 2, 0}) &&
+              !through(wm, {0, 0.5f, 0}) && door.opening.x == 2.f && ridge < 1e-4f &&
+              std::fabs(rm->bounds().hi.y - 3.f) < 1e-4f && std::fabs(hip_ridge - 1.f) < 1e-4f &&
+              shape_preset("roof") && shape_preset("doorway") && shape_preset("pillar"),
+          "shapes: a door and a window open through their wall, a roof's ridge in its middle, a hip roof's shorter");
 
     Scene s;
     const int grid = shape_default_material(s);
@@ -1483,6 +1940,18 @@ int run_selftest() {
               data.is_water("water-anim") && bridge_gone && desert && !desert->ocean.empty() &&
               std::count(desert->companions.begin(), desert->companions.end(), "deserta") == 1,
           "game data: roles, water, the mine's bridge broken by the story, the desert's ocean and companions");
+    // the catalog: props and doors, the interactive objects apart, no collectible; the living ones
+    // the ancestry misses are creatures (left out of the levels too)
+    check(read && data.catalog_category("wascity-windmill") == "static" &&
+              data.catalog_category("vin-door-ctyinda") == "door" && data.catalog_category("crate") == "interactive" &&
+              data.catalog_category("skill") == "collectible" && data.role("tizard") == ActorRole::Creature &&
+              data.role("pecker-ingame") == ActorRole::Creature && data.role("citizen-norm-rider") == ActorRole::Creature,
+          "game data: the catalog's categories (props, doors, interactive, collectibles), the animals and riders creatures");
+    // a level's DGO takes the art group holding a model, none from the common code
+    check(read && data.level_art_group("ctycrate-blue") == "ctycrate" &&
+              data.level_art_group("collectables-skill").empty() &&
+              data.level_art_group("vin-door-ctyinda") == "vin-door-ctyinda",
+          "game data: the art groups a level's DGO needs (the skill's is common)");
   }
 
   // translations: every language has every key of English, with the same printf arguments
@@ -1512,6 +1981,51 @@ int run_selftest() {
     i18n_select("en");
     check(french && std::string(tr("menu.file")) == "File" && std::string(tr("no.such.key")) == "no.such.key",
           "translations: switching language, a missing key shows itself");
+  }
+
+  // the guide's animations, drawn in a hidden window: each draws its scene (more than the clear
+  // color) and names what it shows with a text of the translations; the Build panel's icons too
+  if (SDL_Init(SDL_INIT_VIDEO)) {
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_Window* window = SDL_CreateWindow("selftest", 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+    SDL_GLContext gl = window ? SDL_GL_CreateContext(window) : nullptr;
+    ToolDemo demos;
+    std::string err;
+    if (gl && gladLoadGLLoader(reinterpret_cast<GLADloadproc>(SDL_GL_GetProcAddress)) && demos.init(&err)) {
+      // the pixels of a GL texture of w x h that are not the demos' clear color
+      auto drawn = [](unsigned tex, int w, int h) {
+        std::vector<uint8_t> px((size_t)w * h * 4);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+        size_t n = 0;
+        for (size_t i = 0; i < px.size(); i += 4)
+          n += std::abs(px[i] - 33) + std::abs(px[i + 1] - 38) + std::abs(px[i + 2] - 46) > 12;
+        return n;
+      };
+      std::string bad;
+      for (const auto& name : ToolDemo::names()) {
+        std::vector<DemoOverlay> overlay;
+        const unsigned tex = demos.draw(name, 1.7, 160, 90, &overlay);
+        bool named = false;
+        for (const auto& o : overlay)
+          named |= o.kind == DemoOverlay::Kind::Label && o.text.rfind("guide.demo.", 0) == 0 && o.text != tr_en(o.text.c_str());
+        if (!tex || drawn(tex, 160, 90) < 160 * 90 / 10 || !named) bad += " " + name;
+      }
+      size_t icons = 0;
+      for (const auto& p : shape_presets())
+        if (const unsigned tex = demos.icon(p.params, p.name, 48); tex && drawn(tex, 48, 48) > 48 * 48 / 10) icons++;
+      if (!bad.empty()) std::printf("    not drawn or not named:%s\n", bad.c_str());
+      check(bad.empty() && demos.draw("no-such-demo", 0, 160, 90, nullptr) == 0 && icons == shape_presets().size(),
+            "guide: every tool's animation draws its scene and names what it shows; a shape's icon for each");
+      demos.shutdown();
+    } else {
+      std::printf("  [skip] guide animations: no OpenGL 3.3 (%s)\n", gl ? err.c_str() : SDL_GetError());
+    }
+    if (gl) SDL_GL_DestroyContext(gl);
+    if (window) SDL_DestroyWindow(window);
+    SDL_Quit();
   }
 
   fs::remove_all(tmp, ec);

@@ -15,7 +15,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr int kIndexVersion = 2;  // a new one reads every level again
+constexpr int kIndexVersion = 3;  // a new one reads every level again
 
 fs::path to_path(const std::string& s) { return fs::path(std::u8string((const char8_t*)s.c_str())); }
 
@@ -34,7 +34,8 @@ json to_json(const LevelIndex& l) {
   for (const auto& p : l.parts)
     parts.push_back({p.name, p.mesh_node, p.kind == CatalogPart::Kind::Piece ? 1 : 0, p.triangles, p.copies});
   return {{"version", kIndexVersion}, {"background", l.background}, {"stamp", l.stamp},
-          {"parts", parts},           {"art_names", l.art_names},   {"art_lumps", l.art_lumps}};
+          {"parts", parts},           {"art_names", l.art_names},   {"art_lumps", l.art_lumps},
+          {"textures", l.textures}};
 }
 
 bool from_json(const json& j, LevelIndex* out) {
@@ -58,6 +59,9 @@ bool from_json(const json& j, LevelIndex* out) {
   if (lumps != j.end() && lumps->is_object())
     for (const auto& [etype, names] : lumps->items())
       for (const auto& [name, lump] : names.items()) out->art_lumps[etype][name] = lump;
+  auto textures = j.find("textures");
+  if (textures != j.end() && textures->is_object())
+    for (const auto& [name, n] : textures->items()) out->textures[name] = n.get<int>();
   return true;
 }
 
@@ -91,6 +95,27 @@ bool index_level(const std::string& background, LevelIndex* out, std::string* er
   const json& meshes = array(j, "meshes");
   const json& accessors = array(j, "accessors");
   const int n = (int)nodes.size();
+
+  // the texture each material draws (by its image's name), and how many pieces draw each
+  const json& materials = array(j, "materials");
+  const json& texture_list = array(j, "textures");
+  const json& images = array(j, "images");
+  std::vector<std::string> material_texture(materials.size());
+  for (size_t m = 0; m < materials.size(); m++) {
+    const json& pbr = materials[m].value("pbrMetallicRoughness", json::object());
+    const int ti = pbr.is_object() ? pbr.value("baseColorTexture", json::object()).value("index", -1) : -1;
+    if (ti < 0 || ti >= (int)texture_list.size()) continue;
+    const int si = texture_list[ti].value("source", -1);
+    if (si >= 0 && si < (int)images.size()) material_texture[m] = images[si].value("name", std::string());
+  }
+  for (int i = 0; i < n; i++) {
+    auto mi = nodes[i].find("mesh");
+    if (mi == nodes[i].end() || !mi->is_number_integer() || mi->get<int>() >= (int)meshes.size()) continue;
+    for (const auto& prim : array(meshes[mi->get<int>()], "primitives")) {
+      const int m = prim.value("material", -1);
+      if (m >= 0 && m < (int)material_texture.size() && !material_texture[m].empty()) out->textures[material_texture[m]]++;
+    }
+  }
 
   // the names the importer gives, the hierarchy, the triangles of a mesh
   std::vector<std::string> names(n);
@@ -213,6 +238,7 @@ void LibraryIndex::start(const AssetLibrary& library, const std::string& cache_d
             l.parts = std::move(c.parts);
             l.art_names = std::move(c.art_names);
             l.art_lumps = std::move(c.art_lumps);
+            l.textures = std::move(c.textures);
             cached = true;
           }
         }
@@ -224,6 +250,7 @@ void LibraryIndex::start(const AssetLibrary& library, const std::string& cache_d
           l.parts = std::move(fresh.parts);
           l.art_names = std::move(fresh.art_names);
           l.art_lumps = std::move(fresh.art_lumps);
+          l.textures = std::move(fresh.textures);
           if (!cache.empty() && write_cache) {
             std::ofstream f(to_path(cache), std::ios::binary);
             if (f) f << to_json(l).dump();

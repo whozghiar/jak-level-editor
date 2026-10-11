@@ -21,7 +21,9 @@ game. Every picture was made by the editor itself (its `--screenshot` mode, see
 14. [What objects do](#13-what-objects-do)
 15. [Export it for the game](#14-export-it-for-the-game)
 16. [Save, and find help](#15-save-and-find-help)
-17. [Making these screenshots again](#making-these-screenshots-again)
+17. [Build with shapes and the materials of Jak 3](#16-build-with-shapes-and-the-materials-of-jak-3)
+18. [Replace a level of the game](#17-replace-a-level-of-the-game)
+19. [Making these screenshots again](#making-these-screenshots-again)
 
 ## The approach
 
@@ -141,22 +143,22 @@ own size, whatever the level says: the inspector warns when an object is scaled.
 ![The objects of the catalog, by family](06-catalog.png)
 
 The **Catalog** panel lists what can be put in a level, placed like a prefab: click an element,
-then click in the view (R turns it, Esc stops), or drag it into the view. It has three tabs.
+then click in the view (R turns it, Esc stops), or drag it into the view. It has four kinds.
 
-**Objects** (978), by family and with a filter:
+**Objects** (541), by family and with a filter: what makes up a place, the props that only stand
+there (flags, windmills, a parked hellcat), the doors and airlocks, water, dark eco and lava, and
+the particle effects of the levels (451: lights, neon signs, steam). **Interactive** (206): the
+objects that do something, crates, platforms and elevators, bouncers and board vents, buttons,
+breakable walls and fences, hazards. Never the living (enemies, characters, animals) nor the
+collectibles (orbs, health, ammo): a level's decor is built here, its creatures are the game's.
 
-- the objects of the game (504): crates, collectables, platforms and elevators, doors, buttons,
-  jump pads, breakables, lights, turrets, vehicles, the water and lava of the levels...;
-- the particle effects of the levels (451: lights, neon signs, steam), and the logic that makes
-  sense in another level (23).
-
-A new object takes the data of an object of its type found in the game's levels (the pickup of a
+A new object takes the data of an object of its type found in the game's levels (the data of a
 crate...), without what ties that one to its level.
 
 ![The models of the catalog](09-models.png)
 
-**Models** (275): every other model of the game but the characters, placed as decor: parts of
-objects, debris, props, the statues of the museum.
+**Models** (218): every other model of the game but the characters and the collectibles, placed as
+decor: parts of objects, debris, props, the statues of the museum.
 
 ![The decor of every level searched for "catwalk"](08-decor-search.png)
 
@@ -181,13 +183,12 @@ the game needs.
 
 ## 8. Build a new level
 
-![A new level built from the catalog: two decks, a bridge over water, lamps, crates, orbs and a fountain](10-new-level.png)
+![A new level built from the catalog: two decks, a bridge over water, lamps, crates and a fountain](10-new-level.png)
 
 **File > New level** (Ctrl+N) starts an empty level. This one was built only from the catalog: two
 decks made of eight catwalk modules of the industrial zone (Decor), the water of Spargus' palace
 between them (Objects, Water), the canal bridge of the previous picture stretched across it, ground
-lamps of the city, orbs along the bridge, crates, barrels and a market crate, and the fountain of
-the slums. There is no ground at first: an element placed in the void goes to height 0, and later
+lamps of the city, crates, barrels and a market crate, and the fountain of the slums. There is no ground at first: an element placed in the void goes to height 0, and later
 ones can be dropped onto the surfaces below.
 
 ## 9. Let an assistant build it
@@ -250,7 +251,7 @@ are black.
 ![The nav meshes of the district: the streets, the yard and the catwalks, one color per mesh, the Nav meshes window and the inspector](15-navmesh.png)
 
 The enemies and citizens of Jak 3 walk on nav meshes: flat polygons over the ground,
-on which the game finds their way. **Tools > Nav meshes** generates them from the walkable surfaces
+on which the game finds their way. **Level > Nav meshes** generates them from the walkable surfaces
 of the level, for a creature of the size you give (radius, height, step, slope): Recast (from
 recastnavigation) builds the polygons, and the editor fits them to what the game reads, convex
 polygons of 3 or 4 corners, at most 255 per mesh, each mesh in one piece, with the route table and
@@ -310,11 +311,16 @@ builder cannot write: the export writes them as **code of the level** instead, a
 (`<name>-obs.gc`) with a type of the level for each object whose behavior is set, deriving the game's
 own type. That code was compiled by OpenGOAL's compiler against Jak 3's code.
 
+The decor can act too: with a piece of decor selected, the inspector's **In the game** sets how it
+collides (not at all, invisible, deadly, its surface...), and whether it throws Jak up (a bounce) or
+sends Jak away along an arc (a propulsion), as the game's board vents and Metal Head puffers do
+([`docs/behaviors.md`](../behaviors.md) is the study behind it).
+
 ## 14. Export it for the game
 
 ![The export window: the slums of Haven City exported, and the report of what changed](18-export.png)
 
-**File > Export for the game...** writes what the view shows as a **custom level of OpenGOAL** for
+**Level > Export for the game...** writes what the view shows as a **custom level of OpenGOAL** for
 Jak 3: the `.glb`, `.jsonc` and `.gd` files its level builder takes, the level's code (the behaviors
 of its objects), the level's definition for the game's code and an `INSTALL.md` with the lines to
 add. Here the slums of Haven City (`ctysluma`):
@@ -328,11 +334,43 @@ between two levels or a new level next to the game's comes out where it was buil
 
 ## 15. Save, and find help
 
-![The Getting started window](12-help.png)
+![The guided tour at its fifth step: the animations of the move, rotate, scale and snap tools](12-help.png)
 
 **File > Save** (Ctrl+S) writes your level as a project, a `.glb` file (Blender opens it too), with
-backups next to it; **File > Open project** (Ctrl+O) opens it again. **Help > Getting started**
-(F1) sums up this tour: the steps, the camera, the story and the editing shortcuts.
+backups next to it; **File > Open project** (Ctrl+O) opens it again. **Help > Guided tour** (F1),
+which opens by itself the first time, walks through this tour in eleven steps, each with a short
+animation of the tool, played with the editor's own shapes, and a button that shows where it is;
+**Every tool** has the animation, the keys and a concrete example of each tool, and hovering a tool
+shows the same as a tooltip.
+
+## 16. Build with shapes and the materials of Jak 3
+
+![The Build panel: the shapes, and the palette of Jak 3's recurring textures](20-build.png)
+
+What the game's decor has not, you build: the **Build** panel has blocks, floors, walls (with a
+door or a window), pillars, ramps, stairs, roofs and cylinders, each with its picture. Click one,
+click in the view, again and again; walls of 4 m snapped on the grid of 0.5 m meet edge to edge.
+Under them, **Materials of Jak 3**: the 600 textures the game's levels use again and again, by
+theme. Select what you built (or any piece of decor), click a texture, and it all takes it: a house
+of shapes in the sandstone of Spargus, a wall in the metal of the industrial zone.
+
+The **Prefabs** panel adds the game's own assemblies, made from your levels: houses of the slums
+and of Spargus, buildings, bridges, platforms, vents, tanks; and the **Decor** of the catalog, with
+Jak II extracted too, offers its structures, converted for Jak 3 when they are placed.
+
+## 17. Replace a level of the game
+
+![ctyindbis: ctyindb with a factory block taken down and tanks in its place, the original in blue around them, and the inspector's replacement](21-replace.png)
+
+Made from `ctyindb`, `ctyindbis` can take its place in the game. **Level > Replace a level of the
+game**, choose `ctyindb` and show the original: it is added as a see-through blue ghost, never
+selected nor exported. Where your level kept the original's surfaces, they are drawn as they are;
+where you changed them, the original shows in blue around your own: here a factory block taken
+down, and tanks of the port in its place. **Place it where the original is**, **Turn +90** or
+**-90**, or **Select** it whole and move it with the gizmo, to insert it naturally between the levels
+around it; the inspector lists where the game starts the player there, green with ground under it,
+orange without. **Export in place of ctyindb...** writes it so that the game loads it instead of
+`ctyindb`, with its continue points, music and missions (`INSTALL.md` says the one line to change).
 
 ## Making these screenshots again
 
@@ -350,7 +388,8 @@ $E --screenshot wascitya docs/captures/03-selection.png select --lang en
 $E --screenshot wascitya docs/captures/06-catalog.png catalog --lang en
 $E --screenshot wascitya docs/captures/09-models.png models --lang en
 $E --screenshot ctyindb docs/captures/08-decor-search.png decor-all --lang en
-$E --screenshot ctyport docs/captures/12-help.png help --lang en
+$E --screenshot ctyport docs/captures/12-help.png guide --lang en
+$E --screenshot ctyindb docs/captures/20-build.png build --lang en
 
 # the demo level, built through the remote control, and the assistant's view of it
 python tools/build_demo_level.py --view docs/captures/11-assistant-view.png
@@ -378,6 +417,11 @@ $E --screenshot ctysluma docs/captures/18-export.png export --lang en
 # the behavior of an airlock: a project of ctyinda with its actors, its airlock set through the
 # remote control (set_actor: open when, once crate-163 is gone, from 10 m), saved as behaviors.glb
 $E --screenshot build/demo/behaviors.glb docs/captures/19-behavior.png select --lang en --select com-airlock-outer-55
+
+# a level replacing ctyindb, built through the remote control, the original shown
+python tools/build_replace_demo.py
+$E --screenshot build/demo/ctyindbis.glb docs/captures/21-replace.png project --lang en \
+   --camera 1125,135,725,40,-42
 ```
 
 The setups (the word after the file name):
@@ -394,7 +438,8 @@ The setups (the word after the file name):
 | `navmesh` | the level or project given, its nav meshes drawn (made for the whole level when it has none), the largest selected, the Nav meshes window |
 | `export` | the level given exported for the game to a temporary folder: the export window and its report |
 | `extract` | the extraction window, extracting the disc given to a temporary folder deleted afterwards |
-| `help` | the Getting started window |
+| `guide`, `tools`, `help` | the level given, the guide: the guided tour at its fifth step, every tool, or the keys |
+| `build` | the level given, the Build panel: the shapes and the materials of Jak 3 |
 
 The options: `--size WxH` (1600x900 by default), `--camera x,y,z,yaw,pitch` (position in meters, angles in degrees), `--story off|<step>|<node>` (the point of the story shown),
 `--select a,b,...` (the elements `select`, `scale` and `prefab` use, by name) and `--add a,b,...`

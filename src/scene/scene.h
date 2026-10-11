@@ -111,6 +111,9 @@ struct Node {
 struct LevelSettings {
   std::string level;         // the library level the document comes from ("desert")
   std::string source_group;  // its folder in the library: its models are drawn for its actors
+  // a level of the game this one is made to replace in the game ("ctyindb"), "" for a level of its
+  // own: the game then loads it at that level's place, with that level's continue points
+  std::string replaces;
 
   json to_json() const;
   static LevelSettings from_json(const json& j);
@@ -123,10 +126,19 @@ struct SceneCache {
   std::vector<Mat4> worlds;
   std::vector<uint8_t> visible;   // the node and all its parents are visible (and not hidden by the story)
   std::vector<uint32_t> actor;    // Render nodes under an actor (its model): the actor, else 0
+  // under a group marked og_reference: a level shown to compare with, not part of the document's
+  // level (not selected, not exported)
+  std::vector<uint8_t> reference;
   std::vector<AABB> bounds;       // world box of the node's mesh (Render, Collision), else empty
   // render nodes grouped by mesh (the instances of a prototype): mesh, node indices
   std::vector<std::pair<Mesh*, std::vector<uint32_t>>> mesh_groups;
   std::vector<const Mesh*> meshes;  // each node's when they were grouped
+  // the tree by index: each node's parent (-1 for a root), and its children (kids[kid_start[i] ..
+  // kid_start[i + 1]]), so that walking a subtree does not scan the whole scene
+  std::vector<int32_t> parent;
+  std::vector<uint32_t> kid_start, kids;
+  uint64_t parents_hash = 0;
+  uint64_t version = 0;  // counts the times the cache was made: what was computed from it is still good while it holds
   uint64_t frame = ~0ull;
   size_t count = 0;
   uint32_t first_id = 0, last_id = 0;
@@ -148,6 +160,12 @@ class Scene {
   void remove(const std::vector<uint32_t>& ids);
   std::vector<uint32_t> children(uint32_t id) const;
   std::vector<uint32_t> descendants(uint32_t id) const;
+  // The descendants of each of `roots` (not the roots themselves), in one pass over the nodes
+  // however many roots: a node under two of them goes to the nearest.
+  std::vector<std::vector<uint32_t>> descendants_of(const std::vector<uint32_t>& roots) const;
+  // The indices (in `nodes`) of the subtree of the node at `index`, itself first, from the cache's
+  // tree: as the nodes were when the cache was made.
+  void subtree(size_t index, std::vector<uint32_t>& out) const;
   bool is_ancestor(uint32_t ancestor, uint32_t id) const;
   bool effectively_visible(const Node& n) const;
   // the actor a render node belongs to (its model drawn under it), or 0
@@ -183,6 +201,11 @@ class Scene {
 // Where most of these boxes are: the 2nd to 98th percentile on each axis, so that a stray piece
 // far away does not count; their union when they are few.
 AABB focus_box(const std::vector<AABB>& boxes);
+
+// Whether a piece of a level's shell is ground, which the editor locks so that clicks go to what
+// stands on it: 60 m across or more, most of its surface facing up or down. A facade, a wall or a
+// door of a level's shell as large is not (they stay selectable).
+bool ground_piece(Mesh& mesh);
 
 // Marker size of actors without a model (meters)
 constexpr float kMarkerRadius = 0.6f;

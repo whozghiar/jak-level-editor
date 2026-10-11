@@ -75,10 +75,38 @@ json tools() {
            "one of the game's). Its companions and mission layers come with it, under its group. Waits until it is "
            "added; returns its group and bounds. Undoable.",
            {{"name", str("a level from list_levels")},
-            {"actors", boolean("false: its decor alone, without any actor (true by default: with its objects)")}},
+            {"actors", boolean("false: its decor alone, without any actor (true by default: with its objects)")},
+            {"reference", boolean("true: shown to compare with (washed in blue), never selected nor exported: the "
+                                  "game's level the document replaces")}},
            {"name"}),
       tool("remove_level", "Removes a level added to the document, and what is under its group. Undoable.",
-           {{"name", str("a level added with add_level")}}, {"name"}),
+           {{"name", str("a level added with add_level")}, {"reference", boolean("the one added as a reference")}},
+           {"name"}),
+      tool("set_decor",
+           "What the game does with elements of the decor (pieces, models, shapes, Jak II structures), written by "
+           "export_level: collision {kind: shape|none|invisible, material: stone|ice|quicksand|waterbottom|tar|"
+           "sand|wood|grass|pcmetal|snow|deepsnow|hotcoals|lava|crwood|gravel|dirt|metal|straw|tube|swamp|"
+           "stopproj|rotate|neutral, event: none|deadly|endlessfall|burn|deadlyup|burnup|melt, mode: auto|ground|"
+           "wall|obstacle, noedge, nocamera, noentity, nolineofsight}; bounce {height: meters}: Jak landing on its "
+           "top is thrown up (the game's bouncer without a model); launch {distance, height (meters), yaw "
+           "(degrees from the element's facing), time (seconds)}: Jak stepping on it is thrown along an arc. "
+           "false for a part: back to the game's. Undoable.",
+           {{"ids", ids("elements of the decor")},
+            {"collision", {{"description", "an object as above, or false"}}},
+            {"bounce", {{"description", "{height} or false"}}},
+            {"launch", {{"description", "{distance, height, yaw, time} or false"}}}},
+           {"ids"}),
+      tool("replace_level",
+           "Makes the document a replacement of a level of the game (the game then loads it in that level's place, "
+           "with that level's continue points, music and missions; export_level writes it so). level: the game's "
+           "level ('' for none); show_original: adds that level as a reference (blue, not exported) and waits; "
+           "align: moves the document's own level so that its middle and bottom are where the original's are; "
+           "turn_deg: turns it around its middle. Returns where the game starts the player there: the ground "
+           "under each continue point of the level replaced (null: none, the player would fall). Undoable.",
+           {{"level", str("a level of the game, e.g. 'ctyindb'")},
+            {"show_original", boolean("add the original as a reference")},
+            {"align", boolean("place the document's level where the original is")},
+            {"turn_deg", num("turn the document's level around its middle (degrees)")}}),
       tool("open_level",
            "Opens a level of the game (its decor, its objects and water, without its creatures) and waits until it "
            "is loaded. Refuses when the document has unsaved changes, unless discard_changes is true.",
@@ -91,11 +119,14 @@ json tools() {
            "(nothing to stand on at first: place decor pieces or a prefab).",
            {{"discard_changes", discard}}),
       tool("list_catalog",
-           "The objects that can be placed (crates, collectables, platforms, doors, buttons, water...; the particle "
-           "effects of the levels: lights, neon signs, steam; their other logic), by family, with how many the game's "
-           "levels have. The effects and logic are drawn as markers in the editor.",
-           {{"family", str("crate, collectable, platform, door, button, movement, hazard, breakable, light, weapon, "
-                           "vehicle, water, other, effect or logic")},
+           "The objects that can be placed, by family, with how many the game's levels have: the objects that make up "
+           "a place (group 'objects': props that only stand there, doors and airlocks, water, dark eco and lava, the "
+           "particle effects of the levels: lights, neon signs, steam, drawn as markers) and the interactive ones "
+           "(group 'interactive': crates, platforms, elevators, bouncers, buttons, breakables, hazards). Never the "
+           "living (enemies, characters, animals), the collectibles nor the technical types.",
+           {{"group", str("'objects' or 'interactive' (both by default)")},
+            {"family", str("objects: prop, door, water, effect; interactive: crate, platform, movement, button, "
+                           "hazard, breakable, light, weapon, door-like, other")},
             {"filter", str("part of a name")},
             {"offset", integer("first result (paging)")},
             {"limit", integer("number of results, 100 by default")}}),
@@ -112,16 +143,24 @@ json tools() {
            "with the first level that has it. With a level: its whole decor (the first call reads it, a few "
            "seconds).",
            {{"level", str("a level name from list_levels; omitted: every level")},
+            {"game", str("'jak2': the structures of Jak II (when Jak II was extracted too), placed with place's game "
+                         "'jak2': converted for Jak 3 (textures and names apart, lighting compared)")},
             {"filter", str("part of a name (e.g. 'catwalk')")},
             {"offset", integer("first result (paging)")},
             {"limit", integer("number of results, 100 by default")}}),
-      tool("list_prefabs", "The prefabs of the game's library (groups of elements saved together)."),
+      tool("list_prefabs",
+           "The prefabs: the user's (groups of elements saved together) and the game's (game_prefabs: ready-made "
+           "assemblies of Jak 3's decor by category: buildings, houses, bridges, platforms, vents, generators, "
+           "industrial structures; made from the extracted levels the first time, which this waits for). Place "
+           "either with place kind 'prefab' and its name.",
+           {{"rebuild", boolean("make the game's prefabs again from the levels")}}),
       tool("place",
            "Puts in the document an object of the catalog (kind 'object', name from list_catalog), a model (kind "
            "'model', from list_models, or a .glb file made elsewhere with path), a decor part (kind 'decor', name and "
            "level from list_decor), a prefab (kind 'prefab') or a new shape (kind 'shape', name box, floor, wall, "
-           "ramp, stairs or cylinder, with size; its base's middle at the position; ramps and stairs rise towards "
-           "+z before the turn), at a position in meters (Y is up). Returns the new elements with their id. Undoable "
+           "doorway, window, pillar, ramp, stairs, roof, roof-hip or cylinder, with size, and opening [width, "
+           "height] for a doorway or a window; its base's middle at the position; ramps and stairs rise towards +z "
+           "before the turn, a roof's ridge runs along z), at a position in meters (Y is up). Returns the new elements with their id. Undoable "
            "in the editor.",
            {{"kind", {{"type", "string"}, {"enum", {"object", "model", "decor", "prefab", "shape"}}}},
             {"name", str("the object, part, prefab or shape")},
@@ -130,6 +169,7 @@ json tools() {
             {"tile", num("kind 'shape': meters per repeat of its texture (2 by default)")},
             {"steps", integer("kind 'shape', stairs: the number of steps")},
             {"level", str("kind 'decor': the level the part comes from (omitted: the first that has it)")},
+            {"game", str("kind 'decor': 'jak2' for a structure of Jak II (list_decor game 'jak2')")},
             {"position", vec3("where, [x, y, z] in meters")},
             {"yaw_deg", num("turn around the vertical axis, in degrees")},
             {"rotation_deg", vec3("instead of yaw_deg: [x, y, z] rotation in degrees")},
@@ -202,14 +242,17 @@ json tools() {
            "the name of a texture of the document (list_textures), saved with the project and exported for the "
            "game. Only these elements change, not the others drawing the same material. Undoable.",
            {{"ids", ids("the elements")},
-            {"texture", str("an image file path, or a texture name from list_textures")},
+            {"texture", str("an image file path, or a texture name from list_textures (palette ones too)")},
             {"color", {{"description", "[r, g, b] or [r, g, b, a]: multiplies the texture (the game's materials are at 2)"}}},
             {"material", integer("only this material of theirs (get_node: materials); omitted: all")}},
            {"ids"}),
       tool("list_textures",
            "The textures of the document (those of the levels opened and the images added), by name and size, to "
-           "reuse with set_material.",
-           {{"filter", str("part of a name")},
+           "reuse with set_material; or with palette: the textures Jak 3's levels use again and again (city walls, "
+           "metal floors, sandstone, wood...), the most shared first, usable with set_material even when no level "
+           "having them is open.",
+           {{"palette", boolean("the palette of the game's recurring textures")},
+            {"filter", str("part of a name, or a theme (the first word: city, wascity, des...)")},
             {"offset", integer("first result (paging)")},
             {"limit", integer("number of results, 100 by default")}}),
       tool("set_visibility",
@@ -264,7 +307,10 @@ json tools() {
             {"actors", boolean("false: the decor alone (true by default)")},
             {"collision", str("'game' (default): the levels' own collision, exact, where they have it, the rest "
                               "made by the builder from the decor; 'decor': all of it made from the decor")},
-            {"start", vec3("where the player starts, meters (a continue point of the level opened by default)")}},
+            {"start", vec3("where the player starts, meters (a continue point of the level opened by default)")},
+            {"replaces", str("a level of the game this one replaces (replace_level's by default): only the "
+                             "document's own level is written, its DGO has that level's code, and level-info.gc "
+                             "says the one line to change in the game's definition of that level")}},
            {"name"}),
       tool("set_camera",
            "Moves the editor's camera: position and look_at (points in meters), or yaw_deg and pitch_deg, or frame "
@@ -371,7 +417,8 @@ json call_tool(RemoteClient& client, int port, const std::string& name, const js
   // the ones that may wait for a level to load or for the editor to read the levels
   const bool slow = name == "open_level" || name == "open_project" || name == "list_decor" || name == "place" ||
                     name == "list_catalog" || name == "list_models" || name == "place_many" ||
-                    name == "generate_navmesh" || name == "add_level" || name == "export_level";
+                    name == "generate_navmesh" || name == "add_level" || name == "export_level" ||
+                    name == "replace_level" || name == "list_prefabs";
   json answer;
   if (!client.call(request, &answer, slow ? 300000 : 60000, &err)) return tool_error(err);
   if (!answer.value("ok", false)) return tool_error(answer.value("error", std::string("the editor refused")));

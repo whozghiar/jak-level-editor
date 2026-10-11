@@ -10,9 +10,9 @@ namespace ogle {
 
 namespace {
 
-// the order of the families in the catalog
-const char* kFamilies[] = {"crate", "collectable", "platform", "door",  "button", "movement", "hazard", "breakable",
-                           "light", "weapon",      "vehicle",  "water", "other",  "effect",   "logic"};
+// the order of the families in the catalog: the Objects, then the Interactive ones
+const char* kFamilies[] = {"prop",   "door",   "water",     "effect", "crate", "platform", "movement", "button",
+                           "hazard", "breakable", "light", "weapon", "door-like", "other"};
 
 int family_rank(const std::string& f) {
   for (int i = 0; i < (int)(sizeof(kFamilies) / sizeof(kFamilies[0])); i++)
@@ -169,6 +169,13 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
   };
   for (const auto& type : types) {
     if (data && data->is_water(type)) continue;  // listed by look below
+    // the catalog: the props and doors (Objects), the gameplay objects apart (Interactive); not a
+    // collectible, nothing technical (shots, vehicles, controllers)
+    const std::string category = data ? data->catalog_category(type) : std::string();
+    if (category == "collectible" || category == "technical") continue;
+    const bool interactive = category != "static" && category != "door";
+    std::string family = category == "static" ? "prop" : category == "door" ? "door" : data ? data->object_family(type) : "other";
+    if (interactive && family == "door") family = "door-like";  // gates and switches that are not doors
     auto s = seen.find(type);
     json lump = s != seen.end() ? s->second.lump : json::object();
     const bool known = data && (data->objects().count(type) || data->type_models(type));
@@ -199,7 +206,8 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
         CatalogObject o;
         o.etype = type;
         o.name = m->name;
-        o.family = data ? data->object_family(type) : "other";
+        o.family = family;
+        o.interactive = interactive;
         o.model = m->name;
         o.model_path = m->path;
         add_seen(o);
@@ -218,7 +226,8 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
     if (!m && (!known || s == seen.end())) continue;
     CatalogObject o;
     o.etype = o.name = type;
-    o.family = data ? data->object_family(type) : "other";
+    o.family = family;
+    o.interactive = interactive;
     if (m) {
       o.model = m->name;
       o.model_path = m->path;
@@ -280,17 +289,8 @@ std::vector<CatalogObject> build_catalog(const AssetLibrary& library, const Game
       add_art(o, seen[g.etype], name);
       out.push_back(std::move(o));
     }
-    // the other logic of the levels (a neon sign, the boats of a port, a parking spot): a marker
-    for (const auto& [type, s] : seen) {
-      if (data->role(type) != ActorRole::Logic || data->is_effect(type) || data->is_unlisted(type) ||
-          data->is_water(type) || !s.count)
-        continue;
-      CatalogObject o;
-      o.etype = o.name = type;
-      o.family = "logic";
-      add_seen(o);
-      out.push_back(std::move(o));
-    }
+    // the other logic of the levels (the boats of a port, crowds, spawners of creatures) is not
+    // offered: it is no part of a place's architecture
   }
   std::sort(out.begin(), out.end(), [](const CatalogObject& a, const CatalogObject& b) {
     const int fa = family_rank(a.family), fb = family_rank(b.family);
@@ -308,8 +308,13 @@ std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const
   // boss's pieces) or after an NPC's name, the ones of the cutscenes
   std::set<std::string> characters, creature_names;
   if (data) {
-    for (const auto& [type, models] : data->all_type_models())
-      if (data->role(type) == ActorRole::Creature) characters.insert(models.begin(), models.end());
+    // and the models of what the catalog leaves out: the collectibles (orbs, gems...), the technical
+    // types (shots, vehicles, the player's gun and board)
+    for (const auto& [type, models] : data->all_type_models()) {
+      const std::string category = data->catalog_category(type);
+      if (data->role(type) == ActorRole::Creature || category == "collectible" || category == "technical")
+        characters.insert(models.begin(), models.end());
+    }
     for (const auto& [type, role] : data->roles()) {
       if (role != ActorRole::Creature) continue;
       creature_names.insert(type);
@@ -327,7 +332,11 @@ std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const
   std::vector<CatalogModel> out;
   for (const auto& m : library.models()) {
     if (!out.empty() && out.back().name == m.name) continue;  // its other lods and copies
-    if (taken.count(m.name) || characters.count(m.name) || named_after_creature(m.name) ||
+    // the player's own (Jak, Daxter, the board, the gun, the HUD: the models every level shares, and
+    // Jak's elsewhere) are no prop either
+    const bool player = m.group == "common" || m.name.rfind("jak", 0) == 0 || m.name.rfind("daxter", 0) == 0;
+    if (taken.count(m.name) || characters.count(m.name) || named_after_creature(m.name) || player ||
+        m.name.rfind("collectables-", 0) == 0 ||
         m.name.find("-highres") != std::string::npos || ends_with(m.name, "-lowres") || ends_with(m.name, "-fma") ||
         ends_with(m.name, "-shadow") || m.name.find("-collision") != std::string::npos || m.name == "scenecamera")
       continue;
@@ -365,9 +374,9 @@ std::vector<CatalogPart> list_parts(const Scene& level) {
       }
       if (!part.mesh_node.empty()) prototypes.push_back(std::move(part));
     } else if (p->name.find("-tfrag-") != std::string::npos && n.mesh) {
-      // a piece of the shell; the terrain and the older extractions (a mesh per texture) are not
+      // a piece of the shell; the ground and the older extractions (a mesh per texture) are not
       auto terrain = n.extras.find("og_terrain");
-      if (terrain == n.extras.end() || !terrain->is_boolean() || terrain->get<bool>()) continue;
+      if (terrain == n.extras.end() || !terrain->is_boolean() || (terrain->get<bool>() && ground_piece(*n.mesh))) continue;
       CatalogPart part;
       part.kind = CatalogPart::Kind::Piece;
       part.name = part.mesh_node = n.name;

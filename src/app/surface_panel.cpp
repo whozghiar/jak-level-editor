@@ -7,8 +7,10 @@
 
 #include "app/app.h"
 #include "core/i18n.h"
+#include "core/log.h"
 #include "imgui.h"
 #include "imgui_stdlib.h"
+#include "io/jak2_import.h"
 
 namespace ogle {
 
@@ -53,6 +55,12 @@ void App::ui_shape_inspector(Node& n) {
     edit_begin(snap);
     edit_end(tr("undo.shape"));
   }
+  if (p.kind == "doorway" || p.kind == "window") {
+    changed |= ImGui::DragFloat2(tr_id("inspector.shape.opening").c_str(), &p.opening.x, 0.05f, 0.1f, 2000.f, "%.2f m");
+    edit_begin(snap);
+    edit_end(tr("undo.shape"));
+    tooltip(tr("inspector.shape.opening.tip"));
+  }
   ImGui::PopItemWidth();
   if (changed) reshape(scene, n, ShapeParams::from_json(p.to_json()));
   // stretched with the scale tool: its texture too; the scale made its size keeps the texture's
@@ -64,6 +72,122 @@ void App::ui_shape_inspector(Node& n) {
       commit_node_edit(snap, tr("undo.shape"));
     }
     tooltip(tr("inspector.shape.apply_scale.tip"));
+  }
+}
+
+void App::ui_palette(const std::vector<uint32_t>& ids, int material, float width) {
+  if (palette_textures.empty()) {
+    ImGui::TextDisabled("%s", tr(library_index.ready() ? "palette.empty" : "palette.indexing"));
+    return;
+  }
+  // its themes (the first word of the textures' names: city, wascity, des...), the most used first
+  static std::string theme, filter;
+  std::map<std::string, int> counts;
+  for (const auto& t : palette_textures) counts[t.theme]++;
+  std::vector<std::pair<int, std::string>> themes;
+  for (const auto& [name, n] : counts) themes.push_back({-n, name});
+  std::sort(themes.begin(), themes.end());
+  ImGui::SetNextItemWidth(160);
+  if (ImGui::BeginCombo("##theme", theme.empty() ? tr("palette.all") : theme.c_str(), ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::Selectable(tr("palette.all"), theme.empty())) theme.clear();
+    for (const auto& [n, name] : themes)
+      if (ImGui::Selectable(strf("%s (%d)", name.c_str(), -n).c_str(), theme == name)) theme = name;
+    ImGui::EndCombo();
+  }
+  ImGui::SameLine();
+  ImGui::SetNextItemWidth(std::max(80.f, width - 160.f - ImGui::GetStyle().ItemSpacing.x));
+  ImGui::InputTextWithHint("##palette-filter", tr("palette.filter"), &filter);
+  std::vector<const PaletteTexture*> shown;
+  for (const auto& t : palette_textures)
+    if ((theme.empty() || t.theme == theme) && (filter.empty() || t.name.find(filter) != std::string::npos))
+      shown.push_back(&t);
+  ImGui::TextDisabled(tr("palette.count"), shown.size(), palette_textures.size());
+  const float size = 56.f;
+  ImGui::BeginChild("palette-grid", ImVec2(width, 360), ImGuiChildFlags_Borders);
+  const float cell = size + 6 + ImGui::GetStyle().ItemSpacing.x;
+  const int per_row = std::max(1, (int)((ImGui::GetContentRegionAvail().x + ImGui::GetStyle().ItemSpacing.x) / cell));
+  ImGuiListClipper clipper;
+  clipper.Begin((int)(shown.size() + per_row - 1) / per_row, size + 6 + ImGui::GetStyle().ItemSpacing.y);
+  while (clipper.Step())
+    for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; r++)
+      for (int c = 0; c < per_row; c++) {
+        const size_t i = (size_t)r * per_row + c;
+        if (i >= shown.size()) break;
+        const PaletteTexture& t = *shown[i];
+        if (c) ImGui::SameLine();
+        ImGui::PushID((int)i);
+        const unsigned tex = palette.gl(t);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(3, 3));
+        const bool clicked = tex ? ImGui::ImageButton("##t", (ImTextureID)(uint64_t)tex, ImVec2(size, size))
+                                 : ImGui::Button("...", ImVec2(size + 6, size + 6));
+        ImGui::PopStyleVar();
+        if (ImGui::BeginItemTooltip()) {
+          ImGui::TextUnformatted(t.name.c_str());
+          ImGui::TextDisabled(tr("palette.used"), t.levels, t.uses);
+          ImGui::EndTooltip();
+        }
+        if (clicked) {
+          // the texture into the document (read now if its image is not yet), then on the pieces
+          const int ti = palette_texture(t, true);
+          if (ti >= 0) {
+            NodeChange change(scene);
+            for (auto id : ids) change.save(id);
+            if (edit_material(scene, ids, material, [ti](Material& m) { m.texture = ti; }))
+              history.push(change.commit(tr("undo.texture")));
+          }
+        }
+        ImGui::PopID();
+      }
+  ImGui::EndChild();
+}
+
+void App::ui_import_inspector(Node& n) {
+  auto import = n.extras.find("og_import");
+  if (n.kind != NodeKind::Render || !n.mesh || import == n.extras.end() || !import->is_object()) return;
+  ImGui::SeparatorText(strf(tr("import.title"), import->value("level", std::string()).c_str()).c_str());
+  tooltip(tr("import.tip"));
+  const json checks = import->value("checks", json::array());
+  for (const auto& c : checks) {
+    if (!c.is_object()) continue;
+    const std::string what = c.value("check", std::string());
+    const bool good = c.value("ok", true);
+    std::string text;
+    if (what == "mesh")
+      text = strf(tr("import.check.mesh"), c.value("triangles", (size_t)0), c.value("bad_indices", (size_t)0),
+                  c.value("no_uv", (size_t)0));
+    else if (what == "colors")
+      text = strf(tr("import.check.colors"), c.value("without", (size_t)0), c.value("outside", (size_t)0));
+    else if (what == "lighting")
+      text = strf(tr("import.check.lighting"), c.value("ratio", 1.0));
+    else if (what == "materials")
+      text = strf(tr("import.check.materials"), c.value("count", (size_t)0), c.value("blended", (size_t)0));
+    else if (what == "textures")
+      text = strf(tr("import.check.textures"), c.value("count", (size_t)0), c.value("renamed", (size_t)0),
+                  c.value("odd", (size_t)0));
+    else if (what == "metadata")
+      text = tr("import.check.metadata");
+    else
+      continue;
+    ImGui::TextColored(good ? ImVec4(0.45f, 0.85f, 0.5f, 1.f) : ImVec4(1.f, 0.65f, 0.3f, 1.f), "%s", good ? "ok" : "!");
+    ImGui::SameLine();
+    ImGui::TextWrapped("%s", text.c_str());
+    if (what == "lighting" && !good) {
+      // its vertex colors scaled to the brightness of the document's Jak 3 decor
+      if (ImGui::Button(tr_id("import.match_lighting").c_str())) {
+        const float ratio = lighting_ratio(*n.mesh, scene);
+        if (ratio > 0) {
+          const Node before = n;
+          n.mesh = scaled_colors(*n.mesh, 1.f / ratio);
+          for (auto& k : n.extras["og_import"]["checks"])
+            if (k.value("check", std::string()) == "lighting") {
+              k["ok"] = true;
+              k["ratio"] = 1.0;
+            }
+          commit_node_edit(before, tr("undo.match_lighting"));
+        }
+      }
+      tooltip(tr("import.match_lighting.tip"));
+    }
   }
 }
 
@@ -121,6 +245,13 @@ void App::ui_material_inspector(Node& n) {
           }
         }
       ImGui::EndChild();
+      ImGui::EndPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr_id("palette.button").c_str())) ImGui::OpenPopup("palette");
+    tooltip(tr("palette.button.tip"));
+    if (ImGui::BeginPopup("palette")) {
+      ui_palette(targets, mi);
       ImGui::EndPopup();
     }
     // its color: multiplies the texture (the game's own materials are at 2, their vertex colors at half)

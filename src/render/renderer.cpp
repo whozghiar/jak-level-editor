@@ -593,6 +593,12 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
     }
     if (!b.nodes.empty()) buckets.push_back(std::move(b));
   }
+  // a level shown for reference last, see-through (the ghost pass below)
+  size_t first_reference = buckets.size();
+  if (cache.reference.size() == cache.count)
+    first_reference = std::stable_partition(buckets.begin(), buckets.end(),
+                                            [&](const Bucket& b) { return cache.reference[b.nodes[0]] == 0; }) -
+                      buckets.begin();
   stats.ms_cull = ms_since(t0);
   t0 = clock::now();
   m_instances.clear();
@@ -600,10 +606,13 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
   for (const auto& b : buckets) total += b.nodes.size();
   m_instances.reserve(total);
   const bool any_tint = !selection.empty() || hovered;
+  const bool references = cache.reference.size() == cache.count;
   for (auto& b : buckets) {
     b.first = m_instances.size();
     for (auto i : b.nodes) {
       Vec4 tint{0, 0, 0, 0};
+      // a level shown for reference (the game's level a new one replaces): washed in blue
+      if (references && cache.reference[i]) tint = Vec4{0.3f, 0.55f, 1.f, 0.55f};
       if (any_tint) {
         uint32_t id = scene.nodes[i].id;
         if (selection.count(id)) tint = Vec4{1.f, 0.6f, 0.12f, 0.18f};
@@ -641,7 +650,8 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       if (pass == 2) glDepthMask(GL_FALSE);
     }
-    for (const auto& b : buckets) {
+    for (size_t bi = 0; bi < first_reference; bi++) {
+      const Bucket& b = buckets[bi];
       auto& gm = gpu_mesh(*b.mesh);
       const bool backdrop = rs.fog && b.mesh->extras.value("og_backdrop", false);
       bool based = false;
@@ -668,6 +678,39 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
         stats.triangles += (size_t)(gp.count / 3) * b.nodes.size();
       }
     }
+  }
+  // the level shown for reference (the game's level a new one replaces), see-through over the
+  // document: what the document has in its place shows through it. Its surfaces that the document
+  // has too (a level made from it) are at the same depth: GL_LESS leaves them out instead of
+  // washing the document's in blue. The glows are left out.
+  if (first_reference < buckets.size()) {
+    set_blend(BlendMode::Alpha);
+    glEnable(GL_BLEND);
+    glDepthMask(GL_FALSE);
+    glDepthFunc(GL_LESS);
+    glUniform1i(m_u.mesh_fog, 0);
+    for (size_t bi = first_reference; bi < buckets.size(); bi++) {
+      const Bucket& b = buckets[bi];
+      auto& gm = gpu_mesh(*b.mesh);
+      bind_instances(b.first);
+      for (const auto& gp : gm.prims) {
+        const Material* mat = gp.material >= 0 && gp.material < (int)scene.materials.size()
+                                  ? &scene.materials[gp.material]
+                                  : nullptr;
+        if (material_pass(mat) == 2) continue;
+        set_material(mat, scene.textures, gp.has_colors, rs, 0.4f);
+        if (m_bound_vao != gm.vao) {
+          glBindVertexArray(gm.vao);
+          m_bound_vao = gm.vao;
+        }
+        glDrawElementsInstancedBaseVertex(GL_TRIANGLES, gp.count, GL_UNSIGNED_INT,
+                                          (void*)(gp.first_index * sizeof(uint32_t)), (GLsizei)b.nodes.size(),
+                                          gp.base_vertex);
+        stats.draws++;
+        stats.triangles += (size_t)(gp.count / 3) * b.nodes.size();
+      }
+    }
+    glDepthFunc(GL_LEQUAL);
   }
   set_blend(BlendMode::Alpha);
   glDisable(GL_BLEND);

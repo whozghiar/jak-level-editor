@@ -2,12 +2,15 @@
 
 // The catalog of what can be put in a level:
 //
-//   objects  every object of the game (crates, platforms, doors, collectables, water...): the
-//            actor types of the game data and of the extracted levels, each with the model its
-//            code draws (one entry per model for the types that choose theirs by name) and the
-//            data of an actor of its type found in the levels; the gameplay objects the game draws
-//            without a model (trick points, fire...), the particle effects of the levels (one per
-//            particle group: lights, neon signs, steam) and their other logic are there too
+//   objects  the objects of the game that make up a place: its props (a flag, a windmill, a
+//            sprinkler, a parked hellcat), its doors and airlocks, its water, dark eco and lava,
+//            the particle effects of its levels (one per particle group: lights, neon signs,
+//            steam); and apart, the interactive objects (crates, platforms, elevators, bouncers,
+//            buttons, breakables, hazards...). Each with the model its code draws (one entry per
+//            model for the types that choose theirs by name) and the data of an actor of its type
+//            found in the levels. Never the living (enemies, characters, animals: creatures), the
+//            collectibles (orbs, gems, eco, ammo...) nor the technical types (shots, vehicles,
+//            controllers, the logic of the levels): tools/object_categories.json
 //   models   every other model of the game but the characters: parts of objects, debris, props,
 //            placed as decor
 //   parts    the decor of a level, to reuse in another: the prototypes of its decor (a pillar, a
@@ -25,7 +28,11 @@ namespace ogle {
 struct CatalogObject {
   std::string etype;
   std::string name;        // shown: the type, or the model of a variant (look, art-name)
-  std::string family;      // crate, platform, door, water... (GameData::object_family)
+  // prop (an object of the game that only stands there), door, water, effect: the Objects of the
+  // catalog; else a family of the objects that do something (crate, platform, movement, button,
+  // breakable, hazard...: GameData::object_family), the Interactive objects
+  std::string family;
+  bool interactive = false;
   std::string model;       // the model drawn for it, "" for an object the game draws without one
   std::string model_path;  // its file
   json lump;               // the data of a new one: an actor of the game's, without what binds it to its level
