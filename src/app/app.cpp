@@ -135,6 +135,11 @@ bool App::init_window(bool hidden, int w, int h) {
   }
   // the game's renderer, its shaders next to the executable
   const char* base = SDL_GetBasePath();
+  {
+    std::string perr;
+    if (!particle_data.load(std::string(base ? base : "") + "data/jak3/particles.json", &perr)) LOG_WARN("%s", perr.c_str());
+    thumbs.set_particles(&particle_data);
+  }
   if (!game_view.init(std::string(base ? base : "") + "game-shaders", &game_view_error)) {
     LOG_WARN(tr("log.game_view_unavailable"), game_view_error.c_str());
     game_view_on = false;
@@ -336,6 +341,8 @@ void App::frame(float dt) {
   if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && !scene.nodes.empty())
     renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, view_rs);
+  update_effects(dt);
+  draw_effects();
   draw_navmesh_overlay();
   draw_tool_overlays();
   renderer.set_game_depth(nullptr);
@@ -759,6 +766,8 @@ void App::handle_shortcuts() {
 //   models  : the level `in` loaded, the models of the Catalog panel
 //   decor   : the level `in` loaded, its decor in the Catalog panel
 //   decor-all : the level `in` loaded, the decor of every level searched for "catwalk"
+//   effects : the level `in` loaded, the particle effects of the Catalog panel
+//   actors  : the level `in` loaded with its actors (its effects running)
 //   navmesh : the level or project `in`, its nav meshes drawn (generated for the whole level when
 //             it has none), the largest selected, the Nav meshes window open
 int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std::string& out, int w,
@@ -785,12 +794,14 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         (project_in && (setup == "select" || setup == "scale" || setup == "prefab" || setup == "navmesh"));
     const bool with_level = !with_project && (setup == "levels" || setup == "select" || setup == "scale" ||
                                               setup == "prefab" || setup == "catalog" || setup == "models" ||
+                                              setup == "effects" || setup == "actors" ||
                                               setup == "decor" || setup == "decor-all" || setup == "navmesh" ||
                                               setup == "export" || setup == "guide" || setup == "tools" ||
                                               setup == "build");
     if (with_project) open_project_file(in);  // the preferences are not written in this mode
     if (setup == "project") left_tab_request = 1;
     if (with_level) {
+      load_actors = setup == "actors";
       if (const LevelEntry* level = library.level(in)) {
         m_selected_level = level->name;
         load_level(*level);
@@ -810,8 +821,12 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
       guide_step = 4;  // the gizmo: four animations
     }
     if (setup == "build") left_tab_request = 3;
-    if (setup == "catalog" || setup == "models" || setup == "decor" || setup == "decor-all") {
+    if (setup == "catalog" || setup == "models" || setup == "decor" || setup == "decor-all" || setup == "effects") {
       left_tab_request = 1;
+      if (setup == "effects") {
+        m_catalog_family = "effect";
+        m_catalog_filter = opts.select;  // --select: the effects searched for
+      }
       m_catalog_tab = setup == "decor" || setup == "decor-all" ? 2 : setup == "models" ? 1 : 0;
       if (setup == "decor") m_decor_level = in;
       if (setup == "decor-all") m_catalog_filter = "catwalk";

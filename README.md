@@ -29,7 +29,9 @@ with an animation of each tool, opens at the first start (F1).
 
 The **game view** (View > Game view, G) draws the level with **the game's own renderer**
 (OpenGOAL's), lit as the game lights it at the hour you choose, fogged as the game fogs it: what the
-level will look like in the game once exported. Edits show at once.
+level will look like in the game once exported. Edits show at once. The **particle effects** of
+the levels (steam, sparks, smoke, fire, lights) run in the view and in the catalog, launched and
+moved by the game's own rules.
 
 - No game data comes with the editor: everything is read from the user's disc.
 - It needs nothing but this repository and your disc: it does not use jak-project to build, to
@@ -140,6 +142,8 @@ SSD: the 272 levels are extracted in 1 minute 10 to 1 minute 20 seconds and take
 ```text
 library/jak3/library.json                              the game, its version, the levels extracted
 library/jak3/common/models/*.glb                       models every level uses (collectables, Jak...)
+library/jak3/common/sprites/<page>/<texture>.png       the textures of the particles (index.json: by
+                                                       number)
 library/jak3/<level>/decor/<level>-background.glb      the level: decor (one node per element),
                                                        collision and actors
 library/jak3/<level>/models/<model>-lodN.glb           the models of its actors (crates, doors...)
@@ -218,8 +222,9 @@ mission adds to a level, cutscenes) and the copies of a level found in another D
 When a level opens:
 
 - **Creatures are left out**: enemies, characters, animals, mechs, the characters of the
-  cutscenes. So are the logic actors that the game does not draw (particle spawners, cameras,
-  triggers, managers). The objects stay: crates, doors, platforms, props, turrets...
+  cutscenes. So are the logic actors that the game does not draw (cameras, triggers, managers).
+  The objects stay: crates, doors, platforms, props, turrets..., and the particle effects (see
+  [Effects](#effects)).
 - **Water** (pools, fountains, falls) is drawn translucent, **dark eco** dark purple, **lava**
   with its own texture: the water actors get the model of their "look". The **ocean** is drawn at
   its height where its map covers (Haven City's port and slums, the desert, Spargus...), and, for
@@ -324,6 +329,26 @@ The game view needs OpenGL 4.1 (the game's shaders); without it the menu says wh
 draws as usual. It draws the background (the decor) only: the sky is its color, the ocean, the
 actors' models and the particle effects are the editor's.
 
+### Effects
+
+The particle effects of the levels (the actors naming a particle group by their art-name:
+`part-spawner` and its kind) run in the view: **View > Effects**. Their particles are made as the
+game makes them, from its definitions (`data/jak3/particles.json`, read in the game's code by
+`tools/gen_particles.py`) and by its rules (`sparticle-launcher.gc`, `sparticle.gc`): a group
+launches the particles of its parts all the time, in bursts every period or once; each particle
+starts from its launcher's values (position, velocity, size, rotation, color, how they change, its
+life: a value and a random range each) and moves 60 times a second (its velocities per tick of the
+game, 300 a second; its friction and acceleration per frame); a launcher can hand a particle over
+to another at a time of its life (steam that fades out). They are drawn with the game's textures
+of particles, which the extraction writes to `library/jak3/common/sprites/`, facing the camera;
+the glows (lights, neon signs) are added to what is behind them. Some parts launch only at some
+hours of the day: the game view's hour chooses.
+
+![The steam of ctyindb's vents in the game view at noon, with the labels of their part-spawners](docs/captures/23-effects.png)
+
+In the **Catalog**, the effects show their particles a moment after they start, and run live in
+their tooltip.
+
 ### Selecting and editing
 
 - **Click** an element to select it: each decor element is its own object (a click on a pipe
@@ -393,7 +418,7 @@ The **Catalog** panel lists what else can be put in a level, placed like prefabs
   there (41: flags, windmills, a parked hellcat...), the doors and airlocks (44), water, dark eco
   and lava (5, with the type of that level's water: its ripples and color), and the **particle
   effects** of the levels (451: one per particle group their actors use, the lights, neon signs,
-  steam, sparks, drips... drawn by the game, markers in the editor).
+  steam, sparks, drips..., each shown by its particles, live in its tooltip).
 - **Interactive** (206): the objects that do something: crates (15), platforms and elevators (56),
   moving parts (14), buttons (7), hazards (4), breakables (8), turrets (4), door-like objects (8),
   and others (90). Their behavior is set in the inspector.
@@ -929,6 +954,16 @@ The roles come from the types' ancestry (`enemy`, `process-taskable`... are crea
 choices made in the script (turrets are objects). Run it again when the decompiled code changes,
 then rebuild (the files are copied next to the executable).
 
+`data/jak3/particles.json` holds the game's particle effects, read in the same code by
+`tools/gen_particles.py` (`defpartgroup`, `defpart`): per group, its parts (a launcher and when it
+launches); per launcher, its init specs (each field's value, random range and multiplier, in the
+game's units); the textures they draw. The script also writes `extractor/data/jak3/sprite-pages.json`,
+the texture pages whose textures `ogle-extract` writes for them:
+
+```bash
+python tools/gen_particles.py <jak-project>/goal_src
+```
+
 ### Extracted level
 
 `<level>-background.glb` holds the level's shell (tfrag) in pieces (the large ones, the terrain,
@@ -964,6 +999,8 @@ open-goal-level-editor --selftest
   the library), `project` (`<in>` is a project; `select`, `scale`, `prefab` and `navmesh` take one
   too), `navmesh` (the nav meshes and their window; made for the whole level when there are none),
   `export` (the level exported for the game to a temporary folder: the window and its report),
+  `effects` (the particle effects of the Catalog panel; `--select` searches them), `actors` (the
+  level `<in>` with its actors: its effects running),
   `extract` (`<in>` is an `.iso` or a disc folder: it is extracted to a temporary folder),
   `guide` (the guided tour at its fifth step), `tools` (its Every tool), `help` (its keys) and
   `build` (the Build panel), over the level `<in>`.
@@ -984,7 +1021,7 @@ on Linux).
 
 ## 10. What was tested
 
-- `--selftest`: 93 checks (math, rotations read back as angles even at a quarter turn around y, a
+- `--selftest`: 95 checks (math, rotations read back as angles even at a quarter turn around y, a
   library written like the extractor writes one, opening its level: locked terrain, decor instances,
   actor with its model, collision surfaces; copy and paste with undo; prefab file names, saving,
   pivot, placing twice with shared meshes, the actors of a prefab named apart; project round trip,
@@ -1026,7 +1063,8 @@ on Linux).
   view (a document drawn by the game's renderer, a chunk per palette; a piece moved making its
   chunk again, alone; the game's camera placing things where the editor's does); the export's 8
   palettes on every mesh, a piece's own exactly; a level's blended walls cut out and its glass in
-  the translucent tree.
+  the translucent tree; the particles (a steam vent launching puffs that rise along it and fade
+  out, a light of one frame drawn once as a glow).
 - Jak 3 NTSC (SCUS-97330), from the folder of the disc: `ogle-extract` writes the 272 levels in 1
   minute 10 to 1 minute 20 seconds (3.7 GB), and the editor lists 105 of them. Jak II PAL
   (SCES-51608): the outside of its palace (`PALOUT`) extracted with `--levels PALOUT`, four of its
@@ -1105,12 +1143,16 @@ nav meshes followed by creatures in the game.
   weather; the lamps (palettes 5 to 7) follow the city's levels (lit at night), not each level's own
   mood code.
 - **The game view** draws the background only: no sky (its color), no ocean of the game (the
-  editor's), no particles, no envmap reflections; the actors' models are the editor's. The level
+  editor's), no envmap reflections; the actors' models and the effects are the editor's. The level
   builder quantizes a level's colors to 8,192 per tree (a few vertices of a big level lose a part
   of their afternoon sun): the game view does not, so it shows the palettes exactly.
 - **The catalog's objects** come from the extracted levels and the game's code. A new object
-  takes the data of one of its type: check it before building the level for the game. The
-  particle effects are markers: their particles are not drawn.
+  takes the data of one of its type: check it before building the level for the game.
+- **Effects**: what the game's code does for a particle (its `birth-func` and `func`: textures
+  chosen among several, motion blur, particles following a joint), the 3D particles (drawn facing
+  the camera like the others), the glows' fading behind walls and the animated textures are not
+  done; a few effects of the game come from its code rather than from a part-spawner (an
+  object's own smoke) and are not shown.
 - **Scale**: the game draws decor at any scale, but gives most of its actors (objects) their own
   size whatever the level says; the inspector warns when an object is scaled. Collision is not
   scaled either (see below).
@@ -1168,7 +1210,7 @@ nav meshes followed by creatures in the game.
 
 ```text
 src/core/      math, log, preferences, translations, undo history
-src/scene/     the document, picking (BVH), the story view
+src/scene/     the document, picking (BVH), the story view, the particle effects (particles)
 src/io/        glTF import and export, the library of extracted levels, prefabs and the game's
                prefabs (prefab_recipes), game data, the catalog, loading threads, the nav meshes for
                the game (nav_export), the export of a level for the game (game_export), the decor's
@@ -1184,7 +1226,7 @@ src/app/       window and main loop, document actions, interface panels (panels,
 lang/          translations of the interface (en.json, fr.json)
 data/          what the editor knows of the game (jak3/game-data.json, made by tools/gen_game_data.py;
                jak3/prefabs.json, the recipes of the game's prefabs)
-tools/         gen_game_data.py: writes data/ from OpenGOAL's decompiled code (with
+tools/         gen_game_data.py, gen_particles.py: write data/ from OpenGOAL's decompiled code (with
                object_categories.json, the catalog's choices); build_demo_level.py and
                build_replace_demo.py: build the tour's demo level and its replacement of ctyindb
                through the editor's remote control; build_industrial_district.py: builds the tour's

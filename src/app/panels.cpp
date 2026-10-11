@@ -176,6 +176,8 @@ void App::ui_menu() {
       ImGui::Unindent();
     }
     ImGui::Separator();
+    ImGui::MenuItem(tr("menu.view.effects"), nullptr, &show_effects);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.view.effects.tip"));
     ImGui::MenuItem(tr("menu.view.actors"), nullptr, &rs.show_actors);
     ImGui::MenuItem(tr("menu.view.ocean"), nullptr, &rs.show_ocean);
     ImGui::MenuItem(tr("menu.view.fog"), nullptr, &rs.fog);
@@ -550,7 +552,14 @@ void App::ui_catalog_objects(bool interactive) {
     ThumbRequest req;
     req.kind = ThumbRequest::Kind::Model;
     req.path = o.model_path;
-    unsigned tex = o.model_path.empty() ? 0 : thumbs.get(req);
+    // an effect: a picture of its particles
+    std::string group = o.family == "effect" ? o.lump.value("art-name", std::string()) : std::string();
+    if (!group.empty() && group[0] == '\'') group = group.substr(1);
+    if (!group.empty() && particle_data.group(group)) {
+      req.kind = ThumbRequest::Kind::Effect;
+      req.path = group;
+    }
+    unsigned tex = req.kind == ThumbRequest::Kind::Effect || !o.model_path.empty() ? thumbs.get(req) : 0;
     const bool placing = tool == ToolMode::Place && placement.kind == Placement::Kind::Object &&
                          placement.object.name == o.name && placement.object.etype == o.etype;
     if (placing) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
@@ -567,6 +576,9 @@ void App::ui_catalog_objects(bool interactive) {
       ImGui::TextDisabled("%s", tr(("family." + o.family).c_str()));
       ImGui::Text(tr("inspector.type"), o.etype.c_str());
       if (o.family == "effect") {
+        // its particles, live
+        if (const unsigned live = req.kind == ThumbRequest::Kind::Effect ? thumbs.live_effect(group, ImGui::GetIO().DeltaTime) : 0)
+          ImGui::Image((ImTextureID)(uint64_t)live, ImVec2(160, 160), ImVec2(0, 1), ImVec2(1, 0));
         ImGui::Text(tr("catalog.particles"), o.lump.value("art-name", std::string()).c_str());
         ImGui::TextDisabled("%s", tr("catalog.effect_tip"));
       } else if (o.model.empty()) {

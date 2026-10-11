@@ -37,6 +37,7 @@
 #include "io/prefabs.h"
 #include "render/offscreen.h"
 #include "scene/bvh.h"
+#include "scene/particles.h"
 #include "scene/shapes.h"
 #include "scene/story.h"
 #include "stb_image_write.h"
@@ -2017,6 +2018,56 @@ int run_selftest() {
               data.level_art_group("collectables-skill").empty() &&
               data.level_art_group("vin-door-ctyinda") == "vin-door-ctyinda",
           "game data: the art groups a level's DGO needs (the skill's is common)");
+  }
+
+  // the particle effects of the game (data/jak3/particles.json): ctyindb's fast steam launches
+  // puffs every frame that rise along its vent, slow down and fade out (their launcher hands over
+  // to another at a third of a second); a light of one frame is drawn once, a glow
+  {
+    const char* base = SDL_GetBasePath();
+    ParticleData pd;
+    std::string perr;
+    const bool loaded = pd.load(std::string(base ? base : "") + "data/jak3/particles.json", &perr);
+    const SpGroup* steam = loaded ? pd.group("'group-ctyindb-fast-steam") : nullptr;
+    bool rises = false, fades = false;
+    if (steam) {
+      ParticleSystem ps;
+      for (int i = 0; i < 3; i++) {  // 30 frames (10 at most a call)
+        ps.begin_frame();
+        ps.emit(1, steam, Mat4::identity());
+        ps.update(pd, 1.0 / 6.0, {0, 0, 0});
+      }
+      std::vector<ParticleSprite> sprites;
+      ps.sprites(sprites);
+      float far = 0, faint = 1;
+      for (const auto& sp : sprites) {
+        far = std::max(far, sp.pos.z);  // along the vent: its z
+        faint = std::min(faint, sp.color.w);
+      }
+      rises = ps.count() > 20 && far > 3.f;
+      // later: the first puffs gone (half a second of life)
+      for (int i = 0; i < 3; i++) {
+        ps.begin_frame();
+        ps.emit(1, steam, Mat4::identity());
+        ps.update(pd, 1.0 / 6.0, {0, 0, 0});
+      }
+      ps.sprites(sprites);
+      fades = !sprites.empty() && faint < 0.2f && ps.count() < 200;
+      if (!rises || !fades) std::printf("    steam: %zu particles, %.2f m along its vent, faintest %.3f\n", ps.count(), far, faint);
+    }
+    bool glow = false;
+    if (const SpGroup* light = loaded ? pd.group("group-citylights-newslums") : nullptr) {
+      ParticleSystem ps;
+      ps.begin_frame();
+      ps.emit(1, light, Mat4::identity());
+      ps.update(pd, 1.0 / 60.0, {0, 0, 0});
+      std::vector<ParticleSprite> sprites;
+      ps.sprites(sprites);
+      glow = sprites.size() == 1 && sprites[0].additive && std::fabs(sprites[0].sx - 4.f) < 0.01f;
+    }
+    if (!loaded) std::printf("    %s\n", perr.c_str());
+    check(steam && rises && fades, "particles: a steam vent launches puffs that rise along it and fade out");
+    check(glow, "particles: a light of one frame drawn once, added to what is behind (a glow)");
   }
 
   // translations: every language has every key of English, with the same printf arguments

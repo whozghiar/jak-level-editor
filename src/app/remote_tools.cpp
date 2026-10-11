@@ -150,6 +150,7 @@ std::string App::capture_view_png(int w, int h, float game_hour) {
   if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && document_open())
     renderer.draw_mesh(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), m_ocean_materials, {}, view_rs);
+  draw_effects();
   draw_navmesh_overlay();
   renderer.set_game_depth(nullptr);
   const std::vector<uint8_t> png = target.png();

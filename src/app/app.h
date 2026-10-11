@@ -393,6 +393,10 @@ class App {
   // what the game does with an element of the decor: its collision, bounce, launch (io/decor_behaviors.h)
   void ui_decor_behavior(Node& n);
   std::unique_ptr<NodeChange> m_decor_edit;  // a value being dragged: the elements before
+  // the effects of the document: (node index, group), made again when the scene cache changes
+  std::vector<std::pair<uint32_t, const SpGroup*>> m_effect_nodes;
+  uint64_t m_effect_cache = ~0ull;
+  std::vector<ParticleSprite> m_sprites;
   struct TextureTarget {
     std::vector<uint32_t> ids;
     int material = -1;
@@ -418,6 +422,13 @@ class App {
   GameView game_view;
   bool game_view_on = false;
   std::string game_view_error;  // why there is none
+  // the particle effects of the game (data/jak3/particles.json): the level's effects run in the
+  // view (View > Effects) and in the catalog's pictures
+  ParticleData particle_data;
+  ParticleSystem particles;
+  bool show_effects = true;
+  void update_effects(float dt);
+  void draw_effects();
   Camera camera;
   RenderSettings rs;
   Gizmo gizmo;

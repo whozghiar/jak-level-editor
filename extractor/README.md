@@ -30,6 +30,9 @@ jak-project checkout.
 ```text
 <output>/jak3/library.json                              the game, its version, the levels extracted
 <output>/jak3/common/models/*.glb                       models every level uses (collectables, Jak...)
+<output>/jak3/common/sprites/<page>/<texture>.png       the textures of the particles (the pages of
+                                                       data/jak3/sprite-pages.json), and index.json:
+                                                       "<page id>:<index>" -> "<page>/<texture>"
 <output>/jak3/<level>/decor/<level>-background.glb      decor (one node per instance), collision, actors
 <output>/jak3/<level>/models/<model>-lodN.glb           the models of the level (crates, doors, enemies...)
 <output>/jak3/<level>/textures/*.png                    the textures of the level (--textures)
@@ -127,4 +130,5 @@ first used (`Shader.*`).
 `data/jak3/` (and `data/jak2/` for Jak II) holds the tables of jak-project the reading needs: type
 definitions (`all-types.gc`), the files of the disc and its levels (`inputs.json`), the textures some
 levels miss (`missing_textures.json`), and the level names of each DGO (`levels.json`, from
-`level-info.gc`).
+`level-info.gc`); and the texture pages of the particles the editor draws (`sprite-pages.json`,
+written by the editor's `tools/gen_particles.py`).

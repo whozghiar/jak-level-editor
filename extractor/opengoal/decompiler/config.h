@@ -202,6 +202,10 @@ struct Config {
   // level.json), the shared models to <rip_output_root>/common/models/
   std::string rip_output_root;
   bool rip_textures_png = false;
+  // the texture pages of the particles, by name or by id: their textures go to
+  // <rip_output_root>/common/sprites/<page>/<texture>.png (sprite-pages.json of the game's tables)
+  std::vector<std::string> rip_sprite_pages;
+  std::vector<int> rip_sprite_page_ids;
   std::function<void(const std::string& level)> on_level_done;  // progress, any thread
   // the folder of a level (its name when not set): two DGOs can hold the same level
   std::function<std::string(const std::string& dgo_name, const std::string& level)> rip_level_folder;

@@ -6,6 +6,11 @@
 
 #include "core/log.h"
 #include "glad/glad.h"
+#include "json.hpp"
+#include "stb_image.h"
+
+#include <filesystem>
+#include <fstream>
 
 namespace ogle {
 
@@ -118,6 +123,34 @@ void main() {
 }
 )";
 
+// the particles: textured sprites, their color the game's (1 is the texture as it is: the PS2's
+// 128), the alpha of their texture the PS2's (128 is opaque)
+const char* kSpriteVs = R"(#version 330 core
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec2 a_uv;
+layout(location = 2) in vec4 a_col;
+uniform mat4 u_viewproj;
+out vec2 v_uv;
+out vec4 v_col;
+void main() {
+  v_uv = a_uv;
+  v_col = a_col;
+  gl_Position = u_viewproj * vec4(a_pos, 1.0);
+}
+)";
+
+const char* kSpriteFs = R"(#version 330 core
+in vec2 v_uv;
+in vec4 v_col;
+uniform sampler2D u_tex;
+out vec4 o_color;
+void main() {
+  vec4 t = texture(u_tex, v_uv);
+  o_color = vec4(t.rgb * v_col.rgb, min(1.0, t.a * 2.0) * v_col.a);
+  if (o_color.a < 0.004) discard;
+}
+)";
+
 const char* kSolidVs = R"(#version 330 core
 layout(location = 0) in vec3 a_pos;
 uniform mat4 u_mvp;
@@ -195,7 +228,8 @@ bool Renderer::init(std::string* error) {
   m_mesh_prog = link(kMeshVs, kMeshFs, error);
   m_flat_prog = link(kFlatVs, kFlatFs, error);
   m_solid_prog = link(kSolidVs, kSolidFs, error);
-  if (!m_mesh_prog || !m_flat_prog || !m_solid_prog) return false;
+  m_sprite_prog = link(kSpriteVs, kSpriteFs, error);
+  if (!m_mesh_prog || !m_flat_prog || !m_solid_prog || !m_sprite_prog) return false;
   // uniform locations, looked up once (a lookup is a string search in the driver)
   m_u.flat_alpha = loc(m_flat_prog, "u_alpha");
   m_u.flat_mvp = loc(m_flat_prog, "u_mvp");
@@ -260,11 +294,135 @@ void Renderer::shutdown() {
   glDeleteProgram(m_mesh_prog);
   glDeleteProgram(m_flat_prog);
   glDeleteProgram(m_solid_prog);
+  glDeleteProgram(m_sprite_prog);
+  for (auto& [name, id] : m_sprite_textures)
+    if (id) glDeleteTextures(1, &id);
+  m_sprite_textures.clear();
+  if (m_sprite_vao) glDeleteVertexArrays(1, &m_sprite_vao);
+  if (m_sprite_vbo) glDeleteBuffers(1, &m_sprite_vbo);
+  m_sprite_vao = m_sprite_vbo = 0;
   glDeleteVertexArrays(1, &m_imm_vao);
   glDeleteBuffers(1, &m_imm_vbo);
   glDeleteBuffers(1, &m_inst_vbo);
   glDeleteTextures(1, &m_inst_tex);
   glDeleteTextures(1, &m_white);
+}
+
+void Renderer::set_sprite_folder(const std::string& folder) {
+  if (folder == m_sprite_folder) return;
+  m_sprite_folder = folder;
+  for (auto& [name, id] : m_sprite_textures)
+    if (id) glDeleteTextures(1, &id);
+  m_sprite_textures.clear();
+  m_sprite_index.clear();
+  std::ifstream f(std::filesystem::path(std::u8string((const char8_t*)(folder + "/index.json").c_str())));
+  const nlohmann::json index = f ? nlohmann::json::parse(f, nullptr, false) : nlohmann::json();
+  if (index.is_object())
+    for (const auto& [id, name] : index.items())
+      if (name.is_string()) m_sprite_index[id] = name.get<std::string>();
+}
+
+unsigned Renderer::sprite_texture(const std::string& name_in) {
+  auto it = m_sprite_textures.find(name_in);
+  if (it != m_sprite_textures.end()) return it->second ? it->second : m_white;
+  std::string name = name_in;
+  if (auto by_id = m_sprite_index.find(name); by_id != m_sprite_index.end()) name = by_id->second;
+  unsigned id = 0;
+  std::ifstream f(std::filesystem::path(std::u8string((const char8_t*)(m_sprite_folder + "/" + name + ".png").c_str())),
+                  std::ios::binary);
+  const std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  int w = 0, h = 0, comp = 0;
+  unsigned char* data = bytes.empty() ? nullptr : stbi_load_from_memory(bytes.data(), (int)bytes.size(), &w, &h, &comp, 4);
+  if (data) {
+    glGenTextures(1, &id);
+    glBindTexture(GL_TEXTURE_2D, id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    stbi_image_free(data);
+  }
+  m_sprite_textures[name_in] = id;
+  return id ? id : m_white;
+}
+
+void Renderer::draw_particles(const std::vector<ParticleSprite>& sprites, const std::vector<std::string>& textures) {
+  if (sprites.empty()) return;
+  struct V {
+    float pos[3];
+    float uv[2];
+    float col[4];
+  };
+  // the camera's right and up (rows of the view's rotation): the sprites face it
+  const Vec3 right{m_view.at(0, 0), m_view.at(0, 1), m_view.at(0, 2)};
+  const Vec3 up{m_view.at(1, 0), m_view.at(1, 1), m_view.at(1, 2)};
+  // by blend, then texture: one draw each
+  std::vector<size_t> order(sprites.size());
+  for (size_t i = 0; i < order.size(); i++) order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+    if (sprites[a].additive != sprites[b].additive) return !sprites[a].additive;
+    return sprites[a].texture < sprites[b].texture;
+  });
+  std::vector<V> verts;
+  verts.reserve(sprites.size() * 6);
+  struct Run {
+    size_t first, count;
+    int texture;
+    bool additive;
+  };
+  std::vector<Run> runs;
+  for (size_t i : order) {
+    const ParticleSprite& s = sprites[i];
+    const float c = std::cos(s.rot), sn = std::sin(s.rot);
+    const Vec3 ax = (right * c + up * sn) * s.sx, ay = (up * c - right * sn) * s.sy;
+    const float x0 = s.from_left ? 0.f : -0.5f, x1 = x0 + 1.f;
+    const Vec3 corners[4] = {s.pos + ax * x0 - ay * 0.5f, s.pos + ax * x1 - ay * 0.5f, s.pos + ax * x1 + ay * 0.5f,
+                             s.pos + ax * x0 + ay * 0.5f};
+    const float uv[4][2] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+    if (runs.empty() || runs.back().texture != s.texture || runs.back().additive != s.additive)
+      runs.push_back({verts.size(), 0, s.texture, s.additive});
+    for (int k : {0, 1, 2, 0, 2, 3})
+      verts.push_back({{corners[k].x, corners[k].y, corners[k].z}, {uv[k][0], uv[k][1]}, {s.color.x, s.color.y, s.color.z, s.color.w}});
+    runs.back().count += 6;
+  }
+  if (!m_sprite_vao) {
+    glGenVertexArrays(1, &m_sprite_vao);
+    glGenBuffers(1, &m_sprite_vbo);
+    glBindVertexArray(m_sprite_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_sprite_vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(V), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(V), (void*)12);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(V), (void*)20);
+  }
+  glBindVertexArray(m_sprite_vao);
+  glBindBuffer(GL_ARRAY_BUFFER, m_sprite_vbo);
+  glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(V), verts.data(), GL_STREAM_DRAW);
+  glUseProgram(m_sprite_prog);
+  glUniformMatrix4fv(loc(m_sprite_prog, "u_viewproj"), 1, GL_FALSE, m_draw_vp.m);
+  glUniform1i(loc(m_sprite_prog, "u_tex"), 0);
+  glActiveTexture(GL_TEXTURE0);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(depth_func(GL_LEQUAL));
+  glDepthMask(GL_FALSE);
+  glDisable(GL_CULL_FACE);
+  glEnable(GL_BLEND);
+  for (const auto& r : runs) {
+    glBlendFunc(GL_SRC_ALPHA, r.additive ? GL_ONE : GL_ONE_MINUS_SRC_ALPHA);
+    glBindTexture(GL_TEXTURE_2D, r.texture >= 0 && r.texture < (int)textures.size() ? sprite_texture(textures[r.texture]) : m_white);
+    glDrawArrays(GL_TRIANGLES, (GLint)r.first, (GLsizei)r.count);
+    stats.draws++;
+  }
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glDisable(GL_BLEND);
+  glDepthMask(GL_TRUE);
+  glBindVertexArray(0);
+  m_bound_vao = 0;
+  m_material_valid = false;
 }
 
 unsigned Renderer::gl_texture(const Scene& scene, int ti) { return gl_texture(scene.textures, ti); }

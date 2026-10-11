@@ -389,6 +389,10 @@ void App::set_library(const std::string& root) {
   }
   library_index.start(library, Prefs::dir() + "index/jak3", !Prefs::read_only);
   m_index_applied = false;
+  // the textures of the particles (ogle-extract writes them with the common models)
+  renderer.set_sprite_folder(library_root.empty() ? std::string() : library_root + "/jak3/common/sprites");
+  thumbs.set_sprite_folder(library_root.empty() ? std::string() : library_root + "/jak3/common/sprites");
+  particles.clear();
   palette.clear();
   palette_textures.clear();
   // Jak II's structures, extracted to import them (<library>/jak2): the levels the game has, none of
@@ -1149,6 +1153,37 @@ size_t App::restore_level_effects(size_t* left_out) {
     story_document_changed();
   }
   return added;
+}
+
+void App::update_effects(float dt) {
+  particles.begin_frame();
+  if (show_effects && document_open() && !particle_data.empty()) {
+    const SceneCache& cache = scene.cache();
+    // the actors naming a particle group (part-spawner and its kind: their art-name), found again
+    // when the document changes
+    if (cache.version != m_effect_cache) {
+      m_effect_cache = cache.version;
+      m_effect_nodes.clear();
+      for (size_t i = 0; i < cache.count && i < scene.nodes.size(); i++) {
+        const Node& n = scene.nodes[i];
+        if (n.kind != NodeKind::Actor) continue;
+        auto lump = n.extras.find("lump");
+        if (lump == n.extras.end() || !lump->is_object()) continue;
+        auto art = lump->find("art-name");
+        if (art == lump->end() || !art->is_string()) continue;
+        if (const SpGroup* g = particle_data.group(art->get<std::string>())) m_effect_nodes.push_back({(uint32_t)i, g});
+      }
+    }
+    for (const auto& [i, g] : m_effect_nodes)
+      if (i < cache.visible.size() && cache.visible[i]) particles.emit(scene.nodes[i].id, g, cache.worlds[i]);
+  }
+  particles.update(particle_data, dt, camera.pos, game_view.mood.hour);
+}
+
+void App::draw_effects() {
+  if (!show_effects) return;
+  particles.sprites(m_sprites);
+  renderer.draw_particles(m_sprites, particle_data.textures());
 }
 
 size_t App::restore_level_lighting() {

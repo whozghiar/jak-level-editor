@@ -23,7 +23,7 @@ game. Every picture was made by the editor itself (its `--screenshot` mode, see
 16. [Save, and find help](#15-save-and-find-help)
 17. [Build with shapes and the materials of Jak 3](#16-build-with-shapes-and-the-materials-of-jak-3)
 18. [Replace a level of the game](#17-replace-a-level-of-the-game)
-19. [See it as the game draws it](#18-see-it-as-the-game-draws-it)
+19. [See it as the game draws it](#18-see-it-as-the-game-draws-it), with its effects
 20. [Making these screenshots again](#making-these-screenshots-again)
 
 ## The approach
@@ -387,6 +387,12 @@ the moonlit night, and the level's lamps light up after dusk. The editor's tools
 game's depth (the selection's outline goes behind the pipe), and an edit shows at once: only the
 part of the level it touched is made again.
 
+![The steam of ctyindb's vents in the game view at noon, with the labels of their part-spawners](23-effects.png)
+
+The effects of the level run in both views (**View > Effects**): the steam of the vents, the sparks,
+the lights and neon signs, made as the game makes them from its own definitions and textures. The
+catalog shows each effect by its particles, and plays it in its tooltip.
+
 ## Making these screenshots again
 
 The editor makes these pictures itself, in a hidden window. From the repository root, after
@@ -406,6 +412,8 @@ $E --screenshot ctyindb docs/captures/08-decor-search.png decor-all --lang en
 $E --screenshot ctyport docs/captures/12-help.png guide --lang en
 $E --screenshot ctyindb docs/captures/20-build.png build --lang en
 $E --screenshot ctyindb docs/captures/22-game-view.png select --lang en --game 12
+$E --screenshot ctyindb docs/captures/23-effects.png actors --lang en --game 12 \
+   --camera 1131.75,37.85,589.0,225,-14
 
 # the demo level, built through the remote control, and the assistant's view of it
 python tools/build_demo_level.py --view docs/captures/11-assistant-view.png
@@ -456,6 +464,8 @@ The setups (the word after the file name):
 | `extract` | the extraction window, extracting the disc given to a temporary folder deleted afterwards |
 | `guide`, `tools`, `help` | the level given, the guide: the guided tour at its fifth step, every tool, or the keys |
 | `build` | the level given, the Build panel: the shapes and the materials of Jak 3 |
+| `effects` | the level given, the particle effects of the Catalog panel (`--select`: searched) |
+| `actors` | the level given loaded with its actors: its effects running |
 
 The options: `--size WxH` (1600x900 by default), `--camera x,y,z,yaw,pitch` (position in meters, angles in degrees), `--story off|<step>|<node>` (the point of the story shown),
 `--select a,b,...` (the elements `select`, `scale` and `prefab` use, by name), `--add a,b,...`

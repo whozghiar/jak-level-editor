@@ -365,6 +365,11 @@ int main(int argc, char** argv) {
     int tpage = entry.at(1).get<int>(), idx = entry.at(2).get<int>();
     config.hacks.missing_textures_by_level[entry.at(0).get<std::string>()].emplace_back(tpage, idx);
   }
+  if (fs::exists(tables / "sprite-pages.json")) {
+    const json sprites = read_json(tables / "sprite-pages.json");
+    config.rip_sprite_pages = sprites.value("pages", json::array()).get<std::vector<std::string>>();
+    config.rip_sprite_page_ids = sprites.value("page_ids", json::array()).get<std::vector<int>>();
+  }
   config.levels_to_extract = levels;
   config.levels_extract = true;
   config.rip_levels = true;

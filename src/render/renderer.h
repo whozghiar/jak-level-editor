@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "render/camera.h"
+#include "scene/particles.h"
 #include "scene/scene.h"
 
 namespace ogle {
@@ -78,6 +79,13 @@ class Renderer {
               uint32_t color, int segments = 48);
   void flush(bool depth_test, bool depth_offset = false);
 
+  // The particles of the effects (scene/particles.h): sprites facing the camera, drawn with the
+  // game's textures of them (`textures`: ParticleData::textures(), files of `set_sprite_folder`:
+  // <library>/common/sprites/<page>/<texture>.png, index.json for the textures named by number),
+  // after the scene, without writing the depth
+  void set_sprite_folder(const std::string& folder);
+  void draw_particles(const std::vector<ParticleSprite>& sprites, const std::vector<std::string>& textures);
+
   // What is drawn next goes over the game view (game_view/game_view.h): with the game camera's
   // matrix (world -> clip space) and its depth (reversed: 1 near, 0 far). nullptr: the editor's.
   void set_game_depth(const Mat4* clip);
@@ -139,7 +147,12 @@ class Renderer {
   unsigned depth_func(unsigned func) const;
   void polygon_offset(float factor, float units) const;
 
-  unsigned m_mesh_prog = 0, m_flat_prog = 0, m_solid_prog = 0;
+  unsigned m_mesh_prog = 0, m_flat_prog = 0, m_solid_prog = 0, m_sprite_prog = 0;
+  unsigned m_sprite_vao = 0, m_sprite_vbo = 0;
+  std::string m_sprite_folder;
+  std::unordered_map<std::string, unsigned> m_sprite_textures;  // by name, 0: missing (white)
+  std::unordered_map<std::string, std::string> m_sprite_index;  // "<page>:<index>" -> "<page>/<name>"
+  unsigned sprite_texture(const std::string& name);
   struct {
     int flat_alpha = -1;
     int flat_mvp = -1;

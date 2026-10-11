@@ -268,6 +268,17 @@ level_tools::BspHeader extract_bsp_from_level(const ObjectFileDB& db,
  * Even though GAME.CGO isn't technically a level, the decompiler/loader treat it like one,
  * but the bsp stuff is just empty. It will contain only textures/art groups.
  */
+namespace {
+std::string file_safe(std::string s) {
+  for (auto& c : s) {
+    if (!(isalnum((unsigned char)c) || c == '-' || c == '_' || c == '.')) {
+      c = '_';
+    }
+  }
+  return s;
+}
+}  // namespace
+
 void extract_common(const ObjectFileDB& db,
                     const TextureDB& tex_db,
                     const std::string& dgo_name,
@@ -296,21 +307,35 @@ void extract_common(const ObjectFileDB& db,
   const fs::path out = fs::path(config.rip_output_root) / "common" / "models";
   file_util::create_dir_if_needed(out);
   save_level_foreground_as_gltf(tfrag_level, art_group_data, out, tex_db.animated_tex_output_to_anim_slot);
+
+  // the textures of the particles: common/sprites/<page>/<texture>.png, their alpha the PS2's
+  // (128 is opaque), and index.json: "<page id>:<texture index>" -> "<page>/<texture>"
+  if (!config.rip_sprite_pages.empty() || !config.rip_sprite_page_ids.empty()) {
+    const fs::path sprites = fs::path(config.rip_output_root) / "common" / "sprites";
+    const std::set<std::string> pages(config.rip_sprite_pages.begin(), config.rip_sprite_pages.end());
+    const std::set<int> page_ids(config.rip_sprite_page_ids.begin(), config.rip_sprite_page_ids.end());
+    nlohmann::json index = nlohmann::json::object();
+    for (const auto& [id, tex] : tex_db.textures) {
+      auto page_name = tex_db.tpage_names.find(tex.page);
+      if (page_name == tex_db.tpage_names.end() || tex.w == 0 || tex.h == 0 ||
+          tex.rgba_bytes.size() < (size_t)tex.w * tex.h ||
+          (!pages.count(page_name->second) && !page_ids.count((int)tex.page))) {
+        continue;
+      }
+      const fs::path file = sprites / file_safe(page_name->second) / (file_safe(tex.name) + ".png");
+      file_util::create_dir_if_needed_for_file(file);
+      if (stbi_write_png(file.string().c_str(), tex.w, tex.h, 4, tex.rgba_bytes.data(), tex.w * 4)) {
+        index[fmt::format("{}:{}", tex.page, id & 0xffff)] =
+            file_safe(page_name->second) + "/" + file_safe(tex.name);
+      }
+    }
+    file_util::write_text_file(sprites / "index.json", index.dump(1));
+  }
   if (config.on_level_done) {
     config.on_level_done("common");
   }
 }
 
-namespace {
-std::string file_safe(std::string s) {
-  for (auto& c : s) {
-    if (!(isalnum((unsigned char)c) || c == '-' || c == '_' || c == '.')) {
-      c = '_';
-    }
-  }
-  return s;
-}
-}  // namespace
 
 void extract_from_level(const ObjectFileDB& db,
                         const TextureDB& tex_db,
