@@ -33,8 +33,8 @@ build/bin/open-goal-level-editor --selftest   # ends with "OK (0 failures)"
 
 It needs no game data (it writes a small library of its own) and checks, among others: the scene,
 glTF round trips, prefabs and groups, the export for the game, the translations (every key of
-`lang/en.json` in every language, the same `%` arguments), the game view, the closure of buildings,
-the holes finder, the weathers, the terrain brush.
+`lang/en.json` in every language, the same `%` arguments), the game view, the holes finder, the
+weathers, the terrain brush.
 
 Every new piece of logic leaves one check there (`src/app/selftest.cpp`, a `check(condition,
 "what it proves")` in a block of its own, before the cleanup at the end of `run_selftest`).

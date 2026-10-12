@@ -406,24 +406,6 @@ json tools() {
       tool("list_groups",
            "The groups of the document: the prefabs placed (prefab true) and the groups named, with their elements "
            "and their box."),
-      tool("close_building",
-           "Closes a building open at the back. Most buildings of the game are facades, made to be seen from the "
-           "street only: from behind or from the side the player sees the void or the inside of their walls. This "
-           "adds one element filling it: its footprint and height read from the building, filled inside and behind "
-           "it as seen from seen_from (its front: the triangles of the game do not tell which side is the front), as "
-           "deep as a building of its width, walls where nothing closed it (with pilasters and a cornice), a top "
-           "lower terrace by terrace going back, in the building's own textures, lit like the level. The building's "
-           "surfaces stay in front. The new element joins the building's group. Use it on every building the player "
-           "can walk around (rule 3 of the guide). Undoable.",
-           {{"ids", ids("the building's elements (a prefab placed: list_groups' ids)")},
-            {"seen_from", vec3("[x, y, z]: a point of the street the player sees its front from (the camera's "
-                               "position by default): what is visible from there stays open, what is hidden behind "
-                               "and inside it is filled")},
-            {"depth", num("meters filled behind it (0 by default: from its width, 4 to 24)")},
-            {"cell", num("meters of its grid (0 by default: from its size)")},
-            {"relief", boolean("setbacks, pilasters and a cornice (true by default)")},
-            {"seed", integer("a variant of its setbacks")}},
-           {"ids"}),
       tool("find_gaps",
            "Finds where a player walking the level would see the void (nothing drawn: a visual bug in the game): "
            "from points of the ground every few meters, at the height of Jak's eyes, rays around and downward; a "
@@ -484,15 +466,11 @@ json tools() {
       tool("create_prefab",
            "Saves elements as a prefab (in library/prefabricated/), to place again with place (kind 'prefab'). The "
            "elements smaller than min_size are left out (bolts, debris, stains: a prefab is a structure; rule 2 of "
-           "the guide); with close, the building is closed first (close_building) and its closure saved with it "
-           "(rule 3). Answers its name: the one given, spaces and signs made '_', with -2, -3... when a prefab has it "
-           "already, and the names of the elements left out.",
+           "the guide). Answers its name: the one given, spaces and signs made '_', with -2, -3... when a prefab has "
+           "it already, and the names of the elements left out.",
            {{"ids", ids("the elements")},
             {"name", str("the prefab's name")},
-            {"min_size", num("meters: elements smaller across are left out (0.5 by default, 0: keep all)")},
-            {"close", boolean("close the building at the back first (false by default)")},
-            {"seen_from", vec3("with close: where its front is seen from (the camera by default)")},
-            {"relief", boolean("with close: setbacks, pilasters and a cornice (true by default)")}},
+            {"min_size", num("meters: elements smaller across are left out (0.5 by default, 0: keep all)")}},
            {"ids", "name"}),
       tool("save_project",
            "Saves the document as a project: <library>/projects/<name>/<name>.glb, and its nav meshes for the game "
@@ -521,9 +499,9 @@ const char* kInstructions =
     "2. Prefabs hold structures, not crumbs: create_prefab leaves out elements under 0.5 m (min_size); never "
     "save loose bolts, debris, stains or tiny props in a prefab. "
     "3. Facades are not buildings: most buildings of the game are only a front, open behind. Place a facade so "
-    "that only its front can be seen (against a wall, the edge of the level, other buildings), or close it with "
-    "close_building (create_prefab close true) when the player can walk around it; look at it from the back and "
-    "the sides with set_camera and capture_view. A closure follows the building's shape: keep its relief. "
+    "that only its front can be seen (against a wall, the edge of the level, other buildings, back to back with "
+    "another facade); never in the middle of a place the player can walk around. Look at it from the back and the "
+    "sides with set_camera and capture_view: what the player can reach must never show its back. "
     "4. Look before you report: capture_view from the player's height (1.6 m above the ground) around what you "
     "built.";
 

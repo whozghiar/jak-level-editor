@@ -38,7 +38,6 @@
 #include "render/offscreen.h"
 #include "scene/assemblies.h"
 #include "scene/bvh.h"
-#include "scene/closure.h"
 #include "scene/gaps.h"
 #include "game_view/game_mood.h"
 #include "scene/particles.h"
@@ -2672,70 +2671,7 @@ int run_selftest() {
   }
 
   {
-    // building without visual bugs: a facade alone (one wall seen from the street, -z) closed behind
-    // it, as deep as a building of its width, no higher than it; a closed house has nothing to add
-    Scene s;
-    auto put = [&](const std::string& name, Vec3 at, Vec3 size) {  // a box of that size, its base at `at`
-      Node n{};
-      n.name = name;
-      n.kind = NodeKind::Render;
-      n.mesh = make_box(name, -1);
-      n.local.t = at;
-      n.local.s = size * 0.5f;
-      return s.add(n);
-    };
-    Node facade{};
-    facade.name = "facade";
-    facade.kind = NodeKind::Render;
-    facade.mesh = std::make_shared<Mesh>();
-    Primitive fp;
-    fp.pos = {{-5, 0, 0}, {5, 0, 0}, {5, 8, 0}, {-5, 8, 0}};
-    fp.idx = {0, 2, 1, 0, 3, 2};  // facing -z
-    fp.compute_normals();
-    facade.mesh->prims.push_back(fp);
-    const uint32_t front = s.add(facade);
-    ClosureOptions street;  // seen from the street, in front of it
-    street.has_view = true;
-    street.seen_from = {0, 1.6f, -20};
-    const ClosureResult closed = close_structure(s, {front}, street);
-    AABB cb;
-    if (closed.mesh)
-      for (const auto& p : closed.mesh->prims)
-        for (const auto& v : p.pos) cb.add(v + closed.origin);
-    std::vector<uint32_t> walls = {put("front", {0, 0, 0}, {10, 6, 1}), put("back", {0, 0, 8}, {10, 6, 1}),
-                                   put("left", {-5, 0, 4}, {1, 6, 9}), put("right", {5, 0, 4}, {1, 6, 9}),
-                                   put("roof", {0, 6, 4}, {11, 0.5f, 10})};
-    const ClosureResult house = close_structure(s, walls, ClosureOptions{});
-    // a U open to the street, its courtyard meant to be seen: filled behind its back wall, not inside
-    Scene u;
-    auto uput = [&](const std::string& name, Vec3 at, Vec3 size) {
-      Node n{};
-      n.name = name;
-      n.kind = NodeKind::Render;
-      n.mesh = make_box(name, -1);
-      n.local.t = at;
-      n.local.s = size * 0.5f;
-      return u.add(n);
-    };
-    const std::vector<uint32_t> ushape = {uput("u-back", {0, 0, 10}, {20, 8, 0.4f}), uput("u-left", {-10, 0, 5}, {0.4f, 8, 10}),
-                                          uput("u-right", {10, 0, 5}, {0.4f, 8, 10})};
-    const ClosureResult court = close_structure(u, ushape, street);
-    bool courtyard_open = court.mesh != nullptr, behind = false;
-    if (court.mesh)
-      for (const auto& p : court.mesh->prims)
-        for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
-          const Vec3 m = (p.pos[p.idx[t]] + p.pos[p.idx[t + 1]] + p.pos[p.idx[t + 2]]) * (1.f / 3.f) + court.origin;
-          if (std::fabs(m.x) < 8.f && m.z > 1.f && m.z < 9.f && m.y > 0.5f) courtyard_open = false;
-          behind |= m.z > 12.f;
-        }
-    std::printf("    closure: facade %d back %.2f,%.2f added %zu box %.1f..%.1f x %.1f..%.1f z, top %.2f; house: %s\n",
-                closed.facade, closed.back.x, closed.back.z, closed.added, cb.lo.x, cb.hi.x, cb.lo.z, cb.hi.z, cb.hi.y,
-                house.mesh ? strf("%zu added", house.added).c_str() : house.error.c_str());
-    check(closed.mesh && closed.facade && closed.back.z > 0.9f && closed.added > 0 && cb.hi.z > 5.f && cb.lo.z > -0.5f &&
-              cb.hi.y <= 8.01f && cb.lo.y < 0.f && !house.mesh && !house.error.empty() && courtyard_open && behind,
-          "closure: a facade seen from the street filled behind it (as deep as a building of its width, no higher, "
-          "sunk in the ground), a closed house left as it is, a courtyard facing the street left open");
-
+    // building without visual bugs: holes in the decor
     // holes: two slabs of a floor 1 m apart, walls all around: the gap between them is found and
     // where it is; the floor whole: none
     Scene g;

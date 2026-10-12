@@ -304,37 +304,6 @@ def building(args, e):
              {'key': 'Backspace'}, wait(3), {'key': 'Escape'}, wait(3)])
 
 
-FACADE = 'ind-facade-60'
-
-
-def closing(args, e):
-    new_street(e)
-    g = place_prefabs(e, [FACADE], [0, 0.5, 0])[0]
-    box = e.call('list_groups')['groups'][-1]['box']
-    c = [(box[0][k] + box[1][k]) / 2 for k in range(3)]
-    d = max(box[1][k] - box[0][k] for k in range(3)) * 1.1
-    e.call('select', {'ids': []})
-    # its front is the side of its alcove (+x): the street; from behind and from the side, what the
-    # player should never see
-    views = {'front': [c[0] + d, c[1] + d * 0.2, c[2] + d * 0.15], 'back': [c[0] - d, c[1] + d * 0.35, c[2] + d * 0.5],
-             'side': [c[0] + d * 0.2, c[1] + d * 0.3, c[2] - d]}
-    for name, at in views.items():
-        e.call('set_camera', {'position': at, 'look_at': c})
-        e.call('capture_view', {'width': 960, 'height': 560}, image=out('closing-buildings', 'before-%s.png' % name))
-    # closed as seen from the street in front of it
-    r = e.call('close_building', {'ids': g, 'seen_from': views['front']})
-    print('closure:', {k: r[k] for k in ('facade', 'cells', 'cells_added', 'cell', 'yaw_deg', 'materials')})
-    for name, at in views.items():
-        e.call('set_camera', {'position': at, 'look_at': c})
-        e.call('capture_view', {'width': 960, 'height': 560}, image=out('closing-buildings', 'after-%s.png' % name))
-    # the menu
-    e.call('undo')
-    e.call('select', {'ids': g})
-    e.call('set_camera', {'position': views['front'], 'look_at': c})
-    e.ui(click(*MENU_EDIT, 6) + [{'move': [160, 330]}, wait(10)], shot=out('closing-buildings', 'menu.png'))
-    e.ui([{'key': 'Escape'}, wait(3)])
-
-
 def holes(args, e):
     # a yard whose floor has a slit and whose wall stops short of the corner
     e.call('new_level', {'discard_changes': True})
@@ -407,13 +376,11 @@ def exporting(args, e):
 
 
 def assistant(args, e):
-    # what an assistant builds and sees: a street of Jak II's Main Town on paving of the slums, the
-    # buildings closed at the back, looked at from the player's height
+    # what an assistant builds and sees: a street of Jak II's Main Town on paving of the slums,
+    # looked at from the player's height
     new_street(e)
     names = ['main-town-building-a', 'main-town-building-c', 'main-town-building-d']
-    groups = place_prefabs(e, names, [-45, 0.5, -20], step=42)
-    for g in groups:
-        e.call('close_building', {'ids': g, 'seen_from': [0, 1.6, 40]})
+    place_prefabs(e, names, [-45, 0.5, -20], step=42)
     place_prefabs(e, ['small-fountain'], [0, 0.5, 18])
     place_prefabs(e, ['haven-tree', 'haven-tree'], [-25, 0.5, 30], step=50)
     e.call('select', {'ids': []})
@@ -421,6 +388,16 @@ def assistant(args, e):
     e.call('capture_view', {'width': 960, 'height': 560, 'game_hour': 16}, image=out('mcp', 'assistant-view.png'))
     e.call('set_camera', {'position': [60, 70, 110], 'look_at': [0, 5, -10]})
     e.call('capture_view', {'width': 960, 'height': 560, 'game_hour': 16}, image=out('mcp', 'street-above.png'))
+    # a facade of the game: made to be seen from the street (its alcove, +x), open behind
+    new_street(e)
+    place_prefabs(e, ['ind-facade-60'], [0, 0.5, 0])
+    box = e.call('list_groups')['groups'][-1]['box']
+    c = [(box[0][k] + box[1][k]) / 2 for k in range(3)]
+    d = max(box[1][k] - box[0][k] for k in range(3)) * 1.1
+    e.call('select', {'ids': []})
+    for name, at in (('front', [c[0] + d, c[1] + d * 0.2, c[2] + d * 0.15]), ('back', [c[0] - d, c[1] + d * 0.35, c[2] + d * 0.5])):
+        e.call('set_camera', {'position': at, 'look_at': c})
+        e.call('capture_view', {'width': 720, 'height': 450, 'game_hour': 11}, image=out('mcp', 'facade-%s.png' % name))
 
 def main():
     ap = argparse.ArgumentParser()
@@ -438,7 +415,7 @@ def main():
     e = None
     try:
         for name, f in (('selecting', selecting), ('groups', groups_), ('catalog', catalog), ('prefabs', prefabs),
-                        ('building', building), ('closing-buildings', closing), ('holes', holes),
+                        ('building', building), ('holes', holes),
                         ('game-rendering', game_rendering), ('behaviors', behaviors), ('export', exporting),
                         ('mcp', assistant)):
             if want(name):

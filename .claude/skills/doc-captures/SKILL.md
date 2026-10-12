@@ -7,7 +7,7 @@ description: Make the screenshots of the documentation again (README.md, docs/mc
 
 The editor takes its own screenshots, in hidden windows (1600 x 900, English interface). They go
 in `docs/captures/<feature>/<name>.png`, one folder per feature of the README (getting-started,
-levels, selecting, groups, catalog, prefabs, building, closing-buildings, holes, game-rendering,
+levels, selecting, groups, catalog, prefabs, building, holes, game-rendering,
 behaviors, nav-meshes, export, mcp).
 
 ```bash

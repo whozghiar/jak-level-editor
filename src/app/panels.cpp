@@ -164,9 +164,6 @@ void App::ui_menu() {
       select_group(group_of(primary));
     tooltip(tr("menu.edit.select_group.tip"));
     ImGui::Separator();
-    if (ImGui::MenuItem(tr("menu.edit.close_building"), nullptr, false, sel)) close_selection();
-    tooltip(tr("menu.edit.close_building.tip"));
-    ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.edit.group"), "Ctrl+Shift+G", false, sel)) {
       m_group_name = strf(tr("group.default_name"), document_groups().size() + 1);
       m_show_new_group = true;

@@ -1321,42 +1321,6 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     answer["image"] = png;
     reply(answer);
 
-  } else if (tool == "close_building") {
-    // a building open at the back (a facade) closed: a volume following its shape, in its materials
-    if (!document_open()) return reply(fail("no document"));
-    const auto ids = ids_arg(args);
-    if (ids.empty()) return reply(fail("ids: the elements of the building (a prefab placed: its group's)"));
-    ClosureOptions o;
-    o.cell = std::max(0.f, args.value("cell", 0.f));
-    o.depth = std::max(0.f, args.value("depth", 0.f));
-    o.relief = args.value("relief", true);
-    o.seed = args.value("seed", 1);
-    // where the player sees it from (its front): given, else the camera
-    o.has_view = true;
-    o.seen_from = camera.pos;
-    if (args.contains("seen_from") && !vec3_arg(args, "seen_from", &o.seen_from))
-      return reply(fail("seen_from: [x, y, z], a point of the street the building is seen from"));
-    ClosureResult r;
-    std::string err;
-    const uint32_t id = close_building(ids, o, &r, &err);
-    if (!id) return reply(fail(err));
-    const Node* n = scene.find(id);
-    reply(ok({{"id", id},
-              {"node", n ? remote_node_json(*n) : json()},
-              {"facade", r.facade},
-              {"back", r.facade ? vec3_json(r.back) : json()},
-              {"cells", r.cells},
-              {"cells_added", r.added},
-              {"cell", round3(r.cell)},
-              {"yaw_deg", round3(r.yaw * 57.29578f)},
-              {"materials", [&] {
-                 json m = json::array();
-                 for (int k : {r.wall_material, r.top_material})
-                   m.push_back(k >= 0 && k < (int)scene.materials.size() ? scene.materials[k].name : std::string("(the editor's grid)"));
-                 return m;
-               }()},
-              {"group", group_of(id)}}));
-
   } else if (tool == "find_gaps") {
     // where the player would see the void: from the ground every few meters, rays around and down
     if (!document_open()) return reply(fail("no document"));
@@ -1673,20 +1637,6 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     for (auto id : ids)
       if (scene.find(id)) selection.insert(id);
     if (selection.empty()) return reply(fail("no element with those ids"));
-    // closed first (a facade filled behind): the closure goes into the prefab
-    json closure;
-    if (args.value("close", false)) {
-      ClosureResult r;
-      std::string err;
-      ClosureOptions o;
-      o.relief = args.value("relief", true);
-      o.has_view = true;
-      o.seen_from = camera.pos;
-      if (args.contains("seen_from")) vec3_arg(args, "seen_from", &o.seen_from);
-      const uint32_t id = close_building(selection_roots(), o, &r, &err);
-      if (id) selection.insert(id);
-      closure = id ? json{{"id", id}, {"cells_added", r.added}, {"facade", r.facade}} : json{{"error", err}};
-    }
     // the small pieces left out (bolts, debris, stains): 0.5 m by default
     std::vector<std::string> left_out;
     const std::string path = create_prefab(name, std::max(0.f, args.value("min_size", 0.5f)), &left_out);
@@ -1695,7 +1645,6 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const std::string file = path.substr(path.find_last_of('/') + 1);
     reply(ok({{"name", file.substr(0, file.size() - 4)},
               {"left_out", left_out},
-              {"closure", closure},
               {"prefabs", [&] {
                  json l = json::array();
                  for (const auto& p : prefabs) l.push_back(p.name);

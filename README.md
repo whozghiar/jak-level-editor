@@ -1,7 +1,8 @@
 # OpenGOAL Level Editor
 
-A level editor for **Jak 3**, for the [OpenGOAL](https://github.com/open-goal/jak-project) port of
-the game. It reads the levels from **your own copy of the game**, shows them as the game draws them,
+A level editor for **Jak 3**, for [OpenGOAL](https://github.com/open-goal/jak-project): the project
+that rebuilds the PlayStation 2 game so that it runs natively on PC, from your own disc. The editor
+reads the levels from **your own copy of the game**, shows them as the game draws them,
 and lets you change them or build new ones: move a wall, add a bridge, put houses of Haven City in
 the desert, make a door open only once a crate is broken, then export the result as a level you can
 play in the game.
@@ -12,10 +13,11 @@ appears, with an example, and shows each tool in a picture.
 ![The editor: the levels on the left, the level in the middle as the game draws it, the inspector on the right](docs/captures/getting-started/window.png)
 
 - **Nothing of the game is in this repository.** Everything comes from your disc: you extract it once.
-- **It needs nothing else**: not jak-project, not the game, to build or to run. You only need
-  jak-project to *play* what you exported.
-- **An AI assistant can build for you** (Claude Code or any MCP client): see
-  [the guide for AI agents](docs/mcp-agent-guide.md).
+- **It needs nothing else**: not OpenGOAL, not the game, to build or to run. To *play* what you
+  exported you need **jak-project**, OpenGOAL's source code, built on your computer (see
+  [15](#15-playing-it-in-the-game-export)).
+- **An AI assistant can build for you** (Claude Code, or any program that speaks MCP, the protocol
+  that lets an AI assistant use the editor's tools): see [the guide for AI agents](docs/mcp-agent-guide.md).
 - The interface is in **English and French** (View > Language).
 
 ## Contents
@@ -28,35 +30,43 @@ appears, with an example, and shows each tool in a picture.
 6. [The catalog: everything you can place](#6-the-catalog-everything-you-can-place)
 7. [Prefabs](#7-prefabs)
 8. [Building your own pieces](#8-building-your-own-pieces)
-9. [Closing buildings](#9-closing-buildings)
-10. [Holes in the decor](#10-holes-in-the-decor)
-11. [Seeing it as the game does: sky, hour, weather](#11-seeing-it-as-the-game-does-sky-hour-weather)
-12. [Levels side by side, and the story](#12-levels-side-by-side-and-the-story)
-13. [What objects do](#13-what-objects-do)
-14. [Where creatures walk: nav meshes](#14-where-creatures-walk-nav-meshes)
-15. [Saving](#15-saving)
-16. [Playing it in the game: export](#16-playing-it-in-the-game-export)
-17. [Building with an AI assistant](#17-building-with-an-ai-assistant)
-18. [Keys and mouse](#18-keys-and-mouse)
-19. [Files and folders](#19-files-and-folders)
-20. [More](#20-more)
+9. [Holes in the decor](#9-holes-in-the-decor)
+10. [Seeing it as the game does: sky, hour, weather](#10-seeing-it-as-the-game-does-sky-hour-weather)
+11. [Levels side by side, and the story](#11-levels-side-by-side-and-the-story)
+12. [What objects do](#12-what-objects-do)
+13. [Where creatures walk: nav meshes](#13-where-creatures-walk-nav-meshes)
+14. [Saving](#14-saving)
+15. [Playing it in the game: export](#15-playing-it-in-the-game-export)
+16. [Building with an AI assistant](#16-building-with-an-ai-assistant)
+17. [Keys and mouse](#17-keys-and-mouse)
+18. [Files and folders](#18-files-and-folders)
+19. [More](#19-more)
 
 ## 1. The ideas in five minutes
 
 **A level** is a part of the game's world that the game loads as one piece: a district of Haven
 City (`ctyinda`, the industrial zone), the slums (`ctysluma`), Spargus (`wascitya`), a part of the
-desert... Jak 3 has about a hundred of them. They all live in **one world**: each level is at its
-place, so two levels side by side in the game also meet in the editor.
+desert... The disc holds 272 level files, among them the 105 places you can open (the others are
+cutscenes and additions that missions bring to a place). They all live in **one world**: each level
+is at its place, so two levels side by side in the game also meet in the editor. The name next to
+each level in the list (`CIA.DGO`) is the file of the disc it comes from: you can ignore it.
+
+The **document** is what the editor has open: one level, maybe other levels added next to it, or a
+new empty level of your own.
 
 A level is made of **elements**. There are two main kinds:
 
 | | What it is | Examples | What it does in the game |
 |---|---|---|---|
 | **Decor** | something drawn: the level's scenery | a wall, a roof, a pipe, a lamp post, the ground | nothing by itself: Jak walks on it, bumps into it |
-| **Objects** (the game calls them *actors*) | something with its own code | a door, a crate, an elevator, a steam vent, a jump pad | they move, open, break, throw Jak up |
+| **Objects** (the game and the inspector call them *actors*) | something with its own code | a door, a crate, an elevator, a steam vent, a jump pad | they move, open, break, throw Jak up |
 
 The creatures (enemies, characters, animals) are left out: the editor builds places, not
-missions.
+missions. (In the inspector, a piece of decor is labelled *Object* and an object of the game
+*Actor*.)
+
+**Collision** is the invisible shape Jak stands on and bumps into. It usually follows the decor:
+without it, Jak would fall through the floor or walk through walls.
 
 **The light** of a level is painted into its decor by the game's artists: every corner of every
 piece carries its colors for the sun from four directions, the ambient light and the lamps. The
@@ -68,14 +78,17 @@ house, a fountain, a market stall. The editor also makes **the game's prefabs**:
 towers and bridges taken from the game's levels.
 
 **A facade** is how most buildings of the game are made: only a front, the side the player sees,
-with nothing behind. In the game the player never gets behind. In a level of your own he might: the
-editor **closes** such buildings for you ([9](#9-closing-buildings)).
+with nothing behind. In the game the player never gets behind. In a level of your own he might: put
+facades where their back can never be seen (against a wall, at the edge of the level, back to back
+with another facade), and walk around them in the view to check.
 
 **The void** is what is behind everything: nothing. A gap between two pieces lets the player see
-it, a visual bug. The editor **finds those holes** ([10](#10-holes-in-the-decor)).
+it, a visual bug. The editor **finds those holes** ([9](#9-holes-in-the-decor)).
 
 **Exporting** writes your level in the files OpenGOAL's level builder reads: you copy them into
-jak-project, build, and play ([16](#16-playing-it-in-the-game-export)).
+jak-project, build, and play ([15](#15-playing-it-in-the-game-export)). In the game, the
+**continue points** are the places where it puts Jak when he arrives in a level or starts again
+after a fall.
 
 ## 2. Install
 
@@ -90,7 +103,17 @@ jak-project, build, and play ([16](#16-playing-it-in-the-game-export)).
 ### Build it
 
 You need CMake 3.20+, Ninja and a C++20 compiler (tested with Clang 19 on Windows); the first build
-downloads SDL3 (a few minutes).
+downloads SDL3 (a few minutes). There is no ready-made download yet.
+
+On **Windows**, step by step:
+
+1. Install the tools once, for example with [Scoop](https://scoop.sh) in a PowerShell window:
+   `scoop install git cmake ninja llvm python` (or with `winget`: `Kitware.CMake`, `Ninja-build.Ninja`,
+   `LLVM.LLVM`, `Git.Git`).
+2. Get this repository (`git clone ...`, or the ZIP of the repository's page) and open a terminal
+   in its folder.
+3. Type the four lines below. The last one starts the editor; next time, double-click
+   `build\bin\open-goal-level-editor.exe`.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -163,7 +186,7 @@ as such), the ocean where the level has one, and the levels the game always show
 
 | To | Do |
 |---|---|
-| Fly | hold the **right button** and use **W A S D** (Z Q S D on AZERTY), **Q / E** down and up |
+| Fly | hold the **right button**, then **W A S D** (Z Q S D on an AZERTY keyboard) to go forward, left, back, right, and **Q / E** (A / E on AZERTY) or **C / Space** down and up. These keys fly only while the right button is held: without it, W, E and R choose the move, rotate and scale tools |
 | Go faster / slower | **Shift** / **Ctrl** while flying; the **wheel** while flying sets the speed |
 | Move forward | the **wheel** |
 | Slide the view | hold the **middle button** |
@@ -201,7 +224,8 @@ the rest on it.
 - **Double-click** an element, or **hold the left button still on it** (a ring fills around the
   cursor): its **whole prefab or group** is selected. An element in no group gives its **assembly**:
   the whole structure it is part of (a house with its facades, roof and windows).
-- **Ctrl+G** selects the assembly, **Ctrl+L** the whole level.
+- **Ctrl+G** selects the assembly, **Ctrl+L** the whole level. Do not mix them up with
+  **Ctrl+Shift+G** (make a group, [5](#5-groups)) and **G** alone (the game rendering on or off).
 
 | A box being drawn: 156 elements, outlined | The button held on a prefab: in a moment, all of it |
 |---|---|
@@ -212,8 +236,10 @@ double-click it, and you have the whole house, ready to move.
 
 ### Move, turn, stretch
 
-The **gizmo** appears on the selection: arrows to move it along an axis, squares to move it on a
-plane, rings to turn it, squares at the end of the axes to stretch it.
+The **gizmo** is the handle that appears on the selection: **red** is the X axis, **green** the
+vertical (up), **blue** the Z axis. Drag an arrow to move along that axis, a small square between
+two arrows to slide on the ground (or another flat direction), a ring to turn around an axis; with
+Scale, the square at the end of an axis stretches along it.
 
 - **W** move, **E** rotate, **R** scale. While dragging, the value is written next to the cursor;
   **Shift** is ten times finer, **Ctrl** snaps.
@@ -231,8 +257,8 @@ plane, rings to turn it, squares at the end of the axes to stretch it.
 |---|---|
 | ![moving](docs/captures/selecting/moving.png) | ![scale](docs/captures/selecting/scale.png) |
 
-Example: a platform that Jak cannot quite reach: select it, **W**, drag its up arrow by 2 m, and
-the player needs a double jump.
+Example: a platform that Jak cannot quite reach: select it, **W**, drag its green arrow up by 2 m,
+and the player needs a double jump.
 
 ### Copy, delete, undo
 
@@ -269,15 +295,16 @@ place it (or drag it into the view). Hovering an entry shows what it is.
   hellcat), doors and airlocks, water, dark eco and lava.
 - **Interactive**: the objects that do something: crates, platforms and elevators, jump pads and
   board vents, buttons, breakable walls and fences, hazards. Their behavior is set in the
-  inspector ([13](#13-what-objects-do)), and its **Preview** shows them moving in place (a door
+  inspector ([12](#12-what-objects-do)), and its **Preview** shows them moving in place (a door
   opening, a fence breaking).
 - **Effects**: the game's **visual effects** in a category of their own, sorted by kind: **fire and
   flames**, **smoke, steam and dust**, **lights and glows**, **sparks and electricity**, **water**
   (drips, splashes, falls), and the others (explosions, trails). Each runs in the view as the game
   makes it.
-- **Models**: the other models of the game (parts of objects, debris, props), placed as decor.
-- **Decor**: the pieces of the levels' scenery (a pillar, an arch, a catwalk), searched by name
-  across every level, or by level.
+- **Models**: the other 3D models of the game, the ones that are not part of a level's scenery
+  (a broken piece of a robot, a barrel, a sign), placed as decor: they do nothing.
+- **Decor**: the pieces of the levels' scenery itself (a pillar, an arch, a catwalk of the
+  industrial zone), searched by name across every level, or by level.
 - **Materials**: every texture of the levels: select shapes or pieces, click a texture, they take
   it.
 
@@ -323,17 +350,17 @@ first time you show them.
    **Ctrl+G**: its whole assembly is selected.
 2. **Create a prefab** (toolbar, inspector or Edit menu) and name it.
 3. **Leave out the pieces smaller than 0.5 m** is checked: a prefab is a structure, and loose
-   bolts, debris, stains and tiny props would only clutter it. The window says how many will be left
-   out. The objects of the game (a door, a crate) are always kept.
+   bolts, debris, stains and tiny props would only clutter it. When some would be left out, the
+   window says how many. The objects of the game (a door, a crate) are always kept.
 
 It is saved in `library/prefabricated/` and appears under **My prefabs**.
 
-| A house of Spargus selected by its assembly (Ctrl+G) | Making it a prefab: the small pieces left out |
+| A tower of Spargus selected whole by its assembly (Ctrl+G) | Making it a prefab: the small pieces left out |
 |---|---|
 | ![assembly](docs/captures/prefabs/assembly.png) | ![create](docs/captures/prefabs/create.png) |
 
-A prefab of a building the player will walk around should be **closed** first
-([9](#9-closing-buildings)).
+A building of the game is often a facade: place its prefab where its back cannot be seen
+([the ideas](#1-the-ideas-in-five-minutes)).
 
 ## 8. Building your own pieces
 
@@ -365,10 +392,12 @@ desert's sand and rock, the slums' cobbles).
 
 ### The shape of one piece: topology
 
-**Topology (T)** shows the points and faces of one element: move points with the gizmo, **Extrude**
-faces (a step out of a floor), **Subdivide**, **Flip**, **Delete**.
+**Topology (T)** shows the shape of one element as the game stores it: its **points** (the corners
+of its triangles) and its **faces** (the triangles). Move points with the gizmo; pick faces and
+**Extrude** them (pull them out, with walls joining them to the rest: a step out of a floor),
+**Subdivide** (cut each in four, to shape it more finely), **Flip** (turn them over), **Delete**.
 
-![A floor's faces picked and pulled out 1 m with their walls](docs/captures/building/topology.png)
+![A floor whose faces were cut in four, then half of them picked and pulled up 1 m: a step](docs/captures/building/topology.png)
 
 ### See what an object does: the preview
 
@@ -381,7 +410,7 @@ movement (an elevator), or shows it **breaking** (a fence of the factory thrown 
 
 With Jak II extracted, choose **Jak II** at the top of the Catalog or the Levels panel: its models,
 its decor (Haven City as it was), its prefabs, or a whole level of Jak II opened as a level of Jak 3
-(its collision kept). What could go wrong is checked when it comes in (textures renamed
+(with its collision). What could go wrong is checked when it comes in (textures renamed
 `jak2-<name>`, light compared with the level's: **Match the lighting** in the inspector).
 
 ![The atoll of Jak II opened as a level of Jak 3](docs/captures/building/jak2-level.png)
@@ -392,41 +421,7 @@ What you place, paste or move **takes the light of the level around it**: each o
 borrows the light of the level's nearby surfaces facing the same way. A piece from a dark cave
 placed in a sunny street does not stay dark. **Light it like here** (inspector) does it again.
 
-## 9. Closing buildings
-
-**Why.** Most buildings of the game are **facades**: a front made to be seen from the street, with
-nothing or a few open panels behind. In the game the player never sees their back. In your level,
-if the player can walk around one, he sees the inside of its panels, pieces floating, or the void:
-ugly, and obviously unfinished.
-
-**What closing does.** Select the building (a prefab placed: double-click it), **look at its front
-the way the player will** (the camera in the street), then **Edit > Close the building (fill its
-back)**. The editor adds one element that **fills it**:
-
-- it reads the building's footprint and height on a grid aligned with its walls;
-- it fills what is **hidden behind and inside the building as seen from the camera**: what you see
-  from there (a shop's alcove, a courtyard facing the street) stays open;
-- it goes as deep behind a facade as a building of its width, as high as the building where it is,
-  **lower terrace by terrace going back**, with **pilasters and a cornice** on its new walls: it
-  follows the building's shape instead of being a plain box;
-- it uses the building's own textures and light, and joins its group (they move together).
-
-| | From the street | From behind | From the side |
-|---|---|---|---|
-| Before | ![front](docs/captures/closing-buildings/before-front.png) | ![back](docs/captures/closing-buildings/before-back.png) | ![side](docs/captures/closing-buildings/before-side.png) |
-| After | ![front](docs/captures/closing-buildings/after-front.png) | ![back](docs/captures/closing-buildings/after-back.png) | ![side](docs/captures/closing-buildings/after-side.png) |
-
-Example: the facade above (a prefab of the industrial zone) is a shop front with a sign on a
-column. From the street nothing changes; from behind, the open frame became a building of its
-height, with a setback halfway back.
-
-When **not** to close: a facade the player can never get behind (against the edge of the level,
-backed onto another building). Then just make sure, by walking around in the view, that its back
-never shows.
-
-![Edit > Close the building](docs/captures/closing-buildings/menu.png)
-
-## 10. Holes in the decor
+## 9. Holes in the decor
 
 **Why.** Behind the decor there is nothing. A floor that stops 30 cm short of a wall, two slabs not
 quite touching, a wall that misses the corner: through each gap the player sees the void, the
@@ -447,7 +442,7 @@ Click a line of the list: the camera goes where the player would see it from.
 **Fix them**: stretch a piece over the gap (scale), move it to overlap its neighbor by a few
 centimeters, or place a floor or a wall over it, then look again.
 
-## 11. Seeing it as the game does: sky, hour, weather
+## 10. Seeing it as the game does: sky, hour, weather
 
 **The game rendering** (View > Game rendering, **G**), on from the start, draws the level with the
 game's own renderer: its light at the hour and in the weather you choose, its fog, its sky. **G**
@@ -471,34 +466,36 @@ switches to the editor's own view, where every light is on (handy in dark corner
 |---|---|
 | ![noon](docs/captures/game-rendering/noon-clear.png) | ![dusk](docs/captures/game-rendering/dusk.png) |
 
-| Storm with rain | Night: stars and moon |
+| Storm with rain | Night: the stars, the lamps of the houses lit |
 |---|---|
 | ![storm](docs/captures/game-rendering/storm.png) | ![night](docs/captures/game-rendering/night.png) |
 
 The **effects** (steam, sparks, smoke, fire, lights) run in the view (View > Effects), and the
 **ocean** moves, its waves catching the sun.
 
-![The steam of the industrial zone's vents, with the labels of their effects](docs/captures/game-rendering/effects.png)
+![The effects of the industrial zone: the labels name the objects that make them (part-spawner is the game's name for an effect); their steam and sparks run around them](docs/captures/game-rendering/effects.png)
 
-## 12. Levels side by side, and the story
+## 11. Levels side by side, and the story
 
 **Several levels.** With a level open, choose another in Levels and **Add to the document**: it
 comes at its place in the world. To work on the junction between two levels, or to build a new
-level next to the game's. The inspector lists them (show, hide, frame, remove) and the levels
-**around it in the game** (click one to add it). **Select** next to a level selects it whole, to
-move it.
+level next to the game's. The inspector lists them (show, hide, frame, remove; **Junction** frames
+the place where two levels meet) and the levels **around it in the game** (click one to add it).
+**Select** next to a level selects it whole, to move it.
 
-| The industrial zone, the city walls and the palace together | A level selected whole |
+| The industrial zone with the next district and the city walls added | A level selected whole |
 |---|---|
 | ![several](docs/captures/levels/several-levels.png) | ![selected](docs/captures/levels/level-selected.png) |
 
 **The story.** Some levels change during the game: Haven City's Metal Head tower is blasted, the
-forest's statue falls. The bar under the view shows a level at a point of the story; **Story**
-unchecked shows every state at once.
+forest's statue falls. The bar under the view shows the level at a point of the story: drag its
+slider, or click its arrows to go to the previous or next change; the text next to it names the
+last step of the story done (the game's own name for it, such as `tower-destroy-resolution`: the
+tower's destruction). **Story** unchecked shows every state at once.
 
-![The Metal Head tower after its destruction](docs/captures/levels/story.png)
+![The city walls at their last state: the step of the story after the Metal Head tower's destruction](docs/captures/levels/story.png)
 
-## 13. What objects do
+## 12. What objects do
 
 Select an object: the inspector's **Behavior** says what it does, and you can change it.
 
@@ -523,23 +520,25 @@ a way to break it first.
 metal under Jak's feet, hurt or burn him, **bounce** him up, **launch** him along an arc.
 [`docs/behaviors.md`](docs/behaviors.md) explains what the game allows.
 
-## 14. Where creatures walk: nav meshes
+## 13. Where creatures walk: nav meshes
 
-The game's creatures walk on **nav meshes**: flat polygons over the ground. **Level > Nav meshes**
+The game's creatures walk on **nav meshes**: flat shapes laid over the ground that tell them where
+they can go. The editor leaves creatures out, so you only need them if you add creatures to your
+level later (in jak-project); you can skip this part otherwise. **Level > Nav meshes**
 makes them from the level's walkable surfaces, for a creature of the size you set, for the whole
 level or around the selection; they are drawn over the level, one color each, and saved with the
 project and the export.
 
 ![The nav meshes of the slums](docs/captures/nav-meshes/navmesh.png)
 
-## 15. Saving
+## 14. Saving
 
 **File > Save** (Ctrl+S) saves your work as a **project**, only when you ask, in its own folder:
 `library/projects/<name>/<name>.glb` (a standard 3D file Blender opens too) and its nav meshes.
 **File > Open project** (Ctrl+O) and **Recent projects** open it again. Nothing is saved behind
 your back.
 
-## 16. Playing it in the game: export
+## 15. Playing it in the game: export
 
 **Level > Export for the game...** writes the level as a **custom level of OpenGOAL**, in
 `library/export/<project>/`, laid out like jak-project, with a `README.md` that gives the exact lines
@@ -547,9 +546,17 @@ to add and how to build and go there.
 
 ![The export window and its report](docs/captures/export/export-window.png)
 
-- Choose its **name** (3 to 10 letters) and **nickname** (3 letters), where the player starts, the
-  collision (the game's own where its decor is still in place; made from the shape for what you
-  placed).
+Its window, field by field:
+
+- **Name**: your level's name in the game, 3 to 10 lower-case letters, digits or `-` (`my-ctyslum`).
+- **Nickname**: 3 letters, the name of its file (`mct`). **ISO name**: the same in capitals, 8 at
+  most. **First actor id**: the number its objects start from (leave it).
+- **In place of**: a level of the game it replaces (below), or none.
+- **With the actors** (its objects), and the **collision**: **The game's collision** (the default:
+  the game's own collision where its decor is still in place, a collision made from the shape of
+  what you placed or moved) or **Made from the decor** (everything from the shape: heavier).
+- **Start**: where the player starts (a continue point of the level by default).
+- **Folder**: where it is written.
 - The **behaviors** you set are written as the level's own code.
 - The **report** says what changed and where the collision might be too dense for the game.
 
@@ -561,26 +568,37 @@ blue ghost to compare), **Place it where the original is**, check where the game
 
 ![A level made the replacement of ctyindb: the inspector's section](docs/captures/export/replace.png)
 
-Then, in your jak-project checkout: copy the export's folders, add its lines, build (`(mi)` in the
-compiler) and play. The export's `README.md` gives each step.
+Then, to play it (the export's `README.md` gives the exact lines for your level):
 
-## 17. Building with an AI assistant
+1. Get **jak-project** (OpenGOAL's source code) and build it, as its own
+   [README](https://github.com/open-goal/jak-project#readme) explains, with your Jak 3 extracted in
+   it. You get `goalc` (the compiler of the game's language) and `gk` (the game).
+2. Copy the export's two folders, `custom_assets` and `goal_src`, into the jak-project folder (they
+   merge with the folders of the same names).
+3. Add the lines the export's `README.md` gives to `goal_src/jak3/game.gp` and
+   `goal_src/jak3/engine/level/level-info.gc` (for a replacement: one word to change instead).
+4. Start `goalc`, type `(mi)` and wait for *Successfully built all*; start `gk`; in `goalc`, type
+   `(lt)` then `(start 'play (get-continue-by-name *game-info* "my-ctyslum-start"))`: Jak appears in
+   your level.
+
+## 16. Building with an AI assistant
 
 An AI assistant can build in the editor for you, through its **MCP server**
-(`open-goal-level-editor --mcp`): you describe the level, it opens it, places the decor, closes the
-buildings, checks the holes, looks at the result and shows it to you, in your window, every change
-undoable.
+(`open-goal-level-editor --mcp`; MCP is the protocol that lets an assistant use a program's tools):
+you describe the level, it opens it, places the decor and the prefabs, checks the holes, looks at the
+result and shows it to you, in your window, every change undoable.
 
 - **Claude Code**: start it in this folder (it reads `.mcp.json`) and accept the server.
 - Then ask, for example: *"Open the slums, build a little square with a fountain and two trees in
   front of the tower, and show me a picture at dusk"*.
 
 **[The guide for AI agents](docs/mcp-agent-guide.md)** explains the tools and the rules an agent
-follows (no holes, no crumbs in prefabs, facades closed, look before reporting), with recipes.
+follows (no holes, no crumbs in prefabs, facades only seen from the front, look before reporting),
+with recipes.
 
-![What an assistant built and saw: a street of Jak II's Main Town, its buildings closed at the back](docs/captures/mcp/assistant-view.png)
+![What an assistant built and saw, at the height of the player's eyes: a street of Jak II's Main Town, a fountain, trees](docs/captures/mcp/assistant-view.png)
 
-## 18. Keys and mouse
+## 17. Keys and mouse
 
 | Key | Action |
 |---|---|
@@ -603,7 +621,7 @@ follows (no holes, no crumbs in prefabs, facades closed, look before reporting),
 | Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S | New level, open, save, save as |
 | F1 | The guide |
 
-## 19. Files and folders
+## 18. Files and folders
 
 ```text
 library/                 everything made from your game (git ignores it)
@@ -623,7 +641,7 @@ tools/                   scripts that regenerate data/ and the screenshots
 Only `library/prefabricated/.gitkeep` of `library/` is in git: prefabs, projects and exports hold
 the game's data and stay on your computer.
 
-## 20. More
+## 19. More
 
 - [Technical reference](docs/reference.md): the command line, the file formats, the game data, the
   details of the export and the known limitations.

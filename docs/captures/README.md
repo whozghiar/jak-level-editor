@@ -10,15 +10,14 @@ one folder per feature:
 | `selecting/` | a selection and its gizmo, what the cursor tells, a box being drawn, the button held on a prefab, a prefab dragged, the scale tool |
 | `groups/` | the Groups panel, a group being named |
 | `catalog/` | the objects, the interactive objects, the visual effects and their kinds, the models, the decor searched, the materials |
-| `prefabs/` | the game's prefabs, searched, a house selected by its assembly, a prefab being made (the small pieces left out) |
+| `prefabs/` | the game's prefabs, searched, a tower selected by its assembly, a prefab being made (the small pieces left out) |
 | `building/` | the shapes, a level's style, the terrain brush, the topology tool, the preview of an object, a level of Jak II |
-| `closing-buildings/` | a facade before and after it is closed, from the street, from behind and from the side; the Edit menu |
 | `holes/` | the holes of a yard found, in the editor and as an assistant sees them |
 | `game-rendering/` | the Game rendering window: noon, dusk, storm, night, haze; the effects |
 | `behaviors/` | an airlock that opens once a crate is broken |
 | `nav-meshes/` | the nav meshes of a level |
 | `export/` | the export window, a level made the replacement of one of the game's |
-| `mcp/` | what an assistant built and saw |
+| `mcp/` | what an assistant built and saw; a facade from the street and from behind |
 
 ## Making them again
 

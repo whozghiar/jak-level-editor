@@ -1,17 +1,15 @@
 // Tools to build levels without visual bugs (the rules of docs/mcp-agent-guide.md, the same for a
-// person): closing a building open at the back (scene/closure.h), leaving the small pieces out of
-// a prefab, finding the holes through which the player would see the void (scene/gaps.h).
+// person): leaving the small pieces out of a prefab, finding the holes through which the player
+// would see the void (scene/gaps.h).
 
 #include <imgui.h>
 
 #include <algorithm>
 #include <cmath>
-#include <unordered_set>
 
 #include "app/app.h"
 #include "core/i18n.h"
 #include "core/log.h"
-#include "scene/relight.h"
 
 namespace ogle {
 
@@ -39,67 +37,6 @@ std::vector<uint32_t> App::without_small(const std::vector<uint32_t>& roots, flo
     }
   }
   return kept;
-}
-
-uint32_t App::close_building(const std::vector<uint32_t>& ids, const ClosureOptions& options, ClosureResult* out,
-                             std::string* error) {
-  std::vector<uint32_t> roots;
-  for (auto id : ids)
-    if (scene.find(id)) roots.push_back(id);
-  if (roots.empty()) {
-    if (error) *error = "no element";
-    return 0;
-  }
-  ClosureResult r = close_structure(scene, roots, options);
-  if (out) *out = r;
-  if (!r.mesh) {
-    if (error) *error = r.error;
-    return 0;
-  }
-  NodeChange c(scene);
-  const int fallback = shape_default_material(scene);
-  for (auto& p : r.mesh->prims)
-    if (p.material < 0) p.material = fallback;
-  Node n;
-  const Node* first = scene.find(roots.front());
-  std::unordered_set<std::string> names;
-  for (const auto& node : scene.nodes) names.insert(node.name);
-  std::string name = (first ? first->name : std::string("building")) + "-closure";
-  for (int i = 2; names.count(name); i++) name = (first ? first->name : std::string("building")) + "-closure-" + std::to_string(i);
-  n.name = name;
-  n.kind = NodeKind::Render;
-  n.mesh = r.mesh;
-  // its frame: the structure's axes (r.origin is in the frame turned around the structure's middle)
-  n.local = Transform::from_matrix(Mat4::translate(r.origin) * Mat4::rotate(Quat::axis_angle({0, 1, 0}, r.yaw)));
-  n.extras = json{{"og_closure", {{"cell", r.cell}, {"facade", r.facade}, {"relief", options.relief}, {"seed", options.seed}}}};
-  // part of the group of what it closes (a prefab placed: selected and moved with it)
-  const uint32_t gid = group_of(roots.front());
-  bool one_group = gid != 0;
-  for (auto id : roots) one_group &= group_of(id) == gid;
-  if (one_group)
-    if (const GroupInfo* g = group_info(gid)) set_group_tag(n, gid, g->name, g->prefab);
-  const uint32_t id = scene.add(std::move(n));
-  light_like_surroundings(scene, {id});
-  history.push(c.commit(strf(tr("undo.close_building"), name.c_str())));
-  return id;
-}
-
-void App::close_selection() {
-  ClosureResult r;
-  std::string err;
-  ClosureOptions o;
-  o.relief = closure_relief;
-  // its front is the side the camera sees: filled behind and inside, as seen from here
-  o.has_view = true;
-  o.seen_from = camera.pos;
-  const uint32_t id = close_building(selection_roots(), o, &r, &err);
-  if (!id) {
-    LOG_WARN(tr("log.close_failed"), err.c_str());
-    return;
-  }
-  LOG_INFO(tr("log.closed"), r.added, r.cell);
-  if (const uint32_t g = group_of(id)) select_group(g);
-  else selection.insert(id);
 }
 
 AABB App::gaps_region() const {

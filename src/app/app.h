@@ -33,7 +33,6 @@
 #include "render/texture_palette.h"
 #include "render/tool_demo.h"
 #include "render/thumbnails.h"
-#include "scene/closure.h"
 #include "scene/gaps.h"
 #include "scene/pick.h"
 #include "scene/scene.h"
@@ -386,15 +385,10 @@ class App {
   // smaller than min_size meters (their names to left_out)
   std::string create_prefab(const std::string& name, float min_size = 0.f, std::vector<std::string>* left_out = nullptr);
   // Building without visual bugs (building_tools.cpp): elements of `roots` smaller than `min_size`
-  // left out (an actor stays); a building closed at the back (scene/closure.h), the new element
-  // in its group, lit like the level, undoable (0: error); the holes through which the player
-  // would see the void (scene/gaps.h), shown over the view and listed in a window
+  // left out (an actor stays); the holes through which the player would see the void
+  // (scene/gaps.h), shown over the view and listed in a window
   std::vector<uint32_t> without_small(const std::vector<uint32_t>& roots, float min_size,
                                       std::vector<std::string>* left_out = nullptr) const;
-  uint32_t close_building(const std::vector<uint32_t>& ids, const ClosureOptions& options, ClosureResult* out,
-                          std::string* error);
-  void close_selection();
-  bool closure_relief = true;
   float prefab_min_size = 0.5f;   // the prefab dialog's: small pieces left out
   bool prefab_skip_small = true;
   AABB gaps_region() const;       // the selection's, else the document's own level

@@ -82,7 +82,6 @@ A regular glTF binary. Each node carries its kind in its extras (`og_kind`: `ren
 |---|---|---|
 | `og_level`, `og_companion`, `og_layer`, `og_reference` | groups | a level added, a level shown with it, a mission layer, the original a level replaces |
 | `og_group` | root elements | the group they are in: `{id, name, prefab}` (a prefab placed: `prefab` true) |
-| `og_closure` | a closure | `{cell, facade, relief, seed}` (see [Closing buildings](../README.md#9-closing-buildings)) |
 | `og_navmesh` | nav meshes | `verts` (relative to the node), `polys` (3 or 4 corners), `adj` (the polygon across each edge, -1 a border) |
 | `etype`, `aid`, `game_task`, `bsphere`, `lump`, `lump_types` | actors | the game's data of the actor; its model is a `render` child marked `og_actor_visual` |
 | `og_behavior` | actors | what it does: `open` (approach, locked, always, when), `when`, `distance`, `loads`, `active`, `leave`, `present` (conditions: `{when: always|never|task|pressed|gone, arg}`) |
@@ -212,11 +211,6 @@ documentation's screenshots). The tools, their arguments and the rules of an age
   ocean (waves of its own), the effects and the sky are the editor's: the sky imitates the game's
   colors and clouds, not its textures, its sun's exact orbit nor its cloud mesh. The weather stays
   where it is set (the game moves it slowly on its own); the desert's sandstorms are not offered.
-- **Closing buildings** works on a grid of the ground plan (about 1/48 of the building's width,
-  0.5 m at least): its walls are straight along the building's main axes, a building at another
-  angle gets small steps on its diagonal sides; it fills what is hidden from one viewpoint (close
-  again from another side for a building seen from several streets); overhangs and arches are
-  filled to the ground where something stands under them.
 - **Holes** are looked for from points of walkable ground every few meters, at one height: a hole
   seen only from a ledge, or narrower than the rays' spacing far away, can be missed; a surface
   seen through (glass, water, glows) counts as a hole.
@@ -244,8 +238,8 @@ documentation's screenshots). The tools, their arguments and the rules of an age
 ```text
 src/core/      math, log, preferences, translations, undo history
 src/scene/     the document, picking, the story, the particles, the light of what is placed (relight),
-               shapes, topology, skeletons, a level's style, assemblies, the terrain, closing buildings
-               (closure), holes in the decor (gaps)
+               shapes, topology, skeletons, a level's style, assemblies, the terrain, holes in the
+               decor (gaps)
 src/io/        glTF, the library, prefabs and the game's prefabs, game data, the catalog, nav meshes and
                the export for the game, behaviors, Jak II's structures
 src/render/    camera, renderer, thumbnails, offscreen captures, the palette of materials, the guide's
@@ -254,7 +248,7 @@ src/game_view/ the game rendering: the game's renderer (game_view), the time of 
                (game_mood), the sky (sky)
 src/tools/     the gizmo, the nav mesh generator (Recast, then the game's limits)
 src/app/       the window and its loop, document actions, panels, groups, the Game rendering window
-               (game_window), building tools (closure, holes, small pieces), the guide, behaviors,
+               (game_window), building tools (holes, small pieces), the guide, behaviors,
                the preview, the topology and terrain tools, extraction, the remote control and the MCP
                server, the self-test
 lang/          translations (en.json, fr.json)

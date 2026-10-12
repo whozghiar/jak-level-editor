@@ -6,8 +6,8 @@ the OpenGOAL Level Editor, and for the person who sets it up. It explains what t
 do, the ideas behind them (what a level, a facade, a prefab or a hole in the decor is) and the
 rules that make a level look right in the game, with complete examples.
 
-You do not need to know level editors to follow it: every notion is explained when it first
-appears. The user's guide of the editor itself is the [README](../README.md).
+You do not need to know level editors to follow it: the notions a level needs are explained
+when they first appear. The user's guide of the editor itself is the [README](../README.md).
 
 ![What an agent sees after building a street: capture_view at the height of the player's eyes](captures/mcp/assistant-view.png)
 
@@ -48,12 +48,19 @@ The server tells your client its rules when it starts (its `instructions`): they
    and accept the server `open-goal-level-editor`. From another folder, add it once:
 
    ```bash
-   claude mcp add open-goal-level-editor -- "<repository>/build/bin/open-goal-level-editor.exe" --mcp
+   # Windows, the repository in D:\levels\open-goal-level-builder
+   claude mcp add open-goal-level-editor -- "D:/levels/open-goal-level-builder/build/bin/open-goal-level-editor.exe" --mcp
+   # Linux, the repository in ~/open-goal-level-builder
+   claude mcp add open-goal-level-editor -- ~/open-goal-level-builder/build/bin/open-goal-level-editor --mcp
    ```
 
 3. **Another client**: run `<repository>/build/bin/open-goal-level-editor --mcp` as a stdio server.
-4. Check: call `get_status`. Its answer gives the library (how many levels were extracted) and
-   the document (what the editor has open). The editor's status bar says **Assistant connected**.
+4. Check: ask the assistant to call `get_status` (*"call get_status of the level editor"*). Its
+   answer gives the library and the document, for example
+   `{"levels": 272, "document": {"open": true, "level": "ctysluma", "elements": 13193, ...}, ...}`. The
+   editor's status bar says **Assistant connected**. If a tool of this guide is missing from the
+   list your client shows, the editor is older than the guide: build it again and restart the
+   client.
 
 The repository also has a skill for Claude Code, `.claude/skills/level-building-mcp/`, which
 reminds an agent of these rules whenever it builds.
@@ -63,7 +70,8 @@ reminds an agent of these rules whenever it builds.
 ### Coordinates
 
 - Positions are in **meters**, `[x, y, z]`, **Y is up**. A Jak 3 level is a few hundred meters
-  across; Jak is about 1.5 m tall, his eyes at about 1.6 m above the ground.
+  across; Jak is a little under 2 m tall: look from 1.6 m above the ground to see what the player
+  sees around him.
 - All the levels of the game share **one world**: each level is where the game puts it (the
   slums of Haven City are around x = 0..400, z = 800..1300). Two levels side by side in the game
   meet in the editor too. A new level (`new_level`) starts empty, around `[0, 0, 0]`.
@@ -111,7 +119,9 @@ Placed in a new level where the player can walk around, the same facade shows **
 void, the inside of its panels, pieces floating. That is the most common mistake of a level built
 from the game's pieces. [Rule 3](#rule-3-facades-are-not-buildings) is about it.
 
-![The user's facade prefab ind-facade-60 from the street (left), from behind (middle) and from the side (right): only one side was made to be seen](captures/closing-buildings/before-front.png)
+| From the street: what it was made for | From behind: what the player must never see |
+|---|---|
+| ![front](captures/mcp/facade-front.png) | ![back](captures/mcp/facade-back.png) |
 
 ### The void and the holes
 
@@ -122,8 +132,9 @@ void: a **visual bug**, ugly and obvious in the game. [Rule 1](#rule-1-no-holes)
 
 ### Light, hour and weather
 
-The game lights its levels with colors baked into every vertex (8 *palettes*: the ambient light,
-the sun from four directions, the lamps), mixed according to the hour and the weather. What you
+The game lights its levels with colors baked into every corner of their triangles (each corner
+has 8 colors, the game's *palettes*: one for the ambient light, four for the sun coming from four
+directions, three for the level's own lamps), mixed according to the hour and the weather. What you
 place **takes the light of the level around it** automatically. The **game rendering** draws the
 level with the game's own renderer: what the level will look like in the game. Set its hour and
 weather with `set_view`, and see it with `capture_view`.
@@ -177,48 +188,28 @@ things (a shelf of bottles), and check what was left out.
 ```
 
 ```json
-{"name": "slums-house-corner", "left_out": ["city-trash-01.mb-3", "city-bolt-02.mb-7"], "closure": null}
+{"name": "slums-house-corner", "left_out": ["city-trash-01.mb-3", "city-bolt-02.mb-7"]}
 ```
 
 The objects of the game (actors: a door, a crate) are always kept, whatever their size.
 
 ### Rule 3: facades are not buildings
 
-When a building comes from the game (a prefab of the game, an assembly, decor parts), decide
-**where the player will see it from**:
+When a building comes from the game (a prefab of the game, an assembly, decor parts), it is most
+often a front only. Decide **where the player will see it from** before placing it:
 
-- **Only its front can be seen** (against a wall, at the edge of the level, between other
-  buildings): place it so, and check from every place the player can reach that its back never
-  shows.
-- **The player can walk around it**: **close it**. `close_building` adds one element that fills it:
-  - its footprint and height are read from the building on a grid that follows its walls;
-  - it fills what is **hidden behind and inside the building as seen from `seen_from`** (a point
-    of the street in front of it, where the player sees its front): what is visible from there (a
-    shop's alcove, a courtyard facing the street) stays open; the game's triangles do not tell which
-    side of a wall is its front, so give `seen_from` (the camera's position is used otherwise);
-  - it goes as deep behind a facade as a building of its width (`depth`), as high as the building
-    where it is, **lower terrace by terrace going back** (setbacks), with **pilasters and a cornice**
-    on its new walls, in the building's own textures and light: it keeps the building's shape
-    instead of a plain box;
-  - it joins the building's group: they move together.
+- Put it where **only its front can be seen**: against a wall or a cliff, at the edge of the level,
+  between other buildings, back to back with another facade.
+- **Never in the middle of a place the player can walk around**: its back would show.
+- Check from every place the player can reach: `set_camera` behind and beside it, at 1.6 m above
+  the ground, then `capture_view`. If its back shows, move it, turn it, or hide its back behind
+  other pieces (another building, a wall in the level's style: `place` a `wall` shape with
+  `style`), touching it so that no hole is left (rule 1).
 
-```json
-{"tool": "close_building", "args": {"ids": [1201, 1202, 1203], "seen_from": [960, 26, 590]}}
-```
-
-```json
-{"id": 1477, "facade": true, "cells": 632, "cells_added": 620, "cell": 1.31, "yaw_deg": 0,
- "materials": ["city-ind-wall-noisy-03", "city-ind-dark-marble"], "group": 1}
-```
-
-To make a **prefab of a building**, close it in the same call: `create_prefab` with `close: true`
-and `seen_from`. Then look at it **from the back and the sides** (`set_camera`, `capture_view`):
-if the closure shows from the street, `undo` and give a better `seen_from`.
-
-| | From the street | From behind | From the side |
-|---|---|---|---|
-| Before | ![front](captures/closing-buildings/before-front.png) | ![back](captures/closing-buildings/before-back.png) | ![side](captures/closing-buildings/before-side.png) |
-| After `close_building` | ![front](captures/closing-buildings/after-front.png) | ![back](captures/closing-buildings/after-back.png) | ![side](captures/closing-buildings/after-side.png) |
+Example: a shop front of the industrial zone (the left picture of
+[the notions above](#facades-what-the-player-sees-and-what-he-must-not)) goes at the end of a
+street, its back against the level's outer wall; a building of Main Town, closed all round, can
+stand in the middle of a square.
 
 ### Rule 4: look before you report
 
@@ -251,20 +242,26 @@ capture_view {"game_hour": 12}
 ### Build a small street from prefabs
 
 The example the first picture of this guide comes from: a street of Jak II's Main Town on a
-pavement in the style of Haven's slums, its buildings closed at the back, a fountain and two trees.
+pavement in the style of Haven's slums, a fountain and two trees. The buildings are the user's own
+prefabs made from Jak II's Main Town (`main-town-building-a`, `-c`, `-d`: Jak II extracted, prefabs
+made with `create_prefab`); use any prefab `list_prefabs` gives. They are whole buildings, closed all
+round: they can stand where the player walks around them (rule 3).
 
 ```text
 new_level
 place {"kind": "shape", "name": "ground", "style": "ctysluma", "position": [0, 0, 0],
-       "size": [160, 0.5, 120], "bumps": 0}                  -> the pavement, 0.5 m thick
+       "size": [160, 0.5, 120], "bumps": 0}                  -> the pavement, 0.5 m thick, flat
+                                                                (bumps: how much a ground goes up and down)
 list_prefabs                                                 -> the user's and the game's
 place {"kind": "prefab", "name": "main-town-building-a", "position": [-45, 0.5, -20], "on_ground": true}
 place {"kind": "prefab", "name": "main-town-building-c", "position": [-3, 0.5, -20], "on_ground": true}
 place {"kind": "prefab", "name": "main-town-building-d", "position": [39, 0.5, -20], "on_ground": true}
-list_groups                                                  -> the three buildings: their ids
-close_building {"ids": [...building a...], "seen_from": [0, 1.6, 40]}      (rule 3, each building)
+list_groups                                                  -> {"groups": [{"group": 1, "name":
+                                                                "main-town-building-a", "prefab": true,
+                                                                "ids": [12, 13, ...]}, ...]}
 place {"kind": "prefab", "name": "small-fountain", "position": [0, 0.5, 18], "on_ground": true}
 place {"kind": "prefab", "name": "haven-tree", "position": [-25, 0.5, 30], "on_ground": true}
+place {"kind": "prefab", "name": "haven-tree", "position": [25, 0.5, 30], "on_ground": true}
 find_gaps {"box": [[-80, -1, -60], [80, 10, 60]]}           (rule 1)
 set_view {"game_view": true, "hour": 16, "weather": "few_clouds"}
 set_camera {"position": [8, 2.1, 48], "look_at": [-4, 10, -10]}
@@ -280,12 +277,14 @@ real level would close them with buildings, walls or the edge of the game's worl
 
 ```text
 open_level {"name": "wascitya", "actors": false}
-list_assemblies {"min_elements": 40}          -> whole structures, the largest first
+list_assemblies {"min_elements": 40}          -> whole structures, the largest first:
+                                                 {"assemblies": [{"ids": [4210, 4211, ..., 4302],
+                                                  "box": [[2391, 18, -120], [2428, 41, -84]], ...}, ...]}
 select {"assembly": 4210}                     -> shows it to the user
 set_camera {"frame": [4210], "yaw_deg": 30, "pitch_deg": -25}
 capture_view                                  -> check it is the whole house, nothing else
-create_prefab {"ids": [...the assembly's ids...], "name": "spargus-house",
-               "close": true, "seen_from": [...in front of its door...]}
+create_prefab {"ids": [4210, 4211, ..., 4302], "name": "spargus-house"}
+                                              -> {"name": "spargus-house", "left_out": [...]}
 ```
 
 ### Fix a hole
@@ -310,8 +309,10 @@ capture_view
 ```
 
 The weathers are the game's: `clear`, `few_clouds` (the game's start), `haze`, `smog`, `overcast`,
-`overcast_fog`, `rain`, `storm`, `storm_rain`, `storm_fog`; or `cloud` (0 clear, 0.5 overcast,
-1 storm), `fog` (0 haze, 0.5 clear, 1 rain or smog) and `rain` (0 to 1) directly. They change the
+`overcast_fog`, `rain`, `storm`, `storm_rain`, `storm_fog`; or the two numbers the game itself
+uses: `cloud` (0 a clear sky, 0.5 overcast, 1 a storm) and `fog`, a scale whose middle is a clear
+air (0 hazy, 0.5 clear, 1 rainy under clouds, smoggy under a clear sky); plus `rain` (0 to 1), the
+rain drawn falling, apart from them. They change the
 sun's light, the ambient light, the fog and the sky (clouds, sun, moon, stars) of the game
 rendering; `level_lights` turns the level's lamps on or off at night.
 
@@ -339,8 +340,10 @@ terrain {"id": 88, "mode": "flatten", "position": [20, 6, -25], "size": 22, "hei
 
 ```text
 save_project {"name": "main-town-street"}     -> library/projects/main-town-street/
-export_level {"name": "mtstreet"}             -> library/export/main-town-street/ (its README.md
-                                                 says how to add it to the game)
+export_level {"name": "mtstreet", "nickname": "mts"}
+                                              -> library/export/main-town-street/: the folder takes
+                                                 the project's name, the level in the game "mtstreet";
+                                                 its README.md says how to add it to the game
 ```
 
 ## 6. Every tool
@@ -385,8 +388,7 @@ export_level {"name": "mtstreet"}             -> library/export/main-town-street
 | `set_shape`, `set_material` | a shape's size, bends, corners; a texture for elements |
 | `terrain` | natural ground: paint, raise, dig, smooth, flatten, walls, generated hills, in a level's style |
 | `group`, `ungroup` | name a group of elements, or undo one |
-| `close_building` | fill a building open at the back ([rule 3](#rule-3-facades-are-not-buildings)) |
-| `create_prefab` | save elements as a prefab (`min_size`, `close`: [rules 2 and 3](#rule-2-prefabs-hold-structures-not-crumbs)) |
+| `create_prefab` | save elements as a prefab (`min_size`: [rule 2](#rule-2-prefabs-hold-structures-not-crumbs)) |
 | `match_lighting` | bring a structure of Jak II to the brightness of the level |
 | `set_actor` | what an object does (doors, bouncers, elevators, crates, presence) and its parameters |
 | `set_decor` | what the game does with decor: collision, ground material, bounce, launch |
@@ -421,7 +423,7 @@ The complete description of each argument is what your client receives from `too
 | A call waits for a long time | opening a level, listing the decor or prefabs the first time reads the levels (seconds to a minute): it answers when ready |
 | `no document` | `open_level` or `new_level` first |
 | An element's id is not found | ids change when elements are deleted and undone; find them again with `find_nodes` or `list_groups` |
-| The closure shows from the street | `undo`, then `close_building` again with a `seen_from` really in front of the building (in the street the player walks) |
-| `nothing to close` | the building is already closed, or its walls are modeled on both sides: look at it from behind to be sure |
+| A tool of this guide is missing | the editor is older than the guide: build it again, then restart your client |
+| A building shows its back | move it or turn it so that its back faces a wall or the edge of the level, or hide its back with other pieces ([rule 3](#rule-3-facades-are-not-buildings)) |
 | `find_gaps` finds edges everywhere | the region given is larger than the level: give the box the player can really walk, or close those edges |
 | A piece is too dark or too bright | it took the light of the level around it; a structure of Jak II: `match_lighting` |
