@@ -829,7 +829,7 @@ class App {
   double m_press_time = 0;
   uint32_t m_press_target = 0;        // the element under it
   bool m_press_on_selection = false;  // on an element of the selection: a drag moves the selection
-  bool m_press_double = false;        // a double click
+  bool m_skip_release = false;        // a double click was taken: its release does nothing more
   bool m_long_pressed = false;        // held still: its whole group was selected
   float m_long_press_ring = 0.f;      // 0..1: how long it was held, drawn around the cursor
   bool m_moving_selection = false;

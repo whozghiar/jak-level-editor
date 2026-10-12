@@ -733,6 +733,18 @@ void App::select_tool(bool clicked, bool released) {
     hovered = 0;
   }
 
+  // a double click: the whole prefab or group (else the assembly) of the element under the cursor,
+  // before the gizmo (after the first click, the element's gizmo is often right under it)
+  if (clicked && hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !io.KeyShift && !io.KeyCtrl) {
+    select_whole(hovered);
+    m_skip_release = true;
+    return;
+  }
+  if (m_skip_release) {
+    if (released || !ImGui::IsMouseDown(ImGuiMouseButton_Left)) m_skip_release = false;
+    return;
+  }
+
   // gizmo
   if (!selection_roots().empty() && !m_moving_selection) {
     GizmoInput gi;
@@ -789,7 +801,6 @@ void App::select_tool(bool clicked, bool released) {
     m_press_time = ImGui::GetTime();
     m_press_target = hovered;
     m_press_on_selection = hovered && selection.count(hovered);
-    m_press_double = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
     m_box_preview.clear();
   }
   const bool down = m_lmb_in_vp && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !gizmo.active();
@@ -862,8 +873,6 @@ void App::select_tool(bool clicked, bool released) {
         for (auto id : inside) selection.insert(id);
         if (!inside.empty()) primary = inside.back();
       }
-    } else if (m_mouse_in_vp && m_press_double && hovered && !io.KeyShift && !io.KeyCtrl) {
-      select_whole(hovered);  // a double click: its whole group (or assembly)
     } else if (m_mouse_in_vp) {
       uint32_t target = hovered;
       // a click again where the last one was, the camera still: the next element under the cursor
