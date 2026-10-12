@@ -387,7 +387,9 @@ def behaviors(args, e):
         e.call('set_actor', {'id': door['id'], 'behavior': {'open': 'when', 'distance': 10,
                                                             'when': {'when': 'gone', 'arg': crates[0]['name']}}})
         e.call('select', {'ids': [door['id']]})
-        e.call('set_camera', {'frame': [door['id']], 'yaw_deg': 35, 'pitch_deg': -20})
+        # in front of the door, outside its walls (framing it puts the camera inside them)
+        c = [door['position'][0], door['position'][1] + 5, door['position'][2]]
+        e.call('set_camera', {'position': [c[0] + 16, c[1] + 4, c[2]], 'look_at': c})
         e.ui([AWAY, wait(30)], shot=out('behaviors', 'airlock.png'))
 
 

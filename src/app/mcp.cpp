@@ -427,8 +427,9 @@ json tools() {
       tool("find_gaps",
            "Finds where a player walking the level would see the void (nothing drawn: a visual bug in the game): "
            "from points of the ground every few meters, at the height of Jak's eyes, rays around and downward; a "
-           "ray that meets nothing is a view into the void. Each spot: kind 'gap' (a hole between pieces: fill it) "
-           "or 'edge' (an open edge of the region: close it unless the player cannot go near), where it is (at), "
+           "ray that meets nothing is a view into the void. Each spot: kind 'gap' (a hole between pieces, the void "
+           "right behind it: fill it) or 'edge' (where the ground ends, seen directly or through a passage: close it "
+           "unless the player cannot go near), where it is (at), "
            "where it is seen from (seen_from, direction: give them to set_camera to look at it) and how many rays "
            "went through. Run it after building and fix every gap (rule 1 of the guide). Shown in the editor too.",
            {{"box", {{"type", "array"}, {"description", "[[x, y, z], [x, y, z]]: the region the player can walk"}}},

@@ -144,14 +144,16 @@ height of Jak's eyes, all around and downward. A ray that meets nothing is a vie
 ```
 
 ```json
-{"gaps": 33, "edges": 24, "viewpoints": 108, "rays": 31104,
- "spots": [{"kind": "gap", "at": [20.1, 0.5, -11.2], "seen_from": [17.5, 2.1, -12.5],
-            "direction": [0.92, -0.09, -0.38], "rays": 63}, "..."]}
+{"gaps": 19, "edges": 30, "viewpoints": 108, "rays": 31104,
+ "spots": [{"kind": "gap", "at": [20.06, 0.53, -11.17], "seen_from": [-18.5, 2.1, -3.5],
+            "direction": [0.98, -0.04, -0.195], "rays": 77}, "..."]}
 ```
 
-- `kind: "gap"`: a hole between pieces (surfaces on both sides of it). **Fix every one.**
-- `kind: "edge"`: an open edge of the region (nothing beyond it): close it with a wall, a building,
-  a railing, unless the player can never get near it.
+- `kind: "gap"`: a hole between pieces (surfaces on both sides of it, the void right behind it).
+  **Fix every one.**
+- `kind: "edge"`: an open edge, where the ground ends in the void (seen directly, or through a
+  passage between pieces: then `at` is where that ground ends): close it with a wall, a building, a
+  railing, unless the player can never get near it.
 - `seen_from` and `direction`: where the player would see it from. Look there:
   `set_camera` with `position: seen_from` and `look_at: at`, then `capture_view`.
 - `rays`: how many rays went through: the larger, the more visible.
@@ -290,10 +292,10 @@ create_prefab {"ids": [...the assembly's ids...], "name": "spargus-house",
 
 ```text
 find_gaps {"ids": [...what you built...]}
-  -> {"kind": "gap", "at": [20.1, 0.5, -11.2], "seen_from": [17.5, 2.1, -12.5], ...}
-set_camera {"position": [17.5, 2.1, -12.5], "look_at": [20.1, 0.5, -11.2]}
+  -> {"kind": "gap", "at": [20.06, 0.53, -11.17], "seen_from": [-18.5, 2.1, -3.5], ...}
+set_camera {"position": [-18.5, 2.1, -3.5], "look_at": [20.06, 0.53, -11.17]}
 capture_view                                  -> see it
-find_nodes {"near": [20.1, 0.5, -11.2], "radius": 4}   -> the pieces around it
+find_nodes {"near": [20.06, 0.53, -11.17], "radius": 4}   -> the pieces around it
 transform_nodes {"ids": [the wall], "scale_by": [1.05, 1, 1]}   or   place a floor/wall shape over it
 find_gaps {"ids": [...]}                      -> again, until it is gone
 ```

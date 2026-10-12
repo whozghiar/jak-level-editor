@@ -161,7 +161,16 @@ GapReport find_gaps(Scene& scene, const GapOptions& o) {
           s.direction = ray.d;
           s.edge = !across && !along;
           if (!s.edge) {
-            s.at = ray.at(near);
+            // what lies behind the opening: ground (a passage between two pieces: the void is farther,
+            // where that ground ends: an open edge there) or nothing (a hole)
+            bool ground_behind = false;
+            float t = near + 1.f;
+            for (; t < o.reach; t += 2.f) {
+              if (caster.cast(Ray{ray.at(t), {0, -1, 0}}, o.eye + 3.f) >= o.eye + 3.f) break;
+              ground_behind = true;
+            }
+            s.edge = ground_behind;
+            s.at = ray.at(ground_behind ? t : near);
           } else {
             // an open edge: where the ray leaves the region
             const AABB big = r.expanded(1.f);

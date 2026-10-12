@@ -3,8 +3,9 @@
 // Holes in the decor: where a player walking the level would see the void (nothing drawn behind,
 // the screen's background), a visual bug in the game. From points of the ground every few meters
 // (where Jak's eyes are), rays go around and downward; a ray that meets nothing is a view into the
-// void. The rays around it tell where the hole is: a gap between pieces (they hit something near:
-// the hole is there), or an open edge of the level (they all go through).
+// void. The rays around it tell where the hole is: a gap between pieces (something on both sides of
+// it, the void right behind), or an open edge (the ground ends: seen directly, or through a passage
+// between pieces, then where that ground ends).
 
 #include <vector>
 
