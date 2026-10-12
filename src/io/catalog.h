@@ -16,6 +16,7 @@
 //   parts    the decor of a level, to reuse in another: the prototypes of its decor (a pillar, a
 //            lamp post) and the pieces of its shell (a wall, a bridge)
 
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -43,6 +44,13 @@ struct CatalogObject {
 };
 
 class LibraryIndex;
+
+// The kind of a particle effect of the catalog (family "effect"), from the names of its particles:
+// "fire" (fire, flames, embers, torches, lava), "smoke" (smoke, steam, dust, mist, heat haze),
+// "sparks" (sparks, electricity, lasers), "water" (drips, splashes, waterfalls, bubbles), "light"
+// (lights, glows, neon signs, lamps), else "other" (explosions, trails...): its category among the
+// catalog's Effects.
+std::string effect_kind(const CatalogObject& o);
 
 // Every object of the game, by family then name. With the index of the library (once ready), the
 // art-names of every actor of the levels: all the variants and particle effects, and their counts.
@@ -82,12 +90,29 @@ struct CatalogPart {
   std::string name;        // the prototype ("ruin-top-tower.mb") or the piece ("ruins-canal-top-2")
   std::string mesh_node;   // the node whose mesh it is: the first instance of a prototype, the piece
   size_t triangles = 0;
-  int copies = 0;          // instances of a prototype in its level
+  int copies = 0;          // instances of a prototype in its level, copies of a piece
+  // a piece: its name without its number and its triangles (piece_key), its surface and the length
+  // of its triangles' edges: its copies, here and in other levels, alike within 5 % (same_piece)
+  std::string key;
+  double surface = 0, edges = 0;
 };
 
 // The decor parts of a level as the library has it (a level's background file, not prepared for
-// editing): its prototypes and the pieces of its shell that are not terrain.
+// editing): its prototypes and the pieces of its shell that are not terrain, the copies of a piece
+// once (the game repeats a window, a bolt, a trim: the same name, triangles and measures; `copies`
+// counts them).
 std::vector<CatalogPart> list_parts(const Scene& level);
+
+// What the copies of a piece of a shell share: its name without its number, its triangles
+std::string piece_key(const std::string& name, size_t triangles);
+// Copies of one piece: the same key, their surface and their edges within 5 % of each other (the
+// same however turned or placed; the variants the artists bent a little, the leaves of a palm, too)
+bool same_piece(const CatalogPart& a, const CatalogPart& b);
+// `part` added to `pieces` unless a copy of it is there (then counted in its copies); `by_key`: the
+// pieces of each key
+void add_piece(std::vector<CatalogPart>& pieces, std::map<std::string, std::vector<size_t>>& by_key, CatalogPart part);
+// A mesh's surface and the length of its triangles' edges
+void mesh_measure(const Mesh& mesh, double* surface, double* edges);
 
 // The mesh of a part, moved so that the bottom center of its geometry is its origin (a part sits
 // on the point it is placed at). Null when the level has no such part.

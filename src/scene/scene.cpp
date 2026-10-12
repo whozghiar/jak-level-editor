@@ -618,4 +618,14 @@ std::vector<uint32_t> Scene::append(Scene&& src) {
   return roots;
 }
 
+bool instance_tree(const std::string& name) {
+  for (const char* kind : {"-tie-", "-shrub-"}) {
+    const size_t at = name.rfind(kind);
+    if (at == std::string::npos || at == 0) continue;
+    const size_t digits = at + std::string(kind).size();
+    if (digits < name.size() && name.find_first_not_of("0123456789", digits) == std::string::npos) return true;
+  }
+  return false;
+}
+
 }  // namespace ogle

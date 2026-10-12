@@ -9,6 +9,7 @@
 #include "core/i18n.h"
 #include "core/log.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 
 namespace ogle {
 
@@ -38,7 +39,9 @@ const GuideEntry kGuide[] = {
     {"models", "place"},    {"decor", "place"},         {"jak2", nullptr},            {"prefab", "prefab"},
     {"game_prefabs", "prefab"}, {"bounce", "bounce"},   {"launch", "launch"},         {"collision", nullptr},
     {"ingame", nullptr},    {"surface", nullptr},       {"event", nullptr},           {"relight", nullptr},
-    {"levels", "story"},    {"story", "story"},         {"replace", "replace"},       {"export", nullptr}};
+    {"levels", "story"},    {"story", "story"},         {"replace", "replace"},       {"export", nullptr},
+    {"place_drag", "place"}, {"topology", nullptr},     {"shape_edit", "build"},      {"style", nullptr},
+    {"preview", nullptr},   {"jak2_level", nullptr},     {"terrain", nullptr},        {"assembly", nullptr}};
 
 const GuideEntry* guide_entry(const char* id) {
   for (const auto& e : kGuide)
@@ -53,11 +56,12 @@ struct GuideSection {
 };
 const std::vector<GuideSection>& guide_sections() {
   static const std::vector<GuideSection> s = {
-      {"guide.section.view", {"camera", "select", "box_select", "game_view"}},
-      {"guide.section.transform", {"move", "rotate", "free_rotate", "scale", "snap", "local"}},
-      {"guide.section.build", {"build", "palette", "catalog", "interactive", "models", "decor", "jak2", "prefab", "game_prefabs", "relight"}},
-      {"guide.section.behaviors", {"ingame", "collision", "surface", "event", "bounce", "launch"}},
-      {"guide.section.level", {"levels", "story", "replace", "export"}}};
+      {"guide.section.view", {"camera", "select", "box_select", "assembly", "game_view"}},
+      {"guide.section.transform", {"move", "rotate", "free_rotate", "scale", "snap", "local", "place_drag", "topology"}},
+      {"guide.section.build", {"build", "shape_edit", "style", "terrain", "palette", "catalog", "interactive", "models", "decor", "jak2",
+                               "prefab", "game_prefabs", "relight"}},
+      {"guide.section.behaviors", {"ingame", "collision", "surface", "event", "bounce", "launch", "preview"}},
+      {"guide.section.level", {"levels", "jak2_level", "story", "replace", "export"}}};
   return s;
 }
 
@@ -110,7 +114,16 @@ const std::vector<Tutorial>& tutorials() {
       {"prefabs", "tuto.prefabs.", {{"game", {"prefab"}, A::PrefabsTab}, {"mine", {"prefab"}, A::None}}},
       {"levels", "tuto.levels.", {{"open", {"story"}, A::LevelsTab}, {"add", {}, A::None}, {"story", {"story"}, A::None}}},
       {"replace", "tuto.replace.", {{"choose", {"replace"}, A::Replace}, {"align", {"replace"}, A::None}, {"export", {}, A::Export}}},
-      {"save", "tuto.save.", {{"save", {}, A::Save}, {"export", {}, A::Export}, {"navmesh", {}, A::NavMeshes}}}};
+      {"save", "tuto.save.", {{"save", {}, A::Save}, {"export", {}, A::Export}, {"navmesh", {}, A::NavMeshes}}},
+      {"place", "tuto.place.", {{"click", {"place"}, A::CatalogTab}, {"hold", {"place"}, A::None}, {"turn", {"free_rotate"}, A::None}}},
+      {"topology", "tuto.topology.", {{"enter", {}, A::None}, {"points", {}, A::None}, {"faces", {}, A::None}, {"undo", {}, A::None}}},
+      {"shapes", "tuto.shapes.", {{"size", {"build"}, A::BuildTab}, {"bend", {}, A::None}, {"ground", {}, A::None}}},
+      {"style", "tuto.style.", {{"choose", {}, A::BuildTab}, {"floor", {}, A::None}, {"walls", {}, A::None}}},
+      {"preview", "tuto.preview.", {{"play", {}, A::CatalogTab}, {"motion", {}, A::None}, {"break", {}, A::None}}},
+      {"jak2level", "tuto.jak2level.", {{"choose", {}, A::LevelsTab}, {"what", {}, A::None}, {"export", {}, A::Export}}},
+      {"terrain", "tuto.terrain.",
+       {{"start", {}, A::BuildTab}, {"paint", {}, A::None}, {"shape", {}, A::None}, {"walls", {}, A::None}, {"generate", {}, A::None}}},
+      {"assembly", "tuto.assembly.", {{"select", {"select"}, A::None}, {"prefab", {"prefab"}, A::None}, {"game", {"prefab"}, A::PrefabsTab}}}};
   return t;
 }
 
@@ -392,7 +405,7 @@ void App::ui_guide_window() {
         for (const char* key : {"help.story.1", "help.story.2", "help.story.3"}) bullet(tr(key));
         ImGui::SeparatorText(tr("help.editing"));
         for (const char* key : {"help.editing.1", "help.editing.2", "help.editing.10", "help.editing.3", "help.editing.4",
-                                "help.editing.5", "help.editing.6", "help.editing.7", "help.editing.8", "help.editing.9"})
+                                "help.editing.5", "help.editing.11", "help.editing.12", "help.editing.6", "help.editing.7", "help.editing.8", "help.editing.9"})
           bullet(tr(key));
       }
       ImGui::EndTabItem();
@@ -441,6 +454,8 @@ void App::ui_build_panel() {
   ImGui::Checkbox((strf(tr("build.snap"), gizmo.snap.translate) + "###build-snap").c_str(), &gizmo.snap.enabled);
   tooltip(tr("build.snap.tip"));
 
+  ui_level_style();
+
   // the palette: the textures Jak 3's levels use again and again, on what is selected
   ImGui::SeparatorText(tr("build.materials"));
   guide_tip("palette");
@@ -467,6 +482,71 @@ void App::ui_build_panel() {
   else ImGui::TextWrapped("%s", strf(tr("build.materials.count"), ids.size()).c_str());
   ImGui::PopStyleColor();
   ui_texture_browser(ids, -1, ImGui::GetContentRegionAvail().x, std::max(240.f, ImGui::GetContentRegionAvail().y));
+}
+
+void App::ui_level_style() {
+  // floors and walls looking like a level's: its textures, their size, its light, its ground's bumps
+  ImGui::SeparatorText(tr("build.style"));
+  guide_tip("style");
+  ImGui::SetNextItemWidth(-1);
+  if (ImGui::BeginCombo("##style-level", m_style_level.empty() ? tr("build.style.choose") : m_style_level.c_str(),
+                        ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##style-filter", tr("build.style.filter"), &m_style_filter);
+    std::string f = m_style_filter;
+    for (auto& c : f) c = (char)std::tolower((unsigned char)c);
+    for (const auto& l : library.levels()) {
+      if (!l.listed || (!f.empty() && l.name.find(f) == std::string::npos)) continue;
+      if (ImGui::Selectable(l.name.c_str(), l.name == m_style_level)) m_style_level = l.name;
+    }
+    ImGui::EndCombo();
+  }
+  if (m_style_level.empty()) return;
+  const LevelEntry* level = library.level(m_style_level);
+  if (!level) return;
+  auto it = m_styles.find(m_style_level);
+  if (it == m_styles.end()) {
+    // measured once its decor is read (a few seconds)
+    auto decor = store.level(level->background, true);
+    if (!decor) {
+      ImGui::TextDisabled("%s", tr(store.failed_level(level->background) ? "build.style.failed" : "build.style.reading"));
+      return;
+    }
+    it = m_styles.emplace(m_style_level, measure_style(*decor)).first;
+  }
+  const LevelStyle& s = it->second;
+  if (s.floor.material >= 0) {
+    ImGui::TextWrapped(tr("build.style.floor"), s.floor.texture.c_str(), s.floor.tile, s.bumps, s.bump_size);
+    if (ImGui::Button(tr_id("build.style.place_floor").c_str())) start_style_placement(m_style_level, true);
+    tooltip(tr("build.style.place_floor.tip"));
+  }
+  if (s.wall.material >= 0) {
+    ImGui::TextWrapped(tr("build.style.wall"), s.wall.texture.c_str(), s.wall.tile);
+    if (ImGui::Button(tr_id("build.style.place_wall").c_str())) start_style_placement(m_style_level, false);
+    tooltip(tr("build.style.place_wall.tip"));
+  }
+  if (!s.valid()) ImGui::TextDisabled("%s", tr("build.style.none"));
+  if (s.valid() && ImGui::Button(tr_id("build.style.terrain").c_str())) start_terrain_brush();
+  tooltip(tr("build.style.terrain.tip"));
+}
+
+void App::start_style_placement(const std::string& level_name, bool floor, const std::string& shape) {
+  auto it = m_styles.find(level_name);
+  if (it == m_styles.end()) return;
+  const LevelStyle::Surface& surface = floor ? it->second.floor : it->second.wall;
+  const int material = style_material(level_name, floor);
+  if (material < 0) return;
+  const ShapePreset* chosen = shape.empty() ? nullptr : shape_preset(shape);
+  ShapePreset preset = chosen ? *chosen : *shape_preset(floor ? "ground" : "wall");
+  preset.params.tile = surface.tile;
+  preset.params.color = surface.color;
+  if (preset.params.kind == "ground") {
+    preset.params.bumps = it->second.bumps;
+    preset.params.bump_size = it->second.bump_size;
+  }
+  start_shape_placement(preset, false);
+  placement.material = material;
 }
 
 }  // namespace ogle

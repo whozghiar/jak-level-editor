@@ -1020,21 +1020,27 @@ void Renderer::draw_scene(Scene& scene, const RenderSettings& rs,
   glEnable(GL_POLYGON_OFFSET_LINE);
   polygon_offset(-1.f, -1.f);
   glEnable(GL_BLEND);
-  for (uint32_t id : selection) {
+  auto outline = [&](uint32_t id, const Vec4& color) {
     int i = scene.index_of(id);
-    if (i < 0 || i >= (int)cache.count) continue;
+    if (i < 0 || i >= (int)cache.count) return;
     auto& n = scene.nodes[i];
-    if (n.kind != NodeKind::Render || !n.mesh || !vis[i]) continue;
+    if (n.kind != NodeKind::Render || !n.mesh || !vis[i]) return;
     auto& gm = gpu_mesh(*n.mesh);
     Mat4 mvp = m_draw_vp * worlds[i];
     glUniformMatrix4fv(m_u.solid_mvp, 1, GL_FALSE, mvp.m);
-    glUniform4f(m_u.solid_color, 1.f, 0.62f, 0.15f, 0.55f);
+    glUniform4f(m_u.solid_color, color.x, color.y, color.z, color.w);
     glBindVertexArray(gm.vao);
     for (const auto& gp : gm.prims) {
       glDrawElementsBaseVertex(GL_TRIANGLES, gp.count, GL_UNSIGNED_INT, (void*)(gp.first_index * sizeof(uint32_t)),
                                gp.base_vertex);
     }
-  }
+  };
+  // the group pointed at, faint; the element pointed at; the selection
+  for (uint32_t id : outline_group) outline(id, {0.55f, 0.85f, 1.f, 0.22f});
+  for (uint32_t id : outline_hover) outline(id, {1.f, 1.f, 0.75f, 0.4f});
+  if (outline_selection.empty())
+    for (uint32_t id : selection) outline(id, {1.f, 0.62f, 0.15f, 0.55f});
+  for (uint32_t id : outline_selection) outline(id, {1.f, 0.62f, 0.15f, 0.55f});
   glBindVertexArray(0);
   glDisable(GL_POLYGON_OFFSET_LINE);
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);

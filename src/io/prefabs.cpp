@@ -119,6 +119,8 @@ std::vector<uint32_t> place_prefab(Scene& doc, const Scene& prefab, const Mat4& 
     }
     // a placed actor is a new one: the game gives it its id
     if (n.kind == NodeKind::Actor) n.extras.erase("aid");
+    // the groups it was made of: the prefab placed is one (App::place_at)
+    n.extras.erase("og_group");
     doc.add(std::move(n));
   }
   return roots;

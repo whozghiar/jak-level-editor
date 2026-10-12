@@ -89,6 +89,7 @@ struct LevelExportReport {
   // the places of its floors where Jak would meet more collision than the game gathers at once
   // (461 triangles): he can fall through there
   size_t dense_places = 0;
+  std::vector<std::pair<size_t, Vec3>> densest;  // the 100 densest of them: triangles, where
   size_t regions = 0;      // of the level replaced (region_trees)
   std::string code_file;  // that code, <name>-obs.gc ("" when none)
   std::vector<ExportNote> notes;

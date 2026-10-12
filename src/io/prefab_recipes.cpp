@@ -5,6 +5,7 @@
 
 #include "io/game_data.h"
 #include "io/prefabs.h"
+#include "scene/assemblies.h"
 
 namespace ogle {
 
@@ -72,17 +73,37 @@ std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::stri
       r.box.add(vec3_of(p["box"][0], {0, 0, 0}));
       r.box.add(vec3_of(p["box"][1], {0, 0, 0}));
     }
-    if (r.name.empty() || r.level.empty() || (r.anchor.empty() && !r.box.valid())) continue;
+    r.assembly = p.value("assembly", std::string());
+    r.max_size = p.value("max_size", r.max_size);
+    if (r.name.empty() || r.level.empty() || (r.anchor.empty() && r.assembly.empty() && !r.box.valid())) continue;
     r.file = (game.empty() ? std::string() : game + "/") + slug(r.name) + ".glb";
     out.push_back(std::move(r));
   }
   return out;
 }
 
-std::vector<uint32_t> recipe_members(Scene& level, const PrefabRecipe& r, std::string* error) {
+std::vector<uint32_t> recipe_members(Scene& level, const PrefabRecipe& r, std::string* error,
+                                     LevelAssemblies* assemblies) {
   std::vector<uint32_t> out;
   level.begin_frame();
   const SceneCache& c = level.cache();
+  if (!r.assembly.empty()) {
+    for (size_t i = 0; i < level.nodes.size(); i++) {
+      const Node& n = level.nodes[i];
+      if (n.name != r.assembly || n.kind != NodeKind::Render || !n.mesh || !c.visible[i]) continue;
+      LevelAssemblies own;
+      LevelAssemblies& found = assemblies ? *assemblies : own;
+      auto it = found.find(r.max_size);
+      if (it == found.end()) it = found.emplace(r.max_size, find_assemblies(level, r.max_size)).first;
+      out = assembly_of(it->second, n.id);
+      if (!out.empty()) return out;
+      break;
+    }
+    if (!r.box.valid()) {
+      if (error) *error = "no " + r.assembly + " in " + r.level;
+      return out;
+    }
+  }
   // the anchor: the index-th instance of the prototype (or the node of that name: a piece)
   int anchor = -1, seen = 0;
   for (size_t i = 0; i < level.nodes.size() && anchor < 0 && !r.anchor.empty(); i++) {
@@ -116,8 +137,8 @@ std::vector<uint32_t> recipe_members(Scene& level, const PrefabRecipe& r, std::s
 }
 
 bool save_recipe_prefab(Scene& level, const PrefabRecipe& r, const std::string& path, size_t* elements,
-                        std::string* error) {
-  const auto members = recipe_members(level, r, error);
+                        std::string* error, LevelAssemblies* assemblies) {
+  const auto members = recipe_members(level, r, error, assemblies);
   if (members.empty()) return false;
   if (elements) *elements = members.size();
   return save_prefab(level, members, path, error);

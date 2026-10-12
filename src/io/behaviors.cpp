@@ -19,6 +19,16 @@ std::string clean_name(const std::string& s) {
   return out;
 }
 
+// a level's name as a symbol of the game: lower case letters, digits and '-' ("" for none)
+std::string level_symbol(const std::string& s) {
+  std::string out;
+  for (char c : s) {
+    const char l = (char)std::tolower((unsigned char)c);
+    if (std::isalnum((unsigned char)l) || l == '-') out += l;
+  }
+  return out.empty() || !std::isalpha((unsigned char)out[0]) ? std::string() : out;
+}
+
 // what the game's own doors test before opening (airlock.gc): no cutscene, Jak not grabbed
 const char* kDoorFree = "(not (or (scene-player?) (focus-test? *target* grabbed)))";
 
@@ -53,11 +63,16 @@ const char* condition_name(Condition::Kind k) {
 
 Condition condition_of(const json& j, Condition fallback) {
   if (!j.is_object()) return fallback;
-  const std::string when = j.value("when", std::string());
+  // a value of another kind (a project edited by hand, a client's mistake) reads as none
+  auto text = [&](const char* key) {
+    auto it = j.find(key);
+    return it != j.end() && it->is_string() ? it->get<std::string>() : std::string();
+  };
+  const std::string when = text("when");
   Condition c = fallback;
   for (auto k : {Condition::Always, Condition::Never, Condition::Task, Condition::Pressed, Condition::Gone})
     if (when == condition_name(k)) c.kind = k;
-  c.arg = j.value("arg", std::string());
+  c.arg = text("arg");
   // a condition on nothing named: as the fallback
   if ((c.kind == Condition::Task || c.kind == Condition::Pressed || c.kind == Condition::Gone) &&
       clean_name(c.arg).empty())
@@ -113,25 +128,71 @@ std::string behavior_code(const GameData* data, const std::string& etype, const 
   }
 
   if (kind == BehaviorKind::Door) {
-    const std::string open = b.value("open", std::string("approach"));
+    const std::string open = b.contains("open") && b["open"].is_string() ? b["open"].get<std::string>() : "approach";
     const Condition when = condition_of(b.value("when", json()));
     const double distance = b.value("distance", 0.0);
     const bool locked = open == "locked" || (open == "when" && when.kind == Condition::Never);
+    const std::string loads = level_symbol(b.value("loads", std::string()));
     // without its on-notice script (the builder cannot write it), a door of the game never opens:
-    // every door that opens says that the levels behind it are there
-    if (!locked) {
+    // every door that opens says that the levels behind it are there, or loads the one behind it
+    // (the rooms of a house, a level of their own) as the game's own doors do (the gun course's in
+    // the port: want-load when Jak comes, opened once it is loaded, shown on entering)
+    if (!locked && !loads.empty()) {
+      body << "(defmethod destination-loaded? ((this " << type << ") (arg0 symbol))\n"
+           << "  ;; Jak at the door (asked without a status): " << loads
+           << " wanted with the levels wanted already, and shown\n"
+           << "  (when (not arg0)\n"
+           << "    (let ((have #f))\n"
+           << "      (dotimes (i 10)\n"
+           << "        (if (= (-> *load-state* want i name) '" << loads << ")\n"
+           << "            (set! have #t)\n"
+           << "            )\n"
+           << "        )\n"
+           << "      (when (not have)\n"
+           << "        (let ((names (new 'static 'boxed-array :type symbol :length 10 :allocated-length 10))\n"
+           << "              (n 0)\n"
+           << "              )\n"
+           << "          (dotimes (i 10)\n"
+           << "            (set! (-> names i) #f)\n"
+           << "            )\n"
+           << "          (dotimes (i 10)\n"
+           << "            (when (-> *load-state* want i name)\n"
+           << "              (set! (-> names n) (-> *load-state* want i name))\n"
+           << "              (+! n 1)\n"
+           << "              )\n"
+           << "            )\n"
+           << "          (when (< n 10)\n"
+           << "            (set! (-> names n) '" << loads << ")\n"
+           << "            (want-levels *load-state* (-> names data))\n"
+           << "            )\n"
+           << "          )\n"
+           << "        )\n"
+           << "      )\n"
+           << "    (dotimes (i 10)\n"
+           << "      (if (and (= (-> *load-state* want i name) '" << loads << ") (not (-> *load-state* want i display?)))\n"
+           << "          (want-display-level *load-state* '" << loads << " 'display)\n"
+           << "          )\n"
+           << "      )\n"
+           << "    )\n"
+           << "  (call-parent-method this arg0)\n"
+           << "  )\n\n";
+    } else if (!locked) {
       body << "(defmethod destination-loaded? ((this " << type << ") (arg0 symbol))\n"
            << "  #t\n"
            << "  )\n\n";
+    }
+    if (!locked) {
       std::string test;
       if (open == "always") test = "(not #f)";
       else if (open == "when" && when.kind != Condition::Always)
         test = std::string("(and ") + kDoorFree + " " + condition_script(when) + ")";
       const double d = open == "always" ? 1000.0 : distance;
-      if (!test.empty() || d > 0) {
+      if (!test.empty() || d > 0 || !loads.empty()) {
         body << "(defmethod init-airlock! ((this " << type << "))\n"
              << "  (call-parent-method this)\n";
         if (!test.empty()) body << "  (set! (-> this open-test) '" << test << ")\n";
+        // the levels behind it, as its on-notice script would say: it opens once they are loaded
+        if (!loads.empty()) body << "  (set! (-> this level-name) '(quote (" << loads << ")))\n";
         if (d > 0) {
           char buf[64];
           std::snprintf(buf, sizeof(buf), "%.2f", d);

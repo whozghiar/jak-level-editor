@@ -36,11 +36,19 @@
 #include "io/prefab_recipes.h"
 #include "io/prefabs.h"
 #include "render/offscreen.h"
+#include "scene/assemblies.h"
 #include "scene/bvh.h"
+#include "scene/closure.h"
+#include "scene/gaps.h"
+#include "game_view/game_mood.h"
 #include "scene/particles.h"
 #include "scene/relight.h"
+#include "scene/level_style.h"
 #include "scene/shapes.h"
+#include "scene/skeleton.h"
 #include "scene/story.h"
+#include "scene/terrain.h"
+#include "scene/topology.h"
 #include "stb_image_write.h"
 
 namespace ogle {
@@ -1326,6 +1334,12 @@ int run_selftest() {
       const std::string elev = behavior_code(&data, "elevator", json{{"leave", condition_json(task)}}, "lv-elev", "");
       const std::string there = behavior_code(&data, "crate", json{{"present", {{"when", "gone"}, {"arg", "crate-9"}}}}, "lv-crate", "");
       const std::string plain = behavior_code(&data, "crate", json::object(), "lv-crate", "");
+      // a door loading the rooms behind it (a level of their own): wanted with the others, shown,
+      // the door waiting for it (no "#t")
+      const std::string rooms = behavior_code(&data, "hip-door-a", json{{"open", "approach"}, {"loads", "My Rooms!"}}, "lv-home", "");
+      const bool loads = has(rooms, {"(set! (-> this level-name) '(quote (myrooms)))", "(want-levels *load-state* (-> names data))",
+                                     "(want-display-level *load-state* 'myrooms 'display)", "(call-parent-method this arg0)"}) &&
+                         rooms.find("  #t\n") == std::string::npos;
       check(task.kind == Condition::Task && condition_script(task) == "(task-closed? \"arena-fight-1-resolution\")" &&
                 condition_script(none) == "(entity-status? \"evil\" subtask-complete)" &&
                 condition_name(condition_of(condition_json(task)).kind) == std::string("task") &&
@@ -1337,8 +1351,9 @@ int run_selftest() {
                 has(elev, {"(defstate waiting (lv-elev)", "(set! (-> self activate-test) '(task-closed?", "call-parent-state-handler enter"}) &&
                 has(there, {"(defmethod init-from-entity! ((this lv-crate) (arg0 entity-actor))", "(entity-status? \"crate-9\" dead)",
                             "(deactivate this)"}) &&
-                plain.empty() && behavior_type_name("my-level", "Cty Door_1") == "my-level-cty-door-1",
-            "behaviors: doors, bouncers, elevators and presence as the game's code, conditions safe in a script");
+                plain.empty() && behavior_type_name("my-level", "Cty Door_1") == "my-level-cty-door-1" && loads,
+            "behaviors: doors, bouncers, elevators and presence as the game's code, conditions safe in a script, a door "
+            "loading the rooms behind it");
     }
 
     // a small level: its shell with the game's collision, a box placed, actors
@@ -1500,13 +1515,16 @@ int run_selftest() {
           "export: the behaviors as the level's code, its DGO with the game's code its objects need");
     const json glb = read_glb_json(dir / "my-test.glb");
     size_t surfaces = 0;
-    bool floor_ignored = false, box_collides = false, lamp_ignored = false;
+    bool floor_ignored = false, box_collides = false, box_double = false, lamp_ignored = false;
     if (glb.is_object())
       for (const auto& n : glb["nodes"]) {
         const json e = n.value("extras", json::object());
         if (e.value("set_invisible", 0) == 1) surfaces++;
         if (n.value("name", std::string()) == "testlvl-floor") floor_ignored = e.value("ignore", 0) == 1;
-        if (n.value("name", std::string()) == "box-1") box_collides = !e.contains("set_collision");
+        if (n.value("name", std::string()) == "box-1") {
+          box_collides = !e.contains("set_collision");
+          box_double = e.value("double_sided", 0) == 1;
+        }
         if (n.value("name", std::string()) == "lamp-1") lamp_ignored = e.value("ignore", 0) == 1;
       }
     std::set<std::string> keys;
@@ -1520,7 +1538,7 @@ int run_selftest() {
           "export: the game's collision one node per surface, the shell not colliding twice, a 6 m box by its "
           "shape, a 2 m lamp without collision");
     // a level's blended walls (their depth written) cut out in the builder's solid tree; the decor
-    // faces either way, its collision holds from both sides
+    // faces either way, its collision holds from both sides (the game's own stays one-sided)
     bool walls_cut = glb.is_object() && glb.contains("materials"), glass_blended = false;
     if (walls_cut)
       for (const auto& m : glb["materials"]) {
@@ -1530,7 +1548,7 @@ int run_selftest() {
         else
           walls_cut &= !blend;
       }
-    check(walls_cut && glass_blended && level.value("double_sided_collide", false),
+    check(walls_cut && glass_blended && box_double && !level.value("double_sided_collide", true),
           "export: a level's blended walls cut out, its glass in the builder's translucent tree (og_blend), the "
           "decor's collision from both sides");
     // the game's lighting: every mesh with the 8 palettes the builder reads, a node's own as it has
@@ -1699,6 +1717,8 @@ int run_selftest() {
         };
         piece("lvx-floor", make_floor(-1), {0, 0, 0}, {1, 1, 1});
         if (!edited) piece("lvx-wall", make_box("wall", -1), {-20, 0, 0}, {5, 5, 0.5f});
+        // rubble, deleted: its collision is coarser than it (a box 1.5 to 3 m off its faces)
+        if (!edited) piece("lvx-rubble", make_box("rubble", -1), {0, 10, 20}, {2, 2, 2});
         piece("lvx-block", make_box("block", -1), edited ? Vec3{20, 0, 30} : Vec3{20, 0, 0}, {3, 3, 3});
         Node colg;
         colg.name = "lvx-collision";
@@ -1722,6 +1742,7 @@ int run_selftest() {
         };
         add_box({-20, 0, 0}, {5, 5, 0.5f});
         add_box({20, 0, 0}, {3, 3, 3});
+        add_box({0, 10, 20}, {5, 5, 5});
         cp.tri_pat.assign(cp.idx.size() / 3, 0);
         sc->add(col);
         sc->begin_frame();
@@ -1745,7 +1766,8 @@ int run_selftest() {
       if (fglb.is_object())
         for (const auto& n : fglb["nodes"]) extras[n.value("name", std::string())] = n.value("extras", json::object());
       // the floor's collision kept (and the bottoms of the wall and the block, on it), the rest of
-      // theirs taken out; the floor still the game's, the block colliding by its shape where it is
+      // theirs taken out, and all of the rubble's though it lies off it; the floor still the game's,
+      // the block colliding by its shape where it is
       const bool follows = done && fr.collision_triangles >= 2 && fr.collision_triangles <= 8 && taken_out >= 16 &&
                            extras["lvx-floor"].value("ignore", 0) == 1 && !extras["lvx-block"].contains("set_collision");
       // and a dense piece (5 m, 3,200 triangles) on the floor: said as a place where Jak would fall
@@ -1778,7 +1800,7 @@ int run_selftest() {
                     (int)done, fr.collision_triangles, taken_out, (int)(extras["lvx-floor"].value("ignore", 0) == 1),
                     extras["lvx-block"].dump().c_str(), (int)done2, fr2.dense_places, (int)dense_said, err.c_str());
       check(follows && done2 && fr2.dense_places >= 1 && dense_said,
-            "export: the game's collision taken out with the pieces deleted or moved, a moved piece colliding by its "
+            "export: the game's collision taken out with the pieces deleted or moved (rubble's coarser one too), a moved piece colliding by its "
             "shape; a place denser than Jak 3 gathers (461 triangles) said");
     }
   }
@@ -1820,11 +1842,14 @@ int run_selftest() {
     const auto jak2 = load_prefab_recipes(prefab_recipes_path("jak2"), &err, "jak2");
     bool jak2_apart = !jak2.empty();
     for (const auto& j : jak2) jak2_apart &= j.game == "jak2" && j.file.rfind("jak2/", 0) == 0;
-    check(recipes.size() >= 50 && categories.count("house") && categories.count("bridge") && categories.count("platform") &&
-              categories.count("vent") && categories.count("generator") && categories.count("industrial") &&
-              members == std::vector<uint32_t>{anchor, bolt} && jak2_apart,
-          "game prefabs: the recipes shipped by category, Jak II's apart; a recipe takes its anchor and what is on it, "
-          "not what is far, too large or left out by name");
+    // whole structures: most of them assemblies of their level, found by an element's name
+    size_t assemblies = 0;
+    for (const auto& r : recipes) assemblies += !r.assembly.empty();
+    check(recipes.size() >= 120 && assemblies >= recipes.size() * 3 / 4 && categories.count("building") &&
+              categories.count("house") && categories.count("bridge") && categories.count("tower") &&
+              categories.count("industrial") && members == std::vector<uint32_t>{anchor, bolt} && jak2_apart,
+          "game prefabs: the recipes shipped by category, most of them whole assemblies, Jak II's apart; a recipe takes "
+          "its anchor and what is on it, not what is far, too large or left out by name");
   }
 
   // a structure of Jak II brought into a Jak 3 level: the image Jak 3 has shared, another renamed,
@@ -2333,6 +2358,463 @@ int run_selftest() {
     check(m.light_ambient[0] == m.times[0][0] && m.light_color[0][0] == m.times[2][0] * 0.5f &&
               m.light_color[1][0] == m.times[3][0] * 0.5f && m.light_dir[1][0] == -0.5f && m.light_color[2][0] == 0.f,
           "game view: the models lit by the mood's ambient light and its suns, as merc lights them");
+  }
+
+  {
+    // the trees of instanced decor by their names: not a prototype whose name says tie or shrub
+    check(instance_tree("ctyfarma-tie-0") && instance_tree("atoll-shrub-12") && !instance_tree("atoll-bigvents-tie-01.mb") &&
+              !instance_tree("des-stone-shrub-01.mb") && !instance_tree("ctyfarma-tie-0-wind") && !instance_tree("tie-0"),
+          "catalog: the decor's trees of instances told from prototypes named like them (no duplicates)");
+  }
+
+  {
+    // topology: a box's points welded, a face extruded with its walls, cut in four, deleted
+    ShapeParams p;
+    p.size = {2, 2, 2};
+    auto box = make_shape(p, -1);
+    const MeshPoints pts = mesh_points(*box);
+    std::set<MeshRef> top;  // the faces looking up
+    for (size_t t = 0; t * 3 + 2 < box->prims[0].idx.size(); t++) {
+      const auto& q = box->prims[0];
+      const Vec3 n = cross(q.pos[q.idx[t * 3 + 1]] - q.pos[q.idx[t * 3]], q.pos[q.idx[t * 3 + 2]] - q.pos[q.idx[t * 3]]);
+      if (normalize(n).y > 0.9f) top.insert(mesh_ref(0, t));
+    }
+    Mesh m(*box);
+    const size_t before = m.prims[0].idx.size() / 3;
+    const auto moved = extrude_faces(m, top, 1.f);
+    float high = -1e9f;
+    for (MeshRef f : moved)
+      for (int k = 0; k < 3; k++) high = std::max(high, m.prims[0].pos[m.prims[0].idx[ref_index(f) * 3 + k]].y);
+    const size_t extruded = m.prims[0].idx.size() / 3;
+    const auto cut = subdivide_faces(m, moved);
+    const size_t subdivided = m.prims[0].idx.size() / 3;
+    const size_t gone = delete_faces(m, cut);
+    check(pts.pos.size() == 8 && top.size() == 2 && moved.size() == 2 && std::fabs(high - 3.f) < 1e-4f &&
+              extruded == before + 8 && subdivided == extruded + 6 && gone == 8 &&
+              m.prims[0].idx.size() / 3 == extruded - 2 && m.prims[0].nrm.size() == m.prims[0].pos.size(),
+          "topology: a box's 8 points, its top extruded 1 m with 4 walls, cut in four, deleted");
+  }
+
+  {
+    // shapes: a wall bent a quarter turn ends turned 90 degrees; rounded corners; a ground's bumps
+    ShapeParams wall;
+    wall.size = {8, 4, 0.5f};
+    wall.bend = 90.f;
+    auto bent = make_shape(wall, -1);
+    float min_x = 1e9f, max_x = -1e9f, max_z = -1e9f;
+    for (const Vec3& v : bent->prims[0].pos) {
+      min_x = std::min(min_x, v.x);
+      max_x = std::max(max_x, v.x);
+      max_z = std::max(max_z, v.z);
+    }
+    const float r = 8.f / radians(90.f);  // the arc's radius
+    ShapeParams pillar;
+    pillar.size = {2, 4, 2};
+    pillar.round = 1.f;
+    auto round = make_shape(pillar, -1);
+    float corner = 0;  // the farthest point from the axis: 1 when it is round
+    for (const Vec3& v : round->prims[0].pos) corner = std::max(corner, std::sqrt(v.x * v.x + v.z * v.z));
+    ShapeParams ground = shape_preset("ground")->params;
+    ground.bumps = 0.5f;
+    ground.color = {0.2f, 0.3f, 0.4f, 1.f};
+    auto g = make_shape(ground, -1);
+    float lo = 1e9f, hi = -1e9f;
+    for (size_t i = 0; i < g->prims[0].pos.size(); i++)
+      if (g->prims[0].pos[i].y > 0.01f) {
+        lo = std::min(lo, g->prims[0].pos[i].y);
+        hi = std::max(hi, g->prims[0].pos[i].y);
+      }
+    const ShapeParams back = ShapeParams::from_json(ground.to_json());
+    check(bent->prims[0].pos.size() > 100 && std::fabs(max_x - r * std::sin(radians(45.f)) - 0.25f * std::sin(radians(45.f))) < 0.3f &&
+              std::fabs(min_x + max_x) < 0.01f && max_z > 1.f && corner < 1.01f && corner > 0.99f && hi - lo > 0.2f &&
+              hi - lo < 1.5f && g->prims[0].col.size() == g->prims[0].pos.size() && back.bumps == 0.5f &&
+              back.color.x == 0.2f && ShapeParams::from_json(wall.to_json()).bend == 90.f,
+          "shapes: a wall bent 90 degrees along an arc, a pillar with round corners, a ground with its bumps and light");
+  }
+
+  {
+    // the preview's skinning: a joint moved moves its vertices, the others stay; the rest pose is the bind pose
+    Skeleton s;
+    s.parent = {-1, 0};
+    s.rest = {Mat4::identity(), Mat4::translate({0, 1, 0})};
+    s.joints = {0, 1};
+    s.inverse_bind = {Mat4::identity(), Mat4::translate({0, -1, 0})};
+    Skeleton::Animation a;
+    a.name = "lift";
+    a.duration = 1.f;
+    Skeleton::Channel c;
+    c.node = 1;
+    c.path = 0;
+    c.times = {0.f, 1.f};
+    c.values = {{0, 1, 0, 0}, {0, 3, 0, 0}};
+    a.channels.push_back(c);
+    s.animations.push_back(a);
+    Mesh bind;
+    bind.prims.emplace_back();
+    auto& p = bind.prims[0];
+    p.pos = {{0, 0, 0}, {0, 1, 0}};
+    p.nrm = {{0, 1, 0}, {0, 1, 0}};
+    p.extra_attrs["JOINTS_0"] = {{0, 0, 0, 0}, {1, 0, 0, 0}};
+    p.extra_attrs["WEIGHTS_0"] = {{1, 0, 0, 0}, {1, 0, 0, 0}};
+    Mesh out(bind);
+    const bool rest = skin_mesh(bind, joint_matrices(s, skeleton_pose(s, -1, 0)), out) &&
+                      length(out.prims[0].pos[1] - Vec3{0, 1, 0}) < 1e-5f;
+    skin_mesh(bind, joint_matrices(s, skeleton_pose(s, 0, 0.5f)), out);
+    check(rest && length(out.prims[0].pos[0]) < 1e-5f && length(out.prims[0].pos[1] - Vec3{0, 2, 0}) < 1e-4f,
+          "preview: a model's vertices follow its joints (the rest pose, a joint half-way up)");
+  }
+
+  {
+    // a level's style: its floor's texture and its size (1 repeat over 4 m), its walls'
+    Scene s;
+    Texture t;
+    t.name = "floor-tex";
+    t.width = t.height = 1;
+    t.rgba = {1, 2, 3, 255};
+    Material mf;
+    mf.name = "floor";
+    mf.texture = s.add_texture(t);
+    const int floor_mat = s.add_material(mf);
+    t.name = "wall-tex";
+    Material mw;
+    mw.name = "wall";
+    mw.texture = s.add_texture(t);
+    const int wall_mat = s.add_material(mw);
+    auto quad = [](Vec3 a, Vec3 b, Vec3 c, Vec3 d, float uv, int mat) {
+      auto m = std::make_shared<Mesh>();
+      m->prims.emplace_back();
+      auto& p = m->prims[0];
+      p.pos = {a, b, c, d};
+      p.uv = {{0, 0}, {uv, 0}, {uv, uv}, {0, uv}};
+      p.col.assign(4, Vec4{0.3f, 0.3f, 0.3f, 1});
+      p.idx = {0, 2, 1, 0, 3, 2};
+      p.material = mat;
+      p.compute_normals();
+      return m;
+    };
+    Node f;
+    f.kind = NodeKind::Render;
+    f.mesh = quad({0, 0, 0}, {8, 0, 0}, {8, 0, 8}, {0, 0, 8}, 2.f, floor_mat);
+    f.extras["og_terrain"] = true;
+    s.add(f);
+    Node w;
+    w.kind = NodeKind::Render;
+    w.mesh = quad({0, 0, 0}, {6, 0, 0}, {6, 6, 0}, {0, 6, 0}, 2.f, wall_mat);
+    s.add(w);
+    const LevelStyle st = measure_style(s);
+    check(st.floor.texture == "floor-tex" && std::fabs(st.floor.tile - 4.f) < 0.01f && st.wall.texture == "wall-tex" &&
+              std::fabs(st.wall.tile - 3.f) < 0.01f && std::fabs(st.floor.color.x - 0.3f) < 0.01f && st.bumps < 0.01f,
+          "build: a level's style, its floor's and walls' textures, their size, its light, a flat ground");
+  }
+
+  {
+    // the catalog's objects without a model: a picture of what they do
+    const auto vent = object_icon("industrial-board-vent", "movement");
+    const auto gate = object_icon("sewer-elec-gate", "hazard");
+    const auto any = object_icon("some-type", "other");
+    check(vent->prims.size() == 3 && gate->prims.size() == 2 && !any->prims.empty() && !vent->prims[0].col.empty(),
+          "catalog: an object without a model drawn as what it does (a vent blowing up, an electric gate)");
+  }
+
+  {
+    // assemblies: two houses (four walls and a roof each) on one sidewalk, a pipe from one to the
+    // other, a lamp post in the first, dirt on the ground; a row of blocks 200 m long
+    Scene s;
+    auto put = [&](const std::string& name, Vec3 at, Vec3 size) {  // a box of that size, its base at `at`
+      Node n{};
+      n.name = name;
+      n.kind = NodeKind::Render;
+      n.mesh = make_box(name, -1);
+      n.local.t = at;
+      n.local.s = size * 0.5f;
+      return s.add(n);
+    };
+    std::vector<uint32_t> house[2];
+    for (int h = 0; h < 2; h++) {
+      const float x = h * 30.f;
+      const std::string p = h ? "B-" : "A-";
+      house[h] = {put(p + "front", {x, 0, 0}, {10, 6, 1}), put(p + "back", {x, 0, 8}, {10, 6, 1}),
+                  put(p + "left", {x - 5, 0, 4}, {1, 6, 9}), put(p + "right", {x + 5, 0, 4}, {1, 6, 9}),
+                  put(p + "roof", {x, 6, 4}, {11, 0.5f, 10})};
+    }
+    const uint32_t lamp = put("A-lamp-post", {2, 0, 4}, {0.3f, 4, 0.3f});
+    house[0].push_back(lamp);
+    const uint32_t sidewalk = put("sidewalk", {15, -0.3f, -1}, {40, 0.3f, 10});
+    const uint32_t pipe = put("pipe", {15, 3, -0.75f}, {30, 0.5f, 0.5f});
+    const uint32_t dirt = put("street-dirt-01", {0, 0, 4}, {2, 0.05f, 2});
+    std::vector<uint32_t> row;
+    for (int b = 0; b < 20; b++) row.push_back(put("block-" + std::to_string(b), {100.f + b * 10.f, 0, 50}, {10, 5, 4}));
+    const auto found = find_assemblies(s);
+    auto sorted = [](std::vector<uint32_t> v) {
+      std::sort(v.begin(), v.end());
+      return v;
+    };
+    const auto a = assembly_of(found, house[0][0]), b = assembly_of(found, house[1][0]);
+    bool row_ok = true;
+    std::set<uint32_t> row_seen;
+    size_t row_parts = 0;
+    for (const auto& as : found) {
+      if (std::find(row.begin(), row.end(), as[0]) == row.end()) continue;
+      row_parts++;
+      AABB box;
+      for (uint32_t id : as) {
+        row_ok &= std::find(row.begin(), row.end(), id) != row.end() && row_seen.insert(id).second;
+        box.add(s.cache().bounds[s.index_of(id)]);
+      }
+      row_ok &= box.size().x <= 60.5f;
+    }
+    // a recipe of the game's prefabs finds the same assembly by the name of one of its elements
+    PrefabRecipe r;
+    r.level = "test";
+    r.assembly = "A-roof";
+    std::string err;
+    const auto members = recipe_members(s, r, &err);
+    std::printf("    assemblies: %zu; house A %zu, B %zu; row %zu parts\n", found.size(), a.size(), b.size(), row_parts);
+    check(a == sorted(house[0]) && b == sorted(house[1]) && assembly_of(found, sidewalk) == std::vector<uint32_t>{sidewalk} &&
+              assembly_of(found, pipe) == std::vector<uint32_t>{pipe} && assembly_of(found, dirt) == std::vector<uint32_t>{dirt} &&
+              row_ok && row_seen.size() == row.size() && row_parts >= 4 && members == a,
+          "assemblies: a house its walls, roof and lamp, not the sidewalk under both nor the pipe between them nor "
+          "the dirt; a row 200 m long cut in parts of 60 m at most; a recipe finds it by an element's name");
+  }
+
+  {
+    // the terrain brush: ground painted at the stroke's height, raised and dug in its middle, walls
+    // raised and taken away, the grid kept through its node's extras, hills generated
+    TerrainGrid g;
+    g.cell = 1.f;
+    g.looks[0].floor_material = 0;
+    g.looks[0].wall_material = 1;
+    BrushStroke st;
+    st.mode = BrushMode::Paint;
+    st.center = {0, 0, 0};
+    st.size = 4.f;
+    st.height = 1.f;
+    const bool painted = apply_brush(g, st);
+    size_t cells = 0;
+    for (uint8_t c : g.cells) cells += c == TerrainGrid::Ground;
+    st.mode = BrushMode::Raise;
+    st.amount = 2.f;
+    apply_brush(g, st);
+    const float raised = g.corner(0, 0), edge = g.corner(-2, -2);
+    st.mode = BrushMode::Dig;
+    st.amount = 0.5f;
+    apply_brush(g, st);
+    float middle = 0;
+    const bool on = terrain_height(g, 0.f, 0.f, &middle);
+    float none = 0;
+    const bool off = terrain_height(g, 20.f, 0.f, &none);
+    st.mode = BrushMode::Wall;
+    st.center = {10.f, 0, 0.f};
+    st.size = 2.f;
+    st.height = 0.f;
+    st.amount = 3.f;
+    apply_brush(g, st);
+    size_t walls = 0;
+    for (uint8_t c : g.cells) walls += c == TerrainGrid::Wall;
+    const auto mesh = make_terrain_mesh(g);
+    float top = -1e9f;
+    for (const auto& p : mesh->prims)
+      if (p.material == 1)
+        for (const auto& v : p.pos) top = std::max(top, v.y);
+    TerrainGrid back;
+    const bool read = TerrainGrid::from_json(g.to_json(), &back);
+    bool same = read && back.cells == g.cells && back.height.size() == g.height.size();
+    for (size_t i = 0; same && i < g.height.size(); i++) same &= std::fabs(back.height[i] - g.height[i]) < 0.006f;
+    // another style painted over a part: its own floor and walls, kept in the node; raise where
+    // there is no ground lays some
+    TerrainGrid two = g;
+    TerrainGrid::Look other;
+    other.floor_material = 2;
+    other.wall_material = 3;
+    BrushStroke ps;
+    ps.center = {0, 0, 0};
+    ps.size = 2.f;
+    ps.height = 1.f;
+    ps.look = two.add_look(other);
+    const bool repainted = apply_brush(two, ps) && two.add_look(other) == ps.look;
+    bool floor2 = false, floor0 = false;
+    const auto mesh_two = make_terrain_mesh(two);
+    for (const auto& p : mesh_two->prims) {
+      floor2 |= p.material == 2;
+      floor0 |= p.material == 0;
+    }
+    TerrainGrid two_back;
+    const bool looks_kept = TerrainGrid::from_json(two.to_json(), &two_back) && two_back.look == two.look &&
+                            two_back.looks.size() == 2 && two_back.looks[1].wall_material == 3;
+    BrushStroke rs;
+    rs.mode = BrushMode::Raise;
+    rs.center = {30.f, 0, 30.f};
+    rs.size = 2.f;
+    rs.amount = 1.f;
+    const bool raised_new = apply_brush(two, rs) && two.at(30, 30) == TerrainGrid::Ground && two.corner(30, 30) > 0.9f;
+    st.mode = BrushMode::Erase;
+    apply_brush(g, st);
+    size_t walls_after = 0;
+    for (uint8_t c : g.cells) walls_after += c == TerrainGrid::Wall;
+    TerrainGrid hills;
+    generate_terrain(hills, {0, 5, 0}, {32, 32}, 10.f, 0.5f, 3);
+    float lo = 1e9f, hi = -1e9f;
+    for (float h : hills.height) {
+      lo = std::min(lo, h);
+      hi = std::max(hi, h);
+    }
+    const bool border = std::fabs(hills.corner(hills.x0, hills.z0) - 5.f) < 0.01f;
+    std::printf("    terrain: %zu cells, raised %.2f edge %.2f, middle %.2f, %zu walls (top %.2f), hills %.2f..%.2f; styles: "
+                "repainted %d floors %d/%d kept %d, raised new %d\n",
+                cells, raised, edge, middle, walls, top, lo, hi, repainted, floor0, floor2, looks_kept, raised_new);
+    check(painted && cells == 16 && std::fabs(raised - 3.f) < 0.01f && edge < raised && on && std::fabs(middle - 2.5f) < 0.01f &&
+              !off && walls == 4 && std::fabs(top - 3.f) < 0.01f && mesh->prims.size() == 2 && same && walls_after == 0 &&
+              lo >= 4.99f && hi <= 15.01f && hi - lo > 2.f && border && repainted && floor2 && floor0 && looks_kept &&
+              raised_new,
+          "terrain brush: ground painted at the stroke's height, raised and dug in the square's middle, walls up and "
+          "away, kept in the node, hills generated meeting the ground around, another style painted over a part, "
+          "raise laying ground where there is none");
+  }
+
+  {
+    // building without visual bugs: a facade alone (one wall seen from the street, -z) closed behind
+    // it, as deep as a building of its width, no higher than it; a closed house has nothing to add
+    Scene s;
+    auto put = [&](const std::string& name, Vec3 at, Vec3 size) {  // a box of that size, its base at `at`
+      Node n{};
+      n.name = name;
+      n.kind = NodeKind::Render;
+      n.mesh = make_box(name, -1);
+      n.local.t = at;
+      n.local.s = size * 0.5f;
+      return s.add(n);
+    };
+    Node facade{};
+    facade.name = "facade";
+    facade.kind = NodeKind::Render;
+    facade.mesh = std::make_shared<Mesh>();
+    Primitive fp;
+    fp.pos = {{-5, 0, 0}, {5, 0, 0}, {5, 8, 0}, {-5, 8, 0}};
+    fp.idx = {0, 2, 1, 0, 3, 2};  // facing -z
+    fp.compute_normals();
+    facade.mesh->prims.push_back(fp);
+    const uint32_t front = s.add(facade);
+    ClosureOptions street;  // seen from the street, in front of it
+    street.has_view = true;
+    street.seen_from = {0, 1.6f, -20};
+    const ClosureResult closed = close_structure(s, {front}, street);
+    AABB cb;
+    if (closed.mesh)
+      for (const auto& p : closed.mesh->prims)
+        for (const auto& v : p.pos) cb.add(v + closed.origin);
+    std::vector<uint32_t> walls = {put("front", {0, 0, 0}, {10, 6, 1}), put("back", {0, 0, 8}, {10, 6, 1}),
+                                   put("left", {-5, 0, 4}, {1, 6, 9}), put("right", {5, 0, 4}, {1, 6, 9}),
+                                   put("roof", {0, 6, 4}, {11, 0.5f, 10})};
+    const ClosureResult house = close_structure(s, walls, ClosureOptions{});
+    // a U open to the street, its courtyard meant to be seen: filled behind its back wall, not inside
+    Scene u;
+    auto uput = [&](const std::string& name, Vec3 at, Vec3 size) {
+      Node n{};
+      n.name = name;
+      n.kind = NodeKind::Render;
+      n.mesh = make_box(name, -1);
+      n.local.t = at;
+      n.local.s = size * 0.5f;
+      return u.add(n);
+    };
+    const std::vector<uint32_t> ushape = {uput("u-back", {0, 0, 10}, {20, 8, 0.4f}), uput("u-left", {-10, 0, 5}, {0.4f, 8, 10}),
+                                          uput("u-right", {10, 0, 5}, {0.4f, 8, 10})};
+    const ClosureResult court = close_structure(u, ushape, street);
+    bool courtyard_open = court.mesh != nullptr, behind = false;
+    if (court.mesh)
+      for (const auto& p : court.mesh->prims)
+        for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+          const Vec3 m = (p.pos[p.idx[t]] + p.pos[p.idx[t + 1]] + p.pos[p.idx[t + 2]]) * (1.f / 3.f) + court.origin;
+          if (std::fabs(m.x) < 8.f && m.z > 1.f && m.z < 9.f && m.y > 0.5f) courtyard_open = false;
+          behind |= m.z > 12.f;
+        }
+    std::printf("    closure: facade %d back %.2f,%.2f added %zu box %.1f..%.1f x %.1f..%.1f z, top %.2f; house: %s\n",
+                closed.facade, closed.back.x, closed.back.z, closed.added, cb.lo.x, cb.hi.x, cb.lo.z, cb.hi.z, cb.hi.y,
+                house.mesh ? strf("%zu added", house.added).c_str() : house.error.c_str());
+    check(closed.mesh && closed.facade && closed.back.z > 0.9f && closed.added > 0 && cb.hi.z > 5.f && cb.lo.z > -0.5f &&
+              cb.hi.y <= 8.01f && cb.lo.y < 0.f && !house.mesh && !house.error.empty() && courtyard_open && behind,
+          "closure: a facade seen from the street filled behind it (as deep as a building of its width, no higher, "
+          "sunk in the ground), a closed house left as it is, a courtyard facing the street left open");
+
+    // holes: two slabs of a floor 1 m apart, walls all around: the gap between them is found and
+    // where it is; the floor whole: none
+    Scene g;
+    auto slab = [&](Scene& sc, const std::string& name, Vec3 at, Vec3 size) {
+      Node n{};
+      n.name = name;
+      n.kind = NodeKind::Render;
+      n.mesh = make_box(name, -1);
+      n.local.t = at;
+      n.local.s = size * 0.5f;
+      return sc.add(n);
+    };
+    auto walls_around = [&](Scene& sc) {
+      slab(sc, "wall-n", {0, -1, -21}, {44, 12, 2});
+      slab(sc, "wall-s", {0, -1, 21}, {44, 12, 2});
+      slab(sc, "wall-w", {-21, -1, 0}, {2, 12, 44});
+      slab(sc, "wall-e", {21, -1, 0}, {2, 12, 44});
+    };
+    slab(g, "left", {-10.25f, -0.2f, 0}, {19.5f, 0.2f, 40});
+    slab(g, "right", {10.25f, -0.2f, 0}, {19.5f, 0.2f, 40});
+    walls_around(g);
+    GapOptions go;
+    go.region.add({-18, -1, -18});
+    go.region.add({18, 4, 18});
+    go.spacing = 4.f;
+    const GapReport holes = find_gaps(g, go);
+    size_t gaps = 0, at_gap = 0;
+    for (const auto& sp : holes.spots)
+      if (!sp.edge) {
+        gaps++;
+        at_gap += std::fabs(sp.at.x) < 1.5f;
+      }
+    Scene whole;
+    slab(whole, "floor", {0, -0.2f, 0}, {40, 0.2f, 40});
+    walls_around(whole);
+    const GapReport none = find_gaps(whole, go);
+    std::printf("    holes: %zu viewpoints, %zu rays, %zu escaped, %zu gaps (%zu at the slit); whole floor %zu spots\n",
+                holes.viewpoints, holes.rays, holes.escaped, gaps, at_gap, none.spots.size());
+    check(holes.viewpoints > 0 && gaps > 0 && at_gap == gaps && none.spots.empty(),
+          "holes in the decor: the slit between two slabs found where it is, a whole floor walled around has none");
+
+    // the weathers: a storm darker than a clear sky, its fog nearer; every mix of cloud and fog read
+    MoodSettings clear, storm;
+    clear.cloud = 0.f;
+    storm.cloud = 1.f;
+    storm.fog = 1.f;
+    const GameMood mc = game_mood(clear), ms = game_mood(storm);
+    bool all = true;
+    for (float c = 0; c <= 1.001f; c += 0.125f)
+      for (float f = 0; f <= 1.001f; f += 0.25f) {
+        MoodSettings m;
+        m.cloud = c;
+        m.fog = f;
+        const GameMood gm = game_mood(m);
+        all &= std::isfinite(gm.fog_end) && gm.fog_end > 0 && std::isfinite(gm.light_ambient[0]);
+      }
+    int presets = 0;
+    weather_presets(&presets);
+    check(ms.times[1][0] < mc.times[1][0] && ms.fog_end < mc.fog_end && mc.cloud_min > ms.cloud_min && all && presets == 10,
+          "weather: a storm's sun dimmer and its fog nearer than a clear sky's, every mix of the game's tables read");
+
+    // groups: a copy of a group is a group of its own; a prefab placed forgets the groups it was made of
+    Scene d;
+    Node a{};
+    a.name = "stall";
+    a.kind = NodeKind::Render;
+    a.mesh = make_box("stall", -1);
+    set_group_tag(a, 1, "market", false);
+    const uint32_t ida = d.add(a);
+    const auto copies = paste_nodes(d, copy_nodes(d, {ida}));
+    Scene pre;
+    pre.add(a);
+    std::map<const Mesh*, std::shared_ptr<Mesh>> merged;
+    const auto placed = place_prefab(d, pre, Mat4::identity(), &merged);
+    const Node* copy = copies.empty() ? nullptr : d.find(copies[0]);
+    const Node* p0 = placed.empty() ? nullptr : d.find(placed[0]);
+    check(copy && group_tag(*copy) == 2 && group_tag(*d.find(ida)) == 1 && copy->extras["og_group"]["name"] == "market" &&
+              p0 && group_tag(*p0) == 0 && new_group_id(d) == 3,
+          "groups: a copy of a group is a new group of the same name, a prefab placed forgets the groups it was made of");
   }
 
   fs::remove_all(tmp, ec);

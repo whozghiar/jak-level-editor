@@ -69,6 +69,8 @@ struct Vec4 {
   float& operator[](int i) { return (&x)[i]; }
   float operator[](int i) const { return (&x)[i]; }
   bool operator==(const Vec4& o) const { return x == o.x && y == o.y && z == o.z && w == o.w; }
+  Vec4 operator+(const Vec4& o) const { return {x + o.x, y + o.y, z + o.z, w + o.w}; }
+  Vec4 operator*(float s) const { return {x * s, y * s, z * s, w * s}; }
 };
 
 struct Mat4;

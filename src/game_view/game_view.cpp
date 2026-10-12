@@ -9,9 +9,11 @@
 #include <unordered_map>
 
 #include "core/log.h"
+#include "io/decor_behaviors.h"
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 #include "game/graphics/opengl_renderer/background/TFragment.h"
 #include "game/graphics/opengl_renderer/background/background_common.h"
+#include "game_view/sky.h"
 
 // the matrix the game's background shaders take (background_common.cpp)
 std::array<math::Vector4f, 4> make_new_cam_mat(const math::Vector4f cam_T_w[4],
@@ -196,6 +198,7 @@ struct GameView::Impl {
   const Scene* seen_scene = nullptr;
   GameMood mood;
   GoalBackgroundCameraData cam{};
+  Sky sky;
 
   void destroy(Chunk& c) {
     loader->levels.erase(c.name);
@@ -404,6 +407,8 @@ struct GameView::Impl {
       const Node& n = scene.nodes[i];
       if (n.kind != NodeKind::Render || !n.mesh || !cache.visible[i] || cache.actor[i]) continue;
       if (i < cache.reference.size() && cache.reference[i]) continue;
+      // an invisible wall: the game does not draw it (the editor's own view does, to edit it)
+      if (n.extras.contains("og_decor") && decor_behavior_of(n.extras).collision.kind == "invisible") continue;
       const TodPalette* pal = n.tod && !n.tod->palette->local && n.tod->fits(*n.mesh) ? n.tod->palette.get() : nullptr;
       const Vec3 at = i < cache.bounds.size() && cache.bounds[i].valid() ? cache.bounds[i].center()
                                                                           : cache.worlds[i].point({0, 0, 0});
@@ -513,6 +518,7 @@ bool GameView::init(const std::string& shader_dir, std::string* error) {
 
 void GameView::shutdown() {
   m->clear();
+  m->sky.shutdown();
   if (m->white) glDeleteTextures(1, &m->white);
   m->white = 0;
   m->state.reset();
@@ -535,7 +541,7 @@ void GameView::draw_opaque(const Scene& scene, const Camera& cam, int x, int y, 
   m->cam = game_camera(cam, (float)w / (float)std::max(h, 1), m->mood, clip);
   m->state->fog_color = math::Vector<u8, 4>((u8)m->mood.fog_color[0], (u8)m->mood.fog_color[1],
                                             (u8)m->mood.fog_color[2], 128);
-  m->state->fog_intensity = fog ? 1.f : 0.f;
+  m->state->fog_intensity = 1.f;
   // the sky behind, the depth the game's way (0 far)
   glViewport(x, y, w, h);
   glEnable(GL_SCISSOR_TEST);
@@ -546,10 +552,17 @@ void GameView::draw_opaque(const Scene& scene, const Camera& cam, int x, int y, 
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glClearDepth(1.0);
   glDisable(GL_SCISSOR_TEST);
+  // its sun, its clouds, the stars at night
+  m->sky.draw(m->mood, cam, (float)w / (float)std::max(h, 1), time);
   glDisable(GL_CULL_FACE);
   std::vector<Impl::Chunk*> order;
   for (auto& [k, c] : m->chunks) order.push_back(&c);
   m->render(tfrag3::TFragmentTreeKind::NORMAL, order, stats);
+}
+
+unsigned GameView::sky_preview(int w, int h, float yaw) {
+  if (!m->ok) return 0;
+  return m->sky.preview(game_mood(mood), w, h, yaw, time);
 }
 
 void GameView::draw_translucent() {

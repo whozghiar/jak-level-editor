@@ -7,6 +7,7 @@
 #include "core/log.h"
 #include "core/prefs.h"
 #include "glad/glad.h"
+#include "scene/shapes.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -25,6 +26,7 @@ uint64_t fnv(const std::string& s) {
 std::string ThumbRequest::key() const {
   if (kind == Kind::Part) return "p:" + path + "#" + node + "@" + std::to_string(stamp);
   if (kind == Kind::Effect) return "e2:" + path + "@" + std::to_string(stamp);
+  if (kind == Kind::Icon) return "i1:" + path + "#" + node;
   return (kind == Kind::Model ? "m:" : "b:") + path + "@" + std::to_string(stamp);
 }
 
@@ -198,7 +200,15 @@ bool Thumbnails::render(Item& item) {
   const std::vector<Texture>* textures = nullptr;
   std::shared_ptr<LoadedMesh> model;
   std::shared_ptr<Scene> level;
-  if (r.kind == ThumbRequest::Kind::Model) {
+  std::shared_ptr<Mesh> icon;
+  static const std::vector<Material> kNoMaterials;
+  static const std::vector<Texture> kNoTextures;
+  if (r.kind == ThumbRequest::Kind::Icon) {
+    icon = object_icon(r.path, r.node);
+    draws.push_back({icon.get(), Mat4::identity()});
+    materials = &kNoMaterials;
+    textures = &kNoTextures;
+  } else if (r.kind == ThumbRequest::Kind::Model) {
     model = m_store.model(r.path);
     if (!model) {
       item.failed = m_store.failed_model(r.path);
@@ -293,7 +303,8 @@ void Thumbnails::update() {
     } else {
       // keep its data queued in the store
       if (item.req.kind == ThumbRequest::Kind::Model) m_store.model(item.req.path);
-      else if (item.req.kind != ThumbRequest::Kind::Effect) m_store.level(item.req.path);
+      else if (item.req.kind == ThumbRequest::Kind::Level || item.req.kind == ThumbRequest::Kind::Part)
+        m_store.level(item.req.path);
     }
   }
   // forget thumbnails that left the screen long ago

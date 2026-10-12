@@ -12,6 +12,7 @@
 
 #include "core/log.h"
 #include "stb_image_write.h"
+#include "scene/skeleton.h"
 #include "tiny_gltf.h"
 
 namespace ogle {
@@ -373,6 +374,9 @@ bool import_gltf_file(Scene& scene, const std::string& path, const ImportOptions
         } else if (!name.empty() && name[0] == '_') {
           auto& dst = p.extra_attrs[name];
           gather(*cached_vec4(acc, true, 1.f), [&](const Vec4& v) { dst.push_back(v); });
+        } else if (opts.skin && (name == "JOINTS_0" || name == "WEIGHTS_0")) {
+          auto& dst = p.extra_attrs[name];
+          gather(*cached_vec4(acc, name == "WEIGHTS_0", 0.f), [&](const Vec4& v) { dst.push_back(v); });
         }
       }
       const size_t nu = p.pos.size();
@@ -946,6 +950,75 @@ bool export_glb(const Scene& scene, const std::string& path, const ExportOptions
   ctx.w.doc["scene"] = 0;
   if (ctx.w.doc["meshes"].empty()) ctx.w.doc.erase("meshes");
   return ctx.w.write(path, error);
+}
+
+bool load_skeleton(const std::string& path, Skeleton* out, std::string* error) {
+  tinygltf::TinyGLTF loader;
+  // its images are not needed
+  loader.SetImageLoader([](tinygltf::Image*, const int, std::string*, std::string*, int, int, const unsigned char*, int,
+                           void*) { return true; },
+                        nullptr);
+  tinygltf::Model model;
+  std::string err, warn;
+  if (!loader.LoadBinaryFromFile(&model, &err, &warn, path)) {
+    if (error) *error = err.empty() ? "unreadable glTF file" : err;
+    return false;
+  }
+  if (model.skins.empty()) {
+    if (error) *error = "no skeleton";
+    return false;
+  }
+  Skeleton s;
+  const size_t n = model.nodes.size();
+  s.parent.assign(n, -1);
+  s.rest.assign(n, Mat4::identity());
+  for (size_t i = 0; i < n; i++) {
+    const auto& node = model.nodes[i];
+    for (int c : node.children)
+      if (c >= 0 && c < (int)n) s.parent[c] = (int)i;
+    if (node.matrix.size() == 16) {
+      for (int k = 0; k < 16; k++) s.rest[i].m[k] = (float)node.matrix[k];
+    } else {
+      Vec3 t{0, 0, 0}, sc{1, 1, 1};
+      Quat r;
+      if (node.translation.size() == 3) t = {(float)node.translation[0], (float)node.translation[1], (float)node.translation[2]};
+      if (node.scale.size() == 3) sc = {(float)node.scale[0], (float)node.scale[1], (float)node.scale[2]};
+      if (node.rotation.size() == 4)
+        r = {(float)node.rotation[0], (float)node.rotation[1], (float)node.rotation[2], (float)node.rotation[3]};
+      s.rest[i] = Mat4::translate(t) * Mat4::rotate(r) * Mat4::scale(sc);
+    }
+  }
+  const auto& skin = model.skins[0];
+  s.joints = skin.joints;
+  AccessorView ibm;
+  if (view_accessor(model, skin.inverseBindMatrices, &ibm) && ibm.comps == 16 && ibm.ctype == TINYGLTF_COMPONENT_TYPE_FLOAT)
+    for (size_t j = 0; j < ibm.count; j++) {
+      Mat4 m;
+      std::memcpy(m.m, ibm.data + j * ibm.stride, sizeof(m.m));
+      s.inverse_bind.push_back(m);
+    }
+  for (const auto& a : model.animations) {
+    Skeleton::Animation anim;
+    anim.name = a.name;
+    for (const auto& ch : a.channels) {
+      if (ch.sampler < 0 || ch.sampler >= (int)a.samplers.size()) continue;
+      Skeleton::Channel c;
+      c.node = ch.target_node;
+      if (ch.target_path == "translation") c.path = 0;
+      else if (ch.target_path == "rotation") c.path = 1;
+      else if (ch.target_path == "scale") c.path = 2;
+      else continue;
+      const auto& sm = a.samplers[ch.sampler];
+      c.step = sm.interpolation == "STEP";
+      for (const Vec4& v : read_vec4(model, sm.input, false, 0.f)) c.times.push_back(v.x);
+      c.values = read_vec4(model, sm.output, false, 0.f);
+      if (!c.times.empty()) anim.duration = std::max(anim.duration, c.times.back());
+      anim.channels.push_back(std::move(c));
+    }
+    s.animations.push_back(std::move(anim));
+  }
+  *out = std::move(s);
+  return true;
 }
 
 }  // namespace ogle

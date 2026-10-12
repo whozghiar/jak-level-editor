@@ -2623,6 +2623,7 @@ void add_vertices_and_static_draw(tfrag3::TieTree& tree,
         wind_instance_info.wind_idx = inst.wind_index;   // which wind value to apply in the table
         wind_instance_info.stiffness = proto.stiffness;  // wind stiffness (how much we move)
         wind_instance_info.matrix = inst.mat;            // instance transformation matrix.
+        wind_instance_info.proto_idx = proto_idx;
         tree.wind_instance_info.push_back(wind_instance_info);
       } else {
         tree.packed_vertices.matrices.push_back(inst.mat);

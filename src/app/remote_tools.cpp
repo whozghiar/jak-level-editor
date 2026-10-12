@@ -9,12 +9,14 @@
 #include <filesystem>
 #include <optional>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "app/app.h"
 #include "io/behaviors.h"
 #include "io/decor_behaviors.h"
 #include "io/jak2_import.h"
+#include "scene/assemblies.h"
 #include "scene/relight.h"
 #include "core/i18n.h"
 #include "core/log.h"
@@ -153,6 +155,40 @@ void App::ui_input_step() {
   } else if (e.contains("click")) {
     button(e["click"].get<std::string>(), true);
     m_ui_events.push_front(json{{"up", e["click"]}});
+  } else if (e.contains("wheel")) {
+    ev.type = SDL_EVENT_MOUSE_WHEEL;
+    ev.wheel.windowID = window;
+    ev.wheel.y = e["wheel"].get<float>();
+    ev.wheel.mouse_x = m_ui_mouse.x;
+    ev.wheel.mouse_y = m_ui_mouse.y;
+    SDL_PushEvent(&ev);
+  } else if (e.contains("text")) {
+    // typed (kept until the event is read)
+    m_ui_text = e["text"].get<std::string>();
+    ev.type = SDL_EVENT_TEXT_INPUT;
+    ev.text.windowID = window;
+    ev.text.text = m_ui_text.c_str();
+    SDL_PushEvent(&ev);
+  } else if (e.contains("key")) {
+    // a key pressed and let go ("Escape", "Return", "Backspace", "G"...), with "mods" held
+    // (["ctrl", "shift", "alt"])
+    const std::string name = e["key"].get<std::string>();
+    SDL_Keymod mod = SDL_KMOD_NONE;
+    if (e.contains("mods") && e["mods"].is_array())
+      for (const auto& m : e["mods"]) {
+        const std::string k = m.is_string() ? m.get<std::string>() : std::string();
+        mod |= k == "ctrl" ? SDL_KMOD_LCTRL : k == "shift" ? SDL_KMOD_LSHIFT : k == "alt" ? SDL_KMOD_LALT : 0;
+      }
+    for (bool down : {true, false}) {
+      ev = SDL_Event{};
+      ev.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+      ev.key.windowID = window;
+      ev.key.key = SDL_GetKeyFromName(name.c_str());
+      ev.key.scancode = SDL_GetScancodeFromName(name.c_str());
+      ev.key.mod = mod;
+      ev.key.down = down;
+      SDL_PushEvent(&ev);
+    }
   } else if (e.contains("wait")) {
     m_ui_wait = std::max(0, e["wait"].get<int>());
   } else if (e.contains("shot")) {
@@ -192,9 +228,13 @@ json App::remote_node_json(const Node& n) {
   if (n.kind == NodeKind::Actor) j["etype"] = n.extras.value("etype", std::string());
   j["position"] = vec3_json(scene.world(n).col3(3));
   const AABB b = subtree_bounds(n.id);
-  if (b.valid()) j["size"] = vec3_json(b.size());
+  if (b.valid()) {
+    j["size"] = vec3_json(b.size());
+    j["box"] = {vec3_json(b.lo), vec3_json(b.hi)};
+  }
   if (n.locked) j["locked"] = true;
   if (!scene.effectively_visible(n)) j["hidden"] = true;
+  if (const uint32_t g = group_of(n.id)) j["group"] = g;  // a prefab placed, a group named
   NavMeshData nav;
   if (n.kind == NodeKind::NavMesh && navmesh_of_node(n, &nav)) {
     j["polygons"] = nav.polys.size();
@@ -233,12 +273,20 @@ std::string App::capture_view_png(int w, int h, float game_hour) {
     game_view.draw_opaque(scene, camera, 0, 0, w, h, &clip);
     renderer.set_game_depth(&clip);
   }
+  // what the cursor points at is not in the picture
+  const auto hover = std::move(renderer.outline_hover), group = std::move(renderer.outline_group);
+  renderer.outline_hover.clear();
+  renderer.outline_group.clear();
   renderer.draw_scene(scene, view_rs, selection, 0);
+  renderer.outline_hover = hover;
+  renderer.outline_group = group;
   if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && document_open())
     renderer.draw_water(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), ocean_look(view_rs), view_rs);
   draw_effects();
+  if (game) draw_rain();
   draw_navmesh_overlay();
+  draw_gaps_overlay();
   renderer.set_game_depth(nullptr);
   game_view.mood.hour = hour;
   const std::vector<uint8_t> png = target.png();
@@ -274,7 +322,17 @@ json App::remote_status() {
             {"view",
              {{"game_view", game_view_on && game_view.ready()},
               {"hour", round3(game_view.mood.hour)},
-              {"fog", game_view.fog},
+              {"weather", [&] {
+                 int count = 0;
+                 const WeatherPreset* p = weather_presets(&count);
+                 const int i = weather_preset_index();
+                 return json{{"name", i >= 0 ? p[i].id : "custom"},
+                             {"cloud", round3(game_view.mood.cloud)},
+                             {"fog", round3(game_view.mood.fog)},
+                             {"rain", round3(game_view.mood.rain)},
+                             {"lightning", lightning}};
+               }()},
+              {"level_lights", game_view.mood.level_lights},
               {"effects", show_effects},
               {"particles", particles.count()},
               {"game_chunks", game_view.stats.chunks},
@@ -375,13 +433,14 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     for (const auto& l : document_levels())
       if (l.role != DocumentLevel::Layer) in_document.insert(l.name);
     json levels = json::array();
-    for (const auto& l : library.levels()) {
+    const bool jak2 = args.value("game", std::string()) == "jak2";
+    for (const auto& l : (jak2 ? library_jak2 : library).levels()) {
       if (!l.listed || !(f.empty() || l.name.find(f) != std::string::npos || lower(l.dgo).find(f) != std::string::npos))
         continue;
       if (around && std::find(around->neighbors.begin(), around->neighbors.end(), l.name) == around->neighbors.end())
         continue;
       json e = {{"name", l.name}, {"dgo", l.dgo}};
-      if (in_document.count(l.name)) e["in_document"] = true;
+      if (in_document.count(jak2 ? "jak2-" + l.name : l.name)) e["in_document"] = true;
       levels.push_back(e);
     }
     reply(ok({{"levels", levels}}));
@@ -393,16 +452,18 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "add_level") {
     const std::string name = args.value("name", std::string());
-    const LevelEntry* level = library.level(name);
+    const bool jak2 = args.value("game", std::string()) == "jak2";
+    const LevelEntry* level = (jak2 ? library_jak2 : library).level(name);
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
     std::string err;
     const bool with_actors = load_actors;
     load_actors = args.value("actors", true);
-    const bool started = add_level_to_document(*level, &err, args.value("reference", false));
+    const bool started = add_level_to_document(*level, &err, args.value("reference", false), jak2);
     load_actors = with_actors;
     if (!started) return reply(fail(err));
     const uint64_t before = m_levels_added;
-    m_remote_waits.push_back([this, reply, name, before]() {
+    // Jak II's is named jak2-<name> in the document
+    m_remote_waits.push_back([this, reply, name = jak2 ? "jak2-" + name : name, before]() {
       if (m_levels_added == before) return false;
       if (!m_add_error.empty()) reply(fail(m_add_error));
       else reply(ok(remote_level_json(name)));
@@ -420,12 +481,27 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (!remove_document_level(group, &err)) return reply(fail(err));
     reply(ok(remote_status()));
 
+  } else if (tool == "merge_level") {
+    // a level added made part of the document's own: no longer a level next to it (the export
+    // writes it with the document's, with its collision: a level built from another's pieces)
+    const std::string name = args.value("name", std::string());
+    uint32_t group = 0;
+    for (const auto& l : document_levels())
+      if (l.name == name && l.role == DocumentLevel::Added && !l.reference) group = l.group;
+    if (!group) return reply(fail("name: a level added to the document (add_level), not a reference"));
+    NodeChange c(scene);
+    c.save(group);
+    scene.find(group)->extras.erase("og_level");
+    history.push(c.commit(strf(tr("undo.merge_level"), name.c_str()), [this]() { story_document_changed(); }));
+    story_document_changed();
+    reply(ok({{"group", group}, {"status", remote_status()}}));
+
   } else if (tool == "set_shape") {
     Node* n = scene.find(args.value("id", 0u));
     ShapeParams p;
     if (!n || !node_shape(*n, &p)) return reply(fail("id: a shape (place kind 'shape')"));
     json j = p.to_json();
-    for (const char* k : {"size", "tile", "steps", "sides", "opening"})
+    for (const char* k : {"size", "tile", "steps", "sides", "opening", "bend", "round"})
       if (args.contains(k)) j[k] = args[k];
     NodeChange c(scene);
     c.save(n->id);
@@ -491,6 +567,18 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     if (!b.is_object()) b = json::object();
     if (args.contains("behavior")) {
       if (!args["behavior"].is_object()) return reply(fail("behavior: an object (see the tool's description)"));
+      // checked here: a value of the wrong kind would stop the inspector and the export
+      for (const auto& [k, v] : args["behavior"].items()) {
+        if (v.is_null()) continue;
+        const bool condition = v.is_object() && v.contains("when") && v["when"].is_string();
+        if (k == "open" && !(v.is_string() && (v == "approach" || v == "locked" || v == "always" || v == "when")))
+          return reply(fail("behavior.open: \"approach\", \"locked\", \"always\" or \"when\" (with \"when\": a condition, "
+                            "beside it: {\"open\": \"when\", \"when\": {\"when\": \"gone\", \"arg\": \"crate-1\"}, \"distance\": 10})"));
+        if ((k == "when" || k == "active" || k == "leave" || k == "present") && !condition)
+          return reply(fail("behavior." + k + ": a condition {\"when\": always|never|task|pressed|gone, \"arg\": ...}"));
+        if (k == "distance" && !v.is_number()) return reply(fail("behavior.distance: meters"));
+        if (k == "loads" && !v.is_string()) return reply(fail("behavior.loads: a level's name"));
+      }
       for (const auto& [k, v] : args["behavior"].items()) {
         if (v.is_null()) b.erase(k);
         else b[k] = v;
@@ -563,15 +651,19 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const std::string name = args.value("name", std::string());
     if (m_level_future.valid()) return reply(fail("a level is already loading"));
     if (remote_unsaved(args)) return reply(fail("the document has unsaved changes: save_project first, or discard_changes: true"));
-    const LevelEntry* level = library.level(name);
+    // Jak II's (game "jak2"): its decor made Jak 3's, the document's level named jak2-<name>
+    const bool jak2 = args.value("game", std::string()) == "jak2";
+    if (jak2 && library_jak2.empty()) return reply(fail("Jak II was not extracted (File > Extract game assets with a Jak II disc)"));
+    const LevelEntry* level = (jak2 ? library_jak2 : library).level(name);
     if (!level) return reply(fail("no level '" + name + "' in the library (see list_levels)"));
     const bool before = load_actors;
     load_actors = args.value("actors", true);
-    load_level(*level);
+    load_level(*level, jak2);
     load_actors = before;
-    m_remote_waits.push_back([this, reply, name]() {
+    const std::string opened = jak2 ? "jak2-" + name : name;
+    m_remote_waits.push_back([this, reply, name, opened]() {
       if (m_level_future.valid()) return false;
-      if (scene.settings.source_group != name) reply(fail("the level " + name + " could not be opened (see the editor's log)"));
+      if (scene.settings.source_group != opened) reply(fail("the level " + name + " could not be opened (see the editor's log)"));
       else reply(ok(remote_status()));
       return true;
     });
@@ -600,10 +692,14 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     int matching = 0;
     for (const auto& o : catalog) {
       if (!family.empty() && o.family != family) continue;
-      if ((group == "objects" && o.interactive) || (group == "interactive" && !o.interactive)) continue;
+      if ((group == "objects" && (o.interactive || o.family == "effect")) || (group == "interactive" && !o.interactive) ||
+          (group == "effects" && o.family != "effect"))
+        continue;
       if (!f.empty() && o.name.find(f) == std::string::npos && o.etype.find(f) == std::string::npos) continue;
       if (matching++ < offset || (int)objects.size() >= limit) continue;
-      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family}, {"group", o.interactive ? "interactive" : "objects"}};
+      json j = {{"name", o.name}, {"etype", o.etype}, {"family", o.family},
+                {"group", o.family == "effect" ? "effects" : o.interactive ? "interactive" : "objects"}};
+      if (o.family == "effect") j["effect_kind"] = effect_kind(o);
       if (!o.model.empty()) j["model"] = o.model;
       else j["drawn_without_model"] = true;
       if (o.count) j["in_game"] = o.count;
@@ -687,9 +783,10 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
 
   } else if (tool == "list_prefabs") {
     refresh_prefabs();
-    // the game's prefabs made from the extracted levels first when some are missing (waits)
+    // make: the game's prefabs not made yet made first from the extracted levels (waits); else
+    // each is made with its level's when it is placed
     const bool rebuild = args.value("rebuild", false);
-    if (rebuild || game_prefabs.size() < prefab_recipes.size()) start_game_prefabs(rebuild);
+    if (rebuild || args.value("make", false)) start_game_prefabs(rebuild);
     const uint64_t runs = m_game_prefab_runs;
     const bool waiting = game_prefabs_busy();
     m_remote_waits.push_back([this, reply, runs, waiting]() {
@@ -698,7 +795,7 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       for (const auto& p : prefabs) mine.push_back(p.name);
       for (const auto& p : game_prefabs)
         game.push_back({{"name", p.name}, {"category", p.category}, {"description", p.description},
-                        {"game", p.game.empty() ? "jak3" : p.game}, {"level", p.level}});
+                        {"game", p.game.empty() ? "jak3" : p.game}, {"level", p.level}, {"made", p.made}});
       reply(ok({{"prefabs", mine}, {"game_prefabs", game}}));
       return true;
     });
@@ -786,6 +883,28 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     std::string err;
     if (!export_navmeshes(path, first, &err)) return reply(fail(err));
     reply(ok({{"path", path}, {"meshes", navmesh_nodes().size()}, {"first_id", first}}));
+
+  } else if (tool == "match_lighting") {
+    // the inspector's Match the lighting: the vertex colors of the pieces (and those under them)
+    // scaled to the brightness of the document's Jak 3 decor, or by `factor`
+    const auto ids = ids_arg(args);
+    if (ids.empty()) return reply(fail("ids: the elements"));
+    const float factor = args.value("factor", 0.f);
+    std::vector<uint32_t> all = ids;
+    for (const auto& below : scene.descendants_of(ids)) all.insert(all.end(), below.begin(), below.end());
+    NodeChange c(scene);
+    size_t changed = 0;
+    for (auto id : all) {
+      Node* n = scene.find(id);
+      if (!n || n->kind != NodeKind::Render || !n->mesh || !mesh_lighting(*n->mesh)) continue;
+      const float k = factor > 0 ? factor : 1.f / lighting_ratio(*n->mesh, scene);
+      if (k <= 0 || std::fabs(k - 1.f) < 1e-3f) continue;
+      c.save(id);
+      n->mesh = scaled_colors(*n->mesh, k);
+      changed++;
+    }
+    if (changed) history.push(c.commit(tr("undo.match_lighting")));
+    reply(ok({{"changed", changed}}));
 
   } else if (tool == "set_decor") {
     // what the game does with elements of the decor: their collision, bounce, launch; a part given
@@ -895,7 +1014,11 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     for (const auto& n : r.notes)
       notes.push_back({{"key", n.key}, {"count", n.count}, {"detail", n.detail},
                        {"text", strf(tr_en(n.key.c_str()), n.count, n.detail.c_str())}});
+    json dense = json::array();
+    for (const auto& [n, at] : r.densest) dense.push_back({{"triangles", n}, {"position", vec3_json(at)}});
     reply(ok({{"folder", r.dir},
+              {"dense_places", r.dense_places},
+              {"densest", dense},
               {"level_folder", r.level_dir},
               {"files", r.files},
               {"meshes", r.meshes},
@@ -916,7 +1039,13 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     Vec3 near;
     const bool has_near = vec3_arg(args, "near", &near);
     const float radius = args.value("radius", 20.f);
-    const size_t limit = (size_t)std::clamp(args.value("limit", 50), 1, 1000);
+    const size_t limit = (size_t)std::clamp(args.value("limit", 50), 1, 20000);
+    // inside a box (its middle), or outside it; under a group (a level of the document)
+    AABB box;
+    const bool has_box = args.contains("box") && args["box"].is_array() && args["box"].size() == 2 &&
+                         vec3_arg({{"v", args["box"][0]}}, "v", &box.lo) && vec3_arg({{"v", args["box"][1]}}, "v", &box.hi);
+    const bool outside = args.value("outside", false);
+    const uint32_t under = args.value("under", 0u);
     const SceneCache& cache = scene.cache();
     std::vector<std::pair<float, const Node*>> found;
     for (size_t i = 0; i < scene.nodes.size(); i++) {
@@ -928,11 +1057,21 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       if (!name.empty() && lower(n.name).find(name) == std::string::npos) continue;
       if (!etype.empty() && (n.kind != NodeKind::Actor || n.extras.value("etype", std::string()) != etype)) continue;
       if (n.kind == NodeKind::Group && name.empty() && etype.empty() && kind.empty()) continue;
+      if (under) {
+        const Node* a = scene.find(n.parent);
+        while (a && a->id != under) a = scene.find(a->parent);
+        if (!a) continue;
+      }
+      const AABB nb = n.mesh ? cache.bounds[i] : AABB{};
+      const Vec3 mid = nb.valid() ? nb.center() : cache.worlds[i].col3(3);
+      if (has_box) {
+        const bool in = mid.x >= box.lo.x && mid.x <= box.hi.x && mid.y >= box.lo.y && mid.y <= box.hi.y &&
+                        mid.z >= box.lo.z && mid.z <= box.hi.z;
+        if (in == outside) continue;
+      }
       float d = 0;
       if (has_near) {
-        AABB b = n.mesh ? cache.bounds[i] : AABB{};
-        const Vec3 p = b.valid() ? b.center() : cache.worlds[i].col3(3);
-        d = length(p - near);
+        d = length(mid - near);
         if (d > radius) continue;
       }
       found.push_back({d, &n});
@@ -946,7 +1085,10 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const Node* n = scene.find(args.value("id", 0u));
     if (!n) return reply(fail("no element with that id"));
     json j = remote_node_json(*n);
+    // what the inspector's Preview shows of it (an actor, a model of the catalog)
+    if (const PreviewOptions o = preview_options(*n); o.any()) j["preview"] = o.to_json();
     j["parent"] = n->parent;
+    j["children"] = scene.children(n->id);
     j["local"] = {{"position", vec3_json(n->local.t)},
                   {"rotation_deg", vec3_json(n->local.r.to_euler_deg())},
                   {"scale", vec3_json(n->local.s)}};
@@ -1087,7 +1229,23 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     }
     if (args.contains("hour") && args["hour"].is_number())
       game_view.mood.hour = std::clamp(args["hour"].get<float>(), 0.f, 24.f);
-    if (args.contains("fog") && args["fog"].is_boolean()) game_view.fog = args["fog"].get<bool>();
+    // the weather: one of the game's by its name, or its cloud, fog and rain
+    if (args.contains("weather") && args["weather"].is_string() && !set_weather(args["weather"].get<std::string>())) {
+      int count = 0;
+      const WeatherPreset* p = weather_presets(&count);
+      std::string names;
+      for (int i = 0; i < count; i++) names += std::string(i ? ", " : "") + p[i].id;
+      return reply(fail("weather: one of " + names));
+    }
+    auto unit = [&](const char* key, float* out) {
+      if (args.contains(key) && args[key].is_number()) *out = std::clamp(args[key].get<float>(), 0.f, 1.f);
+    };
+    unit("cloud", &game_view.mood.cloud);
+    unit("fog", &game_view.mood.fog);
+    unit("rain", &game_view.mood.rain);
+    if (args.contains("lightning") && args["lightning"].is_boolean()) lightning = args["lightning"].get<bool>();
+    if (args.contains("level_lights") && args["level_lights"].is_boolean())
+      game_view.mood.level_lights = args["level_lights"].get<bool>();
     if (args.contains("effects") && args["effects"].is_boolean()) show_effects = args["effects"].get<bool>();
     reply(ok(remote_status()["view"]));
 
@@ -1140,13 +1298,145 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     const float shown = game_view_on && game_view.ready() ? game_view.mood.hour : -1.f;
     const float hour = args.contains("game_hour") && args["game_hour"].is_number() ? args["game_hour"].get<float>() : shown;
     if (hour >= 0 && !game_view.ready()) return reply(fail("no game view: " + game_view_error));
+    // only: these elements (and what is under them) alone, the others hidden for the picture
+    std::vector<uint32_t> hidden;
+    if (args.contains("only")) {
+      std::unordered_set<uint32_t> keep;
+      for (auto id : ids_arg(args, "only")) {
+        keep.insert(id);
+        for (auto d : scene.descendants(id)) keep.insert(d);
+      }
+      for (auto& n : scene.nodes)
+        if ((n.kind == NodeKind::Render || n.kind == NodeKind::Actor) && n.visible && !keep.count(n.id)) {
+          n.visible = false;
+          hidden.push_back(n.id);
+        }
+    }
     const std::string png = capture_view_png(w, h, hour);
+    for (auto id : hidden)
+      if (Node* n = scene.find(id)) n->visible = true;
+    if (!hidden.empty()) scene.begin_frame();
     if (png.empty()) return reply(fail("the view could not be captured"));
     json answer = ok({{"width", w}, {"height", h}, {"camera", remote_status()["camera"]}});
     answer["image"] = png;
     reply(answer);
 
+  } else if (tool == "close_building") {
+    // a building open at the back (a facade) closed: a volume following its shape, in its materials
+    if (!document_open()) return reply(fail("no document"));
+    const auto ids = ids_arg(args);
+    if (ids.empty()) return reply(fail("ids: the elements of the building (a prefab placed: its group's)"));
+    ClosureOptions o;
+    o.cell = std::max(0.f, args.value("cell", 0.f));
+    o.depth = std::max(0.f, args.value("depth", 0.f));
+    o.relief = args.value("relief", true);
+    o.seed = args.value("seed", 1);
+    // where the player sees it from (its front): given, else the camera
+    o.has_view = true;
+    o.seen_from = camera.pos;
+    if (args.contains("seen_from") && !vec3_arg(args, "seen_from", &o.seen_from))
+      return reply(fail("seen_from: [x, y, z], a point of the street the building is seen from"));
+    ClosureResult r;
+    std::string err;
+    const uint32_t id = close_building(ids, o, &r, &err);
+    if (!id) return reply(fail(err));
+    const Node* n = scene.find(id);
+    reply(ok({{"id", id},
+              {"node", n ? remote_node_json(*n) : json()},
+              {"facade", r.facade},
+              {"back", r.facade ? vec3_json(r.back) : json()},
+              {"cells", r.cells},
+              {"cells_added", r.added},
+              {"cell", round3(r.cell)},
+              {"yaw_deg", round3(r.yaw * 57.29578f)},
+              {"materials", [&] {
+                 json m = json::array();
+                 for (int k : {r.wall_material, r.top_material})
+                   m.push_back(k >= 0 && k < (int)scene.materials.size() ? scene.materials[k].name : std::string("(the editor's grid)"));
+                 return m;
+               }()},
+              {"group", group_of(id)}}));
+
+  } else if (tool == "find_gaps") {
+    // where the player would see the void: from the ground every few meters, rays around and down
+    if (!document_open()) return reply(fail("no document"));
+    AABB region;
+    if (args.contains("box") && args["box"].is_array() && args["box"].size() == 2) {
+      Vec3 a, b;
+      json box = {{"a", args["box"][0]}, {"b", args["box"][1]}};
+      if (!vec3_arg(box, "a", &a) || !vec3_arg(box, "b", &b)) return reply(fail("box: [[x, y, z], [x, y, z]]"));
+      region.add(a);
+      region.add(b);
+    } else if (args.contains("ids")) {
+      for (auto id : ids_arg(args)) region.add(subtree_bounds(id));
+      region = region.expanded(args.value("margin", 12.f));
+    } else {
+      region = own_level_bounds();
+    }
+    if (!region.valid()) return reply(fail("no region: box, ids, or a document with decor"));
+    GapOptions o;
+    o.region = region;
+    o.spacing = std::max(0.f, args.value("spacing", 0.f));
+    o.eye = args.value("eye", 1.6f);
+    if (m_ocean && rs.show_ocean) o.ocean = m_ocean_height;
+    m_gaps = find_gaps(scene, o);
+    m_gaps_done = true;
+    if (args.value("show", true)) show_gaps_window = true;
+    const int limit = std::clamp(args.value("limit", 40), 1, 500);
+    json spots = json::array();
+    size_t gaps = 0;
+    for (const auto& s : m_gaps.spots) gaps += !s.edge;
+    for (const auto& s : m_gaps.spots) {
+      if ((int)spots.size() >= limit) break;
+      spots.push_back({{"kind", s.edge ? "edge" : "gap"},
+                       {"at", vec3_json(s.at)},
+                       {"seen_from", vec3_json(s.seen_from)},
+                       {"direction", vec3_json(s.direction)},
+                       {"rays", s.rays}});
+    }
+    reply(ok({{"gaps", gaps},
+              {"edges", m_gaps.spots.size() - gaps},
+              {"viewpoints", m_gaps.viewpoints},
+              {"rays", m_gaps.rays},
+              {"region", json::array({vec3_json(region.lo), vec3_json(region.hi)})},
+              {"spots", spots}}));
+
+  } else if (tool == "group") {
+    const std::string name = args.value("name", std::string());
+    if (name.empty()) return reply(fail("name: the group's"));
+    selection.clear();
+    for (auto id : ids_arg(args))
+      if (scene.find(id)) selection.insert(id);
+    if (selection.empty()) return reply(fail("ids: the elements to group"));
+    const uint32_t gid = group_selection(name);
+    reply(ok({{"group", gid}, {"name", name}, {"elements", selection_roots().size()}}));
+
+  } else if (tool == "ungroup") {
+    const uint32_t gid = args.value("group", 0u);
+    if (!group_info(gid)) return reply(fail("group: a group's id (list_groups)"));
+    ungroup(gid);
+    reply(ok({{"ungrouped", gid}}));
+
+  } else if (tool == "list_groups") {
+    json groups = json::array();
+    for (const auto& g : document_groups()) {
+      AABB b;
+      for (auto r : g.roots) b.add(subtree_bounds(r));
+      groups.push_back({{"group", g.id},
+                        {"name", g.name},
+                        {"prefab", g.prefab},
+                        {"ids", g.roots},
+                        {"box", b.valid() ? json::array({vec3_json(b.lo), vec3_json(b.hi)}) : json()}});
+    }
+    reply(ok({{"groups", groups}}));
+
   } else if (tool == "select") {
+    if (args.contains("group")) {
+      const uint32_t gid = args.value("group", 0u);
+      if (!group_info(gid)) return reply(fail("group: a group's id (list_groups, or 'group' of an element)"));
+      select_group(gid);
+      return reply(ok({{"selection", std::vector<uint32_t>(selection.begin(), selection.end())}}));
+    }
     if (args.contains("level")) {
       // a whole level: its group, or the root elements of the level opened
       const std::string name = args.value("level", std::string());
@@ -1157,11 +1447,187 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       select_level((uint32_t)group);
       return reply(ok({{"selection", std::vector<uint32_t>(selection.begin(), selection.end())}}));
     }
+    if (args.contains("assembly")) {
+      const uint32_t id = args.value("assembly", 0u);
+      if (!scene.find(id)) return reply(fail("assembly: an element's id"));
+      select_assembly(id);
+      return reply(ok({{"selection", std::vector<uint32_t>(selection.begin(), selection.end())}}));
+    }
     selection.clear();
     for (auto id : ids_arg(args))
       if (scene.find(id)) selection.insert(id);
     primary = selection.empty() ? 0 : *selection.begin();
     reply(ok({{"selection", std::vector<uint32_t>(selection.begin(), selection.end())}}));
+
+  } else if (tool == "terrain") {
+    // the terrain brush (terrain_tool.cpp): one stroke, along a path when `to` is given, or hills
+    if (!document_open()) return reply(fail("no document: open_level or new_level first"));
+    const std::string style = args.value("style", std::string());
+    if (!style.empty()) {
+      // the level style: measured once its decor is read
+      const LevelEntry* level = library.level(style);
+      if (!level) return reply(fail("style: no level '" + style + "' (see list_levels)"));
+      if (!m_styles.count(style)) {
+        const std::string bg = level->background;
+        if (!store.level(bg, true)) {
+          if (store.failed_level(bg)) return reply(fail("style: the decor of " + style + " cannot be read"));
+          m_remote_waits.push_back([this, tool, args, reply, bg]() {
+            if (!store.level(bg, true) && !store.failed_level(bg)) return false;
+            remote_dispatch(tool, args, reply);
+            return true;
+          });
+          return;
+        }
+        m_styles.emplace(style, measure_style(*store.level(bg, true)));
+      }
+      m_style_level = style;
+    }
+    // textures of that level instead of the style's (the brush window's choice)
+    if (args.contains("floor_texture")) brush.floor_texture = args.value("floor_texture", std::string());
+    if (args.contains("wall_texture")) brush.wall_texture = args.value("wall_texture", std::string());
+    static const std::map<std::string, BrushMode> kModes = {
+        {"paint", BrushMode::Paint},   {"erase", BrushMode::Erase},     {"raise", BrushMode::Raise},
+        {"dig", BrushMode::Dig},       {"smooth", BrushMode::Smooth},   {"flatten", BrushMode::Flatten},
+        {"wall", BrushMode::Wall},     {"unwall", BrushMode::Unwall}};
+    const std::string mode = args.value("mode", std::string("paint"));
+    if (mode != "generate" && !kModes.count(mode))
+      return reply(fail("mode: paint, erase, raise, dig, smooth, flatten, wall, unwall or generate"));
+    Vec3 at;
+    if (!vec3_arg(args, "position", &at)) return reply(fail("position: [x, y, z] in meters"));
+    const uint32_t id = args.value("id", 0u);
+    Node* node = id ? scene.find(id) : nullptr;
+    TerrainGrid g;
+    if (id && (!node || !node_terrain(*node, &g))) return reply(fail("id: a terrain (made by this tool or the brush)"));
+    NodeChange change(scene);
+    const bool made = !node;
+    if (made) {
+      Node t;
+      t.id = scene.next_id;
+      std::string name = "Terrain";
+      for (int k = 2; std::any_of(scene.nodes.begin(), scene.nodes.end(), [&](const Node& n) { return n.name == name; }); k++)
+        name = "Terrain-" + std::to_string(k);
+      t.name = name;
+      t.kind = NodeKind::Render;
+      change.save(t.id);
+      g.cell = std::clamp(args.value("cell", brush.cell), 0.25f, 8.f);
+      g.looks = {terrain_look()};
+      node = scene.find(scene.add(std::move(t)));
+    } else {
+      change.save(id);
+    }
+    const Mat4 inv = scene.world(*node).inverse();
+    const Vec3 local = inv.point(at);
+    bool changed = false;
+    if (mode == "generate") {
+      Vec3 area{64, 0, 64};
+      if (args.contains("area") && args["area"].is_array() && args["area"].size() == 2 && args["area"][0].is_number() &&
+          args["area"][1].is_number())
+        area = {args["area"][0].get<float>(), 0, args["area"][1].get<float>()};
+      generate_terrain(g, local, {std::clamp(area.x, 4.f, 1024.f), std::clamp(area.z, 4.f, 1024.f)},
+                       std::clamp(args.value("hills", 12.f), 0.f, 200.f), std::clamp(args.value("roughness", 0.5f), 0.f, 1.f),
+                       args.value("seed", 1), g.add_look(terrain_look()));
+      changed = true;
+    } else {
+      BrushStroke st;
+      st.mode = kModes.at(mode);
+      st.size = std::clamp(args.value("size", 4.f), 0.25f, 256.f);
+      st.height = args.contains("height") ? inv.point({at.x, args.value("height", 0.f), at.z}).y : local.y;
+      st.seed = args.value("seed", 1);
+      st.look = g.add_look(terrain_look());  // the cells painted take the style asked
+      const bool shaping = st.mode == BrushMode::Smooth || st.mode == BrushMode::Flatten;
+      st.amount = args.value("amount", st.mode == BrushMode::Wall ? 4.f : shaping ? 0.5f : 1.f);
+      const auto look = m_styles.find(m_style_level);
+      if (st.mode == BrushMode::Paint && args.value("relief", true) && look != m_styles.end()) {
+        st.bumps = look->second.bumps;
+        st.bump_size = std::max(look->second.bump_size, 0.5f);
+      }
+      // along a path (a road, a wall): a stamp every quarter of the brush's size
+      Vec3 to_world = at;
+      vec3_arg(args, "to", &to_world);
+      const Vec3 to = inv.point(to_world);
+      const float dist = length(Vec3{to.x - local.x, 0, to.z - local.z});
+      const int stamps = std::clamp((int)std::ceil(dist / std::max(st.size * 0.25f, g.cell * 0.5f)), 0, 4096);
+      for (int k = 0; k <= stamps; k++) {
+        st.center = stamps ? local + (to - local) * ((float)k / stamps) : local;
+        changed |= apply_brush(g, st);
+      }
+    }
+    node->extras["og_terrain_grid"] = g.to_json();
+    node->mesh = make_terrain_mesh(g);
+    light_like_surroundings(scene, {node->id});  // lit like the level around it
+    if (made || changed) history.push(change.commit(tr(made ? "undo.terrain.new" : "undo.terrain")));
+    size_t cells = 0, walls = 0;
+    for (uint8_t c : g.cells) {
+      cells += c != TerrainGrid::None;
+      walls += c == TerrainGrid::Wall;
+    }
+    reply(ok({{"id", node->id}, {"changed", changed}, {"cells", cells}, {"walls", walls}, {"cell", g.cell},
+              {"style", m_style_level}}));
+
+  } else if (tool == "list_assemblies") {
+    const size_t min_elements = (size_t)std::max(1, args.value("min_elements", 2));
+    const float min_size = args.value("min_size", 4.f);
+    const float max_size = std::max(10.f, args.value("max_size", 60.f));
+    const size_t limit = (size_t)std::max(1, args.value("limit", 200));
+    scene.begin_frame();
+    const SceneCache& c = scene.cache();
+    // seed: the largest element whose name no other has (a recipe finds the assembly by it)
+    std::unordered_map<std::string, int> named;
+    for (const auto& n : scene.nodes) named[n.name]++;
+    json list = json::array();
+    size_t total = 0;
+    for (const auto& a : find_assemblies(scene, max_size)) {
+      if (a.size() < min_elements) continue;
+      AABB box;
+      std::string main, seed;
+      float main_volume = -1, seed_volume = -1;
+      std::map<std::string, std::pair<int, float>> parts;  // a part's name without its number: how many, their volume
+      size_t triangles = 0;
+      float largest = 0;  // the largest element's size (meters)
+      for (uint32_t id : a) {
+        const int i = scene.index_of(id);
+        if (i < 0) continue;
+        const AABB& b = c.bounds[i];
+        box.add(b);
+        const Vec3 s = b.size();
+        const std::string& name = scene.nodes[i].name;
+        if (s.x * s.y * s.z > main_volume) {
+          main_volume = s.x * s.y * s.z;
+          main = name;
+        }
+        if (named[name] == 1 && s.x * s.y * s.z > seed_volume) {
+          seed_volume = s.x * s.y * s.z;
+          seed = name;
+        }
+        std::string stem = name;
+        const size_t dash = stem.rfind('-');
+        if (dash != std::string::npos && dash + 1 < stem.size() &&
+            stem.find_first_not_of("0123456789", dash + 1) == std::string::npos)
+          stem.resize(dash);
+        largest = std::max({largest, s.x, s.y, s.z});
+        parts[stem].first++;
+        parts[stem].second += s.x * s.y * s.z;
+        if (scene.nodes[i].mesh) triangles += scene.nodes[i].mesh->tri_count();
+      }
+      if (!box.valid() || std::max({box.size().x, box.size().y, box.size().z}) < min_size) continue;
+      total++;
+      if (list.size() >= limit) continue;
+      std::vector<std::pair<int, std::string>> by_count;
+      for (const auto& [stem, n] : parts) by_count.push_back({-n.first, stem});
+      std::sort(by_count.begin(), by_count.end());
+      json names = json::array();
+      for (size_t k = 0; k < by_count.size() && k < 6; k++)
+        names.push_back({by_count[k].second, -by_count[k].first, std::round(parts[by_count[k].second].second)});
+      list.push_back({{"ids", a},
+                      {"elements", a.size()},
+                      {"triangles", triangles},
+                      {"largest", largest},
+                      {"box", {{box.lo.x, box.lo.y, box.lo.z}, {box.hi.x, box.hi.y, box.hi.z}}},
+                      {"main", main},
+                      {"seed", seed},
+                      {"parts", names}});
+    }
+    reply(ok({{"assemblies", list}, {"count", total}}));
 
   } else if (tool == "set_story") {
     const GameData* data = document_game_data();
@@ -1207,19 +1673,70 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
     for (auto id : ids)
       if (scene.find(id)) selection.insert(id);
     if (selection.empty()) return reply(fail("no element with those ids"));
-    const size_t before = prefabs.size();
-    create_prefab(name);
-    if (prefabs.size() <= before) return reply(fail("the prefab could not be saved (see the editor's log)"));
-    reply(ok({{"prefabs", [&] {
+    // closed first (a facade filled behind): the closure goes into the prefab
+    json closure;
+    if (args.value("close", false)) {
+      ClosureResult r;
+      std::string err;
+      ClosureOptions o;
+      o.relief = args.value("relief", true);
+      o.has_view = true;
+      o.seen_from = camera.pos;
+      if (args.contains("seen_from")) vec3_arg(args, "seen_from", &o.seen_from);
+      const uint32_t id = close_building(selection_roots(), o, &r, &err);
+      if (id) selection.insert(id);
+      closure = id ? json{{"id", id}, {"cells_added", r.added}, {"facade", r.facade}} : json{{"error", err}};
+    }
+    // the small pieces left out (bolts, debris, stains): 0.5 m by default
+    std::vector<std::string> left_out;
+    const std::string path = create_prefab(name, std::max(0.f, args.value("min_size", 0.5f)), &left_out);
+    if (path.empty()) return reply(fail("the prefab could not be saved (see the editor's log)"));
+    // its name (<folder>/<name>.glb): the one asked, or with -2, -3... when a prefab has it already
+    const std::string file = path.substr(path.find_last_of('/') + 1);
+    reply(ok({{"name", file.substr(0, file.size() - 4)},
+              {"left_out", left_out},
+              {"closure", closure},
+              {"prefabs", [&] {
                  json l = json::array();
                  for (const auto& p : prefabs) l.push_back(p.name);
                  return l;
                }()}}));
 
+  } else if (tool == "check_catalog_thumbnails") {
+    // for the tests of the interface (not offered to the assistant): the picture of every object of
+    // the catalog made as its panel makes it, then how many are pictures and which failed
+    if (!m_index_applied) {
+      m_remote_waits.push_back([this, tool, args, reply]() {
+        if (!m_index_applied) return false;
+        remote_dispatch(tool, args, reply);
+        return true;
+      });
+      return;
+    }
+    auto frames = std::make_shared<int>(0);  // asked once a frame
+    m_remote_waits.push_back([this, reply, frames]() {
+      size_t done = 0, failed = 0;
+      std::map<std::string, size_t> kinds;
+      json bad = json::array();
+      for (const auto& o : catalog) {
+        const ThumbRequest req = catalog_thumb(o);
+        const bool ok = thumbs.get(req) != 0;  // asked again each frame: kept in its queue
+        const bool fail = thumbs.failed(req);
+        done += ok;
+        failed += fail;
+        if (fail) bad.push_back(o.name);
+        if (ok) kinds[req.kind == ThumbRequest::Kind::Model ? "model" : req.kind == ThumbRequest::Kind::Effect ? "effect" : "icon"]++;
+      }
+      if (done + failed < catalog.size() && ++*frames < 20000) return false;
+      reply(ok({{"objects", catalog.size()}, {"pictures", done}, {"failed", failed}, {"by_kind", kinds}, {"failed_names", bad}}));
+      return true;
+    });
+
   } else if (tool == "ui_input") {
     // for the tests of the interface (not offered to the assistant): mouse events one frame after
     // the other ({"move": [x, y]} in the window's pixels, {"move_to_node": id}, {"rel": [dx, dy]},
-    // {"down"|"up"|"click": "left"|"right"|"middle"}, {"wait": frames}, {"shot": true}: a picture of
+    // {"down"|"up"|"click": "left"|"right"|"middle"}, {"wheel": clicks}, {"text": "typed"}, {"key": "Escape"},
+    // {"wait": frames}, {"shot": true}: a picture of
     // the whole window, given back with the answer)
     if (m_ui_reply) return reply(fail("ui_input: events are still being given"));
     const json events = args.value("events", json::array());
@@ -1307,13 +1824,37 @@ void App::remote_place(const json& args, RemoteReply reply) {
     start_model_placement(*found, false);
   } else if (kind == "shape") {
     const ShapePreset* preset = shape_preset(name);
-    if (!preset) return reply(fail("name: box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip or cylinder"));
-    json j = preset->params.to_json();
-    for (const char* k : {"size", "tile", "steps", "sides", "opening"})
+    if (!preset)
+      return reply(fail("name: box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip, cylinder or ground"));
+    // in the style of a level: its floors' (a floor, a ground) or its walls' texture, size and light,
+    // its ground's bumps; measured once its decor is read
+    const std::string style = args.value("style", std::string());
+    if (!style.empty()) {
+      const LevelEntry* level = library.level(style);
+      if (!level) return reply(fail("style: no level '" + style + "' (see list_levels)"));
+      if (!m_styles.count(style)) {
+        const std::string bg = level->background;
+        if (!store.level(bg, true)) {
+          if (store.failed_level(bg)) return reply(fail("style: the decor of " + style + " cannot be read"));
+          m_remote_waits.push_back([this, args, reply, bg]() {
+            if (!store.level(bg, true) && !store.failed_level(bg)) return false;
+            remote_place(args, reply);
+            return true;
+          });
+          return;
+        }
+        m_styles.emplace(style, measure_style(*store.level(bg, true)));
+      }
+    }
+    if (!style.empty()) start_style_placement(style, name == "floor" || name == "ground", name);
+    json j = (style.empty() ? preset->params : placement.shape).to_json();
+    for (const char* k : {"size", "tile", "steps", "sides", "opening", "bend", "round", "bumps", "bump_size", "seed"})
       if (args.contains(k)) j[k] = args[k];
     ShapePreset p = *preset;
     p.params = ShapeParams::from_json(j);
+    const int material = style.empty() ? -1 : placement.material;
     start_shape_placement(p, false);
+    placement.material = material;
   } else if (kind == "object") {
     const CatalogObject* found = nullptr;
     for (const auto& o : catalog)
@@ -1330,6 +1871,22 @@ void App::remote_place(const json& args, RemoteReply reply) {
       for (const auto& p : *list)
         if (p.name == name) found = &p;
     if (!found) return reply(fail("no prefab '" + name + "' (see list_prefabs)"));
+    if (!found->made) {
+      // a game's prefab not made yet: made with its level's, then placed
+      const uint64_t runs = m_game_prefab_runs;
+      want_game_prefabs(found->game, found->level);
+      m_remote_waits.push_back([this, args, reply, runs]() {
+        if (m_game_prefab_runs == runs || game_prefabs_busy()) return false;
+        const std::string wanted = args.value("name", std::string());
+        bool made = false;
+        for (const auto& p : game_prefabs)
+          if (p.name == wanted) made = p.made;
+        if (!made) reply(fail("the prefab could not be made from its level (see the editor's log)"));
+        else remote_place(args, reply);
+        return true;
+      });
+      return;
+    }
     start_placement(found->path, found->name, false);
   } else if (kind == "decor") {
     // a structure of Jak II (game: "jak2"): converted for Jak 3 (io/jak2_import.h)

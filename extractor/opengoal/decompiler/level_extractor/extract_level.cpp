@@ -425,9 +425,9 @@ void extract_from_level(const ObjectFileDB& db,
   }
   // where the game runs a script when Jak or the camera goes in or out: the levels it loads and
   // shows around this one (a level built in its place needs them)
-  if (!bsp_header.region_trees.empty()) {
-    info["region_trees"] = nlohmann::json::parse(bsp_header.region_trees);
-  }
+  // (written when it has none too: a level whose level.json lacks it was extracted before regions)
+  info["region_trees"] = bsp_header.region_trees.empty() ? nlohmann::json::object()
+                                                         : nlohmann::json::parse(bsp_header.region_trees);
   info["collision_triangles"] = level_data.collision.vertices.size() / 3;
   info["models"] = nlohmann::json::array();
   for (const auto& model : level_data.merc_data.models) {

@@ -309,9 +309,25 @@ struct TriGrid {
     const uint32_t t = (uint32_t)tris.size();
     tris.push_back({a, b, c});
     boxes.push_back(box);
-    for (int x = at(box.lo.x); x <= at(box.hi.x); x++)
-      for (int y = at(box.lo.y); y <= at(box.hi.y); y++)
-        for (int z = at(box.lo.z); z <= at(box.hi.z); z++) cells[key(x, y, z)].push_back(t);
+    const int64_t span = (int64_t)(at(box.hi.x) - at(box.lo.x) + 1) * (at(box.hi.y) - at(box.lo.y) + 1) *
+                         (at(box.hi.z) - at(box.lo.z) + 1);
+    if (span <= 64) {
+      for (int x = at(box.lo.x); x <= at(box.hi.x); x++)
+        for (int y = at(box.lo.y); y <= at(box.hi.y); y++)
+          for (int z = at(box.lo.z); z <= at(box.hi.z); z++) cells[key(x, y, z)].push_back(t);
+      return;
+    }
+    // a large one (a level's ground, a far mountain): the cells its surface crosses, not all the
+    // cells of its box (a slanted triangle of a kilometer would fill millions)
+    const float longest = std::max({length(b - a), length(c - b), length(a - c)});
+    const int n = std::clamp((int)std::ceil(longest / (cell * 0.5f)), 1, 2048);
+    std::unordered_set<uint64_t> crossed;
+    for (int i = 0; i <= n; i++)
+      for (int j = 0; i + j <= n; j++) {
+        const Vec3 p = a + (b - a) * ((float)i / n) + (c - a) * ((float)j / n);
+        crossed.insert(key(at(p.x), at(p.y), at(p.z)));
+      }
+    for (uint64_t k : crossed) cells[k].push_back(t);
   }
   // f(t) once for each triangle in the cells the box covers
   template <typename F>
@@ -728,7 +744,7 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
   struct Pieces {
     bool known = false;  // compared with the level as extracted
     std::unordered_set<std::string> kept;
-    TriGrid kept_tris{1.f}, removed_tris{1.f};
+    TriGrid kept_tris{4.f}, removed_tris{4.f};  // 4 m cells: searched 8 m around
     size_t removed = 0;
   };
   std::map<std::pair<uint32_t, std::string>, Pieces> pieces;
@@ -818,6 +834,7 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
       if (decor.collision.kind != "none") {
         rep.collision_from_decor++;
         by_shape.push_back(i);
+        eo.node_extras[n.id]["double_sided"] = 1;
       }
     } else if ((o.game_collision && covered) || see_through(scene, *n.mesh)) {
       eo.node_extras[n.id] = json{{"set_collision", 1}, {"ignore", 1}};
@@ -831,6 +848,9 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     } else {
       rep.collision_from_decor++;
       by_shape.push_back(i);
+      // the decor faces either way (the game draws both sides, its ground often faces down): a
+      // collision made from it holds from both sides (the game's own collision stays one-sided)
+      eo.node_extras[n.id] = json{{"double_sided", 1}};
     }
     if (decor.bounce.set || decor.launch.set) decor_actions.push_back(i);
   }
@@ -856,9 +876,11 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
           if (it != pieces.end() && !it->second.removed_tris.empty()) level_pieces = &it->second;
         }
       }
-      // nearer to a piece taken out than to the pieces in place, by 5 cm at least (0.75 m at most:
-      // the game's collision follows its decor that closely)
-      constexpr float kNear = 0.75f;
+      // nearer to a piece taken out than to the pieces in place, by 5 cm at least, and within 8 m of
+      // it: the game's collision of a piece in place lies on it, so it stays; around rubble it is
+      // coarser than its pieces (the fallen palace's in the port: 1 to 5 m off them, which a closer
+      // limit left standing as invisible walls across the street)
+      constexpr float kNear = 8.f;
       auto gone = [&](const Vec3& at) {
         const float to_removed = level_pieces->removed_tris.distance(at, kNear);
         return to_removed < kNear && to_removed + 0.05f < level_pieces->kept_tris.distance(at, kNear);
@@ -945,14 +967,15 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
       for (const auto& prim : mesh->prims)
         for (size_t t = 0; t + 2 < prim.idx.size(); t += 3)
           all.add(prim.pos[prim.idx[t]], prim.pos[prim.idx[t + 1]], prim.pos[prim.idx[t + 2]]);
+    // the faces made from the decor's shape twice: the builder doubles them
     for (size_t i : by_shape) {
       const Mat4& w = cache.worlds[i];
       for (const auto& prim : scene.nodes[i].mesh->prims)
         for (size_t t = 0; t + 2 < prim.idx.size(); t += 3)
-          all.add(w.point(prim.pos[prim.idx[t]]), w.point(prim.pos[prim.idx[t + 1]]), w.point(prim.pos[prim.idx[t + 2]]));
+          for (int side = 0; side < 2; side++)
+            all.add(w.point(prim.pos[prim.idx[t]]), w.point(prim.pos[prim.idx[t + 1]]), w.point(prim.pos[prim.idx[t + 2]]));
     }
-    const size_t sides = rep.collision_from_decor > 0 ? 2 : 1;  // the builder doubles every face then
-    const auto dense = collision_hot_spots(all, sides);
+    const auto dense = collision_hot_spots(all, 1);
     for (size_t k = 0; k < dense.size() && k < 3; k++) {
       char at[96];
       std::snprintf(at, sizeof(at), "(%.0f, %.0f, %.0f): %zu", dense[k].second.x, dense[k].second.y, dense[k].second.z,
@@ -961,6 +984,7 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     }
     if (dense.size() > 3) notes.add("export.note.collision_dense", "", dense.size() - 3);
     rep.dense_places = dense.size();
+    rep.densest.assign(dense.begin(), dense.begin() + std::min<size_t>(dense.size(), 100));
   }
 
   // --- the actors ------------------------------------------------------------------------------
@@ -1272,7 +1296,8 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     const json regions = builder_regions(o.region_trees, base_id + 2000, &rep.regions);
     regions_line = "  // where the game loads and shows the levels around this one (the level replaced's)\n"
                    "  \"region_trees\": " + regions.dump() + ",\n";
-  } else if (replacing) {
+  } else if (replacing && !o.region_trees.is_object()) {
+    // unknown (extracted before the regions were): {} is a level that has none (ctywide)
     notes.add("export.note.regions_missing", o.replaces);
   }
 
@@ -1290,9 +1315,9 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
     << "  // the game's collision is in the file; the builder makes the rest from the decor's shape\n"
     << "  \"automatic_wall_detection\": " << (auto_walls ? "true" : "false") << ",\n"
     << "  \"automatic_wall_angle\": 45.0,\n"
-    // the decor faces either way (the game draws both sides, its ground often faces down): a
-    // collision made from it holds from both sides
-    << "  \"double_sided_collide\": " << (rep.collision_from_decor > 0 ? "true" : "false") << ",\n"
+    // the faces made from the decor are doubled each (extras double_sided, the builder of the
+    // editor's fork); all of them when the level has no collision of the game's
+    << "  \"double_sided_collide\": " << (rep.collision_from_decor > 0 && !o.game_collision ? "true" : "false") << ",\n"
     << "  \"base_id\": " << base_id << ",\n"
     << "  \"base_region_id\": " << base_id << ",\n"
     << "  \"cameras\": [],\n"
@@ -1452,7 +1477,12 @@ bool export_level_for_game(const Scene& scene, const GameData* data, const Level
      << "  like the level's from their color.\n"
      << "- The surfaces seen through (stains, decals, glass, water, glows) are blended over what is behind\n"
      << "  them by the level builder of the editor's jak-project branch (the translucent tree, and the PS2\n"
-     << "  blend of each material: `extras.og_blend`); OpenGOAL's own builder does not draw them.\n";
+     << "  blend of each material: `extras.og_blend`); OpenGOAL's own builder does not draw them.\n"
+     << "- That builder also: makes the collision of the decor colliding by its shape hold from both sides\n"
+     << "  (`extras.double_sided`, the game's collision staying one-sided), lists everything visible in the\n"
+     << "  level (no visibility data: with the PC settings' PS2 actor visibility, the actors of a level are\n"
+     << "  born only where it says they are seen) and keeps the grid of a collision spread over a whole\n"
+     << "  city to 2 million cells (the level's memory).\n";
   if (rep.regions)
     md << "- The level's regions are the ones of " << o.replaces << " (" << rep.regions
        << "): where the game loads and shows the levels around it as Jak or the camera goes by.\n";

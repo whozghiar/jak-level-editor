@@ -12,8 +12,12 @@
 // instances in the level, or a piece of its shell) and how far around it to take what the game put
 // there (`margin` in meters, `grow`: more below and above, [lo, hi]): every element of the level's
 // decor whose middle is in that box and which is not much larger than it, but the ground and the
-// names `exclude` lists.
+// names `exclude` lists. Or an assembly (scene/assemblies.h): the structure an element of the level
+// is part of, all of it and only it (a house of the slums, a building of Haven, the palace), as a
+// click and "Select its assembly" select it in the editor; its box when an older extraction has no
+// element of that name.
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -38,6 +42,9 @@ struct PrefabRecipe {
   // roofs and what hangs on them)
   AABB box;
   std::vector<std::string> exclude;          // parts of names left out
+  // or the assembly of this element of the level (cut at max_size meters, as find_assemblies)
+  std::string assembly;
+  float max_size = 60.f;
   std::string file;         // the prefab's file in <prefabs>/game/ ("<slug>.glb", Jak II's "jak2/<slug>.glb")
 };
 
@@ -45,13 +52,18 @@ struct PrefabRecipe {
 std::vector<PrefabRecipe> load_prefab_recipes(const std::string& path, std::string* error, const std::string& game = "");
 std::string prefab_recipes_path(const std::string& game = "");
 
+// The assemblies of a level found so far, by the size they were cut at: the recipes of a level
+// share them.
+using LevelAssemblies = std::map<float, std::vector<std::vector<uint32_t>>>;
+
 // The elements of `level` (a document of it: opened without actors) a recipe takes: the anchor
-// and what is around it.
-std::vector<uint32_t> recipe_members(Scene& level, const PrefabRecipe& r, std::string* error);
+// and what is around it, or its assembly.
+std::vector<uint32_t> recipe_members(Scene& level, const PrefabRecipe& r, std::string* error,
+                                     LevelAssemblies* assemblies = nullptr);
 
 // Makes a recipe's prefab at `path` from its level (opened without actors). `elements`: how many
 // it holds.
 bool save_recipe_prefab(Scene& level, const PrefabRecipe& r, const std::string& path, size_t* elements,
-                        std::string* error);
+                        std::string* error, LevelAssemblies* assemblies = nullptr);
 
 }  // namespace ogle

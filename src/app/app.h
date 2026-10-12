@@ -33,9 +33,15 @@
 #include "render/texture_palette.h"
 #include "render/tool_demo.h"
 #include "render/thumbnails.h"
+#include "scene/closure.h"
+#include "scene/gaps.h"
 #include "scene/pick.h"
 #include "scene/scene.h"
 #include "scene/shapes.h"
+#include "scene/level_style.h"
+#include "scene/skeleton.h"
+#include "scene/terrain.h"
+#include "scene/topology.h"
 #include "scene/story.h"
 #include "app/remote.h"
 #include "tools/gizmo.h"
@@ -50,6 +56,8 @@ namespace ogle {
 enum class ToolMode {
   Select = 0,  // select, move, rotate
   Place,       // put the chosen prefab, object or decor part where the cursor points
+  Topology,    // the points and faces of one element's mesh (topology_tool.cpp)
+  Terrain,     // the terrain brush: ground painted, raised, dug, walls (terrain_tool.cpp)
 };
 
 enum class DialogAction {
@@ -75,6 +83,7 @@ struct Placement {
   std::string game;      // Part, Model: "jak2" for Jak II's (io/jak2_import.h), else Jak 3's
   std::string level;     // Model: the level it comes from
   ShapeParams shape;     // Shape
+  int material = -1;     // Shape: its material in the document (a level's style), -1 the grey grid
   float yaw = 0.f;    // radians (R, Ctrl + wheel)
   Quat tilt;          // the turn the right button gives it, in the world (applied after the yaw)
   bool once = false;  // dragged from a panel: one placement, then back to selecting
@@ -157,6 +166,11 @@ Clipboard copy_nodes(const Scene& scene, const std::vector<uint32_t>& roots);
 // Adds copies of the clipboard's nodes (under their old parent when it is still there, at the
 // same place). Returns the new roots.
 std::vector<uint32_t> paste_nodes(Scene& scene, const Clipboard& clip);
+// Groups (groups.cpp): the group an element is the root of (extras og_group), 0 none; a group given
+// to it (0: none); a group id the document has not given yet
+uint32_t group_tag(const Node& n);
+void set_group_tag(Node& n, uint32_t id, const std::string& name, bool prefab);
+uint32_t new_group_id(const Scene& scene);
 
 class App {
  public:
@@ -193,6 +207,14 @@ class App {
   Quat m_free_tilt0;
   void viewport_interaction();
   void select_tool(bool clicked, bool released);
+  // the mouse's drag (pixels) as a move in the world at `at`: left and right along the view's
+  // horizontal, up and down vertical (Ctrl: forward and back), with the snap's steps
+  Vec3 drag_offset(Vec2 px, const Vec3& at) const;
+  std::vector<uint32_t> box_nodes(Vec2 a, Vec2 b) const;  // what a box of the view selects
+  // what the renderer outlines: the selection with what is under it, what the cursor points at
+  void update_outlines();
+  void outline_subtree(uint32_t id, std::vector<uint32_t>& out, size_t cap) const;
+  void draw_cursor_info();  // next to the cursor: what it points at, its group, what a click does
   // what a click on `node` selects: the actor of an actor's model, nothing on the locked ground
   // (unless select_terrain)
   uint32_t selectable(uint32_t node) const;
@@ -245,7 +267,8 @@ class App {
   // a level of the library added on a worker thread, then to the document (undoable) when ready;
   // `reference`: shown to compare with, washed in blue, not selected nor exported (the level the
   // document replaces, as the game has it)
-  bool add_level_to_document(const LevelEntry& level, std::string* error, bool reference = false);
+  bool add_level_to_document(const LevelEntry& level, std::string* error, bool reference = false, bool jak2 = false);
+  bool m_levels_jak2 = false;  // the Levels panel lists Jak II's
   bool m_adding_reference = false;
   // replacing a level of the game (scene.settings.replaces): the document's own level moved so that
   // its middle and its bottom are where the replaced level's are (the reference shown, else its
@@ -270,6 +293,34 @@ class App {
   // where its mesh is the same. How many pieces got it back.
   size_t restore_level_lighting();
   void select_level(uint32_t group);
+  // the assembly the element is part of, all of it (scene/assemblies.h): a house with its facades,
+  // roof and windows
+  void select_assembly(uint32_t id);
+  // Groups of the document (groups.cpp): a prefab placed, a selection grouped and named
+  struct GroupInfo {
+    uint32_t id = 0;
+    std::string name;
+    bool prefab = false;           // a prefab placed (named after it)
+    std::vector<uint32_t> roots;   // its elements (with what is under them)
+  };
+  const std::vector<GroupInfo>& document_groups() const;  // by id, found again when the document changes
+  const GroupInfo* group_info(uint32_t gid) const;
+  uint32_t group_of(uint32_t id) const;  // the group of an element or of one above it, 0 none
+  void select_group(uint32_t gid);
+  // the whole group of an element (double click, the button held still), else its assembly
+  bool select_whole(uint32_t id);
+  uint32_t group_selection(const std::string& name);  // undoable; the new group
+  void ungroup(uint32_t gid);
+  void rename_group(uint32_t gid, const std::string& name);
+  void ui_group_section();     // the inspector's: the selection's group
+  void ui_groups_panel();      // the Groups tab
+  void ui_new_group_window();  // naming a new group
+  mutable std::vector<GroupInfo> m_groups;
+  mutable uint64_t m_groups_revision = ~0ull;
+  mutable size_t m_groups_nodes = 0;
+  bool m_show_new_group = false, m_group_focus = false;
+  std::string m_group_name, m_groups_filter;
+  uint32_t m_renaming_group = 0;
   // roughly: within the camera's field of view and not past its far plane (a cone, not the exact
   // frustum: good enough to decide whether a point needs framing to be seen)
   bool camera_sees(const Vec3& p) const;
@@ -291,7 +342,8 @@ class App {
   void apply_story_view();
   void update_ocean();
   void set_ocean_backdrop();  // the far ocean in the render settings, before the viewport is drawn
-  void load_level(const LevelEntry& level);
+  // jak2: a level of Jak II (library_jak2), its decor made Jak 3's (no actors)
+  void load_level(const LevelEntry& level, bool jak2 = false);
   void open_project_file(const std::string& path);
   // Saves the project, only when the user asks: in its folder of <library>/projects/<name>/ (the
   // first time and with save_as, the user names it), its .glb and its nav meshes for the game
@@ -330,7 +382,28 @@ class App {
   void copy_selection();
   void paste();
   void duplicate_selection();
-  void create_prefab(const std::string& name);
+  // the selection saved as a prefab: its file ("" when it could not be); without its elements
+  // smaller than min_size meters (their names to left_out)
+  std::string create_prefab(const std::string& name, float min_size = 0.f, std::vector<std::string>* left_out = nullptr);
+  // Building without visual bugs (building_tools.cpp): elements of `roots` smaller than `min_size`
+  // left out (an actor stays); a building closed at the back (scene/closure.h), the new element
+  // in its group, lit like the level, undoable (0: error); the holes through which the player
+  // would see the void (scene/gaps.h), shown over the view and listed in a window
+  std::vector<uint32_t> without_small(const std::vector<uint32_t>& roots, float min_size,
+                                      std::vector<std::string>* left_out = nullptr) const;
+  uint32_t close_building(const std::vector<uint32_t>& ids, const ClosureOptions& options, ClosureResult* out,
+                          std::string* error);
+  void close_selection();
+  bool closure_relief = true;
+  float prefab_min_size = 0.5f;   // the prefab dialog's: small pieces left out
+  bool prefab_skip_small = true;
+  AABB gaps_region() const;       // the selection's, else the document's own level
+  void run_find_gaps(const AABB& region);
+  void draw_gaps_overlay();
+  void ui_gaps_window();
+  bool show_gaps_window = false, m_gaps_done = false;
+  GapReport m_gaps;
+  int m_gap_selected = -1;
   void start_placement(const std::string& prefab_path, const std::string& name, bool once);
   void start_object_placement(const CatalogObject& object, bool once);
   void start_model_placement(const CatalogModel& model, bool once);
@@ -378,6 +451,7 @@ class App {
   std::deque<json> m_ui_events;
   RemoteReply m_ui_reply;
   Vec2 m_ui_mouse{0, 0};
+  std::string m_ui_text;  // the text of the last typing event
   int m_ui_wait = 0;
   bool m_ui_shot_pending = false;
   std::string m_ui_shot;  // the last picture, PNG in base64
@@ -407,7 +481,7 @@ class App {
   void ui_left_panel(float x, float y, float w, float h);
   void ui_levels_panel();
   void ui_catalog_panel();
-  void ui_catalog_objects(bool interactive);  // the Objects, or the Interactive ones
+  void ui_catalog_objects(int tab);  // the Objects (0), the Interactive ones (3), the Effects (5)
   void ui_catalog_models();
   void ui_catalog_decor();
   void ui_catalog_decor_all();  // the decor of every level, searched by name
@@ -426,7 +500,144 @@ class App {
   // a shape's size and a surface's materials (surface_panel.cpp)
   void ui_shape_inspector(Node& n);
   void ui_material_inspector(Node& n);
-  void ui_import_inspector(Node& n);  // a structure of Jak II: what was checked when it came in
+  void ui_import_inspector(Node& n);
+  // The topology tool (topology_tool.cpp, scene/topology.h): one element's points or faces
+  uint32_t m_topo_node = 0;
+  bool m_topo_faces = false;              // picks faces, else points
+  std::set<uint32_t> m_topo_points;       // into m_topo_cache
+  std::set<MeshRef> m_topo_faces_sel;
+  MeshPoints m_topo_cache;
+  const Mesh* m_topo_cache_mesh = nullptr;
+  uint64_t m_topo_cache_version = 0;
+  std::unique_ptr<Node> m_topo_before;    // a gizmo drag going on: the node before it
+  std::vector<std::pair<MeshRef, Vec3>> m_topo_start;  // its vertices where they were (world)
+  Vec3 m_topo_pivot{0, 0, 0};
+  Mat4 m_topo_axes;
+  uint64_t m_topo_revision = 0;
+  float m_topo_extrude = 1.f;
+  bool topology_editable(uint32_t id) const;
+  bool start_topology();
+  void stop_topology();
+  const MeshPoints& topology_points();
+  std::set<MeshRef> topology_vertices();
+  void topology_edit(const char* undo_key, const std::function<void(Mesh&)>& edit);
+  void topology_tool(bool clicked, bool released);
+  void draw_topology_overlay();
+  void ui_topology_inspector();
+  void topology_delete();
+  // The terrain brush (terrain_tool.cpp, scene/terrain.h)
+  struct TerrainBrush {
+    BrushMode mode = BrushMode::Paint;
+    float size = 4.f;         // meters: the square's side
+    float strength = 3.f;     // raise, dig: meters per second at its middle; smooth, flatten: how fast
+    float wall_height = 4.f;  // meters above the ground
+    float cell = 1.f;         // a new terrain's cells (meters)
+    bool relief = true;       // paint: the level style's bumps
+    Vec2 gen_size{64, 64};    // generate: the rectangle (meters)
+    float hills = 12.f, roughness = 0.5f;
+    int seed = 1;
+    // a texture of the level style's level chosen for the ground, the walls ("": the style's)
+    std::string floor_texture, wall_texture;
+  } brush;
+  uint32_t m_terrain_node = 0;                   // the terrain painted (0: a new one at the first stroke)
+  std::unique_ptr<NodeChange> m_terrain_change;  // a stroke going on
+  TerrainGrid m_terrain_grid;                    // its grid while it goes on
+  bool m_terrain_new = false, m_terrain_changed = false;
+  float m_stroke_height = 0.f;  // the ground's height where the stroke started (its node's space)
+  int m_stroke_look = 0;        // the look its cells take (in the grid's looks)
+  bool m_terrain_rmb = false;        // the right button held over the view (the wheel raises, digs)
+  bool m_terrain_sculpting = false;  // ... and the wheel turned: the square stays where it is
+  float m_terrain_rmb_moved = 0.f;   // pixels moved since (far enough: it looks around instead)
+  float m_brush_plane = 0.f;    // where the brush is when the ray meets nothing
+  Vec3 m_brush_point{0, 0, 0};
+  bool m_brush_valid = false;
+  uint32_t m_brush_hit_node = 0;  // what the brush is over (0: the plane)
+  Vec3 m_last_stamp{0, 0, 0};
+  bool m_has_stamp = false;
+  TerrainGrid m_terrain_grid_view;  // the element's grid, for the square drawn over it
+  const Mesh* m_terrain_view_mesh = nullptr;
+  bool start_terrain_brush();
+  void stop_terrain_brush();
+  void terrain_end_stroke();
+  bool terrain_begin_stroke(BrushMode mode);
+  void terrain_apply(BrushMode mode, Vec3 from, Vec3 to, float amount);
+  void terrain_tool(bool clicked, bool released);
+  // the right button held with the brush: the wheel raises or digs; true while it has the mouse
+  bool terrain_right_button(Vec2 rel);
+  void draw_terrain_overlay();
+  void ui_terrain_window();
+  void terrain_generate(Vec3 at);
+  // a terrain's materials and texture sizes: the level style chosen, else the editor's grid
+  TerrainGrid::Look terrain_look();
+  // a level's style, measured once its decor is read (nullptr meanwhile, or when it cannot be)
+  const LevelStyle* level_style(const std::string& level);
+  // the textures a level's decor draws, the most used first (the brush's choices)
+  const std::vector<PaletteTexture>& level_textures(const std::string& level);
+  std::string m_level_textures_of;
+  std::vector<PaletteTexture> m_level_textures;
+  std::string m_terrain_tex_filter;
+  // a material of the document drawing a texture of a level (like `like`, -1: the editor's)
+  int material_with_texture(const std::string& level, const std::string& texture, int like);
+  // the brush's choice of a texture among the level's: true when it changed
+  bool ui_terrain_texture(const char* key, std::string* texture, const std::string& style_texture);
+  // a level style's floor (or wall) material, added to the document once; -1: none
+  int style_material(const std::string& level, bool floor);
+  // Build panel: floors and walls in the style of a level (scene/level_style.h)
+  std::string m_style_level;
+  std::string m_style_filter;
+  std::map<std::string, LevelStyle> m_styles;  // measured, by level
+  void ui_level_style();
+  // a shape (`shape`: a preset's name; "": a ground or a wall) with a level's floors' or walls' look
+  void start_style_placement(const std::string& level, bool floor, const std::string& shape = "");
+  // The preview of an actor's animation or effect (the inspector's): its model drawn moving in place
+  // of its own mesh until stopped, the document left as it is (scene/skeleton.h)
+  struct AnimPreview {
+    uint32_t node = 0;  // the model node drawn moving, 0: none
+    std::shared_ptr<Mesh> original, moving, bind;
+    std::shared_ptr<Skeleton> skeleton;
+    // an animation of its model (>= 0), else -1 broken (its -explode model), -2 the movement its
+    // code gives it (motion), -3 its own model cut in pieces
+    int animation = -1;
+    int motion = 0;
+    Vec3 base{0, 0, 0};  // the movement: around the middle of its base, its height
+    float height = 0;
+    float time = 0;
+    std::vector<Mat4> rest;  // broken: where its pieces were, how they fly
+    std::vector<Vec3> velocity, spin;
+    uint64_t revision = 0;  // a change of the document ends it
+    bool icon = false;      // an actor without a model: `moving` is its picture, drawn over the view
+    int seed = 0;           // its lightning's zigzags, drawn again and again (they crackle)
+  };
+  AnimPreview m_preview;
+  bool m_preview_loop = true;
+  int m_preview_choice = 0;
+  std::map<std::string, std::shared_ptr<Skeleton>> m_skeletons;  // model file -> its skeleton (null: none)
+  const Skeleton* model_skeleton(const std::string& path);
+  // What an element (an actor, or a model placed from the catalog: Jak 3's Models, Jak II's
+  // Objects) can show in the preview
+  struct PreviewOptions {
+    const Node* model = nullptr;          // the node drawn moving (an actor's model, the model itself)
+    std::string name;                     // its model's
+    const ModelAsset* asset = nullptr;    // its file
+    const ModelAsset* broken = nullptr;   // the model of its pieces (<model>-explode)
+    const Skeleton* skeleton = nullptr;
+    std::vector<int> animations;          // the ones that move
+    bool fracture = false;                // broken without pieces of its own: its model cut up
+    int motion = 0;                       // the movement its code gives it (preview.cpp Motion)
+    bool icon = false;                    // an actor without a model: its picture doing what it does
+    bool jak2 = false;
+    bool any() const { return !animations.empty() || broken || fracture || motion || icon; }
+    json to_json() const;
+  };
+  PreviewOptions preview_options(const Node& n);
+  void ui_preview_inspector(const Node& n);
+  void draw_preview_overlay();
+  // the picture of an object of the catalog: its model, its particles, or what it does
+  ThumbRequest catalog_thumb(const CatalogObject& o) const;
+  bool start_preview(uint32_t model_node, const std::string& path, int animation, int motion, bool jak2 = false);
+  bool start_icon_preview(uint32_t actor, int motion);
+  void update_preview(float dt);
+  void stop_preview();  // a structure of Jak II: what was checked when it came in
   // what the game does with an element of the decor: its collision, bounce, launch (io/decor_behaviors.h)
   void ui_decor_behavior(Node& n);
   std::unique_ptr<NodeChange> m_decor_edit;  // a value being dragged: the elements before
@@ -466,6 +677,20 @@ class App {
   bool show_effects = true;
   void update_effects(float dt);
   void draw_effects();
+  // The Game rendering window (game_window.cpp): the sky, the hour and the weather of the game view
+  bool show_game_window = false;
+  bool time_passes = false;   // the hour goes on by itself
+  float time_speed = 20.f;    // minutes of the game per second
+  bool lightning = false;     // a storm's flashes
+  float m_lightning_wait = 3.f, m_lightning_time = 0.f;
+  int m_lightning_frame = -1;
+  void ui_game_window();
+  int weather_preset_index() const;          // the weather chosen, -1 one of the user's own
+  bool set_weather(const std::string& id);   // a weather of weather_presets() by its id
+  void update_weather(float dt);             // the hour passing, the lightning
+  void draw_rain();                          // the rain falling around the camera
+  // the effects lost in the game's fog of the hour and the weather, far away
+  void fog_effects(std::vector<ParticleSprite>& sprites) const;
   // what the editor draws over the game view: no grid, the models lit and fogged like the game's
   void game_view_settings(RenderSettings& out);
   Camera camera;
@@ -488,7 +713,13 @@ class App {
   // on a worker thread, the first time the Prefabs panel shows them (or `rebuild`)
   std::vector<PrefabRecipe> prefab_recipes;
   std::vector<PrefabInfo> game_prefabs;
-  void start_game_prefabs(bool rebuild = false);
+  // makes the game's prefabs not made yet (all of them again: rebuild), or only those of `levels`
+  // (game, level)
+  void start_game_prefabs(bool rebuild = false, const std::set<std::pair<std::string, std::string>>& levels = {});
+  // the prefabs of that level are wanted (shown in the panel, placed): made as soon as possible
+  void want_game_prefabs(const std::string& game, const std::string& level);
+  std::set<std::pair<std::string, std::string>> m_prefab_levels_wanted;
+  std::string m_prefab_place_when_made;  // clicked before it was made: placed once it is
   void poll_game_prefabs();
   bool game_prefabs_busy() const { return m_game_prefab_work.valid(); }
   std::future<size_t> m_game_prefab_work;
@@ -592,9 +823,24 @@ class App {
   Vec2 m_mouse_rel;  // relative motion accumulated from SDL events (mouse look)
   bool m_lmb_in_vp = false;
   std::string m_title;
-  // select tool
+  // select tool: the left button pressed (a click, a box, the selection dragged, held still)
   bool m_box_selecting = false;
   Vec2 m_box_start;
+  double m_press_time = 0;
+  uint32_t m_press_target = 0;        // the element under it
+  bool m_press_on_selection = false;  // on an element of the selection: a drag moves the selection
+  bool m_press_double = false;        // a double click
+  bool m_long_pressed = false;        // held still: its whole group was selected
+  float m_long_press_ring = 0.f;      // 0..1: how long it was held, drawn around the cursor
+  bool m_moving_selection = false;
+  Vec2 m_move_px{0, 0};
+  Vec3 m_move_anchor{0, 0, 0};
+  std::vector<uint32_t> m_box_preview;  // what the box would select
+  Vec2 m_box_preview_end{-1, -1};
+  double m_box_preview_time = 0;
+  double m_hover_since = 0;  // the element under the cursor since then
+  uint64_t m_outline_key = ~0ull;
+  std::set<uint32_t> m_outline_sel;
   // the last click (a click again there goes to the next element under the cursor)
   Vec2 m_last_click{-1e9f, -1e9f};
   Vec3 m_last_click_cam;
@@ -608,6 +854,11 @@ class App {
   // placement
   bool m_place_valid = false;
   Mat4 m_place_matrix;
+  // the left button held where it is placed: the mouse raises it (up and down) and moves it along x
+  // (left and right) from there, placed when the button is released
+  bool m_place_drag = false;
+  Mat4 m_place_anchor;
+  Vec2 m_place_drag_px;
   bool m_drag_from_panel = false;  // an ImGui drag of a prefab is going on
   std::map<std::string, std::unique_ptr<Scene>> m_prefab_scenes;  // prefabs read, by path
   // prefab meshes merged into the document, per prefab file and mesh (shared by placements)
@@ -621,7 +872,8 @@ class App {
   std::string m_levels_filter;
   std::string m_selected_level;
   // catalog panel: its objects, or the decor of a level
-  int m_catalog_tab = 0;  // 0 objects, 1 models, 2 decor, 3 the interactive objects, 4 materials
+  int m_catalog_tab = 0;  // 0 objects, 1 models, 2 decor, 3 the interactive objects, 4 materials, 5 effects
+  std::string m_effect_kind;  // the Effects' category shown ("effect.smoke"), "" all
   std::string m_models_level;  // the level whose models are shown, "" for every level
   std::string m_catalog_filter;
   std::string m_catalog_family;  // "" for every family

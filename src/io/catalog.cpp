@@ -1,6 +1,7 @@
 #include "io/catalog.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 
@@ -70,6 +71,21 @@ json portable_lump(const json& lump) {
     out[key] = value;
   }
   return out;
+}
+
+std::string effect_kind(const CatalogObject& o) {
+  const std::string n = o.name + " " + o.lump.value("art-name", std::string());
+  auto any = [&](std::initializer_list<const char*> words) {
+    for (const char* w : words)
+      if (n.find(w) != std::string::npos) return true;
+    return false;
+  };
+  if (any({"fire", "flame", "ember", "torch", "burn", "lava", "brazier"})) return "fire";
+  if (any({"smoke", "steam", "dust", "mist", "haze", "fog", "puff", "vapor", "cloud", "exhaust"})) return "smoke";
+  if (any({"spark", "elec", "zap", "lightning", "laser"})) return "sparks";
+  if (any({"water", "drip", "splash", "fall", "bubble", "runoff", "rain", "foam", "spray", "goo"})) return "water";
+  if (any({"light", "glow", "neon", "sign", "lamp", "beam", "flash", "shine", "pulsat"})) return "light";
+  return "other";
 }
 
 Node make_catalog_actor(const CatalogObject& object, const std::string& name) {
@@ -347,15 +363,51 @@ std::vector<CatalogModel> list_catalog_models(const AssetLibrary& library, const
   return out;
 }
 
+std::string piece_key(const std::string& name, size_t triangles) {
+  std::string stem = name;
+  const size_t dash = stem.rfind('-');
+  if (dash != std::string::npos && dash + 1 < stem.size() &&
+      stem.find_first_not_of("0123456789", dash + 1) == std::string::npos)
+    stem.resize(dash);
+  return stem + "#" + std::to_string(triangles);
+}
+
+bool same_piece(const CatalogPart& a, const CatalogPart& b) {
+  auto close = [](double x, double y) { return std::fabs(x - y) <= 0.05 * std::max({x, y, 1e-6}); };
+  return a.key == b.key && close(a.surface, b.surface) && close(a.edges, b.edges);
+}
+
+void add_piece(std::vector<CatalogPart>& pieces, std::map<std::string, std::vector<size_t>>& by_key, CatalogPart part) {
+  auto& alike = by_key[part.key];
+  for (size_t i : alike)
+    if (same_piece(pieces[i], part)) {
+      pieces[i].copies += part.copies;
+      return;
+    }
+  alike.push_back(pieces.size());
+  pieces.push_back(std::move(part));
+}
+
+void mesh_measure(const Mesh& mesh, double* surface, double* edges) {
+  *surface = *edges = 0;
+  for (const auto& p : mesh.prims)
+    for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+      const Vec3 a = p.pos[p.idx[t]], b = p.pos[p.idx[t + 1]], c = p.pos[p.idx[t + 2]];
+      *surface += 0.5 * length(cross(b - a, c - a));
+      *edges += length(b - a) + length(c - b) + length(a - c);
+    }
+}
+
 std::vector<CatalogPart> list_parts(const Scene& level) {
   std::vector<CatalogPart> prototypes, pieces;
+  std::map<std::string, std::vector<size_t>> piece_of;  // its copies once
   std::map<uint32_t, std::vector<const Node*>> children;
   for (const auto& n : level.nodes)
     if (n.parent) children[n.parent].push_back(&n);
   for (const auto& n : level.nodes) {
     const Node* p = n.parent ? level.find(n.parent) : nullptr;
     if (!p) continue;
-    if (p->name.find("-tie-") != std::string::npos || p->name.find("-shrub-") != std::string::npos) {
+    if (instance_tree(p->name)) {
       // a prototype: its instances have the mesh (or the node itself)
       CatalogPart part;
       part.kind = CatalogPart::Kind::Prototype;
@@ -384,7 +436,9 @@ std::vector<CatalogPart> list_parts(const Scene& level) {
       part.name = part.mesh_node = n.name;
       part.triangles = n.mesh->tri_count();
       part.copies = 1;
-      pieces.push_back(std::move(part));
+      part.key = piece_key(n.name, part.triangles);
+      mesh_measure(*n.mesh, &part.surface, &part.edges);
+      add_piece(pieces, piece_of, std::move(part));
     }
   }
   auto by_name = [](const CatalogPart& a, const CatalogPart& b) { return a.name < b.name; };

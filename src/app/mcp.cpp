@@ -30,10 +30,15 @@ namespace ogle {
 
 namespace {
 
-constexpr const char* kVersion = "0.4";
+constexpr const char* kVersion = "0.5";
 
 json vec3(const char* description) {
   return {{"type", "array"}, {"items", {{"type", "number"}}}, {"minItems", 3}, {"maxItems", 3},
+          {"description", description}};
+}
+
+json vec2(const char* description) {
+  return {{"type", "array"}, {"items", {{"type", "number"}}}, {"minItems", 2}, {"maxItems", 2},
           {"description", description}};
 }
 
@@ -63,7 +68,8 @@ json tools() {
            "The levels of the game that can be opened or added, with their DGO file and whether the document has "
            "them. With near: only the levels the game displays together with that one (its neighbors).",
            {{"filter", str("part of a level name or DGO (e.g. 'des' for the desert)")},
-            {"near", str("a level: its neighbors in the game only")}}),
+            {"near", str("a level: its neighbors in the game only")},
+            {"game", str("'jak2': Jak II's levels (once extracted), to open or add as decor")}}),
       tool("get_level_info",
            "What is known of a level: its neighbors in the game (the levels displayed with it), its companions, its "
            "continue points (where the game starts the player: position in meters, levels shown there), and when the "
@@ -77,11 +83,24 @@ json tools() {
            {{"name", str("a level from list_levels")},
             {"actors", boolean("false: its decor alone, without any actor (true by default: with its objects)")},
             {"reference", boolean("true: shown to compare with (washed in blue), never selected nor exported: the "
-                                  "game's level the document replaces")}},
+                                  "game's level the document replaces")},
+            {"game", str("'jak2': a level of Jak II (list_levels with game 'jak2'): its decor alone, its textures "
+                         "renamed jak2-..., named jak2-<name> in the document")}},
            {"name"}),
       tool("remove_level", "Removes a level added to the document, and what is under its group. Undoable.",
            {{"name", str("a level added with add_level")}, {"reference", boolean("the one added as a reference")}},
            {"name"}),
+      tool("match_lighting",
+           "Scales the vertex colors (the light) of pieces and of what is under them: to the brightness of the "
+           "document's Jak 3 decor by default (the inspector's Match the lighting, for structures of Jak II lit "
+           "darker or brighter than the level), or by `factor`. Undoable.",
+           {{"ids", ids("the elements")}, {"factor", num("multiplies their colors instead (1.5: half as bright again)")}},
+           {"ids"}),
+      tool("merge_level",
+           "Makes a level added to the document (add_level, a level of Jak 3 or of Jak II) part of the document's own "
+           "level: no longer a level next to it, its pieces and its collision go with the document's in export_level "
+           "(also in place of a level of the game: replace_level). Undoable.",
+           {{"name", str("the level added (as get_status lists it: jak2-<name> for Jak II's)")}}, {"name"}),
       tool("set_decor",
            "What the game does with elements of the decor (pieces, models, shapes, Jak II structures), written by "
            "export_level: collision {kind: shape|none|invisible, material: stone|ice|quicksand|waterbottom|tar|"
@@ -112,6 +131,8 @@ json tools() {
            "is loaded. Refuses when the document has unsaved changes, unless discard_changes is true.",
            {{"name", str("a level name from list_levels")},
             {"actors", boolean("false: its decor alone, without any actor (true by default: with its objects)")},
+            {"game", str("'jak2': a level of Jak II (list_levels with game 'jak2'): its decor alone made Jak 3's, "
+                         "the document's level named jak2-<name>")},
             {"discard_changes", discard}},
            {"name"}),
       tool("new_level",
@@ -120,11 +141,12 @@ json tools() {
            {{"discard_changes", discard}}),
       tool("list_catalog",
            "The objects that can be placed, by family, with how many the game's levels have: the objects that make up "
-           "a place (group 'objects': props that only stand there, doors and airlocks, water, dark eco and lava, the "
-           "particle effects of the levels: lights, neon signs, steam, drawn as markers) and the interactive ones "
-           "(group 'interactive': crates, platforms, elevators, bouncers, buttons, breakables, hazards). Never the "
-           "living (enemies, characters, animals), the collectibles nor the technical types.",
-           {{"group", str("'objects' or 'interactive' (both by default)")},
+           "a place (group 'objects': props that only stand there, doors and airlocks, water, dark eco and lava), the "
+           "visual effects (group 'effects': the particle effects of the levels, each with its effect_kind: smoke, "
+           "fire, light, sparks, water, other) and the interactive ones (group 'interactive': crates, platforms, "
+           "elevators, bouncers, buttons, breakables, hazards). Never the living (enemies, characters, animals), the "
+           "collectibles nor the technical types.",
+           {{"group", str("'objects', 'effects' or 'interactive' (all by default)")},
             {"family", str("objects: prop, door, water, effect; interactive: crate, platform, movement, button, "
                            "hazard, breakable, light, weapon, door-like, other")},
             {"filter", str("part of a name")},
@@ -160,7 +182,7 @@ json tools() {
            "Puts in the document an object of the catalog (kind 'object', name from list_catalog), a model (kind "
            "'model', from list_models, or a .glb file made elsewhere with path), a decor part (kind 'decor', name and "
            "level from list_decor), a prefab (kind 'prefab') or a new shape (kind 'shape', name box, floor, wall, "
-           "doorway, window, pillar, ramp, stairs, roof, roof-hip or cylinder, with size, and opening [width, "
+           "doorway, window, pillar, ramp, stairs, roof, roof-hip, cylinder or ground, with size, and opening [width, "
            "height] for a doorway or a window; its base's middle at the position; ramps and stairs rise towards +z "
            "before the turn, a roof's ridge runs along z), at a position in meters (Y is up). Returns the new elements with their id. Undoable "
            "in the editor.",
@@ -170,6 +192,12 @@ json tools() {
             {"size", vec3("kind 'shape': [width, height, depth] in meters")},
             {"tile", num("kind 'shape': meters per repeat of its texture (2 by default)")},
             {"steps", integer("kind 'shape', stairs: the number of steps")},
+            {"bend", num("kind 'shape': bent around a vertical axis, in degrees over its length (x; ramps and stairs "
+                         "along their climb): a wall bent 90 is a quarter of a round tower, stairs bent 180 a spiral")},
+            {"round", num("kind 'shape', box: the radius of its upright edges in meters (rounded corners)")},
+            {"style", str("kind 'shape': a level of the game whose look it takes: a floor or a ground its floors' "
+                          "texture (at their size), light and bumps, the other shapes its walls' (e.g. 'ctysluma')")},
+            {"bumps", num("kind 'shape', ground: meters its top goes up and down")},
             {"level", str("kind 'decor': the level the part comes from (omitted: the first that has it)")},
             {"game", str("kind 'decor' or 'model': 'jak2' for a structure or an object of Jak II (list_decor, list_models "
                          "with game 'jak2')")},
@@ -188,18 +216,22 @@ json tools() {
            {"items"}),
       tool("find_nodes",
            "Finds elements of the document by part of their name, actor type (etype), kind (actor, render, group) "
-           "or near a point. Returns id, name, kind, type, position, size, and whether it is locked (terrain) or "
+           "or near a point. Returns id, name, kind, type, position, size, box (its bounds, [min, max]), and whether it is locked (terrain) or "
            "hidden by the story view. Locked terrain is left out unless include_locked.",
            {{"name", str("part of the name")},
             {"etype", str("an actor type, e.g. 'crate'")},
             {"kind", {{"type", "string"}, {"enum", {"actor", "render", "group", "navmesh"}}}},
             {"near", vec3("a point, [x, y, z] in meters")},
             {"radius", num("distance from `near`, 20 m by default")},
+            {"box", {{"type", "array"}, {"description", "[[x, y, z], [x, y, z]]: only the elements whose middle is inside"}}},
+            {"outside", boolean("with box: only those outside it")},
+            {"under", integer("only the elements inside this group (a level's group: get_status document.levels)")},
             {"include_locked", boolean("also the terrain")},
-            {"limit", integer("number of results, 50 by default")}}),
+            {"limit", integer("number of results, 50 by default, 20000 at most")}}),
       tool("get_node",
            "Everything about one element: position, rotation (degrees) and scale, size, mesh, children, and for an "
-           "actor its type, model and game data (lump).",
+           "actor its type, model and game data (lump); for an actor or a model of the catalog, what the inspector's "
+           "preview shows of it (preview: its animations, its movement, how it breaks, its picture).",
            {{"id", integer("the element")}}, {"id"}),
       tool("transform_nodes",
            "Moves, turns or scales elements: position sets the world position, translate adds an offset (meters), "
@@ -227,18 +259,22 @@ json tools() {
             {"behavior", {{"type", "object"},
                           {"description", "merged into its behavior (null removes a key): open (a door): "
                                           "approach|locked|always|when, with when (a condition) and distance "
-                                          "(meters); active (a bouncer), leave (an elevator), present (any): a "
+                                          "(meters), and loads (a level: the rooms behind it, loaded and shown "
+                                          "when Jak comes, the door opening once it is); active (a bouncer), leave (an elevator), present (any): a "
                                           "condition"}}},
             {"params", {{"type", "object"}, {"description", "tag -> value (null: back to the game's)"}}}},
            {"id"}),
       tool("set_shape",
            "Changes a shape made in the editor (place kind 'shape'): its size in meters, how many meters one repeat "
-           "of its texture covers, its steps (stairs) or sides (cylinder). Undoable.",
+           "of its texture covers, its steps (stairs) or sides (cylinder), its bend (degrees) and the radius of its "
+           "corners (round, a box). Undoable.",
            {{"id", integer("the shape")},
             {"size", vec3("[width, height, depth] in meters")},
             {"tile", num("meters per repeat of the texture")},
             {"steps", integer("stairs")},
-            {"sides", integer("cylinder")}},
+            {"sides", integer("cylinder")},
+            {"bend", num("degrees around a vertical axis over its length (not a cylinder)")},
+            {"round", num("a box: the radius of its upright edges, meters")}},
            {"id"}),
       tool("set_material",
            "Gives elements (shapes, models, decor) a texture: an image file (PNG, JPG, TGA, BMP) or the name of a "
@@ -300,7 +336,9 @@ json tools() {
            "(<library>/export/<project>/ by default) laid out like the jak-project checkout: "
            "custom_assets/jak3/levels/<name>/ (the .glb, the .jsonc and the .gd its level builder takes, "
            "level-info.gc), goal_src/jak3/levels/<name>/ (the behaviors' code) and README.md (how to bring it into "
-           "the game); notes says what changed or was left out. Hidden levels and elements are left out.",
+           "the game); notes says what changed or was left out, densest the places of the floors where Jak would "
+           "meet more collision than the game gathers at once (461 triangles: he can fall through), the densest "
+           "first. Hidden levels and elements are left out.",
            {{"name", str("the level's name in the game: 3 to 10 lower case letters, digits or '-' (not a level of "
                          "the game)")},
             {"nickname", str("3 lower case letters: its DGO's name (made from the name by default)")},
@@ -327,11 +365,19 @@ json tools() {
             {"frame", {{"description", "'all', 'selection' or a list of ids"}}}}),
       tool("set_view",
            "How the 3D view draws the level: game_view true draws it with the game's own renderer (its lighting at "
-           "the hour of the day, its fog), as the exported level will look in the game; effects: the particle "
-           "effects of the level (steam, sparks, lights). Answers the view's state.",
+           "the hour of the day and in the weather, its fog, its sky with the sun, the moon and the clouds), as the "
+           "exported level will look in the game; effects: the particle effects of the level (steam, sparks, "
+           "lights). The weather is the game's: cloud 0 clear, 0.5 overcast, 1 storm; fog 0 haze, 0.5 clear, 1 rain "
+           "or smog. Answers the view's state.",
            {{"game_view", boolean("the game's renderer")},
             {"hour", num("0..24: the time of the day of the game view (12: noon, 22: night)")},
-            {"fog", boolean("the game's fog in the game view")},
+            {"weather", str("one of the game's weathers: clear, few_clouds, haze, smog, overcast, overcast_fog, rain, "
+                            "storm, storm_rain, storm_fog")},
+            {"cloud", num("0..1: the clouds (0 clear, 0.5 overcast, 1 storm)")},
+            {"fog", num("0..1: 0 haze, 0.5 clear, 1 rain (smog under a clear sky)")},
+            {"rain", num("0..1: rain falling around the camera")},
+            {"lightning", boolean("a storm's flashes (with cloud above 0.75)")},
+            {"level_lights", boolean("the level's lamps (on at night)")},
             {"effects", boolean("the particle effects")}}),
       tool("capture_view",
            "A picture of the 3D view from the editor's camera (PNG), to see the result of what was placed. By "
@@ -340,19 +386,113 @@ json tools() {
            "game_hour chooses the hour of the game rendering; -1 the editor's own view.",
            {{"width", integer("pixels, 960 by default")},
             {"height", integer("pixels, 600 by default")},
-            {"game_hour", num("0..24: the game rendering at that hour (12: noon, 22: night); -1: the editor's view")}}),
+            {"game_hour", num("0..24: the game rendering at that hour (12: noon, 22: night); -1: the editor's view")},
+            {"only", ids("these elements alone (and what is under them): the others are not drawn in the picture")}}),
       tool("select",
            "Selects elements in the editor, to show them to the user; or a whole level (level: its name), to move "
-           "it with transform_nodes on the selection's ids.",
-           {{"ids", ids("the elements")}, {"level", str("the level opened or a level added: all of it")}}),
+           "it with transform_nodes on the selection's ids; or the assembly an element is part of (assembly: its "
+           "id): a house with its facades, roof and windows, a bridge with its pillars; or a group (group: its id, "
+           "the 'group' of an element: a prefab placed, a group made with the tool group).",
+           {{"ids", ids("the elements")},
+            {"level", str("the level opened or a level added: all of it")},
+            {"assembly", integer("an element: all of its assembly")},
+            {"group", integer("a group's id: all of its elements")}}),
+      tool("group",
+           "Makes a named group of elements (Groups panel): they are selected together (a double click on one of "
+           "them), moved together, listed by list_groups. A prefab placed is a group already.",
+           {{"ids", ids("the elements")}, {"name", str("its name")}}, {"ids", "name"}),
+      tool("ungroup", "Undoes a group (its elements stay where they are).",
+           {{"group", integer("the group's id")}}, {"group"}),
+      tool("list_groups",
+           "The groups of the document: the prefabs placed (prefab true) and the groups named, with their elements "
+           "and their box."),
+      tool("close_building",
+           "Closes a building open at the back. Most buildings of the game are facades, made to be seen from the "
+           "street only: from behind or from the side the player sees the void or the inside of their walls. This "
+           "adds one element filling it: its footprint and height read from the building, filled inside and behind "
+           "it as seen from seen_from (its front: the triangles of the game do not tell which side is the front), as "
+           "deep as a building of its width, walls where nothing closed it (with pilasters and a cornice), a top "
+           "lower terrace by terrace going back, in the building's own textures, lit like the level. The building's "
+           "surfaces stay in front. The new element joins the building's group. Use it on every building the player "
+           "can walk around (rule 3 of the guide). Undoable.",
+           {{"ids", ids("the building's elements (a prefab placed: list_groups' ids)")},
+            {"seen_from", vec3("[x, y, z]: a point of the street the player sees its front from (the camera's "
+                               "position by default): what is visible from there stays open, what is hidden behind "
+                               "and inside it is filled")},
+            {"depth", num("meters filled behind it (0 by default: from its width, 4 to 24)")},
+            {"cell", num("meters of its grid (0 by default: from its size)")},
+            {"relief", boolean("setbacks, pilasters and a cornice (true by default)")},
+            {"seed", integer("a variant of its setbacks")}},
+           {"ids"}),
+      tool("find_gaps",
+           "Finds where a player walking the level would see the void (nothing drawn: a visual bug in the game): "
+           "from points of the ground every few meters, at the height of Jak's eyes, rays around and downward; a "
+           "ray that meets nothing is a view into the void. Each spot: kind 'gap' (a hole between pieces: fill it) "
+           "or 'edge' (an open edge of the region: close it unless the player cannot go near), where it is (at), "
+           "where it is seen from (seen_from, direction: give them to set_camera to look at it) and how many rays "
+           "went through. Run it after building and fix every gap (rule 1 of the guide). Shown in the editor too.",
+           {{"box", {{"type", "array"}, {"description", "[[x, y, z], [x, y, z]]: the region the player can walk"}}},
+            {"ids", ids("or around these elements (their box and a margin)")},
+            {"margin", num("meters around ids, 12 by default")},
+            {"spacing", num("meters between the points looked from (0 by default: about 400 points)")},
+            {"eye", num("meters above the ground, 1.6 by default")},
+            {"limit", integer("spots returned, 40 by default")},
+            {"show", boolean("listed and drawn in the editor (true by default)")}}),
+      tool("list_assemblies",
+           "The assemblies of the document's decor, the most elements first: the elements touching each other "
+           "(a house with its facades, roof and windows; a bridge with its pillars; a tower with its balconies), "
+           "not the ground. Each: its element ids, its box, its triangles, its main element and its parts (name, how many, "
+           "their volume in m3). A whole "
+           "structure to select, to copy or to save as a prefab (create_prefab).",
+           {{"min_elements", integer("2 by default")},
+            {"min_size", num("meters across at least, 4 by default")},
+            {"max_size", num("meters: a larger one is cut in parts, 60 by default")},
+            {"limit", integer("at most this many, 200 by default")}}),
+      tool("terrain",
+           "Draws natural ground with the terrain brush (B): a square `size` meters across at position "
+           "(along to `to` when given: a road, a wall, a ditch). mode paint lays ground at `height` (the position's y "
+           "by default) with the relief of the level style; erase takes it away; raise and dig move it `amount` meters at "
+           "the square's middle, fading to its edges (laying ground first where there is none); smooth evens it, flatten brings it to `height` (amount 0..1); wall "
+           "raises upright walls `amount` meters high (4 by default), unwall takes them down; generate makes hills over "
+           "`area` [x, z] meters, `hills` high, `roughness` 0..1. The cells painted (paint, wall, new ground) take the "
+           "style's look, each part of a terrain keeping its own: flat ground its floor texture, slopes, walls and edges "
+           "its wall texture. id: the terrain to change (from a previous call), else a new one. Undoable.",
+           {{"mode", str("paint (default), erase, raise, dig, smooth, flatten, wall, unwall or generate")},
+            {"position", vec3("[x, y, z] in meters: the brush's middle")},
+            {"to", vec3("[x, y, z]: the brush goes from position to there")},
+            {"size", num("meters, the square's side (4 by default)")},
+            {"amount", num("raise, dig, wall: meters; smooth, flatten: 0..1")},
+            {"height", num("paint, flatten: the ground's height (meters)")},
+            {"style", str("a level (list_levels) whose floor and wall textures and relief it takes")},
+            {"floor_texture", str("a texture of the style's level for the ground instead of its floor's (list_textures)")},
+            {"wall_texture", str("a texture of the style's level for the walls and slopes instead of its walls'")},
+            {"relief", boolean("paint: the style's bumps (true by default)")},
+            {"area", vec2("generate: [x, z] meters (64 by 64 by default)")},
+            {"hills", num("generate: meters high at most (12 by default)")},
+            {"roughness", num("generate: 0 smooth .. 1 broken (0.5 by default)")},
+            {"seed", integer("generate, paint: a variant")},
+            {"cell", num("a new terrain's cells, meters (1 by default)")},
+            {"id", integer("the terrain to change")}},
+           {"position"}),
       tool("set_story",
            "The story view of the game's levels: enabled false shows every state of the level at once; step "
            "(1 = start of the game) or after_node (a task node name) shows it at that point of the story.",
            {{"enabled", boolean("the story view")},
             {"step", integer("1 = the start of the game")},
             {"after_node", str("a task node, e.g. 'arena-fight-1-resolution'")}}),
-      tool("create_prefab", "Saves elements as a prefab, to place again with place (kind 'prefab').",
-           {{"ids", ids("the elements")}, {"name", str("the prefab's name")}}, {"ids", "name"}),
+      tool("create_prefab",
+           "Saves elements as a prefab (in library/prefabricated/), to place again with place (kind 'prefab'). The "
+           "elements smaller than min_size are left out (bolts, debris, stains: a prefab is a structure; rule 2 of "
+           "the guide); with close, the building is closed first (close_building) and its closure saved with it "
+           "(rule 3). Answers its name: the one given, spaces and signs made '_', with -2, -3... when a prefab has it "
+           "already, and the names of the elements left out.",
+           {{"ids", ids("the elements")},
+            {"name", str("the prefab's name")},
+            {"min_size", num("meters: elements smaller across are left out (0.5 by default, 0: keep all)")},
+            {"close", boolean("close the building at the back first (false by default)")},
+            {"seen_from", vec3("with close: where its front is seen from (the camera by default)")},
+            {"relief", boolean("with close: setbacks, pilasters and a cornice (true by default)")}},
+           {"ids", "name"}),
       tool("save_project",
            "Saves the document as a project: <library>/projects/<name>/<name>.glb, and its nav meshes for the game "
            "(<name>-nav.json) when it has some. name is needed the first time (then it saves there again).",
@@ -372,7 +512,19 @@ const char* kInstructions =
     "Tools of the OpenGOAL Level Editor (levels of Jak 3), acting on the editor window the "
     "user sees (started when needed). Positions are in meters, Y is up. A typical session: get_status; open_level "
     "(or new_level); find_nodes / raycast to know where things are; list_catalog, list_decor and list_prefabs to "
-    "choose what to put; place; capture_view to check; save_project. Every change can be undone.";
+    "choose what to put; place; capture_view to check; save_project. Every change can be undone. "
+    "Rules for what you build (docs/mcp-agent-guide.md explains them): "
+    "1. No holes: pieces must touch or overlap (by 5 to 10 cm), floors reach the walls, walls reach the ground and "
+    "each other; a gap lets the player see the void, a visual bug in the game. Run find_gaps on what you built and "
+    "fix every 'gap' (and every 'edge' the player can reach) before you say it is done. "
+    "2. Prefabs hold structures, not crumbs: create_prefab leaves out elements under 0.5 m (min_size); never "
+    "save loose bolts, debris, stains or tiny props in a prefab. "
+    "3. Facades are not buildings: most buildings of the game are only a front, open behind. Place a facade so "
+    "that only its front can be seen (against a wall, the edge of the level, other buildings), or close it with "
+    "close_building (create_prefab close true) when the player can walk around it; look at it from the back and "
+    "the sides with set_camera and capture_view. A closure follows the building's shape: keep its relief. "
+    "4. Look before you report: capture_view from the player's height (1.6 m above the ground) around what you "
+    "built.";
 
 void write(const json& message) {
   const std::string text = message.dump(-1, ' ', false, json::error_handler_t::replace) + "\n";
@@ -438,7 +590,7 @@ json call_tool(RemoteClient& client, int port, const std::string& name, const js
   // the ones that may wait for a level to load or for the editor to read the levels
   const bool slow = name == "open_level" || name == "open_project" || name == "list_decor" || name == "place" ||
                     name == "list_catalog" || name == "list_models" || name == "place_many" ||
-                    name == "generate_navmesh" || name == "add_level" || name == "export_level" ||
+                    name == "generate_navmesh" || name == "add_level" || name == "export_level" || name == "find_gaps" ||
                     name == "replace_level" || name == "list_prefabs";
   json answer;
   if (!client.call(request, &answer, slow ? 300000 : 60000, &err)) return tool_error(err);

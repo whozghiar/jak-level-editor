@@ -356,6 +356,7 @@ struct TieWindInstance {
   std::array<math::Vector4f, 4> matrix;
   u16 wind_idx;
   float stiffness;
+  u16 proto_idx = 0;  // level editor: its prototype (tree.proto_names), not serialized
   void serialize(Serializer& ser);
 };
 

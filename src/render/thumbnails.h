@@ -16,9 +16,11 @@
 namespace ogle {
 
 struct ThumbRequest {
-  enum class Kind { Model = 0, Level, Part, Effect } kind = Kind::Model;
-  std::string path;   // .glb: a model or prefab, or a level's background; Effect: its particle group
-  std::string node;   // Part: the node of the level whose mesh is drawn
+  enum class Kind { Model = 0, Level, Part, Effect, Icon } kind = Kind::Model;
+  // .glb: a model or prefab, or a level's background; Effect: its particle group; Icon: the type of
+  // an object without a model (scene/shapes.h object_icon)
+  std::string path;
+  std::string node;   // Part: the node of the level whose mesh is drawn; Icon: the object's family
   int64_t stamp = 0;  // file date: a changed file gets a new thumbnail
   std::string key() const;
 };

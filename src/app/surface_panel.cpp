@@ -69,6 +69,34 @@ void App::ui_shape_inspector(Node& n) {
     edit_end(tr("undo.shape"));
     tooltip(tr("inspector.shape.opening.tip"));
   }
+  if (p.kind == "ground") {
+    changed |= ImGui::DragFloat(tr_id("inspector.shape.bumps").c_str(), &p.bumps, 0.01f, 0.f, 20.f, "%.2f m");
+    edit_begin(snap);
+    edit_end(tr("undo.shape"));
+    tooltip(tr("inspector.shape.bumps.tip"));
+    changed |= ImGui::DragFloat(tr_id("inspector.shape.bump_size").c_str(), &p.bump_size, 0.05f, 0.25f, 200.f, "%.1f m");
+    edit_begin(snap);
+    edit_end(tr("undo.shape"));
+    tooltip(tr("inspector.shape.bump_size.tip"));
+    changed |= ImGui::InputInt(tr_id("inspector.shape.seed").c_str(), &p.seed);
+    tooltip(tr("inspector.shape.seed.tip"));
+    if (ImGui::IsItemDeactivatedAfterEdit()) commit_node_edit(snap, tr("undo.shape"));
+  }
+  if (p.kind == "stairs")
+    ImGui::TextDisabled(tr("inspector.shape.step"), p.size.y / std::max(p.steps, 1), p.size.z / std::max(p.steps, 1));
+  if (p.kind == "box") {
+    changed |= ImGui::DragFloat(tr_id("inspector.shape.round").c_str(), &p.round, 0.02f, 0.f,
+                                std::min(p.size.x, p.size.z) / 2, "%.2f m");
+    edit_begin(snap);
+    edit_end(tr("undo.shape"));
+    tooltip(tr("inspector.shape.round.tip"));
+  }
+  if (p.kind != "cylinder") {
+    changed |= ImGui::SliderFloat(tr_id("inspector.shape.bend").c_str(), &p.bend, -360.f, 360.f, "%.0f deg");
+    edit_begin(snap);
+    edit_end(tr("undo.shape"));
+    tooltip(tr(p.kind == "stairs" || p.kind == "ramp" ? "inspector.shape.bend.climb_tip" : "inspector.shape.bend.tip"));
+  }
   ImGui::PopItemWidth();
   if (changed) reshape(scene, n, ShapeParams::from_json(p.to_json()));
   // stretched with the scale tool: its texture too; the scale made its size keeps the texture's

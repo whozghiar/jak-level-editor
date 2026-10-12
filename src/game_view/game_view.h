@@ -40,8 +40,13 @@ class GameView {
   // then its translucent surfaces (water, glass, glows), after the editor's opaque models
   void draw_translucent();
 
+  // the hour, the weather, the level's lights (the Game rendering window); the fog is always the
+  // game's
   MoodSettings mood;
-  bool fog = true;
+  float time = 0.f;  // seconds: the clouds drift
+  // a half turn of the sky around `yaw` (the camera's angle) in a texture of w x h, for the Game
+  // rendering window (sky.h); 0 when it cannot be drawn
+  unsigned sky_preview(int w, int h, float yaw);
   struct Stats {
     size_t chunks = 0, triangles = 0, rebuilt = 0;
     double ms_build = 0;  // the last chunks made

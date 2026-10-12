@@ -299,6 +299,8 @@ void App::frame(float dt) {
   } timer{frame_start, m_frame_ms};
   m_water_time += dt;
   rs.time = m_water_time;
+  update_preview(dt);
+  update_weather(dt);
   // the scene cache (world matrices...) is kept while nothing changes: the history did not move,
   // no gizmo drag, no field being dragged (nodes added or removed are detected by the cache)
   if (history.revision() != m_frame_revision || gizmo.active() || m_free_rotating || ImGui::IsAnyItemActive())
@@ -324,6 +326,7 @@ void App::frame(float dt) {
   handle_shortcuts();
   update_camera(dt);
   viewport_interaction();
+  draw_cursor_info();
   ui_labels();
   ui_viewport_hint();
   thumbs.update();
@@ -353,14 +356,18 @@ void App::frame(float dt) {
     game_view.draw_opaque(scene, camera, px, py, pw, ph, &clip);
     renderer.set_game_depth(&clip);
   }
+  update_outlines();
   renderer.draw_scene(scene, view_rs, selection, hovered);
   if (game) game_view.draw_translucent();
   if (rs.show_ocean && m_ocean && !scene.nodes.empty())
     renderer.draw_water(*m_ocean, Mat4::translate({0, m_ocean_height, 0}), ocean_look(view_rs), view_rs);
   update_effects(dt);
   draw_effects();
+  draw_rain();
   draw_navmesh_overlay();
+  draw_gaps_overlay();
   draw_tool_overlays();
+  draw_preview_overlay();
   renderer.set_game_depth(nullptr);
   glViewport(0, 0, fbw, fbh);
 
@@ -383,7 +390,7 @@ void App::game_view_settings(RenderSettings& out) {
     }
     out.game_fog[i] = m.fog_color[i] / 255.f;
   }
-  out.game_fog[3] = game_view.fog ? (m.fog_max - m.fog_min) / 255.f : 0.f;
+  out.game_fog[3] = (m.fog_max - m.fog_min) / 255.f;
   out.game_fog_start = m.fog_start / 4096.f;
   out.game_fog_end = m.fog_end / 4096.f;
 }
@@ -420,6 +427,8 @@ void App::update_camera(float dt) {
   ImGuiIO& io = ImGui::GetIO();
   Vec2 rel = m_mouse_rel;
   m_mouse_rel = {0, 0};
+  // the terrain brush: the right button held and the wheel raise or dig where its square is
+  if (tool == ToolMode::Terrain && terrain_right_button(rel)) return;
   const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
   // on the selection (or what is placed) the right button turns it, elsewhere it looks around
   if (!m_looking && !m_free_rotating && rmb && m_mouse_in_vp && ImGui::IsMouseClicked(ImGuiMouseButton_Right) &&
@@ -460,6 +469,8 @@ void App::update_camera(float dt) {
   if (m_mouse_in_vp && io.MouseWheel != 0) {
     if (tool == ToolMode::Place && io.KeyCtrl) {
       placement.yaw += io.MouseWheel * radians(15.f);
+    } else if (tool == ToolMode::Terrain && io.KeyCtrl) {
+      brush.size = std::clamp(brush.size * std::pow(1.15f, io.MouseWheel), 0.5f, 64.f);  // the square's size
     } else {
       camera.pos += camera.forward() * io.MouseWheel * std::max(camera.speed * 0.35f, 0.4f);
     }
@@ -577,7 +588,7 @@ void App::viewport_interaction() {
   bool inside = m_mouse_vp.x >= 0 && m_mouse_vp.y >= 0 && m_mouse_vp.x < m_vp_w && m_mouse_vp.y < m_vp_h;
   // while a prefab is dragged from its panel ImGui owns the mouse: the viewport is "under" it
   // when no window is
-  const bool modal = m_show_discard || m_show_new_prefab;
+  const bool modal = m_show_discard || m_show_new_prefab || m_show_new_group || ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
   m_mouse_over_vp = inside && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && !modal;
   m_mouse_in_vp = inside && !io.WantCaptureMouse && !modal;
   const ImGuiPayload* payload = ImGui::GetDragDropPayload();
@@ -590,8 +601,119 @@ void App::viewport_interaction() {
   bool released = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
   if (clicked) m_lmb_in_vp = true;
   if (tool == ToolMode::Place) place_tool(clicked);
+  else if (tool == ToolMode::Topology) topology_tool(clicked, released);
+  else if (tool == ToolMode::Terrain) terrain_tool(clicked, released);
   else select_tool(clicked, released);
   if (released) m_lmb_in_vp = false;
+}
+
+Vec3 App::drag_offset(Vec2 px, const Vec3& at) const {
+  // a pixel of the mouse, a pixel of the view where it stands
+  const float mpp = 2.f * length(at - camera.pos) * std::tan(radians(camera.fov_deg) * 0.5f) / std::max(1.f, m_vp_h);
+  Vec3 side = camera.right();
+  side.y = 0;
+  side = length2(side) > 1e-6f ? normalize(side) : Vec3{1, 0, 0};
+  Vec3 ahead{-side.z, 0, side.x};  // the view's forward, level
+  if (dot(ahead, camera.forward()) < 0) ahead = -ahead;
+  const bool depth = ImGui::GetIO().KeyCtrl;  // up and down: forward and back instead of higher and lower
+  Vec3 off = side * (px.x * mpp) + (depth ? ahead : Vec3{0, 1, 0}) * (-px.y * mpp);
+  if (gizmo.snap.enabled && gizmo.snap.translate > 0) {
+    const float s = gizmo.snap.translate;
+    off = {std::round(off.x / s) * s, std::round(off.y / s) * s, std::round(off.z / s) * s};
+  }
+  return off;
+}
+
+std::vector<uint32_t> App::box_nodes(Vec2 a, Vec2 b) const {
+  const float x0 = std::min(a.x, b.x), x1 = std::max(a.x, b.x);
+  const float y0 = std::min(a.y, b.y), y1 = std::max(a.y, b.y);
+  std::vector<uint32_t> out;
+  const SceneCache& cache = scene.cache();
+  for (size_t i = 0; i < scene.nodes.size() && i < cache.count; i++) {
+    const Node& n = scene.nodes[i];
+    if ((n.kind != NodeKind::Render && n.kind != NodeKind::Actor && (n.kind != NodeKind::NavMesh || !show_navmesh)) ||
+        (n.locked && !select_terrain) || !cache.visible[i] || cache.reference[i])
+      continue;
+    if (cache.actor[i]) continue;  // an actor's model: the actor is selected instead
+    if (n.kind == NodeKind::Actor && !rs.show_actors) continue;
+    const Vec3 center = cache.bounds[i].valid() ? cache.bounds[i].center() : cache.worlds[i].col3(3);
+    Vec2 s;
+    if (!renderer.project(center, &s)) continue;
+    if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) out.push_back(n.id);
+  }
+  return out;
+}
+
+void App::outline_subtree(uint32_t id, std::vector<uint32_t>& out, size_t cap) const {
+  const SceneCache& c = scene.cache();
+  const int i = scene.index_of(id);
+  if (i < 0 || (size_t)i >= c.count) return;
+  static thread_local std::vector<uint32_t> nodes;
+  nodes.clear();
+  scene.subtree((size_t)i, nodes);
+  for (uint32_t k : nodes) {
+    if (out.size() >= cap) return;
+    if (scene.nodes[k].kind == NodeKind::Render) out.push_back(scene.nodes[k].id);
+  }
+}
+
+void App::update_outlines() {
+  renderer.outline_hover.clear();
+  renderer.outline_group.clear();
+  // the selection with what is under it (a group of a whole level: its first thousands)
+  const uint64_t key = scene.cache().version;
+  if (m_outline_key != key || m_outline_sel != selection) {
+    m_outline_key = key;
+    m_outline_sel = selection;
+    renderer.outline_selection.clear();
+    for (auto id : selection_roots()) outline_subtree(id, renderer.outline_selection, 6000);
+  }
+  if (tool != ToolMode::Select) return;
+  if (m_box_selecting) {
+    for (auto id : m_box_preview) outline_subtree(id, renderer.outline_hover, 4000);
+    return;
+  }
+  if (!hovered || selection.count(hovered)) return;
+  outline_subtree(hovered, renderer.outline_hover, 4000);
+  if (const uint32_t g = group_of(hovered))
+    if (const GroupInfo* gi = group_info(g))
+      for (auto r : gi->roots)
+        if (r != hovered && !selection.count(r)) outline_subtree(r, renderer.outline_group, 4000);
+}
+
+void App::draw_cursor_info() {
+  if (tool != ToolMode::Select || !m_mouse_over_vp) return;
+  // what the cursor points at, next to it: the element, its group, what a click does
+  ImDrawList* dl = ImGui::GetForegroundDrawList();
+  const ImVec2 at(m_vp_x + m_mouse_vp.x + 18, m_vp_y + m_mouse_vp.y + 14);
+  std::string text;
+  if (m_box_selecting) {
+    const ImGuiIO& io = ImGui::GetIO();
+    text = strf(tr(io.KeyCtrl ? "cursor.box_remove" : io.KeyShift ? "cursor.box_add" : "cursor.box"), m_box_preview.size());
+  } else if (m_long_press_ring > 0.f) {
+    // the button held still: a ring filling up, then the whole group is selected
+    const ImVec2 c(m_vp_x + m_mouse_vp.x, m_vp_y + m_mouse_vp.y);
+    dl->AddCircle(c, 16, IM_COL32(255, 255, 255, 60), 32, 3.f);
+    dl->PathArcTo(c, 16, -1.5708f, -1.5708f + 6.2832f * m_long_press_ring, 32);
+    dl->PathStroke(IM_COL32(255, 170, 60, 230), 0, 3.f);
+    text = tr("cursor.hold");
+  } else if (m_moving_selection) {
+    text = tr(ImGui::GetIO().KeyCtrl ? "cursor.moving_depth" : "cursor.moving");
+  } else if (hovered && ImGui::GetTime() - m_hover_since > 0.35) {
+    const Node* n = scene.find(hovered);
+    if (!n) return;
+    text = n->name;
+    if (const uint32_t g = group_of(hovered))
+      if (const GroupInfo* gi = group_info(g)) {
+        const bool all = std::all_of(gi->roots.begin(), gi->roots.end(), [&](uint32_t r) { return selection.count(r); });
+        text += "\n" + strf(tr(gi->prefab ? "cursor.prefab" : "cursor.group"), gi->name.c_str(), gi->roots.size());
+        if (!all) text += "\n" + std::string(tr("cursor.select_group"));
+      }
+  }
+  if (text.empty()) return;
+  const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+  dl->AddRectFilled(ImVec2(at.x - 5, at.y - 3), ImVec2(at.x + size.x + 5, at.y + size.y + 3), IM_COL32(20, 22, 26, 210), 4.f);
+  dl->AddText(at, IM_COL32(235, 235, 225, 255), text.c_str());
 }
 
 void App::select_tool(bool clicked, bool released) {
@@ -601,15 +723,18 @@ void App::select_tool(bool clicked, bool released) {
   pf.actors = rs.show_actors;
   pf.navmesh = show_navmesh;
   pf.include_locked = true;
+  m_long_press_ring = 0.f;
   // hover
-  if (m_mouse_in_vp && !gizmo.active() && !m_box_selecting) {
-    hovered = selectable(pick(scene, camera.ray(m_mouse_vp.x, m_mouse_vp.y, m_vp_w, m_vp_h), pf).node);
+  if (m_mouse_in_vp && !gizmo.active() && !m_box_selecting && !m_moving_selection) {
+    const uint32_t h = selectable(pick(scene, camera.ray(m_mouse_vp.x, m_mouse_vp.y, m_vp_w, m_vp_h), pf).node);
+    if (h != hovered) m_hover_since = ImGui::GetTime();
+    hovered = h;
   } else if (!m_mouse_in_vp) {
     hovered = 0;
   }
 
   // gizmo
-  if (!selection_roots().empty()) {
+  if (!selection_roots().empty() && !m_moving_selection) {
     GizmoInput gi;
     gi.mouse = m_mouse_vp;
     gi.viewport_pos = {m_vp_x, m_vp_y};
@@ -656,42 +781,89 @@ void App::select_tool(bool clicked, bool released) {
     if (gizmo.active() || (gizmo.hovering() && clicked)) return;
   }
 
-  // click and box selection
+  // the button pressed: a click, a box, the selection dragged, or held still (its whole group)
   if (clicked) {
     m_box_start = m_mouse_vp;
     m_box_selecting = false;
+    m_long_pressed = false;
+    m_press_time = ImGui::GetTime();
+    m_press_target = hovered;
+    m_press_on_selection = hovered && selection.count(hovered);
+    m_press_double = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+    m_box_preview.clear();
   }
-  if (m_lmb_in_vp && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !gizmo.active()) {
-    if (!m_box_selecting && (m_mouse_vp - m_box_start).length() > 6.f) m_box_selecting = true;
-    if (m_box_selecting) {
+  const bool down = m_lmb_in_vp && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !gizmo.active();
+  if (down && !m_long_pressed) {
+    const float moved = (m_mouse_vp - m_box_start).length();
+    if (!m_box_selecting && !m_moving_selection && moved > 6.f) {
+      if (m_press_on_selection) {
+        // the selection dragged: left and right, up and down (Ctrl: forward and back)
+        m_moving_selection = true;
+        m_move_px = {0, 0};
+        m_drag_change = std::make_unique<NodeChange>(scene);
+        m_drag_start.clear();
+        for (auto id : selection_roots())
+          if (const Node* n = scene.find(id)) {
+            m_drag_change->save(id);
+            m_drag_start[id] = scene.world(*n);
+          }
+        const PickHit h = pick(scene, camera.ray(m_box_start.x, m_box_start.y, m_vp_w, m_vp_h), pf);
+        m_move_anchor = h.hit() ? h.point : selection_frame().col3(3);
+      } else {
+        m_box_selecting = true;
+      }
+    }
+    if (m_moving_selection) {
+      m_move_px = m_move_px + Vec2{io.MouseDelta.x, io.MouseDelta.y} * (io.KeyShift ? 0.25f : 1.f);
+      const Mat4 t = Mat4::translate(drag_offset(m_move_px, m_move_anchor));
+      for (auto& [id, start] : m_drag_start)
+        if (Node* n = scene.find(id)) scene.set_world(*n, t * start);
+    } else if (m_box_selecting) {
       ImVec2 a(m_vp_x + std::min(m_box_start.x, m_mouse_vp.x), m_vp_y + std::min(m_box_start.y, m_mouse_vp.y));
       ImVec2 b(m_vp_x + std::max(m_box_start.x, m_mouse_vp.x), m_vp_y + std::max(m_box_start.y, m_mouse_vp.y));
       dl->AddRectFilled(a, b, IM_COL32(80, 190, 210, 40));
       dl->AddRect(a, b, IM_COL32(80, 190, 210, 200));
+      // what it would select, outlined as it grows (found again when the box changed, 20 times a second)
+      if ((m_mouse_vp - m_box_preview_end).length() > 1.f && ImGui::GetTime() - m_box_preview_time > 0.05) {
+        m_box_preview = box_nodes(m_box_start, m_mouse_vp);
+        m_box_preview_end = m_mouse_vp;
+        m_box_preview_time = ImGui::GetTime();
+      }
+    } else if (moved <= 6.f && m_press_target) {
+      // held still on an element: after a moment, its whole group (or assembly)
+      const double held = ImGui::GetTime() - m_press_time;
+      if (held > 0.15) m_long_press_ring = (float)std::min(1.0, (held - 0.15) / 0.45);
+      if (held > 0.6) {
+        select_whole(m_press_target);
+        m_long_pressed = true;
+      }
     }
   }
   if (released && m_lmb_in_vp) {
-    if (m_box_selecting) {
-      if (!io.KeyShift && !io.KeyCtrl) selection.clear();
-      float x0 = std::min(m_box_start.x, m_mouse_vp.x), x1 = std::max(m_box_start.x, m_mouse_vp.x);
-      float y0 = std::min(m_box_start.y, m_mouse_vp.y), y1 = std::max(m_box_start.y, m_mouse_vp.y);
-      const SceneCache& cache = scene.cache();
-      for (size_t i = 0; i < scene.nodes.size(); i++) {
-        const Node& n = scene.nodes[i];
-        if ((n.kind != NodeKind::Render && n.kind != NodeKind::Actor &&
-             (n.kind != NodeKind::NavMesh || !show_navmesh)) ||
-            (n.locked && !select_terrain) || !cache.visible[i] || cache.reference[i])
-          continue;
-        if (cache.actor[i]) continue;  // an actor's model: the actor is selected instead
-        if (n.kind == NodeKind::Actor && !rs.show_actors) continue;
-        const Vec3 center = cache.bounds[i].valid() ? cache.bounds[i].center() : cache.worlds[i].col3(3);
-        Vec2 s;
-        if (!renderer.project(center, &s)) continue;
-        if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) {
-          selection.insert(n.id);
-          primary = n.id;
-        }
+    if (m_moving_selection) {
+      std::vector<uint32_t> roots;
+      for (const auto& [id, start] : m_drag_start) roots.push_back(id);
+      if (m_drag_change) {
+        relight_moved(*m_drag_change, roots);
+        history.push(m_drag_change->commit(tr("undo.move")));
       }
+      m_drag_change.reset();
+      m_drag_start.clear();
+      m_moving_selection = false;
+    } else if (m_long_pressed) {
+      // done while it was held
+    } else if (m_box_selecting) {
+      const std::vector<uint32_t> inside = box_nodes(m_box_start, m_mouse_vp);
+      if (io.KeyCtrl) {
+        for (auto id : inside) selection.erase(id);  // Ctrl: taken out of the selection
+        if (!selection.count(primary)) primary = selection.empty() ? 0 : *selection.begin();
+      } else {
+        if (!io.KeyShift) selection.clear();
+        for (auto id : inside) selection.insert(id);
+        if (!inside.empty()) primary = inside.back();
+      }
+    } else if (m_mouse_in_vp && m_press_double && hovered && !io.KeyShift && !io.KeyCtrl) {
+      select_whole(hovered);  // a double click: its whole group (or assembly)
     } else if (m_mouse_in_vp) {
       uint32_t target = hovered;
       // a click again where the last one was, the camera still: the next element under the cursor
@@ -716,12 +888,17 @@ void App::select_tool(bool clicked, bool released) {
       m_last_click_pitch = camera.pitch;
       if (target) {
         if (io.KeyShift || io.KeyCtrl) toggle_select(target);
+        // a click on an element of a selection of several keeps them all (a drag would move them);
+        // a click again there takes that element alone
+        else if (selection.count(target) && selection.size() > 1 && !again) primary = target;
         else select_only(target);
       } else if (!io.KeyShift && !io.KeyCtrl) {
         select_only(0);
       }
     }
     m_box_selecting = false;
+    m_box_preview.clear();
+    m_box_preview_end = {-1, -1};
   }
 }
 
@@ -737,6 +914,27 @@ uint32_t App::selectable(uint32_t node) const {
 
 void App::place_tool(bool clicked) {
   hovered = 0;
+  if (m_place_drag) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+      // the mouse moves it left and right, up and down (Ctrl: forward and back), Shift finer
+      m_place_drag_px = m_place_drag_px + Vec2{io.MouseDelta.x, io.MouseDelta.y} * (io.KeyShift ? 0.25f : 1.f);
+      m_place_matrix = Mat4::translate(drag_offset(m_place_drag_px, m_place_anchor.col3(3))) * m_place_anchor;
+      m_place_valid = true;
+      return;
+    }
+    m_place_drag = false;
+    // placed: selected (a prefab all of it) with the gizmo on it, to move it again at once; Shift
+    // held when the button is released keeps placing copies
+    if (!place_at(m_place_matrix).empty() && !io.KeyShift) {
+      const std::set<uint32_t> placed = selection;
+      const uint32_t first = primary;
+      stop_placement();
+      selection = placed;
+      primary = first;
+    }
+    return;
+  }
   m_place_valid = false;
   const bool over = placement.once ? m_mouse_over_vp : m_mouse_in_vp;
   if (over) {
@@ -752,7 +950,11 @@ void App::place_tool(bool clicked) {
     }
     return;
   }
-  if (clicked && m_place_valid) place_at(m_place_matrix);
+  if (clicked && m_place_valid) {
+    m_place_drag = true;
+    m_place_anchor = m_place_matrix;
+    m_place_drag_px = {0, 0};
+  }
 }
 
 void App::draw_navmesh_overlay() {
@@ -800,6 +1002,14 @@ void App::draw_navmesh_overlay() {
 }
 
 void App::draw_tool_overlays() {
+  if (tool == ToolMode::Topology) {
+    draw_topology_overlay();
+    return;
+  }
+  if (tool == ToolMode::Terrain) {
+    draw_terrain_overlay();
+    return;
+  }
   if (tool != ToolMode::Place || !m_place_valid) return;
   // what is placed, see-through, where it would go (its mesh, merged into the document once)
   std::shared_ptr<Mesh> preview = placement_mesh();
@@ -814,6 +1024,13 @@ void App::draw_tool_overlays() {
     renderer.line(c, c + Vec3{0, r * 1.5f, 0}, 0xff808080);
   }
   renderer.circle(c + Vec3{0, 0.03f, 0}, {1, 0, 0}, {0, 0, 1}, 0.5f, 0xff40d0ff, 24);
+  if (m_place_drag) {
+    // where it was clicked, and the way to where it goes
+    const Vec3 a = m_place_anchor.col3(3);
+    renderer.circle(a + Vec3{0, 0.03f, 0}, {1, 0, 0}, {0, 0, 1}, 0.3f, 0xff808080, 16);
+    renderer.line(a, {c.x, a.y, c.z}, 0xff4040ff);
+    renderer.line({c.x, a.y, c.z}, c, 0xff40ff40);
+  }
   renderer.flush(true);
 }
 
@@ -841,13 +1058,31 @@ void App::handle_shortcuts() {
     duplicate_selection();
   } else if (ctrl && pressed(ImGuiKey_L)) {
     if (!selection.empty()) select_level(level_of_node(primary));
+  } else if (ctrl && shift && pressed(ImGuiKey_G)) {
+    if (!selection.empty()) {
+      m_group_name = strf(tr("group.default_name"), document_groups().size() + 1);
+      m_show_new_group = true;
+    }
+  } else if (ctrl && pressed(ImGuiKey_G)) {
+    if (primary) select_assembly(primary);
   } else if (pressed(ImGuiKey_Escape)) {
     if (tool == ToolMode::Place) stop_placement();
+    else if (tool == ToolMode::Topology) stop_topology();
+    else if (tool == ToolMode::Terrain) stop_terrain_brush();
     else select_only(0);
+  } else if (!ctrl && pressed(ImGuiKey_B)) {
+    if (tool == ToolMode::Terrain) stop_terrain_brush();
+    else start_terrain_brush();
+  } else if (tool == ToolMode::Terrain && (pressed(ImGuiKey_LeftBracket) || pressed(ImGuiKey_RightBracket))) {
+    brush.size = std::clamp(brush.size * (pressed(ImGuiKey_RightBracket) ? 1.25f : 0.8f), 0.5f, 64.f);
+  } else if (!ctrl && pressed(ImGuiKey_T)) {
+    if (tool == ToolMode::Topology) stop_topology();
+    else start_topology();
   } else if (tool == ToolMode::Place && !ctrl && pressed(ImGuiKey_R)) {
     placement.yaw += radians(shift ? -45.f : 45.f);
   } else if (pressed(ImGuiKey_Delete)) {
-    delete_selection();
+    if (tool == ToolMode::Topology) topology_delete();
+    else delete_selection();
   } else if (!ctrl && pressed(ImGuiKey_F)) {
     frame_selection();
   } else if (pressed(ImGuiKey_Home)) {
@@ -950,11 +1185,12 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
     if (setup == "catalog" || setup == "models" || setup == "decor" || setup == "decor-all" || setup == "effects" ||
         setup == "materials") {
       left_tab_request = 1;
-      if (setup == "effects") {
-        m_catalog_family = "effect";
-        m_catalog_filter = opts.select;  // --select: the effects searched for
-      }
-      m_catalog_tab = setup == "decor" || setup == "decor-all" ? 2 : setup == "models" ? 1 : setup == "materials" ? 4 : 0;
+      if (setup == "effects") m_catalog_filter = opts.select;  // --select: the effects searched for
+      m_catalog_tab = setup == "decor" || setup == "decor-all" ? 2
+                      : setup == "models"                      ? 1
+                      : setup == "materials"                   ? 4
+                      : setup == "effects"                     ? 5
+                                                               : 0;
       if (setup == "decor") m_decor_level = in;
       if (setup == "decor-all") m_catalog_filter = "catwalk";
     }

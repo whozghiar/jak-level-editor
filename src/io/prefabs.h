@@ -1,8 +1,8 @@
 #pragma once
 
 // Prefabs: elements of a level saved together (a building and its props, a group of crates...)
-// to be put again in any level. Each prefab is a .glb in the game's prefab folder
-// (<library>/<game>/prefabs/): the elements with their hierarchy, around a pivot at the bottom
+// to be put again in any level. Each prefab is a .glb in the prefab folder
+// (<library>/prefabricated/): the elements with their hierarchy, around a pivot at the bottom
 // center of their bounds, so that a prefab sits on the surface it is placed on.
 
 #include <map>
@@ -19,8 +19,10 @@ struct PrefabInfo {
   std::string path;
   int64_t mtime = 0;
   // a prefab of the game (io/prefab_recipes.h): its category and what it is, its game ("" Jak 3,
-  // "jak2") and the level it comes from
+  // "jak2") and the level it comes from; made: its file is there (they are made level by level,
+  // when they are shown or placed)
   std::string category, description, game, level;
+  bool made = true;
 };
 std::vector<PrefabInfo> list_prefabs(const std::string& folder);
 

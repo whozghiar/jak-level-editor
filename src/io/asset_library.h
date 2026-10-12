@@ -7,7 +7,8 @@
 //   <game>/<level>/models/<model>-lodN.glb        the models of its actors
 //   <game>/<level>/level.json                     what the folder holds (dgo, actors, models)
 //   <game>/common/models/                         the models every level uses
-//   <game>/prefabs/                               the user's prefabs made from the game's levels
+//   prefabricated/                                the prefabs (next to the game's folder): the
+//                                                 user's, and the game's in prefabricated/game/
 //
 // An AssetLibrary is the folder of the game. Scanning only lists file names; geometry is read
 // when a level is opened or a thumbnail is drawn.
@@ -71,11 +72,17 @@ class AssetLibrary {
   void set_listed(const std::function<bool(const LevelEntry&)>& listed);
   const LevelEntry* level(const std::string& name) const;
   const LevelEntry* level_of(const std::string& background_path) const;
-  std::string prefab_folder() const { return m_root.empty() ? std::string() : m_root + "/prefabs"; }
+  // <library>/prefabricated: the prefabs, kept out of git (they hold the game's decor)
+  std::string prefab_folder() const {
+    return m_root.empty() ? std::string() : m_root.substr(0, m_root.find_last_of('/')) + "/prefabricated";
+  }
 
   const std::vector<ModelAsset>& models() const { return m_models; }  // by name, group, lod
   // lowest lod of a model name, the copy of `prefer_group` first
   const ModelAsset* model_named(const std::string& name, const std::string& prefer_group) const;
+  // every copy of a model (a level folder each, its lowest lod): the same model saved with the
+  // levels that load it, not all with its animations
+  std::vector<const ModelAsset*> models_named(const std::string& name) const;
   // The model drawn for an actor type, from file names only:
   //   1. a model named like the type (vin-door-ctyinda),
   //   2. the only model whose name starts with "<etype>-" (crate -> crate-krimson),
@@ -102,8 +109,9 @@ struct LoadedMesh {
 };
 
 // Every render node of the file baked into one mesh, in the file's space (a model in its bind
-// pose, a prefab around its pivot).
-bool load_model_asset(const std::string& path, LoadedMesh* out, std::string* error);
+// pose, a prefab around its pivot). `skin`: each vertex's joints and weights kept (an animated
+// model's: scene/skeleton.h).
+bool load_model_asset(const std::string& path, LoadedMesh* out, std::string* error, bool skin = false);
 
 // Copies a mesh into a document: textures (deduplicated by name and content) and materials are
 // appended, primitive materials remapped. The returned mesh belongs to the document.

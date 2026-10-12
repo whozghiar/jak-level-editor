@@ -127,7 +127,7 @@ Items collect(const Scene& scene, const GameData& data) {
       continue;
     }
     // a decor prototype: a node under the level's tie or shrub trees
-    if (parent && (parent->name.find("-tie-") != std::string::npos || parent->name.find("-shrub-") != std::string::npos)) {
+    if (parent && instance_tree(parent->name)) {
       const auto* rules = data.prototype_rules(out.levels[level]);
       if (!rules) continue;
       std::string name = node.name;

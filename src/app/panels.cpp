@@ -118,6 +118,7 @@ void App::draw_ui() {
   m_vp_w = std::max(W - m_left_w - m_right_w, 50.f);
   m_vp_h = panel_h;
   ui_story_bar();
+  ui_terrain_window();
   ui_windows();
   ui_extract_window();
 }
@@ -157,6 +158,21 @@ void App::ui_menu() {
     if (ImGui::MenuItem(tr("menu.edit.create_prefab"), nullptr, false, sel)) m_show_new_prefab = true;
     if (ImGui::MenuItem(tr("menu.edit.select_none"), tr("key.escape"), false, sel)) select_only(0);
     if (ImGui::MenuItem(tr("menu.edit.select_level"), "Ctrl+L", false, sel)) select_level(level_of_node(primary));
+    if (ImGui::MenuItem(tr("menu.edit.select_assembly"), "Ctrl+G", false, sel)) select_assembly(primary);
+    tooltip(tr("menu.edit.select_assembly.tip"));
+    if (ImGui::MenuItem(tr("menu.edit.select_group"), tr("key.double_click"), false, sel && group_of(primary)))
+      select_group(group_of(primary));
+    tooltip(tr("menu.edit.select_group.tip"));
+    ImGui::Separator();
+    if (ImGui::MenuItem(tr("menu.edit.close_building"), nullptr, false, sel)) close_selection();
+    tooltip(tr("menu.edit.close_building.tip"));
+    ImGui::Separator();
+    if (ImGui::MenuItem(tr("menu.edit.group"), "Ctrl+Shift+G", false, sel)) {
+      m_group_name = strf(tr("group.default_name"), document_groups().size() + 1);
+      m_show_new_group = true;
+    }
+    tooltip(tr("group.make.tip"));
+    if (ImGui::MenuItem(tr("group.ungroup"), nullptr, false, sel && group_of(primary))) ungroup(group_of(primary));
     ImGui::EndMenu();
   }
   if (ImGui::BeginMenu(tr_id("menu.view").c_str())) {
@@ -170,15 +186,11 @@ void App::ui_menu() {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
       ImGui::SetTooltip("%s", game_view.ready() ? tr("menu.view.game_view.tip")
                                                 : strf(tr("menu.view.game_view.unavailable"), game_view_error.c_str()).c_str());
-    if (game_view_on && game_view.ready()) {
-      ImGui::Indent();
-      ImGui::SetNextItemWidth(160);
-      ImGui::SliderFloat(tr_id("menu.view.game_hour").c_str(), &game_view.mood.hour, 0.f, 24.f, "%.1f h");
-      ImGui::MenuItem(tr("menu.view.game_fog"), nullptr, &game_view.fog);
-      ImGui::MenuItem(tr("menu.view.game_lights"), nullptr, &game_view.mood.level_lights);
-      if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.view.game_lights.tip"));
-      ImGui::Unindent();
-    }
+    // its sky, hour and weather: in a window of their own
+    ImGui::BeginDisabled(!game_view.ready());
+    ImGui::MenuItem(tr("menu.view.game_window"), nullptr, &show_game_window);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", tr("menu.view.game_window.tip"));
     ImGui::Separator();
     ImGui::MenuItem(tr("menu.view.effects"), nullptr, &show_effects);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.view.effects.tip"));
@@ -225,6 +237,8 @@ void App::ui_menu() {
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.level.restore_effects.tip"));
     if (ImGui::MenuItem(tr("menu.level.navmesh"), nullptr, show_navmesh_window)) show_navmesh_window = !show_navmesh_window;
+    if (ImGui::MenuItem(tr("menu.level.gaps"), nullptr, show_gaps_window)) show_gaps_window = !show_gaps_window;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tr("menu.level.gaps.tip"));
     ImGui::Separator();
     if (ImGui::MenuItem(tr("menu.file.export_game"))) open_export_window();
     guide_tip("export");
@@ -275,6 +289,15 @@ void App::ui_toolbar(float y, float h) {
   if (button("toolbar.scale", nullptr, gizmo.op == GizmoOp::Scale, true, "scale")) {
     stop_placement();
     gizmo.op = GizmoOp::Scale;
+  }
+  if (button("toolbar.topology", nullptr, tool == ToolMode::Topology,
+             tool == ToolMode::Topology || topology_editable(primary), "topology")) {
+    if (tool == ToolMode::Topology) stop_topology();
+    else start_topology();
+  }
+  if (button("toolbar.terrain", nullptr, tool == ToolMode::Terrain, document_open(), "terrain")) {
+    if (tool == ToolMode::Terrain) stop_terrain_brush();
+    else start_terrain_brush();
   }
   ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4);
   bool local = gizmo.space == GizmoSpace::Local;
@@ -331,10 +354,10 @@ void App::ui_left_panel(float x, float y, float w, float h) {
                                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus);
   m_left_w = ImGui::GetWindowWidth();
   if (ImGui::BeginTabBar("panels")) {
-    // shown in this order: Levels, Build, Catalog, Prefabs (left_tab_request: 0, 3, 1, 2)
-    const char* tabs[] = {"tab.levels", "tab.catalog", "tab.prefabs", "tab.build"};
-    const char* guides[] = {"levels", "catalog", "game_prefabs", "build"};
-    for (int i : {0, 3, 1, 2}) {
+    // shown in this order: Levels, Build, Catalog, Prefabs, Groups (left_tab_request: 0, 3, 1, 2, 4)
+    const char* tabs[] = {"tab.levels", "tab.catalog", "tab.prefabs", "tab.build", "tab.groups"};
+    const char* guides[] = {"levels", "catalog", "game_prefabs", "build", "groups"};
+    for (int i : {0, 3, 1, 2, 4}) {
       ImGuiTabItemFlags flags = left_tab_request == i ? ImGuiTabItemFlags_SetSelected : 0;
       const bool open = ImGui::BeginTabItem(tr_id(tabs[i]).c_str(), nullptr, flags);
       guide_tip(guides[i]);
@@ -342,7 +365,8 @@ void App::ui_left_panel(float x, float y, float w, float h) {
         if (i == 0) ui_levels_panel();
         else if (i == 1) ui_catalog_panel();
         else if (i == 2) ui_prefabs_panel();
-        else ui_build_panel();
+        else if (i == 3) ui_build_panel();
+        else ui_groups_panel();
         ImGui::EndTabItem();
       }
     }
@@ -369,12 +393,26 @@ void App::ui_levels_panel() {
     }
     return;
   }
+  // the game: Jak 3's levels, or Jak II's (its decor brought into Jak 3) once it is extracted
+  if (library_jak2.empty()) m_levels_jak2 = false;
+  else {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(tr("catalog.game"));
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Jak 3##levels-game", !m_levels_jak2)) m_levels_jak2 = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Jak II##levels-game", m_levels_jak2)) m_levels_jak2 = true;
+    tooltip(tr("levels.jak2.tip"));
+  }
+  const bool jak2 = m_levels_jak2;
+  const AssetLibrary& lib = jak2 ? library_jak2 : library;
+  const std::string prefix = jak2 ? "jak2-" : "";  // its name in a document
   ImGui::SetNextItemWidth(-1);
   ImGui::InputTextWithHint("##filter", tr("levels.filter"), &m_levels_filter);
   const std::string f = lower(m_levels_filter);
   std::vector<const LevelEntry*> shown;
   size_t listed = 0;
-  for (const auto& l : library.levels()) {
+  for (const auto& l : lib.levels()) {
     if (!l.listed) continue;
     listed++;
     if (f.empty() || l.name.find(f) != std::string::npos || lower(l.dgo).find(f) != std::string::npos)
@@ -383,7 +421,7 @@ void App::ui_levels_panel() {
   ImGui::TextDisabled(tr("levels.count"), shown.size(), listed);
 
   const bool loading = m_level_future.valid() || level_adding();
-  const LevelEntry* selected = library.level(m_selected_level);
+  const LevelEntry* selected = lib.level(m_selected_level);
   const float preview = std::min(ImGui::GetContentRegionAvail().x, 180.f);
   const float footer = selected ? preview + ImGui::GetFrameHeightWithSpacing() * 5 : ImGui::GetFrameHeightWithSpacing() * 4;
   // the levels of the document besides the one opened (counted again when it changes)
@@ -403,18 +441,18 @@ void App::ui_levels_panel() {
   while (clipper.Step()) {
     for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
       const LevelEntry* l = shown[i];
-      const bool is_open = l->name == scene.settings.level;
+      const bool is_open = prefix + l->name == scene.settings.level;
       if (ImGui::Selectable((l->name + "##" + l->name).c_str(), l->name == m_selected_level,
                             ImGuiSelectableFlags_AllowDoubleClick)) {
         m_selected_level = l->name;
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !loading) {
           LevelEntry entry = *l;
-          confirm_discard([this, entry]() { load_level(entry); });
+          confirm_discard([this, entry, jak2]() { load_level(entry, jak2); });
         }
       }
       ImGui::SameLine();
       if (is_open) ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.5f, 1.f), "%s", tr("levels.open_mark"));
-      else if (added.count(l->name)) ImGui::TextColored(ImVec4(0.45f, 0.7f, 0.95f, 1.f), "%s", tr("levels.added_mark"));
+      else if (added.count(prefix + l->name)) ImGui::TextColored(ImVec4(0.45f, 0.7f, 0.95f, 1.f), "%s", tr("levels.added_mark"));
       else ImGui::TextDisabled("%s", l->dgo.c_str());
     }
   }
@@ -436,23 +474,28 @@ void App::ui_levels_panel() {
     ImGui::TextDisabled("%s", selected->dgo.c_str());
     ImGui::EndGroup();
   }
-  ImGui::Checkbox(tr_id("levels.with_actors").c_str(), &load_actors);
-  tooltip(tr("levels.with_actors.tip"));
+  if (jak2) {
+    ImGui::TextDisabled("%s", tr("levels.jak2.note"));
+  } else {
+    ImGui::Checkbox(tr_id("levels.with_actors").c_str(), &load_actors);
+    tooltip(tr("levels.with_actors.tip"));
+  }
   ImGui::BeginDisabled(!selected || loading);
   if (ImGui::Button(m_level_future.valid() ? tr_id("levels.loading").c_str() : tr_id("levels.load").c_str(),
                     ImVec2(-1, 34)) &&
       selected) {
     LevelEntry entry = *selected;
-    confirm_discard([this, entry]() { load_level(entry); });
+    confirm_discard([this, entry, jak2]() { load_level(entry, jak2); });
   }
   ImGui::EndDisabled();
   // or add it to the document, at its place in the game's world
-  const bool in_document = selected && (selected->name == scene.settings.level || added.count(selected->name));
+  const bool in_document =
+      selected && (prefix + selected->name == scene.settings.level || added.count(prefix + selected->name));
   ImGui::BeginDisabled(!selected || loading || !document_open() || in_document);
   if (ImGui::Button(level_adding() ? tr_id("levels.adding").c_str() : tr_id("levels.add").c_str(), ImVec2(-1, 0)) &&
       selected) {
     std::string err;
-    if (!add_level_to_document(*selected, &err)) LOG_WARN("%s", err.c_str());
+    if (!add_level_to_document(*selected, &err, false, jak2)) LOG_WARN("%s", err.c_str());
   }
   ImGui::EndDisabled();
   tooltip(in_document ? tr("levels.add.in_document") : tr("levels.add.tip"));
@@ -487,7 +530,7 @@ void App::ui_catalog_panel() {
       m_models_level.clear();
       m_all_parts_filter = "\x01";  // the search made again
       // Jak II has no objects for Jak 3
-      if (m_catalog_jak2 && (m_catalog_tab == 0 || m_catalog_tab == 3)) m_catalog_tab = 1;
+      if (m_catalog_jak2 && (m_catalog_tab == 0 || m_catalog_tab == 3 || m_catalog_tab == 5)) m_catalog_tab = 1;
     }
     ImGui::Separator();
   } else {
@@ -501,7 +544,8 @@ void App::ui_catalog_panel() {
       const char* guide;
     };
     std::vector<Kind> kinds;
-    if (!m_catalog_jak2) kinds = {{0, "catalog.objects", "catalog"}, {3, "catalog.interactive", "interactive"}};
+    if (!m_catalog_jak2)
+      kinds = {{0, "catalog.objects", "catalog"}, {3, "catalog.interactive", "interactive"}, {5, "catalog.effects", "effects"}};
     kinds.push_back({1, m_catalog_jak2 ? "catalog.models.jak2" : "catalog.models", "models"});
     kinds.push_back({2, "catalog.decor", "decor"});
     kinds.push_back({4, "catalog.materials", "palette"});
@@ -515,8 +559,8 @@ void App::ui_catalog_panel() {
       guide_tip(kinds[i].guide);
     }
   }
-  if (m_catalog_jak2 && (m_catalog_tab == 0 || m_catalog_tab == 3)) m_catalog_tab = 1;
-  if (m_catalog_tab == 0 || m_catalog_tab == 3) ui_catalog_objects(m_catalog_tab == 3);
+  if (m_catalog_jak2 && (m_catalog_tab == 0 || m_catalog_tab == 3 || m_catalog_tab == 5)) m_catalog_tab = 1;
+  if (m_catalog_tab == 0 || m_catalog_tab == 3 || m_catalog_tab == 5) ui_catalog_objects(m_catalog_tab);
   else if (m_catalog_tab == 1) ui_catalog_models();
   else if (m_catalog_tab == 4) ui_catalog_materials();
   else ui_catalog_decor();
@@ -580,18 +624,54 @@ void thumbnail_grid(int count, float size, const std::function<void(int)>& cell)
 
 }  // namespace
 
-void App::ui_catalog_objects(bool interactive) {
-  // the family, the filter
+ThumbRequest App::catalog_thumb(const CatalogObject& o) const {
+  ThumbRequest req;
+  req.kind = ThumbRequest::Kind::Model;
+  req.path = o.model_path;
+  // an effect: a picture of its particles
+  std::string group = o.family == "effect" ? o.lump.value("art-name", std::string()) : std::string();
+  if (!group.empty() && group[0] == '\'') group = group.substr(1);
+  if (!group.empty() && particle_data.group(group)) {
+    req.kind = ThumbRequest::Kind::Effect;
+    req.path = group;
+  } else if (o.model_path.empty()) {
+    // nothing the game draws of its own: a picture of what it does
+    req.kind = ThumbRequest::Kind::Icon;
+    req.path = o.etype;
+    req.node = o.family;
+  }
+  return req;
+}
+
+void App::ui_catalog_objects(int tab) {
+  // tab 0: the objects that make up a place, 3: the interactive ones, 5: the particle effects (smoke,
+  // fire, lights...), each kind in its own category
+  const bool interactive = tab == 3, effects = tab == 5;
+  auto in_tab = [&](const CatalogObject& o) {
+    return effects ? o.family == "effect" : o.interactive == interactive && o.family != "effect";
+  };
+  auto category = [&](const CatalogObject& o) { return effects ? "effect." + effect_kind(o) : "family." + o.family; };
+  std::string& chosen = effects ? m_effect_kind : m_catalog_family;
+  // the category, the filter
   std::vector<std::string> families;
   for (const auto& o : catalog)
-    if (o.interactive == interactive && (families.empty() || families.back() != o.family)) families.push_back(o.family);
-  if (std::find(families.begin(), families.end(), m_catalog_family) == families.end()) m_catalog_family.clear();
+    if (in_tab(o)) {
+      const std::string c = category(o);
+      if (std::find(families.begin(), families.end(), c) == families.end()) families.push_back(c);
+    }
+  if (effects) std::sort(families.begin(), families.end());
+  if (std::find(families.begin(), families.end(), chosen) == families.end()) chosen.clear();
+  if (effects) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("%s", tr("catalog.effects.help"));
+    ImGui::PopStyleColor();
+  }
   ImGui::SetNextItemWidth(-1);
-  const std::string current = m_catalog_family.empty() ? tr("catalog.all_families") : tr(("family." + m_catalog_family).c_str());
+  const std::string current = chosen.empty() ? tr("catalog.all_families") : tr(chosen.c_str());
   if (ImGui::BeginCombo("##family", current.c_str())) {
-    if (ImGui::Selectable(tr("catalog.all_families"), m_catalog_family.empty())) m_catalog_family.clear();
+    if (ImGui::Selectable(tr("catalog.all_families"), chosen.empty())) chosen.clear();
     for (const auto& f : families)
-      if (ImGui::Selectable(tr(("family." + f).c_str()), m_catalog_family == f)) m_catalog_family = f;
+      if (ImGui::Selectable(tr(f.c_str()), chosen == f)) chosen = f;
     ImGui::EndCombo();
   }
   ImGui::SetNextItemWidth(-1);
@@ -600,9 +680,9 @@ void App::ui_catalog_objects(bool interactive) {
   std::vector<const CatalogObject*> shown;
   size_t total = 0;
   for (const auto& o : catalog) {
-    if (o.interactive != interactive) continue;
+    if (!in_tab(o)) continue;
     total++;
-    if (!m_catalog_family.empty() && o.family != m_catalog_family) continue;
+    if (!chosen.empty() && category(o) != chosen) continue;
     if (!f.empty() && o.name.find(f) == std::string::npos && o.etype.find(f) == std::string::npos &&
         o.model.find(f) == std::string::npos)
       continue;
@@ -617,31 +697,21 @@ void App::ui_catalog_objects(bool interactive) {
   const float size = 80.f;
   thumbnail_grid((int)shown.size(), size, [&](int i) {
     const CatalogObject& o = *shown[i];
-    ThumbRequest req;
-    req.kind = ThumbRequest::Kind::Model;
-    req.path = o.model_path;
-    // an effect: a picture of its particles
-    std::string group = o.family == "effect" ? o.lump.value("art-name", std::string()) : std::string();
-    if (!group.empty() && group[0] == '\'') group = group.substr(1);
-    if (!group.empty() && particle_data.group(group)) {
-      req.kind = ThumbRequest::Kind::Effect;
-      req.path = group;
-    }
-    unsigned tex = req.kind == ThumbRequest::Kind::Effect || !o.model_path.empty() ? thumbs.get(req) : 0;
+    const ThumbRequest req = catalog_thumb(o);
+    const std::string group = req.kind == ThumbRequest::Kind::Effect ? req.path : std::string();
+    unsigned tex = thumbs.get(req);
     const bool placing = tool == ToolMode::Place && placement.kind == Placement::Kind::Object &&
                          placement.object.name == o.name && placement.object.etype == o.etype;
     if (placing) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(3, 3));
-    const char* label = !o.model_path.empty()   ? (thumbs.failed(req) ? "?" : "...")
-                        : o.family == "effect" ? tr("catalog.effect")
-                                               : tr("catalog.marker");
+    const char* label = thumbs.failed(req) ? "?" : "...";
     const bool clicked = tex ? ImGui::ImageButton("##img", (ImTextureID)(uint64_t)tex, ImVec2(size, size))
                              : ImGui::Button((std::string(label) + "##img").c_str(), ImVec2(size + 6, size + 6));
     ImGui::PopStyleVar();
     if (placing) ImGui::PopStyleColor();
     if (ImGui::BeginItemTooltip()) {
       ImGui::TextUnformatted(o.name.c_str());
-      ImGui::TextDisabled("%s", tr(("family." + o.family).c_str()));
+      ImGui::TextDisabled("%s", tr(category(o).c_str()));
       ImGui::Text(tr("inspector.type"), o.etype.c_str());
       if (o.family == "effect") {
         // its particles, live
@@ -897,17 +967,15 @@ void App::ui_prefabs_panel() {
   // the game's: ready-made assemblies of its decor, by category, made from the extracted levels
   if (ImGui::CollapsingHeader(tr_id("prefabs.game").c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
     guide_tip("game_prefabs");
-    // made the first time they are shown (a few seconds: each level read once)
-    static bool asked = false;
-    if (!asked && !library.empty() && game_prefabs.size() < prefab_recipes.size()) {
-      asked = true;
-      start_game_prefabs();
-    }
+    // made level by level when they are shown (each level read once, a few seconds), or all at once
+    size_t made = 0;
+    for (const auto& p : game_prefabs) made += p.made;
     if (game_prefabs_busy()) {
       ImGui::ProgressBar(m_game_prefab_total ? (float)*m_game_prefab_done / m_game_prefab_total : 0.f, ImVec2(-1, 0),
                          strf(tr("prefabs.game.making"), (int)*m_game_prefab_done, m_game_prefab_total).c_str());
-    } else if (game_prefabs.size() < prefab_recipes.size()) {
-      if (ImGui::Button(tr_id("prefabs.game.make").c_str(), ImVec2(-1, 0))) start_game_prefabs();
+    } else if (made < game_prefabs.size() && !library.empty()) {
+      if (ImGui::Button((strf(tr("prefabs.game.make"), game_prefabs.size() - made) + "##make-all").c_str(), ImVec2(-1, 0)))
+        start_game_prefabs();
       tooltip(tr("prefabs.game.make.tip"));
     }
     // the game (Jak II's when it was extracted), the level they come from, their category
@@ -962,18 +1030,30 @@ void App::ui_prefabs_panel() {
         ImGui::EndCombo();
       }
     }
-    size_t shown = 0;
+    // and a search by name (the games have a thousand of them)
+    static std::string search;
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##prefab-search", tr("prefabs.search"), &search);
+    const std::string f = lower(search);
+    std::vector<const PrefabInfo*> listed;
+    size_t of_game = 0;
     for (const PrefabInfo& p : game_prefabs) {
-      if (p.game != game || (!level.empty() && p.level != level) || (!category.empty() && p.category != category))
+      if (p.game != game) continue;
+      of_game++;
+      if ((!level.empty() && p.level != level) || (!category.empty() && p.category != category)) continue;
+      if (!f.empty() && lower(p.name).find(f) == std::string::npos && lower(p.description).find(f) == std::string::npos)
         continue;
-      ImGui::PushID(p.path.c_str());
-      if (shown++ % per_row) ImGui::SameLine();
-      ImGui::BeginGroup();
+      listed.push_back(&p);
+    }
+    ImGui::TextDisabled(tr("catalog.count"), listed.size(), of_game);
+    thumbnail_grid((int)listed.size(), size, [&](int i) {
+      const PrefabInfo& p = *listed[i];
+      if (!p.made) want_game_prefabs(p.game, p.level);  // shown: made now, with its level's
       ThumbRequest req;
       req.kind = ThumbRequest::Kind::Model;
       req.path = p.path;
       req.stamp = p.mtime;
-      unsigned tex = thumbs.get(req);
+      unsigned tex = p.made ? thumbs.get(req) : 0;
       const bool placing = tool == ToolMode::Place && placement.path == p.path;
       if (placing) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
       ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(3, 3));
@@ -987,12 +1067,13 @@ void App::ui_prefabs_panel() {
                             p.level.c_str());
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.f);
         if (!p.description.empty()) ImGui::TextUnformatted(p.description.c_str());
-        ImGui::TextDisabled("%s", tr("prefabs.cell_tip"));
+        ImGui::TextDisabled("%s", tr(p.made ? "prefabs.cell_tip" : "prefabs.game.being_made"));
         ImGui::PopTextWrapPos();
         ImGui::EndTooltip();
       }
-      if (clicked) start_placement(p.path, p.name, false);
-      if (ImGui::BeginDragDropSource()) {
+      if (clicked && !p.made) m_prefab_place_when_made = p.name;  // placed once made
+      else if (clicked) start_placement(p.path, p.name, false);
+      if (p.made && ImGui::BeginDragDropSource()) {
         if (!m_drag_from_panel) {
           m_drag_from_panel = true;
           start_placement(p.path, p.name, true);
@@ -1003,9 +1084,7 @@ void App::ui_prefabs_panel() {
         ImGui::EndDragDropSource();
       }
       ImGui::TextUnformatted(fit_text(p.name, size + 6).c_str());
-      ImGui::EndGroup();
-      ImGui::PopID();
-    }
+    });
   }
 
   // the user's own
@@ -1087,6 +1166,10 @@ void App::ui_inspector(float x, float y, float w, float h) {
     ImGui::TextWrapped("%s", placement.name.c_str());
     ImGui::TextWrapped("%s", tr("inspector.placing.help"));
     if (ImGui::Button(tr_id("inspector.placing.stop").c_str())) stop_placement();
+    ImGui::Spacing();
+  }
+  if (tool == ToolMode::Topology) {
+    ui_topology_inspector();
     ImGui::Spacing();
   }
   Node* n = scene.find(primary);
@@ -1238,6 +1321,7 @@ void App::ui_inspector(float x, float y, float w, float h) {
   if (selection.size() > 1) {
     ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), tr("inspector.selected_count"), selection.size());
   }
+  ui_group_section();
   ui_node_inspector(*n);
   ImGui::End();
 }
@@ -1359,12 +1443,17 @@ void App::ui_replace_section(const std::vector<DocumentLevel>& levels) {
 void App::ui_node_inspector(Node& n) {
   ImGui::SeparatorText(kind_label(n.kind));
   ImGui::TextWrapped("%s", n.name.c_str());
+  if (n.kind == NodeKind::Render && n.mesh) {
+    if (ImGui::SmallButton(tr_id("inspector.select_assembly").c_str())) select_assembly(n.id);
+    tooltip(tr("menu.edit.select_assembly.tip"));
+  }
   if (n.kind == NodeKind::Actor) {
     ImGui::Text(tr("inspector.type"), n.extras.value("etype", std::string("?")).c_str());
     for (auto c : scene.children(n.id))
       if (const Node* cn = scene.find(c); cn && cn->extras.contains("og_actor_visual"))
         ImGui::TextDisabled(tr("inspector.model"), cn->name.c_str());
   }
+  ui_preview_inspector(n);
   // where it is
   {
     const Node snap = n;  // before this frame's edits, for undo
@@ -1456,7 +1545,10 @@ void App::ui_statusbar(float y, float h) {
                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
                    ImGuiWindowFlags_NoBringToFrontOnFocus);
-  ImGui::TextUnformatted(tr(tool == ToolMode::Place ? "status.place" : "status.select"));
+  ImGui::TextUnformatted(tr(tool == ToolMode::Place      ? "status.place"
+                            : tool == ToolMode::Topology ? "status.topology"
+                            : tool == ToolMode::Terrain  ? "status.terrain"
+                                                         : "status.select"));
   ImGui::SameLine();
   if (history.revision() != saved_revision && document_open()) {
     ImGui::TextColored(ImVec4(1, 0.75f, 0.3f, 1), "|  %s", tr("status.unsaved"));
@@ -1857,6 +1949,9 @@ void App::ui_export_window() {
 }
 
 void App::ui_windows() {
+  ui_new_group_window();
+  ui_gaps_window();
+  ui_game_window();
   ui_navmesh_window();
   ui_export_window();
   ui_texture_window();
@@ -1900,15 +1995,29 @@ void App::ui_windows() {
     if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
     bool enter = ImGui::InputText(tr_id("prefab_popup.name").c_str(), &m_new_prefab_name,
                                   ImGuiInputTextFlags_EnterReturnsTrue);
+    // the small pieces (bolts, debris, stains) left out: a prefab is a structure
+    ImGui::Checkbox(tr("prefab_popup.skip_small"), &prefab_skip_small);
+    tooltip(tr("prefab_popup.skip_small.tip"));
+    if (prefab_skip_small) {
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(120);
+      ImGui::DragFloat("##min-size", &prefab_min_size, 0.05f, 0.05f, 10.f, "%.2f m");
+      const auto all = selection_roots();
+      const size_t kept = without_small(all, prefab_min_size).size();
+      if (kept < all.size()) ImGui::TextDisabled(tr("prefab_popup.left_out"), all.size() - kept);
+    }
     ImGui::BeginDisabled(m_new_prefab_name.empty() || prefab_folder().empty() || selection.empty());
     if (ImGui::Button(tr_id("prefab_popup.create").c_str(), ImVec2(140, 0)) || (enter && !m_new_prefab_name.empty())) {
-      create_prefab(m_new_prefab_name);
+      std::vector<std::string> left_out;
+      create_prefab(m_new_prefab_name, prefab_skip_small ? prefab_min_size : 0.f, &left_out);
+      if (!left_out.empty()) LOG_INFO(tr("log.prefab_left_out"), left_out.size());
       left_tab_request = 1;
       ImGui::CloseCurrentPopup();
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
-    if (ImGui::Button(tr_id("popup.cancel").c_str(), ImVec2(140, 0))) ImGui::CloseCurrentPopup();
+    if (ImGui::Button(tr_id("popup.cancel").c_str(), ImVec2(140, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+      ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
   }
 

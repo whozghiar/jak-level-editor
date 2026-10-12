@@ -15,7 +15,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr int kIndexVersion = 3;  // a new one reads every level again
+constexpr int kIndexVersion = 8;  // a new one reads every level again
 
 fs::path to_path(const std::string& s) { return fs::path(std::u8string((const char8_t*)s.c_str())); }
 
@@ -32,7 +32,8 @@ std::string cache_file(const std::string& dir, const std::string& background) {
 json to_json(const LevelIndex& l) {
   json parts = json::array();
   for (const auto& p : l.parts)
-    parts.push_back({p.name, p.mesh_node, p.kind == CatalogPart::Kind::Piece ? 1 : 0, p.triangles, p.copies});
+    parts.push_back({p.name, p.mesh_node, p.kind == CatalogPart::Kind::Piece ? 1 : 0, p.triangles, p.copies, p.key,
+                     p.surface, p.edges});
   return {{"version", kIndexVersion}, {"background", l.background}, {"stamp", l.stamp},
           {"parts", parts},           {"art_names", l.art_names},   {"art_lumps", l.art_lumps},
           {"textures", l.textures}};
@@ -44,13 +45,16 @@ bool from_json(const json& j, LevelIndex* out) {
   auto arts = j.find("art_names");
   if (parts == j.end() || !parts->is_array() || arts == j.end() || !arts->is_object()) return false;
   for (const auto& p : *parts) {
-    if (!p.is_array() || p.size() != 5) return false;
+    if (!p.is_array() || p.size() != 8) return false;
     CatalogPart part;
     part.name = p[0].get<std::string>();
     part.mesh_node = p[1].get<std::string>();
     part.kind = p[2].get<int>() ? CatalogPart::Kind::Piece : CatalogPart::Kind::Prototype;
     part.triangles = p[3].get<size_t>();
     part.copies = p[4].get<int>();
+    part.key = p[5].get<std::string>();
+    part.surface = p[6].get<double>();
+    part.edges = p[7].get<double>();
     out->parts.push_back(std::move(part));
   }
   for (const auto& [etype, names] : arts->items())
@@ -146,8 +150,10 @@ bool index_level(const std::string& background, LevelIndex* out, std::string* er
     return count;
   };
 
-  // the parts, as list_parts() finds them in the loaded level
+  // the parts, as list_parts() finds them in the loaded level (a piece's copies once, by the measures
+  // the extractor writes: og_measure)
   std::vector<CatalogPart> prototypes, pieces;
+  std::map<std::string, std::vector<size_t>> piece_of;
   for (int i = 0; i < n; i++) {
     static const json kNone;
     auto ex = nodes[i].find("extras");
@@ -167,7 +173,7 @@ bool index_level(const std::string& background, LevelIndex* out, std::string* er
     if (p < 0) continue;
     const std::string& pname = names[p];
     const int mesh = mesh_of(i);
-    if (contains(pname, "-tie-") || contains(pname, "-shrub-")) {
+    if (instance_tree(pname)) {
       CatalogPart part;
       part.kind = CatalogPart::Kind::Prototype;
       part.name = names[i];
@@ -195,7 +201,15 @@ bool index_level(const std::string& background, LevelIndex* out, std::string* er
       part.name = part.mesh_node = names[i];
       part.triangles = triangles(mesh);
       part.copies = 1;
-      pieces.push_back(std::move(part));
+      auto measure = extras.find("og_measure");
+      if (measure == extras.end() || !measure->is_array() || measure->size() != 2) {
+        pieces.push_back(std::move(part));  // an older extraction: no measures, every piece shown
+        continue;
+      }
+      part.key = piece_key(names[i], part.triangles);
+      part.surface = (*measure)[0].get<double>();
+      part.edges = (*measure)[1].get<double>();
+      add_piece(pieces, piece_of, std::move(part));
     }
   }
   auto by_name = [](const CatalogPart& a, const CatalogPart& b) { return a.name < b.name; };
@@ -270,7 +284,8 @@ void LibraryIndex::start(const AssetLibrary& library, const std::string& cache_d
 std::vector<DecorEntry> all_decor(const LibraryIndex& index, const AssetLibrary& library) {
   std::vector<DecorEntry> out;
   if (!index.ready()) return out;
-  std::map<std::string, size_t> first;  // prototype -> its entry
+  std::map<std::string, size_t> first;                 // prototype -> its entry
+  std::map<std::string, std::vector<size_t>> pieces;   // a piece's key -> the entries of its copies
   for (const auto& li : index.levels()) {
     const LevelEntry* level = library.level(li.level);
     if (!level || !level->listed) continue;
@@ -282,6 +297,18 @@ std::vector<DecorEntry> all_decor(const LibraryIndex& index, const AssetLibrary&
           continue;
         }
         first[p.name] = out.size();
+      } else if (!p.key.empty()) {
+        // a copy of a piece another level has: once
+        auto& alike = pieces[p.key];
+        bool seen = false;
+        for (size_t i : alike)
+          if (same_piece(out[i].part, p)) {
+            out[i].levels++;
+            seen = true;
+            break;
+          }
+        if (seen) continue;
+        alike.push_back(out.size());
       }
       DecorEntry e;
       e.level = li.level;

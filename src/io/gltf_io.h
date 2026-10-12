@@ -22,6 +22,7 @@ namespace ogle {
 struct ImportOptions {
   uint32_t parent = 0;  // attach the imported roots under this node
   bool read_settings = false;  // take LevelSettings from the file's asset extras (projects)
+  bool skin = false;  // keep each vertex's joints and weights (JOINTS_0, WEIGHTS_0 in extra_attrs)
 };
 
 struct ImportResult {
@@ -34,6 +35,10 @@ struct ImportResult {
 
 bool import_gltf(Scene& scene, const std::string& path, const ImportOptions& opts,
                  ImportResult* result, std::string* error);
+
+struct Skeleton;
+// The skeleton of a model file and its animations (scene/skeleton.h); false when it has none
+bool load_skeleton(const std::string& path, Skeleton* out, std::string* error);
 
 enum class ExportMode { Project, Prefab, Builder };
 

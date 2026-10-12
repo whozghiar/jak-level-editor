@@ -1024,6 +1024,28 @@ void add_tfrag(const tfrag3::Level& level,
     c_node.name = fmt::format("{}-{}", texture_name(level, tfrag.draws[main_draw].tree_tex_id), number++);
     tinygltf::Value::Object extras;
     extras["og_terrain"] = tinygltf::Value(terrain);
+    // its surface and the length of its triangles' edges (square meters, meters), the same however
+    // it is turned: the editor's catalog shows the copies of a piece once
+    double surface = 0, edges = 0;
+    for (const auto& [d, indices] : by_draw)
+      for (size_t t = 0; t + 2 < indices.size(); t += 3) {
+        float q[3][3];
+        for (int k = 0; k < 3; k++)
+          for (int j = 0; j < 3; j++) q[k][j] = positions[indices[t + k]][j] / 4096.f;
+        auto length = [](const float* u, const float* v) {
+          return std::sqrt((double)(u[0] - v[0]) * (u[0] - v[0]) + (double)(u[1] - v[1]) * (u[1] - v[1]) +
+                           (double)(u[2] - v[2]) * (u[2] - v[2]));
+        };
+        const double e1[3] = {q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]};
+        const double e2[3] = {q[2][0] - q[0][0], q[2][1] - q[0][1], q[2][2] - q[0][2]};
+        const double cx = e1[1] * e2[2] - e1[2] * e2[1], cy = e1[2] * e2[0] - e1[0] * e2[2], cz = e1[0] * e2[1] - e1[1] * e2[0];
+        surface += 0.5 * std::sqrt(cx * cx + cy * cy + cz * cz);
+        edges += length(q[0], q[1]) + length(q[1], q[2]) + length(q[2], q[0]);
+      }
+    tinygltf::Value::Array measure;
+    measure.push_back(tinygltf::Value(std::round(surface * 100.0) / 100.0));
+    measure.push_back(tinygltf::Value(std::round(edges * 100.0) / 100.0));
+    extras["og_measure"] = tinygltf::Value(measure);
     c_node.extras = tinygltf::Value(extras);
     model.nodes[node_idx].children.push_back(c_node_idx);
     int mesh_idx = (int)model.meshes.size();
@@ -2546,7 +2568,8 @@ void add_tie_instanced(const tfrag3::Level& level,
         tod_palette, [&](u32 unpacked) { return tie.unpacked.vertices.at(unpacked).color_index; });
   }
 
-  // wind instances: one node each, its primitives on the tree's vertex arrays
+  // wind instances: one node each, its primitives on the tree's vertex arrays, under its
+  // prototype's node as the other instances are
   if (!tie.instanced_wind_draws.empty()) {
     int position_buffer_accessor = make_position_buffer_accessor(tie.unpacked.vertices, model);
     int texture_buffer_accessor = make_tex_buffer_accessor(tie.unpacked.vertices, model, 1.f);
@@ -2555,9 +2578,8 @@ void add_tie_instanced(const tfrag3::Level& level,
     int wind_index_buffer_view = make_tie_wind_index_buffer_view(tie.instanced_wind_draws, model,
                                                                  draw_to_starts, draw_to_counts);
     std::map<u32, int> mesh_of_instance;
-    int wind_group = (int)model.nodes.size();
-    model.nodes.emplace_back().name = fmt::format("{}-tie-{}-wind", level.level_name, tree_idx);
-    model.nodes[node_idx].children.push_back(wind_group);
+    std::map<u16, int> proto_node;
+    std::vector<int> wind_nodes;
     for (size_t draw_idx = 0; draw_idx < tie.instanced_wind_draws.size(); draw_idx++) {
       const auto& wind_draw = tie.instanced_wind_draws[draw_idx];
       int mat =
@@ -2569,13 +2591,22 @@ void add_tie_instanced(const tfrag3::Level& level,
           int mesh_idx = (int)model.meshes.size();
           model.meshes.emplace_back().name = fmt::format("wind-{}", grp.instance_idx);
           it = mesh_of_instance.emplace(grp.instance_idx, mesh_idx).first;
+          const auto& info = tie.wind_instance_info.at(grp.instance_idx);
+          const std::string proto = proto_name(tie.proto_names, info.proto_idx, "tie");
+          auto p = proto_node.find(info.proto_idx);
+          if (p == proto_node.end()) {
+            const int p_idx = (int)model.nodes.size();
+            model.nodes.emplace_back().name = proto;
+            model.nodes[node_idx].children.push_back(p_idx);
+            p = proto_node.emplace(info.proto_idx, p_idx).first;
+          }
           int c_node_idx = (int)model.nodes.size();
           auto& c_node = model.nodes.emplace_back();
-          c_node.name = fmt::format("wind-{}", grp.instance_idx);
+          c_node.name = fmt::format("{}-{}", proto, grp.instance_idx);
           c_node.mesh = mesh_idx;
-          const auto& info = tie.wind_instance_info.at(grp.instance_idx);
           c_node.matrix = instance_matrix(info.matrix);
-          model.nodes[wind_group].children.push_back(c_node_idx);
+          model.nodes[p->second].children.push_back(c_node_idx);
+          wind_nodes.push_back(c_node_idx);
         }
         auto& prim = model.meshes[it->second].primitives.emplace_back();
         prim.material = mat;
@@ -2593,7 +2624,7 @@ void add_tie_instanced(const tfrag3::Level& level,
       tod.push_back(v.color_index);
     }
     const int tod_index = add_tod_index(model, tod);
-    for (int c : model.nodes[wind_group].children) {
+    for (int c : wind_nodes) {
       set_node_tod(model, c, tod_palette, tod_index,
                    model.meshes.at(model.nodes[c].mesh).primitives.size());
     }

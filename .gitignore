@@ -1,8 +1,16 @@
 build/
-# the levels extracted from the user's game (never in the repository)
-library/
+# the levels extracted from the user's game, its projects, exports and prefabs: they hold the game's
+# data (never in the repository); library/prefabricated/ is kept, empty, by its .gitkeep
+library/*
+!library/prefabricated/
+library/prefabricated/*
+!library/prefabricated/.gitkeep
 # projects made from the levels: they hold the game's decor (never in the repository)
 projects/
+# models generated with other tools from the game's data
+thrixel_assets/
+# the builders of the user's own custom levels: kept on their computer, not published
+tools/build_*.py
 .cache/
 *.backups/
 *.tmp

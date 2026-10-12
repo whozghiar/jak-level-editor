@@ -183,6 +183,15 @@ const ModelAsset* AssetLibrary::model_named(const std::string& name, const std::
   return any;
 }
 
+std::vector<const ModelAsset*> AssetLibrary::models_named(const std::string& name) const {
+  std::vector<const ModelAsset*> out;
+  auto it = std::lower_bound(m_models.begin(), m_models.end(), name,
+                             [](const ModelAsset& m, const std::string& n) { return m.name < n; });
+  for (; it != m_models.end() && it->name == name; ++it)
+    if (out.empty() || out.back()->group != it->group) out.push_back(&*it);
+  return out;
+}
+
 const ModelAsset* AssetLibrary::model_for_etype(const std::string& etype, const std::string& prefer_group) const {
   if (etype.empty()) return nullptr;
   if (const ModelAsset* m = model_named(etype, prefer_group)) return m;
@@ -210,9 +219,10 @@ const ModelAsset* AssetLibrary::model_for_etype(const std::string& etype, const 
 // loading
 // ------------------------------------------------------------------------------------------------
 
-bool load_model_asset(const std::string& path, LoadedMesh* out, std::string* error) {
+bool load_model_asset(const std::string& path, LoadedMesh* out, std::string* error, bool skin) {
   Scene tmp;
   ImportOptions o;
+  o.skin = skin;
   ImportResult r;
   if (!import_gltf(tmp, path, o, &r, error)) return false;
   auto mesh = std::make_shared<Mesh>();

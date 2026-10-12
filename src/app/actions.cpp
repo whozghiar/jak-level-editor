@@ -15,6 +15,7 @@
 #include "core/prefs.h"
 #include "io/gltf_io.h"
 #include "io/jak2_import.h"
+#include "scene/assemblies.h"
 #include "scene/relight.h"
 #include "io/nav_export.h"
 #include "scene/story.h"
@@ -220,6 +221,31 @@ uint32_t add_extra_level(Scene& scene, const AssetLibrary& library, const GameDa
   return id;
 }
 
+// A level of Jak II made decor of Jak 3 (its nodes from `first`): without its actors (their code is
+// Jak II's), with its collision (the surfaces of Jak II are written as Jak 3's: the same bits, the
+// same materials and events, Jak 3 has more), its textures and materials renamed apart from Jak 3's
+// (jak2-...), its pieces marked as Jak II's, and its groups named jak2-<level>-...: nothing takes
+// it for a level of Jak 3 of the same name (Jak II has a ctyport, a stadium...).
+void make_jak2_level(Scene& scene, size_t first, const std::string& level) {
+  std::unordered_set<uint32_t> doomed;
+  for (size_t i = first; i < scene.nodes.size(); i++)
+    if (scene.nodes[i].kind == NodeKind::Actor) doomed.insert(scene.nodes[i].id);
+  remove_subtrees(scene, std::move(doomed));
+  auto prefixed = [](const std::string& s) { return s.rfind("jak2-", 0) == 0; };
+  for (auto& t : scene.textures)
+    if (!prefixed(t.name)) t.name = "jak2-" + t.name;
+  for (auto& m : scene.materials)
+    if (!prefixed(m.name)) m.name = "jak2-" + m.name;
+  const std::string group = level + "-";
+  for (size_t i = first; i < scene.nodes.size(); i++) {
+    Node& n = scene.nodes[i];
+    if (n.name.rfind(group, 0) == 0 && (instance_tree(n.name) || n.name.find("-tfrag-") != std::string::npos ||
+                                         n.name == group + "collision" || n.name == group + "actors"))
+      n.name = "jak2-" + n.name;
+    if (n.kind == NodeKind::Render && n.mesh) n.extras["og_import"] = {{"game", "jak2"}, {"level", level}};
+  }
+}
+
 std::string unique_name(const std::string& base, std::unordered_set<std::string>& used) {
   std::string name = base;
   for (int i = 2; used.count(name); i++) name = base + "-" + std::to_string(i);
@@ -336,10 +362,18 @@ std::vector<uint32_t> paste_nodes(Scene& scene, const Clipboard& clip) {
   for (const auto& n : clip.nodes) ids[n.id] = scene.next_id++;
   std::unordered_set<std::string> names;
   for (const auto& n : scene.nodes) names.insert(n.name);
+  // a copy of a group is a group of its own
+  std::unordered_map<uint32_t, uint32_t> groups;
+  uint32_t next_group = new_group_id(scene);
   std::vector<uint32_t> roots;
   for (const auto& src : clip.nodes) {
     Node n = src;
     n.id = ids[src.id];
+    if (const uint32_t g = group_tag(src)) {
+      auto [it, fresh] = groups.emplace(g, next_group);
+      if (fresh) next_group++;
+      n.extras["og_group"]["id"] = it->second;
+    }
     const bool is_root = clip.root_worlds.count(src.id) != 0;
     if (is_root) {
       // under its old parent when it is still in the document
@@ -677,23 +711,29 @@ WaterLook App::ocean_look(const RenderSettings& view_rs) const {
   return look;
 }
 
-void App::load_level(const LevelEntry& level) {
+void App::load_level(const LevelEntry& level, bool jak2) {
   if (m_level_future.valid()) {
     LOG_WARN("%s", tr("log.level_busy"));
     return;
   }
   stop_placement();
-  m_level_name = level.name;
-  AssetLibrary lib = library;  // the worker reads its own copy
+  m_level_name = jak2 ? "jak2-" + level.name : level.name;
+  game_view_on = game_view.ready();  // a level of the game: seen as the game draws it
+  AssetLibrary lib = jak2 ? library_jak2 : library;  // the worker reads its own copy
   LevelEntry entry = level;
-  auto data = game_data();
-  const bool actors = load_actors;
-  m_level_future = std::async(std::launch::async, [lib, entry, data, actors]() -> std::unique_ptr<Scene> {
+  auto data = jak2 ? std::shared_ptr<GameData>() : game_data();
+  const bool actors = load_actors && !jak2;
+  m_level_future = std::async(std::launch::async, [lib, entry, data, actors, jak2]() -> std::unique_ptr<Scene> {
     auto s = std::make_unique<Scene>();
     std::string err;
     if (!open_level(*s, lib, data.get(), entry, &err, actors)) {
       LOG_ERROR("%s: %s", entry.background.c_str(), err.c_str());
       return nullptr;
+    }
+    if (jak2) {
+      // Jak II's: its decor, made Jak 3's, a level of its own
+      make_jak2_level(*s, 0, entry.name);
+      s->settings.level = s->settings.source_group = "jak2-" + entry.name;
     }
     return s;
   });
@@ -741,7 +781,7 @@ bool App::level_in_document(const std::string& name) const {
   return false;
 }
 
-bool App::add_level_to_document(const LevelEntry& level, std::string* error, bool reference) {
+bool App::add_level_to_document(const LevelEntry& level, std::string* error, bool reference, bool jak2) {
   auto fail = [&](const char* key) {
     if (error) *error = strf(tr(key), level.name.c_str());
     return false;
@@ -750,24 +790,31 @@ bool App::add_level_to_document(const LevelEntry& level, std::string* error, boo
   if (m_add_future.valid() || m_level_future.valid()) return fail("levels.add.busy");
   // a level is in the document once; the reference of the level replaced may join a document made
   // from that very level
+  const std::string name = jak2 ? "jak2-" + level.name : level.name;
   for (const auto& l : document_levels())
-    if (l.name == level.name && l.role != DocumentLevel::Layer && (reference ? l.reference : !l.reference))
+    if (l.name == name && l.role != DocumentLevel::Layer && (reference ? l.reference : !l.reference))
       return fail("levels.add.already");
-  if (!reference && level_in_document(level.name)) return fail("levels.add.already");
+  if (!reference && level_in_document(name)) return fail("levels.add.already");
   stop_placement();
-  m_adding_level = level.name;
+  m_adding_level = name;
   m_adding_reference = reference;
-  AssetLibrary lib = library;  // the worker reads its own copy
+  AssetLibrary lib = jak2 ? library_jak2 : library;  // the worker reads its own copy
   LevelEntry entry = level;
-  auto data = game_data();
-  const bool actors = load_actors;
-  m_add_future = std::async(std::launch::async, [lib, entry, data, actors, reference]() -> std::unique_ptr<Scene> {
+  auto data = jak2 ? std::shared_ptr<GameData>() : game_data();
+  const bool actors = load_actors && !jak2;
+  m_add_future = std::async(std::launch::async, [lib, entry, data, actors, reference, jak2, name]() -> std::unique_ptr<Scene> {
     auto s = std::make_unique<Scene>();
     std::string err;
     const uint32_t group = add_level(*s, lib, data.get(), entry, &err, actors);
     if (!group) {
       LOG_ERROR("%s", err.c_str());
       return nullptr;
+    }
+    if (jak2) {
+      make_jak2_level(*s, 0, entry.name);
+      Node* g = s->find(group);
+      g->name = name;
+      g->extras["og_level"] = name;
     }
     if (reference) s->find(group)->extras["og_reference"] = true;
     return s;
@@ -928,6 +975,18 @@ void App::select_level(uint32_t group) {
   }
 }
 
+void App::select_assembly(uint32_t id) {
+  std::vector<uint32_t> members = assembly_of(find_assemblies(scene), id);
+  if (members.empty()) members = {id};  // the ground, a detail of it, an actor: itself
+  selection = std::set<uint32_t>(members.begin(), members.end());
+  primary = id;
+  LOG_INFO(tr("log.assembly_selected"), members.size());
+  AABB b;
+  for (uint32_t m : members)
+    if (int i = scene.index_of(m); i >= 0) b.add(scene.cache().bounds[i]);
+  if (b.valid() && !camera_sees(b.center())) camera.frame(b);
+}
+
 AABB App::document_junction(uint32_t group_a, uint32_t group_b) const {
   const AABB a = document_level_bounds(group_a).expanded(8.f), b = document_level_bounds(group_b).expanded(8.f);
   AABB out;
@@ -1032,6 +1091,7 @@ bool App::save_project_as(const std::string& name, std::string* error) {
 }
 
 bool App::save_project_files(const std::string& glb_path, std::string* error) {
+  stop_preview();  // the model as it is, not as the preview draws it
   if (!save_project(scene, glb_path, error)) return false;
   // its nav meshes as the game takes them, next to it (none: the file of an earlier save goes)
   const fs::path p = to_path(glb_path);
@@ -1322,6 +1382,7 @@ void App::update_effects(float dt) {
 void App::draw_effects() {
   if (!show_effects) return;
   particles.sprites(m_sprites);
+  fog_effects(m_sprites);
   renderer.draw_particles(m_sprites, particle_data.textures());
 }
 
@@ -1333,7 +1394,8 @@ size_t App::restore_level_lighting() {
     for (const Node* p = n.parent ? s.find(n.parent) : nullptr; p; p = p->parent ? s.find(p->parent) : nullptr) {
       path = p->name + "/" + path;
       for (const char* group : {"-tfrag-", "-tie-", "-shrub-"})
-        if (const size_t at = p->name.find(group); at != std::string::npos && at > 0) {
+        if (const size_t at = p->name.rfind(group);
+            at != std::string::npos && at > 0 && (std::string(group) == "-tfrag-" || instance_tree(p->name))) {
           *level = p->name.substr(0, at);
           return path;
         }
@@ -1463,11 +1525,11 @@ void App::refresh_prefabs() {
   std::error_code ec;
   for (const auto& r : prefab_recipes) {
     const std::string path = folder + "/game/" + r.file;
-    if (!fs::is_regular_file(to_path(path), ec)) continue;
     PrefabInfo p;
     p.name = r.name;
     p.path = path;
-    p.mtime = (int64_t)fs::last_write_time(to_path(path), ec).time_since_epoch().count();
+    p.made = fs::is_regular_file(to_path(path), ec);
+    if (p.made) p.mtime = (int64_t)fs::last_write_time(to_path(path), ec).time_since_epoch().count();
     p.category = r.category;
     p.description = r.description;
     p.game = r.game;
@@ -1476,14 +1538,20 @@ void App::refresh_prefabs() {
   }
 }
 
-void App::start_game_prefabs(bool rebuild) {
+void App::want_game_prefabs(const std::string& game, const std::string& level) {
+  m_prefab_levels_wanted.insert({game, level});
+}
+
+void App::start_game_prefabs(bool rebuild, const std::set<std::pair<std::string, std::string>>& levels) {
   const std::string folder = prefab_folder();
   if (m_game_prefab_work.valid() || library.empty() || folder.empty()) return;
   refresh_prefabs();
   std::error_code ec;
   std::vector<PrefabRecipe> todo;
   for (const auto& r : prefab_recipes)
-    if (rebuild || !fs::is_regular_file(to_path(folder + "/game/" + r.file), ec)) todo.push_back(r);
+    if ((levels.empty() || levels.count({r.game, r.level})) &&
+        (rebuild || !fs::is_regular_file(to_path(folder + "/game/" + r.file), ec)))
+      todo.push_back(r);
   if (todo.empty()) return;
   m_game_prefab_total = (int)todo.size();
   auto done = m_game_prefab_done;
@@ -1513,9 +1581,13 @@ void App::start_game_prefabs(bool rebuild) {
           if (n.kind == NodeKind::Render && n.mesh)
             n.extras["og_import"] = json{{"game", "jak2"}, {"level", name}, {"part", n.name}, {"checks", json::array()}};
       }
+      // as the editor shows it at the start of the story (one state of what changes: a facade whole
+      // or blasted, not both)
+      if (opened && !jak2) apply_story(level, data.get(), StoryView{});
+      LevelAssemblies assemblies;  // found once for all the recipes of the level
       for (const PrefabRecipe* r : recipes) {
         size_t elements = 0;
-        if (opened && save_recipe_prefab(level, *r, folder + "/game/" + r->file, &elements, &err)) built++;
+        if (opened && save_recipe_prefab(level, *r, folder + "/game/" + r->file, &elements, &err, &assemblies)) built++;
         else LOG_WARN("%s: %s", r->name.c_str(), err.empty() ? name.c_str() : err.c_str());
         (*done)++;
       }
@@ -1526,29 +1598,48 @@ void App::start_game_prefabs(bool rebuild) {
 
 void App::poll_game_prefabs() {
   using namespace std::chrono_literals;
-  if (!m_game_prefab_work.valid() || m_game_prefab_work.wait_for(0s) != std::future_status::ready) return;
+  if (!m_game_prefab_work.valid()) {
+    // the levels whose prefabs were wanted meanwhile, all at once
+    if (!m_prefab_levels_wanted.empty()) {
+      const auto levels = std::move(m_prefab_levels_wanted);
+      m_prefab_levels_wanted.clear();
+      start_game_prefabs(false, levels);
+      if (!m_game_prefab_work.valid()) m_game_prefab_runs++;  // nothing to make: they are there
+    }
+    return;
+  }
+  if (m_game_prefab_work.wait_for(0s) != std::future_status::ready) return;
   const size_t built = m_game_prefab_work.get();
   m_game_prefab_runs++;
   refresh_prefabs();
   LOG_INFO(tr("log.game_prefabs_done"), built, (size_t)m_game_prefab_total);
+  // clicked before it was made: placed now
+  if (!m_prefab_place_when_made.empty()) {
+    for (const auto& p : game_prefabs)
+      if (p.name == m_prefab_place_when_made && p.made) {
+        start_placement(p.path, p.name, false);
+        m_prefab_place_when_made.clear();
+      }
+  }
 }
 
-void App::create_prefab(const std::string& name) {
-  auto roots = selection_roots();
-  if (roots.empty()) return;
+std::string App::create_prefab(const std::string& name, float min_size, std::vector<std::string>* left_out) {
+  auto roots = without_small(selection_roots(), min_size, left_out);
+  if (roots.empty()) return {};
   const std::string folder = prefab_folder();
   if (folder.empty()) {
     LOG_WARN("%s", tr("log.prefab_no_library"));
-    return;
+    return {};
   }
   const std::string path = new_prefab_path(folder, name);
   std::string err;
   if (!save_prefab(scene, roots, path, &err)) {
     LOG_ERROR(tr("log.prefab_failed"), err.c_str());
-    return;
+    return {};
   }
   refresh_prefabs();
   LOG_INFO(tr("log.prefab_saved"), from_path(to_path(path).stem()).c_str(), roots.size());
+  return path;
 }
 
 const Scene* App::prefab_scene(const std::string& path) {
@@ -1571,7 +1662,7 @@ std::string Placement::key() const {
     case Kind::Object:
     case Kind::Model: return "model:" + path;
     case Kind::Part: return "part:" + path + "#" + part.mesh_node;
-    case Kind::Shape: return "shape:" + shape.to_json().dump();
+    case Kind::Shape: return "shape:" + shape.to_json().dump() + "#" + std::to_string(material);
     default: return path;
   }
 }
@@ -1671,7 +1762,7 @@ std::shared_ptr<Mesh> App::placement_mesh() {
       break;
     }
     case Placement::Kind::Shape:
-      mesh = make_shape(placement.shape, shape_default_material(scene));
+      mesh = make_shape(placement.shape, placement.material >= 0 ? placement.material : shape_default_material(scene));
       break;
   }
   return mesh;
@@ -1685,6 +1776,10 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
     NodeChange c(scene);
     roots = place_prefab(scene, *prefab, m, &m_prefab_meshes[placement.path]);
     if (roots.empty()) return roots;
+    // its elements stay together: a group named after the prefab (a double click selects it all)
+    const uint32_t gid = new_group_id(scene);
+    for (auto id : roots)
+      if (Node* n = scene.find(id)) set_group_tag(*n, gid, placement.name, true);
     // lit like the level around it (a batch: once, at its end)
     if (m_batch_change) m_batch_placed.insert(m_batch_placed.end(), roots.begin(), roots.end());
     else light_like_surroundings(scene, roots);
@@ -1718,6 +1813,7 @@ std::vector<uint32_t> App::place_at(const Mat4& m) {
       n.name = unique_name(placement.game == "jak2" ? "jak2-" + placement.name : placement.name, names);
       n.kind = NodeKind::Render;
       n.mesh = mesh;
+      n.extras = json{{"og_model", placement.name}};  // which model (its animations: the preview)
       if (placement.game == "jak2")
         n.extras = json{{"og_import", {{"game", "jak2"},
                                        {"level", placement.level},
@@ -1767,6 +1863,9 @@ void App::new_level() {
   new_document();
   // a document without a level of the game: no story, no ocean
   scene.settings.level = "custom-level";
+  // nothing of the game's to light it: the editor's own view (the game rendering would show it all
+  // blue, under the sky)
+  game_view_on = false;
   story_document_changed();
   set_title();
   LOG_INFO("%s", tr("log.new_level"));
@@ -1776,6 +1875,7 @@ void App::stop_placement() {
   tool = ToolMode::Select;
   placement = Placement{};
   m_place_valid = false;
+  m_place_drag = false;
 }
 
 Mat4 App::placement_matrix(const PickHit& hit, const Ray& ray) const {
@@ -2177,6 +2277,7 @@ void App::open_export_window() {
 }
 
 bool App::export_for_game(const LevelExportOptions& in, LevelExportReport* report, std::string* error) {
+  stop_preview();
   if (!document_open()) {
     if (error) *error = tr("export.no_document");
     return false;
@@ -2198,13 +2299,19 @@ bool App::export_for_game(const LevelExportOptions& in, LevelExportReport* repor
       const std::string level = n.name.substr(0, n.name.size() - suffix.size());
       if (o.originals.count(level)) continue;
       auto& original = m_export_originals[level];
-      const LevelEntry* entry = library.level(level);
+      // a level of Jak II (jak2-<name>): read from its library, named as the document has it
+      const bool jak2 = level.rfind("jak2-", 0) == 0;
+      const LevelEntry* entry = jak2 ? library_jak2.level(level.substr(5)) : library.level(level);
       if (!original && entry) {
         auto read = std::make_shared<Scene>();
         ImportResult r;
         std::string err;
-        if (import_gltf(*read, entry->background, ImportOptions{}, &r, &err)) original = read;
-        else LOG_WARN("%s: %s", entry->background.c_str(), err.c_str());
+        if (import_gltf(*read, entry->background, ImportOptions{}, &r, &err)) {
+          if (jak2) make_jak2_level(*read, 0, level.substr(5));
+          original = read;
+        } else {
+          LOG_WARN("%s: %s", entry->background.c_str(), err.c_str());
+        }
       }
       if (original) o.originals[level] = original;
     }

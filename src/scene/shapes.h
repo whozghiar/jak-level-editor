@@ -16,13 +16,24 @@ namespace ogle {
 
 struct ShapeParams {
   // box, ramp, stairs, cylinder (floors, walls and pillars are boxes); roof (two slopes meeting at
-  // a ridge along z), roof-hip (four slopes); doorway and window (a wall with an opening)
+  // a ridge along z), roof-hip (four slopes); doorway and window (a wall with an opening); ground
+  // (a floor with bumps)
   std::string kind = "box";
   Vec3 size{4, 2, 4};        // meters: width (x), height (y), depth (z); a cylinder's x and z are its diameters
   float tile = 2.f;          // meters of the shape per repeat of its texture
   int steps = 8;             // stairs
   int sides = 16;            // cylinder
   Vec2 opening{2.f, 3.f};    // doorway, window: the opening's width and height (meters)
+  // bent around a vertical axis, in degrees over its length (along x; ramps and stairs along their
+  // climb, z): a wall bent 90 makes a quarter of a round tower, stairs 180 turn half a turn
+  float bend = 0.f;
+  float round = 0.f;         // box: the radius of its upright edges (meters), rounded corners
+  // ground: a slab whose top goes up and down by `bumps` meters, its bumps `bump_size` across
+  // (a level's ground measured: scene/level_style.h); `seed` chooses them
+  float bumps = 0.3f;
+  float bump_size = 3.f;
+  int seed = 1;
+  Vec4 color{0, 0, 0, 0};    // its vertex colors (a level's light on it); w 0: none
 
   json to_json() const;
   static ShapeParams from_json(const json& j);  // clamped to sensible values
@@ -41,8 +52,18 @@ const ShapePreset* shape_preset(const std::string& name);
 // The shape's mesh, every face with `material`, its UVs in meters / tile
 std::shared_ptr<Mesh> make_shape(const ShapeParams& p, int material);
 
+// A picture in 3D of an object of the game that has no model (what the game draws of it is in the
+// level's decor, or made of effects: lightning, vents, beams): what it does, for its thumbnail. By
+// its type, else its family (platform, hazard, water...); vertex colors, no material.
+// `seed`: other zigzags of its lightning (a preview draws it again and again: it crackles)
+std::shared_ptr<Mesh> object_icon(const std::string& etype, const std::string& family, int seed = 0);
+
 // The node's shape, when it is one
 bool node_shape(const Node& n, ShapeParams* out);
+
+// A smooth noise over the plane, -0.5..0.5, one bump per unit, the same for the same seed (the
+// ground's bumps, the terrain brush's relief)
+float smooth_noise(float x, float z, int seed);
 
 // The material of new shapes: a grey grid texture (one cell per repeat), added to the scene once
 int shape_default_material(Scene& scene);

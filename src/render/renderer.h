@@ -84,6 +84,10 @@ class Renderer {
   void set_view(const Camera& cam, int x, int y, int w, int h, float logical_w = 0, float logical_h = 0);
   void draw_scene(Scene& scene, const RenderSettings& rs, const std::set<uint32_t>& selection,
                   uint32_t hovered);
+  // What draw_scene outlines (wire over the surfaces, the game view's decor included): the
+  // selection with what is under it (empty: the selection alone), and what the cursor points at:
+  // the element under it, its group, what a box would select
+  std::vector<uint32_t> outline_selection, outline_hover, outline_group;
   // One mesh with explicit materials and textures (bank thumbnails, placement preview). `tint`
   // is mixed into the color by its alpha; `alpha` < 1 draws it see-through.
   void draw_mesh(Mesh& mesh, const Mat4& world, const std::vector<Material>& materials,

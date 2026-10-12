@@ -118,6 +118,10 @@ void App::ui_actor_behavior(Node& n) {
   ImGui::SeparatorText(tr("behavior.title"));
   json b = n.extras.value("og_behavior", json::object());
   if (!b.is_object()) b = json::object();
+  // a value of another kind than the inspector writes (a project edited by hand) reads as unset
+  for (const char* k : {"open", "loads"})
+    if (b.contains(k) && !b[k].is_string()) b.erase(k);
+  if (b.contains("distance") && !b["distance"].is_number()) b.erase("distance");
   const Node before = n;
   bool changed = false;
   auto lump_float = [&](const char* tag, float fallback) {
@@ -171,6 +175,19 @@ void App::ui_actor_behavior(Node& n) {
       }
       edit_end(tr("undo.behavior"));
       tooltip(tr("behavior.door.distance.tip"));
+    }
+    if (open != "locked") {
+      // the level behind it (the rooms of a house, exported as a level of their own): loaded when
+      // Jak comes, the door opening once it is
+      std::string loads = b.value("loads", std::string());
+      ImGui::SetNextItemWidth(-160);
+      if (ImGui::InputTextWithHint(tr_id("behavior.door.loads").c_str(), tr("behavior.door.loads.none"), &loads,
+                                   ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsNoBlank)) {
+        if (loads.empty()) b.erase("loads");
+        else b["loads"] = loads;
+        changed = true;
+      }
+      tooltip(tr("behavior.door.loads.tip"));
     }
   } else if (kind == BehaviorKind::Bouncer) {
     ImGui::TextUnformatted(tr("behavior.bouncer.active"));

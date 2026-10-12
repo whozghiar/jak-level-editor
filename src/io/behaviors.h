@@ -8,7 +8,9 @@
 //
 //   og_behavior.open      a door (com-airlock and its subtypes): "approach" (the default),
 //                         "locked", "always", "when" (once `when` holds); "distance": meters
-//                         Jak opens it from (0: the game's)
+//                         Jak opens it from (0: the game's); "loads": a level (the rooms of a
+//                         house, a level of their own) loaded and shown when Jak comes to the
+//                         door, kept with the levels wanted already: the door opens once it is
 //   og_behavior.active    a bouncer (board vents, jump pads, awnings): when it throws Jak up
 //   og_behavior.leave     an elevator: when it leaves once ridden
 //   og_behavior.present   any object: whether it is there, checked when the level loads

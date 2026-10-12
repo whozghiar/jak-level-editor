@@ -250,6 +250,11 @@ AABB focus_box(const std::vector<AABB>& boxes);
 // door of a level's shell as large is not (they stay selectable).
 bool ground_piece(Mesh& mesh);
 
+// Whether a node of an extracted level is one of its trees of instanced decor, <level>-tie-<n> or
+// <level>-shrub-<n>: its children are the prototypes of its decor, their children the instances.
+// A prototype's own name may hold "-tie-" or "-shrub-" too (des-stone-shrub-01.mb).
+bool instance_tree(const std::string& name);
+
 // Marker size of actors without a model (meters)
 constexpr float kMarkerRadius = 0.6f;
 
