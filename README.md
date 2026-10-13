@@ -214,7 +214,9 @@ the rest on it.
 - **Click again at the same place** to reach what is behind or under: the second click selects
   the next element under the cursor.
 - The **ground** is locked, so that clicks go to what stands on it (View > Select the ground
-  unlocks it).
+  unlocks it). Only the ground: the walls the game made one with it, roofs, ceilings, bridges,
+  debris and water surfaces are selected like the rest (how the editor tells them apart:
+  [reference](docs/reference.md#ground-and-decor)).
 
 ![The cursor over a building: its piece outlined, the whole prefab it belongs to outlined faintly, and the label](docs/captures/selecting/hover.png)
 
