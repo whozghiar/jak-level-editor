@@ -1,7 +1,8 @@
 // The terrain brush (B, its own small window): a square target over the view, its size changed with
 // Ctrl + wheel or [ and ], what it would do shown see-through under it before it is done; the left
 // button held paints ground (with the relief and the textures of the level style chosen, the open
-// level's at first), raises walls from it, smooths or flattens it, a click erases ground and walls;
+// level's at first), raises walls from it or erases ground and walls (shown see-through until it is
+// let go, Esc: nothing done), smooths or flattens it;
 // the right button held and the mouse moved up raises the ground there, down digs it (shown until
 // it is released). Its strokes go into the terrain under the square (else one of its own,
 // scene/terrain.h), each one undone with Ctrl+Z.
@@ -184,7 +185,7 @@ bool App::start_terrain_brush() {
 }
 
 void App::stop_terrain_brush() {
-  if (m_terrain_change) terrain_end_stroke();
+  if (m_terrain_change) m_stroke_preview ? terrain_cancel_stroke() : terrain_end_stroke();
   if (m_terrain_sculpting) SDL_SetWindowRelativeMouseMode(m_window, false);  // the ground left as it was
   m_terrain_rmb = m_terrain_sculpting = false;
   if (tool == ToolMode::Terrain) tool = ToolMode::Select;
@@ -201,11 +202,27 @@ void App::terrain_end_stroke() {
     return;
   }
   if (n) n->extras["og_terrain_grid"] = m_terrain_grid.to_json();
+  // what was shown, made
+  if (n && m_stroke_preview && m_terrain_changed) {
+    n->mesh->prims = std::move(make_terrain_mesh(m_terrain_grid)->prims);
+    n->mesh->touch();
+  }
+  m_stroke_preview = false;
   // lit like the level around it, as what is placed (its palettes made again for its new shape)
   if (n && m_terrain_changed) light_like_surroundings(scene, {n->id});
   if (m_terrain_change && m_terrain_changed)
     history.push(m_terrain_change->commit(tr(m_terrain_new ? "undo.terrain.new" : "undo.terrain")));
   m_terrain_change.reset();
+}
+
+void App::terrain_cancel_stroke() {
+  // the element made for it taken away; the one painted keeps its mesh (the stroke only showed)
+  if (Node* n = scene.find(m_terrain_node); n && m_terrain_new) {
+    scene.remove({n->id});
+    m_terrain_node = 0;
+  }
+  m_terrain_change.reset();
+  m_stroke_preview = false;
 }
 
 // a stroke starts where the brush is: the element painted (a new one when there is none), its state
@@ -246,6 +263,10 @@ bool App::terrain_begin_stroke(BrushMode mode) {
   }
   // the cells painted take the style chosen now
   m_stroke_look = m_terrain_grid.add_look(terrain_look());
+  m_stroke_preview = mode == BrushMode::Paint || mode == BrushMode::Wall || mode == BrushMode::Erase;
+  m_stroke_before = m_stroke_preview ? m_terrain_grid : TerrainGrid{};
+  m_stroke_cells[0] = m_stroke_cells[1] = INT_MAX;
+  m_stroke_cells[2] = m_stroke_cells[3] = INT_MIN;
   m_stroke_height = terrain_start_height(m_terrain_grid, node);
   m_brush_plane = m_brush_point.y;
   m_last_stamp = scene.world(*node).inverse().point(m_brush_point);
@@ -294,13 +315,21 @@ void App::terrain_apply(BrushMode mode, Vec3 from, Vec3 to, float amount) {
   const float dist = length(Vec3{to.x - from.x, 0, to.z - from.z});
   const int n_stamps = std::clamp((int)std::ceil(dist / step), 1, 64);
   bool changed = false;
-  for (int s = 1; s <= n_stamps; s++)
-    changed |= apply_brush(m_terrain_grid, terrain_stamp(mode, from + (to - from) * ((float)s / n_stamps),
-                                                         mode == BrushMode::Wall ? amount : amount / n_stamps, m_stroke_height));
+  const float cl = m_terrain_grid.cell, half = std::max(brush.size * 0.5f, cl * 0.5f);
+  for (int s = 1; s <= n_stamps; s++) {
+    const Vec3 at = from + (to - from) * ((float)s / n_stamps);
+    changed |= apply_brush(m_terrain_grid, terrain_stamp(mode, at, mode == BrushMode::Wall ? amount : amount / n_stamps, m_stroke_height));
+    m_stroke_cells[0] = std::min(m_stroke_cells[0], (int)std::floor((at.x - half) / cl) - 1);
+    m_stroke_cells[1] = std::min(m_stroke_cells[1], (int)std::floor((at.z - half) / cl) - 1);
+    m_stroke_cells[2] = std::max(m_stroke_cells[2], (int)std::floor((at.x + half) / cl) + 1);
+    m_stroke_cells[3] = std::max(m_stroke_cells[3], (int)std::floor((at.z + half) / cl) + 1);
+  }
   if (changed) {
-    node->mesh->prims = std::move(make_terrain_mesh(m_terrain_grid)->prims);
-    node->mesh->touch();
     m_terrain_changed = true;
+    if (!m_stroke_preview) {
+      node->mesh->prims = std::move(make_terrain_mesh(m_terrain_grid)->prims);
+      node->mesh->touch();
+    }
   }
 }
 
@@ -340,16 +369,7 @@ void App::terrain_tool(bool clicked, bool released) {
   if (!m_terrain_change && m_brush_hit_node && m_brush_hit_node != m_terrain_node)
     if (const Node* h = scene.find(m_brush_hit_node); h && h->extras.contains("og_terrain_grid")) m_terrain_node = h->id;
   const BrushMode mode = io.KeyShift ? inverted(brush.mode) : brush.mode;
-  if (clicked && m_brush_valid && !m_terrain_change) {
-    if (!terrain_begin_stroke(mode)) return;
-    // erased at the click alone, ground and walls, not along the way
-    if (mode == BrushMode::Erase) {
-      const Vec3 at = scene.world(*scene.find(m_terrain_node)).inverse().point(m_brush_point);
-      terrain_apply(mode, at, at, 0);
-      terrain_end_stroke();
-      return;
-    }
-  }
+  if (clicked && m_brush_valid && !m_terrain_change && !terrain_begin_stroke(mode)) return;
   // held: the brush applied along the way
   const Node* node = scene.find(m_terrain_node);
   if (m_terrain_change && node && ImGui::IsMouseDown(ImGuiMouseButton_Left) && m_brush_valid) {
@@ -481,7 +501,12 @@ void App::draw_terrain_overlay() {
   renderer.flush(true, true);
   // what it would do there, before it is done: the right button held, the ground raised or dug that
   // much (its height next to it); else what the left button does (a smoothing or flattening done)
-  if (m_terrain_change) return;
+  if (m_terrain_change) {
+    if (m_stroke_preview)
+      draw_terrain_ghost(m_stroke_before, m_terrain_grid, m_stroke_cells[0], m_stroke_cells[1], m_stroke_cells[2],
+                         m_stroke_cells[3], mode, world);
+    return;
+  }
   TerrainGrid empty;
   empty.cell = brush.cell;
   const TerrainGrid& before = node ? grid : empty;
@@ -507,12 +532,18 @@ void App::draw_terrain_preview(const TerrainGrid& before, const BrushStroke& sta
   TerrainGrid after = before;
   if (!apply_brush(after, stamp)) return;
   const float cl = after.cell, half = stamp.size * 0.5f;
-  const auto changes =
-      terrain_changes(before, after, (int)std::floor((stamp.center.x - half) / cl) - 1, (int)std::floor((stamp.center.z - half) / cl) - 1,
-                      (int)std::floor((stamp.center.x + half) / cl) + 1, (int)std::floor((stamp.center.z + half) / cl) + 1);
-  const uint32_t color = stamp.mode == BrushMode::Wall ? IM_COL32(240, 205, 90, 0)
-                         : stamp.mode == BrushMode::Dig ? IM_COL32(255, 170, 60, 0)
-                                                        : IM_COL32(90, 230, 255, 0);
+  draw_terrain_ghost(before, after, (int)std::floor((stamp.center.x - half) / cl) - 1, (int)std::floor((stamp.center.z - half) / cl) - 1,
+                     (int)std::floor((stamp.center.x + half) / cl) + 1, (int)std::floor((stamp.center.z + half) / cl) + 1,
+                     stamp.mode, world);
+}
+
+void App::draw_terrain_ghost(const TerrainGrid& before, const TerrainGrid& after, int i0, int k0, int i1, int k1,
+                             BrushMode mode, const Mat4& world) {
+  const auto changes = terrain_changes(before, after, i0, k0, i1, k1);
+  const float cl = after.cell;
+  const uint32_t color = mode == BrushMode::Wall  ? IM_COL32(240, 205, 90, 0)
+                         : mode == BrushMode::Dig ? IM_COL32(255, 170, 60, 0)
+                                                  : IM_COL32(90, 230, 255, 0);
   // seen where it is in front, and faintly through the ground (a hollow dug under it)
   for (const uint32_t alpha : {110u, 45u}) {
     for (const TerrainChange& ch : changes) {

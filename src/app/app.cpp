@@ -1122,6 +1122,7 @@ void App::handle_shortcuts() {
   } else if (pressed(ImGuiKey_Escape)) {
     if (tool == ToolMode::Place) stop_placement();
     else if (tool == ToolMode::Topology) stop_topology();
+    else if (tool == ToolMode::Terrain && m_terrain_change && m_stroke_preview) terrain_cancel_stroke();
     else if (tool == ToolMode::Terrain) stop_terrain_brush();
     else select_only(0);
   } else if (!ctrl && pressed(ImGuiKey_B)) {

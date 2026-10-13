@@ -556,6 +556,11 @@ class App {
   std::unique_ptr<NodeChange> m_terrain_change;  // a stroke going on
   TerrainGrid m_terrain_grid;                    // its grid while it goes on
   bool m_terrain_new = false, m_terrain_changed = false;
+  // a stroke laying ground, walls or erasing: shown see-through while the button is held (its grid
+  // before, the cells it reached), done when it is let go
+  bool m_stroke_preview = false;
+  TerrainGrid m_stroke_before;
+  int m_stroke_cells[4] = {0, 0, -1, -1};  // i0, k0, i1, k1
   float m_stroke_height = 0.f;  // the ground's height where the stroke started (its node's space)
   int m_stroke_look = 0;        // the look its cells take (in the grid's looks)
   bool m_terrain_rmb = false;        // the right button held over the view, the mouse not moved far yet
@@ -573,6 +578,7 @@ class App {
   bool start_terrain_brush();
   void stop_terrain_brush();
   void terrain_end_stroke();
+  void terrain_cancel_stroke();  // a stroke shown, not let go: nothing done
   bool terrain_begin_stroke(BrushMode mode);
   // where a stroke starting now starts: the ground's height under the brush (the terrain's space)
   float terrain_start_height(const TerrainGrid& g, const Node* node) const;
@@ -587,6 +593,9 @@ class App {
   void draw_terrain_overlay();
   // what a stamp would change, see-through, before it is done
   void draw_terrain_preview(const TerrainGrid& before, const BrushStroke& stamp, const Mat4& world);
+  // the cells of [i0, i1] x [k0, k1] changed from `before` to `after`, see-through
+  void draw_terrain_ghost(const TerrainGrid& before, const TerrainGrid& after, int i0, int k0, int i1, int k1,
+                          BrushMode mode, const Mat4& world);
   void ui_terrain_window();
   void terrain_generate(Vec3 at);
   // a terrain's materials and texture sizes: the level style chosen, else the editor's grid
