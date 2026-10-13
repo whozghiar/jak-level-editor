@@ -499,6 +499,27 @@ bool structure_texture(const std::string& name) {
   return false;
 }
 
+float piece_floor(const Mesh& mesh, const Mat4& world, float* area) {
+  std::vector<std::pair<float, float>> flats;  // height, area
+  double total = 0;
+  for (const auto& p : mesh.prims)
+    for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+      const Vec3 a = world.point(p.pos[p.idx[t]]), b = world.point(p.pos[p.idx[t + 1]]), c = world.point(p.pos[p.idx[t + 2]]);
+      const Vec3 n = cross(b - a, c - a);
+      const float l = length(n);
+      if (l < 1e-8f || std::fabs(n.y) < 0.7f * l) continue;
+      flats.push_back({(a.y + b.y + c.y) / 3.f, l * 0.5f});
+      total += l * 0.5f;
+    }
+  if (area) *area = (float)total;
+  if (flats.empty()) return 0.f;
+  std::sort(flats.begin(), flats.end());
+  double acc = 0;
+  for (const auto& [y, a] : flats)
+    if ((acc += a) >= 0.2 * total) return y;
+  return flats.back().first;
+}
+
 int split_ground_piece(Scene& scene, size_t index) {
   if (index >= scene.nodes.size()) return -1;
   const Node& src = scene.nodes[index];

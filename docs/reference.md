@@ -127,18 +127,21 @@ holds every triangle of that cobblestone, the walls built with it included. A pi
    `dune`, `cliff`, `lava`, `ground`), or nothing lies under it: down rays from 64 points of its flat
    surfaces, whichever way their triangles face, meet another piece (not a backdrop) more than 1 m
    below for less than half of them. A roof, a ceiling, a bridge, a slab of debris lying on the
-   ground, a water surface over its bed have something under them.
+   ground, a water surface over its bed have something under them;
+4. it is not a long narrow piece (under 12 m wide, 8 times as long) standing more than 10 m over the
+   level's ground (the floor under a quarter of the ground's area): a wall's top, a walkway.
 
 A ground keeping walls more than 3 m above its floor (40 % of what stands there upright) has them
 moved to a piece of their own, `<name>-walls`, selected like the rest. Projects saved before get the
 same when they are opened.
 
-Over the 94 levels of Jak 3 with a shell (9 130 large pieces), this leaves 449 grounds of the 647 the
-first rule alone gives: 198 pieces are selected like decor again (59 of the far views of the city,
+Over the 94 levels of Jak 3 with a shell (9 130 large pieces), this leaves 446 grounds of the 647 the
+first rule alone gives: 201 pieces are selected like decor again (59 of the far views of the city,
 53 floors, plates and rubble lying on others, 34 roofs and ceilings, 28 pieces of the palace, pillars,
-beams, braces and bridges, 24 water surfaces), and 33 grounds had walls split off. Still taken for
-ground: a structure standing on nothing modeled in its own level and named like ground, and the
-upper floors of interiors (caves, the Precursor levels), which are walked on.
+beams, braces and bridges, 24 water surfaces, the 3 tops of the farms' walls), and 33 grounds had
+walls split off. In the city's levels, what stays ground is the ground of the streets (5 to 9 m:
+cobblestones, pavement, the slums, the ditches, the outposts' yards, the farms' grass). The upper
+floors of interiors (caves, the Precursor levels) stay ground too: they are walked on.
 
 ## 4. Game data
 

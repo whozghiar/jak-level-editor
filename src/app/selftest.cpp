@@ -1250,6 +1250,24 @@ int run_selftest() {
                 natural_ground("farm-grass-ground-02-20") && !natural_ground("freehq-monitor01-4"),
             "level pieces: the textures of structures (a roof, a bridge's brace) are never ground, those of natural "
             "ground (sand, grass) are even over other ground");
+      // a wall's top 150 m long, 8 m wide, 17 m over a large ground: not ground; a strip of the ground: it is
+      Scene ws;
+      auto ground_node = [&](float x0, float x1, float z0, float z1, float y) {
+        Node n{};
+        n.kind = NodeKind::Render;
+        n.mesh = quad(x1 - x0, z1 - z0, false);
+        n.local.t = {x0, y, z0};
+        n.locked = true;
+        n.extras["og_terrain"] = true;
+        return ws.add(n);
+      };
+      ground_node(0, 200, 0, 200, 0);
+      const uint32_t wall_top = ground_node(0, 150, 210, 218, 17);
+      const uint32_t strip = ground_node(0, 64, 220, 227, 0);
+      ws.begin_frame();
+      free_raised_strips(ws, 0);
+      check(!ws.find(wall_top)->locked && ws.find(strip)->locked && ws.nodes[0].locked,
+            "level pieces: a wall's top standing over the ground is not ground, a strip of the ground is");
       check(yard == 0.f && roof > 0.95f && road < 0.05f,
             strf("level pieces: ground is what has nothing under it (yard %.2f, roof over it %.2f, road on it %.2f)", yard, roof, road).c_str());
     }

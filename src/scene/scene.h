@@ -262,6 +262,9 @@ bool natural_ground(const std::string& name);
 // ... and of a structure (a roof, a bridge, a pillar, the palace, a tower's side, a monitor, a beam,
 // a pipe, a brace): never ground, however large and flat
 bool structure_texture(const std::string& name);
+// The height of a piece's floor: of its flat surfaces (by area) the lowest fifth's, in the world
+// (`world` its node's matrix); `area` gets their area
+float piece_floor(const Mesh& mesh, const Mat4& world, float* area = nullptr);
 
 // Whether a node of an extracted level is one of its trees of instanced decor, <level>-tie-<n> or
 // <level>-shrub-<n>: its children are the prototypes of its decor, their children the instances.

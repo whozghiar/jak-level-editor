@@ -146,6 +146,9 @@ bool open_project(Scene& scene, const std::string& path, std::string* error);
 // named after a structure's texture (a roof, a bridge, a pillar...), and natural ground (sand, grass,
 // rock...) or with nothing under it (not a roof, a ceiling, debris lying on the ground, a water surface)
 bool level_ground(Scene& scene, size_t index);
+// ... and not a long narrow piece standing more than 10 m over the level's ground (under a quarter of
+// the ground's area): a wall's top, a walkway (the farms' walls). Unlocks those of the nodes from `first`.
+void free_raised_strips(Scene& scene, size_t first);
 bool save_project(const Scene& scene, const std::string& path, std::string* error);
 // A level of the library: its decor, its actors with the model the library has for each, and its
 // collision (kept, not shown). The terrain is locked: clicks go to the objects on it. With the

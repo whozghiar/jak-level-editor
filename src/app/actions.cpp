@@ -194,6 +194,7 @@ void prepare_level_nodes(Scene& scene, const AssetLibrary& library, const GameDa
     }
     if (p != index.end() && scene.nodes[p->second].name.find("-tfrag-") != std::string::npos) n.locked = true;
   }
+  free_raised_strips(scene, first);
   attach_actor_models(scene, library, data, first, group);
 }
 
@@ -267,6 +268,41 @@ std::string unique_name(const std::string& base, std::unordered_set<std::string>
 // document operations (no window needed)
 // ------------------------------------------------------------------------------------------------
 
+void free_raised_strips(Scene& scene, size_t first) {
+  // the ground's floors, the level's ground under a quarter of their area (the lowest first)
+  struct G {
+    size_t i;
+    float floor, area;
+  };
+  std::vector<G> grounds;
+  for (size_t i = first; i < scene.nodes.size(); i++) {
+    const Node& n = scene.nodes[i];
+    if (!n.locked || n.kind != NodeKind::Render || !n.mesh || !n.extras.contains("og_terrain")) continue;
+    G g{i, 0, 0};
+    g.floor = piece_floor(*n.mesh, scene.world(n), &g.area);
+    grounds.push_back(g);
+  }
+  if (grounds.size() < 2) return;
+  std::sort(grounds.begin(), grounds.end(), [](const G& a, const G& b) { return a.floor < b.floor; });
+  double total = 0, acc = 0;
+  for (const G& g : grounds) total += g.area;
+  float level = grounds.front().floor;
+  for (const G& g : grounds) {
+    level = g.floor;
+    if ((acc += g.area) >= 0.25 * total) break;
+  }
+  std::vector<size_t> strips;
+  for (const G& g : grounds) {
+    const Vec3 s = scene.world_bounds(scene.nodes[g.i]).size();
+    const float w = std::min(s.x, s.z), l = std::max(s.x, s.z);
+    if (w < 12.f && l >= 8.f * w && g.floor > level + 10.f) strips.push_back(g.i);
+  }
+  for (size_t i : strips) {
+    scene.nodes[i].locked = false;
+    center_piece_origin(scene.nodes[i]);
+  }
+}
+
 bool level_ground(Scene& scene, size_t i) {
   const Node& n = scene.nodes[i];
   if (!n.mesh || !ground_piece(*n.mesh) || structure_texture(n.name)) return false;
@@ -299,6 +335,7 @@ bool open_project(Scene& scene, const std::string& path, std::string* error) {
     g.extras["og_split"] = true;
     g.locked = ground_piece(*g.mesh);
   }
+  free_raised_strips(scene, 0);
   return true;
 }
 
