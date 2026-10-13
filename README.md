@@ -180,7 +180,9 @@ unchecked, you get its decor alone.
 ![The Levels panel: the slums of Haven City loaded](docs/captures/levels/levels-panel.png)
 
 What comes with a level: its decor, its objects, its water (pools, fountains, dark eco, lava drawn
-as such), the ocean where the level has one, and the levels the game always shows with it.
+as such), the ocean where the level has one, and the levels the game always shows with it. The
+ocean stops where the levels around stand in the game (behind the port, Haven City's ground): no
+water where the game has none.
 
 ### Move around
 

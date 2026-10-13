@@ -315,6 +315,7 @@ void App::frame(float dt) {
   poll_level_opening();
   poll_level_adding();
   poll_navmesh_generation();
+  poll_ocean_land();
   poll_game_prefabs();
   remote_poll();
   extract_poll();

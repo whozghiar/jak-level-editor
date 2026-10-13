@@ -179,9 +179,17 @@ void prepare_level_nodes(Scene& scene, const AssetLibrary& library, const GameDa
     auto terrain = n.extras.find("og_terrain");
     if (terrain != n.extras.end() && terrain->is_boolean()) {
       // the extractor marks every piece 60 m across; only the ground stays locked (a facade or a
-      // door of the shell as large is selected like the rest)
-      n.locked = terrain->get<bool>() && n.mesh && ground_piece(*n.mesh);
-      if (!n.locked) center_piece_origin(n);
+      // door of the shell as large is selected like the rest), the walls the game made one with a
+      // ground given a piece of their own (selected like a facade)
+      if (terrain->get<bool>() && n.mesh && ground_piece(*n.mesh)) {
+        if (split_ground_piece(scene, i) >= 0) scene.nodes[i].extras["og_split"] = true;
+        Node& g = scene.nodes[i];
+        g.locked = ground_piece(*g.mesh);
+        if (!g.locked) center_piece_origin(g);
+      } else {
+        n.locked = false;
+        center_piece_origin(n);
+      }
       continue;
     }
     if (p != index.end() && scene.nodes[p->second].name.find("-tfrag-") != std::string::npos) n.locked = true;
@@ -269,12 +277,21 @@ bool open_project(Scene& scene, const std::string& path, std::string* error) {
   o.read_settings = true;
   ImportResult r;
   if (!import_gltf(scene, path, o, &r, error)) return false;
-  // projects saved before the ground alone was locked: their large walls and doors are freed
-  for (auto& n : scene.nodes) {
-    if (!n.locked || n.kind != NodeKind::Render || !n.mesh || !n.extras.contains("og_terrain") || ground_piece(*n.mesh))
+  // projects saved before the ground alone was locked: their large walls and doors are freed; and
+  // before the walls standing on a ground had a piece of their own: given one, as a level opened
+  for (size_t i = 0; i < scene.nodes.size(); i++) {
+    Node& n = scene.nodes[i];
+    if (!n.locked || n.kind != NodeKind::Render || !n.mesh || !n.extras.contains("og_terrain")) continue;
+    if (!ground_piece(*n.mesh)) {
+      n.locked = false;
+      center_piece_origin(n);
       continue;
-    n.locked = false;
-    center_piece_origin(n);
+    }
+    if (n.extras.contains("og_split")) continue;
+    if (split_ground_piece(scene, i) < 0) continue;
+    Node& g = scene.nodes[i];
+    g.extras["og_split"] = true;
+    g.locked = ground_piece(*g.mesh);
   }
   return true;
 }
@@ -591,6 +608,134 @@ void App::set_ocean_backdrop() {
   rs.far_ocean_color[2] = m_ocean_far_color.z;
 }
 
+std::vector<uint8_t> ocean_land(const OceanMap& map, float ocean_y, const Scene& land) {
+  const int side = map.size * 32;
+  const float sq = map.cell / 32.f;
+  std::vector<uint8_t> out((size_t)side * side, 0);
+  const SceneCache& cache = land.cache();
+  for (size_t i = 0; i < land.nodes.size(); i++) {
+    const Node& n = land.nodes[i];
+    if (n.kind != NodeKind::Render || !n.mesh) continue;
+    const Mat4& w = cache.worlds[i];
+    for (const Primitive& p : n.mesh->prims)
+      for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+        const Vec3 a = w.point(p.pos[p.idx[t]]), b = w.point(p.pos[p.idx[t + 1]]), c = w.point(p.pos[p.idx[t + 2]]);
+        if (std::max({a.y, b.y, c.y}) <= ocean_y + 0.3f) continue;
+        // the squares whose middle it covers, seen from above (a wall covers none)
+        const float d = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
+        if (std::fabs(d) < 1e-6f) continue;
+        auto first = [&](float v, float o) { return std::max(0, (int)std::ceil((v - o) / sq - 0.5f)); };
+        auto last = [&](float v, float o) { return std::min(side - 1, (int)std::floor((v - o) / sq - 0.5f)); };
+        const int x0 = first(std::min({a.x, b.x, c.x}), map.corner.x), x1 = last(std::max({a.x, b.x, c.x}), map.corner.x);
+        const int z0 = first(std::min({a.z, b.z, c.z}), map.corner.z), z1 = last(std::max({a.z, b.z, c.z}), map.corner.z);
+        for (int z = z0; z <= z1; z++)
+          for (int x = x0; x <= x1; x++) {
+            const float px = map.corner.x + (x + 0.5f) * sq, pz = map.corner.z + (z + 0.5f) * sq;
+            const float u = ((b.x - px) * (c.z - pz) - (c.x - px) * (b.z - pz)) / d;
+            const float v = ((c.x - px) * (a.z - pz) - (a.x - px) * (c.z - pz)) / d;
+            if (u < 0 || v < 0 || u + v > 1) continue;
+            if (u * a.y + v * b.y + (1 - u - v) * c.y > ocean_y + 0.3f) out[(size_t)z * side + x] = 1;
+          }
+      }
+  }
+  return out;
+}
+
+std::vector<uint8_t> ocean_land_around(int side, const std::vector<std::vector<uint8_t>>& doc,
+                                       const std::vector<std::vector<uint8_t>>& around,
+                                       const std::vector<std::vector<uint8_t>>& far) {
+  const size_t count = (size_t)side * side;
+  std::vector<uint8_t> own(count, 0), out(count, 0);
+  for (const auto& d : doc)
+    if (d.size() == count)
+      for (size_t i = 0; i < count; i++) own[i] |= d[i];
+  for (const auto& a : around)
+    if (a.size() == count)
+      for (size_t i = 0; i < count; i++) out[i] |= a[i];
+  // the document's area: the box of its land
+  int x0 = side, x1 = -1, z0 = side, z1 = -1;
+  for (int z = 0; z < side; z++)
+    for (int x = 0; x < side; x++)
+      if (own[(size_t)z * side + x]) {
+        x0 = std::min(x0, x), x1 = std::max(x1, x);
+        z0 = std::min(z0, z), z1 = std::max(z1, z);
+      }
+  // the view from afar placed like the document's levels (some are models moved or scaled): the
+  // one whose land matches theirs best in their box, if it does
+  // ponytail: a match of 0.35, from the city's (0.41 placed, 0.30 scaled, 0.16 moved)
+  const std::vector<uint8_t>* best = nullptr;
+  double best_match = 0.35;
+  for (const auto& f : far) {
+    if (f.size() != count) continue;
+    size_t both = 0, either = 0;
+    for (int z = z0; z <= z1; z++)
+      for (int x = x0; x <= x1; x++) {
+        const size_t i = (size_t)z * side + x;
+        both += own[i] && f[i];
+        either += own[i] || f[i];
+      }
+    if (either && (double)both / either > best_match) {
+      best_match = (double)both / either;
+      best = &f;
+    }
+  }
+  // of it, the land the document's stands on, as far as it goes (not islands the game does not
+  // show from there)
+  if (best) {
+    std::vector<uint8_t> seen(count, 0);
+    std::vector<size_t> todo;
+    for (size_t i = 0; i < count; i++)
+      if (own[i]) seen[i] = 1, todo.push_back(i);
+    while (!todo.empty()) {
+      const size_t i = todo.back();
+      todo.pop_back();
+      if ((*best)[i]) out[i] = 1;
+      const int x = (int)(i % side), z = (int)(i / side);
+      for (const auto [dx, dz] : {std::pair{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+        if (x + dx < 0 || x + dx >= side || z + dz < 0 || z + dz >= side) continue;
+        const size_t j = (size_t)(z + dz) * side + x + dx;
+        if (!seen[j] && (*best)[j]) seen[j] = 1, todo.push_back(j);
+      }
+    }
+  }
+  // in their box, the document's own pieces hide the water, or show it (under a bridge, where the
+  // user took a piece away)
+  auto clear_box = [&] {
+    for (int z = z0; z <= z1; z++) std::fill_n(&out[(size_t)z * side + x0], x1 - x0 + 1, 0);
+  };
+  clear_box();
+  // land thinner than 27 m (a wall in the sea, a bridge) keeps the water around it, a gap as thin
+  // in the land (a street of a view from afar) none
+  auto grow = [&](bool land) {  // by 4 squares
+    std::vector<uint8_t> tmp(count);
+    for (int pass = 0; pass < 2; pass++) {
+      const std::vector<uint8_t>& from = pass ? tmp : out;
+      std::vector<uint8_t>& to = pass ? out : tmp;
+      for (int z = 0; z < side; z++)
+        for (int x = 0; x < side; x++) {
+          bool v = !land;
+          for (int k = -4; k <= 4; k++) {
+            const int xx = pass ? x : std::clamp(x + k, 0, side - 1), zz = pass ? std::clamp(z + k, 0, side - 1) : z;
+            if ((from[(size_t)zz * side + xx] != 0) == land) v = land;
+          }
+          to[(size_t)z * side + x] = v;
+        }
+    }
+  };
+  grow(false), grow(true), grow(true), grow(false);
+  clear_box();
+  return out;
+}
+
+void App::poll_ocean_land() {
+  using namespace std::chrono_literals;
+  if (!m_ocean_land_future.valid() || m_ocean_land_future.wait_for(0s) != std::future_status::ready) return;
+  m_ocean_land = m_ocean_land_future.get();
+  m_ocean_land_key = m_ocean_land_want;
+  m_ocean_land_want.clear();
+  update_ocean();
+}
+
 void App::update_ocean() {
   const GameData* data = document_game_data();
   // like the game: the ocean of a level shown with an ocean map (the level opened first, then the
@@ -620,50 +765,114 @@ void App::update_ocean() {
   }
   m_ocean_far_color = map->far_color;
   m_ocean_height = data->ocean_height(ocean_level, story.enabled ? story.step_of(ocean_level) : 1);
-  if (m_ocean && m_ocean_map == info->ocean) return;
-  m_ocean_map = info->ocean;
+  // the land of the levels the game shows around the document's (their neighbors, and the city
+  // seen from afar on the same map) hides the water there in the game; read on a worker from the
+  // library, with the document's levels as extracted (where they are)
+  const auto levels = document_levels();
+  auto in_document = [&](const std::string& name) {
+    for (const auto& l : levels)
+      if (l.name == name) return true;
+    return false;
+  };
+  std::vector<std::string> doc, around, far;
+  std::string want = strf("%s@%.2f", info->ocean.c_str(), m_ocean_height);
+  auto add = [&](std::vector<std::string>& to, const std::string& name) {
+    // a level the game loads under several names (ctywide-ff, ctywide-kg): its library's
+    const LevelEntry* e = library.level(name);
+    if (!e) e = library.level(name.substr(0, name.find('-')));
+    if (!e || (&to != &doc && (in_document(e->name) || in_document(name)))) return;
+    for (const auto* v : {&doc, &around, &far})
+      if (std::find(v->begin(), v->end(), e->background) != v->end()) return;
+    to.push_back(e->background);
+    want += (&to == &doc ? " =" : &to == &around ? " +" : " ~") + e->name;
+  };
+  for (const auto& l : levels)
+    if (l.role != DocumentLevel::Layer) add(doc, l.name);
+  for (const auto& l : levels)
+    if (const LevelInfo* li = l.role != DocumentLevel::Layer ? data->level(l.name) : nullptr)
+      for (const auto& n : li->neighbors) add(around, n);
+  for (const auto& [name, li] : data->levels())
+    if (li.ocean == info->ocean) add(far, name);
+  if (want != m_ocean_land_key && want != m_ocean_land_want && !m_ocean_land_future.valid()) {
+    m_ocean_land_want = want;
+    m_ocean_land_future = std::async(std::launch::async, [doc, around, far, m = *map, y = m_ocean_height]() {
+      auto read = [&](const std::vector<std::string>& paths, bool afar) {
+        std::vector<std::vector<uint8_t>> out;
+        for (const auto& path : paths) {
+          Scene s;
+          ImportResult r;
+          std::string err;
+          if (!import_gltf(s, path, ImportOptions{}, &r, &err)) continue;
+          // a view from afar has hills kilometers wide around: a backdrop, not the land there
+          if (afar)
+            for (auto& n : s.nodes)
+              if (const AABB b = n.mesh ? s.world_bounds(n) : AABB{}; b.valid() && std::max(b.hi.x - b.lo.x, b.hi.z - b.lo.z) > 2000.f)
+                n.mesh.reset();
+          out.push_back(ocean_land(m, y, s));
+        }
+        return out;
+      };
+      return ocean_land_around(m.size * 32, read(doc, false), read(around, false), read(far, true));
+    });
+  }
+  const bool masked = want == m_ocean_land_key && !m_ocean_land.empty();
+  const std::string key = masked ? want : info->ocean;
+  if (m_ocean && m_ocean_map == key) return;
+  m_ocean_map = key;
   // the water: the mid ocean's cells, and the near ocean's water by the shores (3 m squares) where
-  // the game draws it instead; a quad per run of water along x, at height 0 (drawn at the ocean's
-  // height)
+  // the game draws it instead, less the land around; a quad per run of water along x, at height 0
+  // (drawn at the ocean's height)
   auto mesh = std::make_shared<Mesh>();
   mesh->name = "ocean";
   Primitive p;
   const int size = map->size;
+  const size_t side = (size_t)size * 32;
   auto quad = [&](float x0, float x1, float z0, float z1) {
     const uint32_t base = (uint32_t)p.pos.size();
     p.pos.insert(p.pos.end(), {{x0, 0, z0}, {x1, 0, z0}, {x1, 0, z1}, {x0, 0, z1}});
     p.nrm.insert(p.nrm.end(), 4, Vec3{0, 1, 0});
     p.idx.insert(p.idx.end(), {base, base + 2, base + 1, base, base + 3, base + 2});
   };
-  auto whole = [&](int r, int c) {
+  // the 32 rows of water squares of a cell (bit x of row z); true when it is water everywhere
+  auto rows = [&](int r, int c, uint32_t out[32]) {
     const auto it = map->near.find(r * size + c);
-    return it != map->near.end() ? it->second.empty() : map->cells[(size_t)r * size + c] != 0;
+    const bool near = it != map->near.end() && it->second.size() >= 32;
+    const bool all = it != map->near.end() ? it->second.empty() : map->cells[(size_t)r * size + c] != 0;
+    bool whole = true;
+    for (int row = 0; row < 32; row++) {
+      uint32_t bits = all ? ~0u : near ? it->second[row] : 0u;
+      if (masked && bits) {
+        const uint8_t* l = &m_ocean_land[((size_t)r * 32 + row) * side + (size_t)c * 32];
+        for (int x = 0; x < 32; x++)
+          if (l[x]) bits &= ~(1u << x);
+      }
+      out[row] = bits;
+      whole &= bits == ~0u;
+    }
+    return whole;
   };
   const float sq = map->cell / 32.f;
+  uint32_t bits[32];
   for (int r = 0; r < size; r++) {
     for (int c = 0; c < size;) {
-      if (!whole(r, c)) {
-        // part of the cell, by the shore: its rows of water squares
-        const auto it = map->near.find(r * size + c);
-        if (it != map->near.end())
-          for (int row = 0; row < 32; row++) {
-            const uint32_t bits = it->second[row];
-            for (int x = 0; x < 32;) {
-              if (!(bits >> x & 1u)) {
-                x++;
-                continue;
-              }
-              const int x0 = x;
-              while (x < 32 && (bits >> x & 1u)) x++;
-              const float cx = map->corner.x + c * map->cell, cz = map->corner.z + r * map->cell;
-              quad(cx + x0 * sq, cx + x * sq, cz + row * sq, cz + (row + 1) * sq);
+      if (!rows(r, c, bits)) {
+        // part of the cell: its rows of water squares
+        const float cx = map->corner.x + c * map->cell, cz = map->corner.z + r * map->cell;
+        for (int row = 0; row < 32; row++)
+          for (int x = 0; x < 32;) {
+            if (!(bits[row] >> x & 1u)) {
+              x++;
+              continue;
             }
+            const int x0 = x;
+            while (x < 32 && (bits[row] >> x & 1u)) x++;
+            quad(cx + x0 * sq, cx + x * sq, cz + row * sq, cz + (row + 1) * sq);
           }
         c++;
         continue;
       }
       const int c0 = c;
-      while (c < size && whole(r, c)) c++;
+      while (c < size && rows(r, c, bits)) c++;
       const float z0 = map->corner.z + r * map->cell;
       quad(map->corner.x + c0 * map->cell, map->corner.x + c * map->cell, z0, z0 + map->cell);
     }

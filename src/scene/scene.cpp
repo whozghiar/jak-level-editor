@@ -482,6 +482,119 @@ bool ground_piece(Mesh& mesh) {
   return all > 0 && flat >= 0.5 * all;
 }
 
+int split_ground_piece(Scene& scene, size_t index) {
+  if (index >= scene.nodes.size()) return -1;
+  const Node& src = scene.nodes[index];
+  if (!src.mesh || src.kind != NodeKind::Render) return -1;
+  const Mesh& mesh = *src.mesh;
+  // the height of its ground: the low fifth of its flat surfaces (by area)
+  struct Tri {
+    size_t prim, first;
+    float area, ny, top, mid;
+  };
+  std::vector<Tri> tris;
+  std::vector<std::pair<float, float>> flat;  // height, area
+  double flat_area = 0;
+  for (size_t pi = 0; pi < mesh.prims.size(); pi++) {
+    const Primitive& p = mesh.prims[pi];
+    for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+      const Vec3 &a = p.pos[p.idx[t]], &b = p.pos[p.idx[t + 1]], &c = p.pos[p.idx[t + 2]];
+      const Vec3 n = cross(b - a, c - a);
+      const float l = length(n);
+      if (l < 1e-8f) continue;
+      const Tri tri{pi, t, l * 0.5f, n.y / l, std::max({a.y, b.y, c.y}), (a.y + b.y + c.y) / 3.f};
+      tris.push_back(tri);
+      if (std::fabs(tri.ny) >= 0.7f) {
+        flat.push_back({tri.mid, tri.area});
+        flat_area += tri.area;
+      }
+    }
+  }
+  if (flat.empty()) return -1;
+  std::sort(flat.begin(), flat.end());
+  float base = flat.front().first;
+  for (double acc = 0; const auto& [y, a] : flat) {
+    base = y;
+    if ((acc += a) >= 0.2 * flat_area) break;
+  }
+  // what stands more than 3 m above it: walls (and the roofs on them) rather than the ground
+  const float above = base + 3.f;
+  std::vector<std::vector<uint8_t>> up(mesh.prims.size());
+  for (size_t pi = 0; pi < mesh.prims.size(); pi++) up[pi].assign(mesh.prims[pi].idx.size() / 3, 0);
+  double area = 0, upright = 0;
+  float high = base;
+  for (const Tri& t : tris) {
+    const bool is_flat = std::fabs(t.ny) >= 0.7f;
+    if (!(is_flat ? t.mid > above : t.top > above)) continue;
+    up[t.prim][t.first / 3] = 1;
+    area += t.area;
+    if (std::fabs(t.ny) < 0.3f) upright += t.area;
+    high = std::max(high, t.top);
+  }
+  // not a hill (its high slopes are not upright), not a few posts
+  if (area < 50.0 || upright < 0.4 * area || high - base < 3.f) return -1;
+
+  // the two meshes, each vertex of a part once (and its palettes of the game's light)
+  auto part = [&](bool walls, std::vector<std::vector<uint16_t>>* tod_index) {
+    auto out = std::make_shared<Mesh>();
+    out->name = mesh.name + (walls ? "-walls" : "");
+    out->extras = mesh.extras;
+    const TodColors* tod = src.tod && src.tod->fits(mesh) ? src.tod.get() : nullptr;
+    for (size_t pi = 0; pi < mesh.prims.size(); pi++) {
+      const Primitive& p = mesh.prims[pi];
+      Primitive q;
+      q.material = p.material;
+      std::vector<uint32_t> remap(p.pos.size(), UINT32_MAX);
+      std::vector<uint16_t> idx_tod;
+      for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+        if ((up[pi][t / 3] != 0) != walls) continue;
+        for (int k = 0; k < 3; k++) {
+          const uint32_t v = p.idx[t + k];
+          if (remap[v] == UINT32_MAX) {
+            remap[v] = (uint32_t)q.pos.size();
+            q.pos.push_back(p.pos[v]);
+            if (v < p.nrm.size()) q.nrm.push_back(p.nrm[v]);
+            if (v < p.uv.size()) q.uv.push_back(p.uv[v]);
+            if (v < p.col.size()) q.col.push_back(p.col[v]);
+            for (const auto& [name, values] : p.extra_attrs)
+              if (v < values.size()) q.extra_attrs[name].push_back(values[v]);
+            if (tod) idx_tod.push_back(tod->index[pi][v]);
+          }
+          q.idx.push_back(remap[v]);
+        }
+        if (t / 3 < p.tri_pat.size()) q.tri_pat.push_back(p.tri_pat[t / 3]);
+      }
+      if (q.idx.empty()) continue;
+      out->prims.push_back(std::move(q));
+      if (tod) tod_index->push_back(std::move(idx_tod));
+    }
+    return out;
+  };
+  std::vector<std::vector<uint16_t>> ground_tod, walls_tod;
+  auto ground = part(false, &ground_tod);
+  auto walls = part(true, &walls_tod);
+  if (ground->prims.empty() || walls->prims.empty()) return -1;
+  Node w = src;
+  w.id = 0;
+  w.name = src.name + "-walls";
+  w.mesh = walls;
+  w.extras["og_terrain"] = false;  // a piece of the shell, not its ground
+  w.locked = false;
+  if (src.tod && src.tod->fits(mesh)) {
+    auto gt = std::make_shared<TodColors>(), wt = std::make_shared<TodColors>();
+    gt->palette = wt->palette = src.tod->palette;
+    gt->index = std::move(ground_tod);
+    wt->index = std::move(walls_tod);
+    scene.nodes[index].tod = gt;
+    w.tod = wt;
+  } else {
+    w.tod.reset();
+  }
+  scene.nodes[index].mesh = ground;
+  scene.add(std::move(w));
+  return (int)scene.nodes.size() - 1;
+}
+
 bool translucent_in_game(const Material& m) {
   // a level's material is drawn twice as bright (base_color 2: the PS2's colors), the editor's not
   return m.alpha == AlphaMode::Blend && (m.blend != BlendMode::Alpha || m.translucent || m.base_color.w <= 1.5f);

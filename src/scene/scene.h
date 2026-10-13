@@ -249,6 +249,12 @@ AABB focus_box(const std::vector<AABB>& boxes);
 // stands on it: 60 m across or more, most of its surface facing up or down. A facade, a wall or a
 // door of a level's shell as large is not (they stay selectable).
 bool ground_piece(Mesh& mesh);
+// A piece of ground (ground_piece) the game made one with walls standing on it (a street and the
+// facade along it): what stands more than 3 m above its ground, mostly upright (walls, and the roofs
+// on them), moved to a piece of its own, <name>-walls, selectable; a hill is left whole. Its light
+// (the game's palettes) goes with each part. Returns the new node's index, -1 when there is nothing
+// to split. The nodes may move in memory.
+int split_ground_piece(Scene& scene, size_t index);
 
 // Whether a node of an extracted level is one of its trees of instanced decor, <level>-tie-<n> or
 // <level>-shrub-<n>: its children are the prototypes of its decor, their children the instances.

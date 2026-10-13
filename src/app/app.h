@@ -161,6 +161,16 @@ uint32_t add_level(Scene& scene, const AssetLibrary& library, const GameData* da
 // another level), not actors alone (no collision: cutscenes...), not a copy of a level found in
 // another DGO.
 bool level_listed(const LevelEntry& level, const GameData* data);
+// Where the land of other levels hides the ocean of `map` in the game (its water at `ocean_y`): per
+// square of 3 m of the map (rows along z, map.size * 32 squares a side), 1 under a surface of a
+// render piece of `land` lying above the water (walls left out).
+std::vector<uint8_t> ocean_land(const OceanMap& map, float ocean_y, const Scene& land);
+// The land hiding the ocean around the document's levels, from such masks (side x side): `doc` its
+// levels', `around` the levels the game shows with them, `far` views of the map from afar (the one
+// placed like the document's levels, if one is). Never in the box of the document's own land.
+std::vector<uint8_t> ocean_land_around(int side, const std::vector<std::vector<uint8_t>>& doc,
+                                       const std::vector<std::vector<uint8_t>>& around,
+                                       const std::vector<std::vector<uint8_t>>& far);
 Clipboard copy_nodes(const Scene& scene, const std::vector<uint32_t>& roots);
 // Adds copies of the clipboard's nodes (under their old parent when it is still there, at the
 // same place). Returns the new roots.
@@ -928,6 +938,12 @@ class App {
   WaterLook ocean_look(const RenderSettings& view_rs) const;
   std::string m_ocean_map;
   float m_ocean_height = 0;
+  // the land of the levels the game shows around the document's, read on a worker: no water drawn
+  // there (in the game, their ground hides it); its key: the map, the height, the levels
+  std::vector<uint8_t> m_ocean_land;
+  std::string m_ocean_land_key, m_ocean_land_want;
+  std::future<std::vector<uint8_t>> m_ocean_land_future;
+  void poll_ocean_land();
   bool m_ocean_far = false;  // the far ocean drawn: a level of the document asks for it
   Vec3 m_ocean_far_color;
 

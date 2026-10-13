@@ -1205,6 +1205,31 @@ int run_selftest() {
     check(ground_piece(*quad(100, 100, false)) && !ground_piece(*quad(81, 30, true)) && !ground_piece(*quad(20, 20, false)),
           "level pieces: a large flat piece is ground (locked), a facade as wide is not, nor a small slab");
 
+    // a ground the game made one with a 20 m wall standing on it: the wall becomes a piece of its own;
+    // a hill stays whole
+    {
+      Scene gs;
+      Node yard{};
+      yard.kind = NodeKind::Render;
+      yard.name = "yard";
+      yard.mesh = quad(100, 100, false);
+      Primitive wall = quad(60, 20, true)->prims[0];
+      for (Vec3& p : wall.pos) p.z += 50;
+      yard.mesh->prims.push_back(wall);
+      gs.add(yard);
+      Node hill{};
+      hill.kind = NodeKind::Render;
+      hill.mesh = quad(100, 100, false);
+      for (Vec3& p : hill.mesh->prims[0].pos) p.y = p.z * 0.2f;
+      gs.add(hill);
+      const int walls = split_ground_piece(gs, 0);
+      const bool split = walls == 2 && gs.nodes[2].name == "yard-walls" && gs.nodes[0].mesh->prims.size() == 1 &&
+                         gs.nodes[2].mesh->prims.size() == 1 && gs.nodes[2].mesh->prims[0].pos[2].y == 20.f &&
+                         ground_piece(*gs.nodes[0].mesh) && !ground_piece(*gs.nodes[2].mesh);
+      check(split && split_ground_piece(gs, 1) < 0 && gs.nodes.size() == 3,
+            "level pieces: a wall the game merged with the ground is split off (selectable), a hill is not cut");
+    }
+
     // a box behind a glow (an additive light beam): the click goes to the box, a second click to the glow
     Scene ps;
     Material glow_mat;
@@ -1229,6 +1254,57 @@ int run_selftest() {
     check(hit.node == box_id && all.size() == 2 && all[0].node == box_id && all[1].node == beam_id &&
               beam_alone.node == beam_id,
           "picking: a glow in front does not take the click, a second click reaches it, alone it is picked");
+  }
+
+  // the ocean: no water where the land of the levels around hides it in the game (a slab above it,
+  // not one under it nor a wall); of a view from afar, the one placed like the document's levels,
+  // as far as their land goes; not under thin land, nor in the document's own box
+  {
+    OceanMap map;
+    map.cell = 96;
+    map.size = 2;  // 64 squares of 3 m a side
+    auto slab = [](float x0, float x1, float z0, float z1, float y) {
+      Primitive p;
+      p.pos = {{x0, y, z0}, {x1, y, z0}, {x1, y, z1}, {x0, y, z1}};
+      p.idx = {0, 1, 2, 0, 2, 3};
+      return p;
+    };
+    Scene land;
+    Node piece{};
+    piece.kind = NodeKind::Render;
+    piece.mesh = std::make_shared<Mesh>();
+    piece.mesh->prims = {slab(30, 60, 30, 60, 2), slab(90, 120, 90, 120, -1)};
+    Primitive wall;
+    wall.pos = {{0, 0, 150}, {90, 0, 150}, {90, 20, 150}, {0, 20, 150}};
+    wall.idx = {0, 1, 2, 0, 2, 3};
+    piece.mesh->prims.push_back(wall);
+    land.add(piece);
+    const auto mask = ocean_land(map, 0.f, land);
+    size_t covered = 0;
+    for (uint8_t v : mask) covered += v;
+    check(mask.size() == 64 * 64 && covered == 100 && mask[15 * 64 + 15] && !mask[35 * 64 + 35],
+          "ocean: the squares under a slab above the water are land (not under one below it, nor a wall)");
+
+    const int side = 64;
+    auto block = [&](std::vector<uint8_t>& m, int x0, int x1, int z0, int z1) {
+      if (m.empty()) m.assign(side * side, 0);
+      for (int z = z0; z <= z1; z++)
+        for (int x = x0; x <= x1; x++) m[z * side + x] = 1;
+    };
+    std::vector<uint8_t> doc, placed, moved, around;
+    block(doc, 20, 29, 20, 29);
+    block(placed, 20, 29, 20, 29);
+    block(placed, 30, 63, 0, 63);   // the city on, from the document's land
+    block(placed, 0, 9, 50, 59);    // an island
+    block(moved, 40, 49, 40, 49);
+    block(moved, 0, 15, 30, 45);    // land of a model moved away: not taken
+    block(around, 0, 15, 0, 15);    // a neighbor
+    block(around, 0, 19, 47, 47);   // a wall in the sea, one square thick
+    const auto out = ocean_land_around(side, {doc}, {around}, {moved, placed});
+    auto at = [&](int x, int z) { return out[z * side + x] != 0; };
+    check(at(40, 10) && at(8, 8) && !at(25, 25) && !at(5, 55) && !at(10, 47) && !at(8, 38),
+          "ocean: the city seen from afar hides it beyond the level (not an island, not a moved model), "
+          "a neighbor too, not a thin wall nor the level's own box");
   }
 
   // the remote control of the MCP server: a request and its answer, one line each
