@@ -1,9 +1,10 @@
 // The terrain brush (B, its own small window): a square target over the view, its size changed with
-// Ctrl + wheel or [ and ]; the left button held paints ground (with the relief and the textures of
-// the level style chosen, the open level's at first), erases it, raises or digs it, smooths or
-// flattens it, or raises walls from it; the right button held and the wheel raise (up) or dig
-// (down) where the square is. Its strokes go into one terrain element (scene/terrain.h), each one
-// undone with Ctrl+Z.
+// Ctrl + wheel or [ and ], what it would do shown see-through under it before it is done; the left
+// button held paints ground (with the relief and the textures of the level style chosen, the open
+// level's at first), raises walls from it, smooths or flattens it, a click erases ground and walls;
+// the right button held and the mouse moved up raises the ground there, down digs it (shown until
+// it is released). Its strokes go into the terrain under the square (else one of its own,
+// scene/terrain.h), each one undone with Ctrl+Z.
 
 #include <algorithm>
 #include <cctype>
@@ -33,9 +34,10 @@ void tooltip(const char* text) {
   }
 }
 
-const char* const kModeKeys[] = {"terrain.mode.paint",   "terrain.mode.erase", "terrain.mode.raise",
-                                 "terrain.mode.dig",     "terrain.mode.smooth", "terrain.mode.flatten",
-                                 "terrain.mode.wall",    "terrain.mode.unwall"};
+// the window's modes (raising and digging: the right button; the MCP tool has them all)
+const BrushMode kModes[] = {BrushMode::Paint, BrushMode::Wall, BrushMode::Erase, BrushMode::Smooth, BrushMode::Flatten};
+const char* const kModeKeys[] = {"terrain.mode.paint", "terrain.mode.wall", "terrain.mode.erase", "terrain.mode.smooth",
+                                 "terrain.mode.flatten"};
 
 void disabled_wrapped(const std::string& text) {
   ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
@@ -54,15 +56,12 @@ std::string terrain_name(const Scene& scene) {
   }
 }
 
-// Shift: the other way (paint and erase, raise and dig, walls up and down)
+// Shift: the other way (paint or walls and erase)
 BrushMode inverted(BrushMode m) {
   switch (m) {
-    case BrushMode::Paint: return BrushMode::Erase;
+    case BrushMode::Paint:
+    case BrushMode::Wall: return BrushMode::Erase;
     case BrushMode::Erase: return BrushMode::Paint;
-    case BrushMode::Raise: return BrushMode::Dig;
-    case BrushMode::Dig: return BrushMode::Raise;
-    case BrushMode::Wall: return BrushMode::Unwall;
-    case BrushMode::Unwall: return BrushMode::Wall;
     default: return m;
   }
 }
@@ -186,6 +185,7 @@ bool App::start_terrain_brush() {
 
 void App::stop_terrain_brush() {
   if (m_terrain_change) terrain_end_stroke();
+  if (m_terrain_sculpting) SDL_SetWindowRelativeMouseMode(m_window, false);  // the ground left as it was
   m_terrain_rmb = m_terrain_sculpting = false;
   if (tool == ToolMode::Terrain) tool = ToolMode::Select;
 }
@@ -246,23 +246,43 @@ bool App::terrain_begin_stroke(BrushMode mode) {
   }
   // the cells painted take the style chosen now
   m_stroke_look = m_terrain_grid.add_look(terrain_look());
-  // the ground's height where it starts: on the terrain itself, its ground there (not the side
-  // of its edge, half a cell nearer the camera)
-  const Mat4 to_node = scene.world(*node).inverse();
-  const Vec3 at = to_node.point(m_brush_point);
-  m_stroke_height = at.y;
-  if (m_brush_hit_node == node->id) {
-    Vec3 back = to_node.dir(camera.pos - m_brush_point);
-    back.y = 0;
-    const Vec3 probe = length(back) > 1e-4f ? at + normalize(back) * (m_terrain_grid.cell * 0.5f) : at;
-    float y;
-    if (terrain_height(m_terrain_grid, at.x, at.z, &y) || terrain_height(m_terrain_grid, probe.x, probe.z, &y))
-      m_stroke_height = y;
-  }
+  m_stroke_height = terrain_start_height(m_terrain_grid, node);
   m_brush_plane = m_brush_point.y;
-  m_last_stamp = at;
+  m_last_stamp = scene.world(*node).inverse().point(m_brush_point);
   m_has_stamp = false;
   return true;
+}
+
+// the ground's height where a stroke starts: on the terrain itself, its ground there (not the side
+// of its edge, half a cell nearer the camera)
+float App::terrain_start_height(const TerrainGrid& g, const Node* node) const {
+  const Mat4 to_node = node ? scene.world(*node).inverse() : Mat4::identity();
+  const Vec3 at = to_node.point(m_brush_point);
+  if (!node || m_brush_hit_node != node->id) return at.y;
+  Vec3 back = to_node.dir(camera.pos - m_brush_point);
+  back.y = 0;
+  const Vec3 probe = length(back) > 1e-4f ? at + normalize(back) * (g.cell * 0.5f) : at;
+  float y;
+  if (terrain_height(g, at.x, at.z, &y) || terrain_height(g, probe.x, probe.z, &y)) return y;
+  return at.y;
+}
+
+BrushStroke App::terrain_stamp(BrushMode mode, Vec3 center, float amount, float height) {
+  BrushStroke st;
+  st.mode = mode;
+  st.center = center;
+  st.size = brush.size;
+  st.height = height;
+  st.seed = brush.seed;
+  st.look = m_stroke_look;
+  st.amount = amount;
+  // new ground with the relief of the style (raise and dig lay some where there is none)
+  const LevelStyle* style = m_style_level.empty() ? nullptr : level_style(m_style_level);
+  if (brush.relief && style && mode != BrushMode::Wall) {
+    st.bumps = style->bumps;
+    st.bump_size = std::max(style->bump_size, 0.5f);
+  }
+  return st;
 }
 
 // the brush applied from `from` to `to` (the terrain's space), stamps a quarter of its size apart;
@@ -273,24 +293,10 @@ void App::terrain_apply(BrushMode mode, Vec3 from, Vec3 to, float amount) {
   const float step = std::max(brush.size * 0.25f, m_terrain_grid.cell * 0.5f);
   const float dist = length(Vec3{to.x - from.x, 0, to.z - from.z});
   const int n_stamps = std::clamp((int)std::ceil(dist / step), 1, 64);
-  const LevelStyle* style = m_style_level.empty() ? nullptr : level_style(m_style_level);
   bool changed = false;
-  for (int s = 1; s <= n_stamps; s++) {
-    BrushStroke st;
-    st.mode = mode;
-    st.center = from + (to - from) * ((float)s / n_stamps);
-    st.size = brush.size;
-    st.height = m_stroke_height;
-    st.seed = brush.seed;
-    st.look = m_stroke_look;
-    st.amount = mode == BrushMode::Wall ? amount : amount / n_stamps;
-    // new ground with the relief of the style (raise and dig lay some where there is none)
-    if (brush.relief && style && mode != BrushMode::Wall) {
-      st.bumps = style->bumps;
-      st.bump_size = std::max(style->bump_size, 0.5f);
-    }
-    changed |= apply_brush(m_terrain_grid, st);
-  }
+  for (int s = 1; s <= n_stamps; s++)
+    changed |= apply_brush(m_terrain_grid, terrain_stamp(mode, from + (to - from) * ((float)s / n_stamps),
+                                                         mode == BrushMode::Wall ? amount : amount / n_stamps, m_stroke_height));
   if (changed) {
     node->mesh->prims = std::move(make_terrain_mesh(m_terrain_grid)->prims);
     node->mesh->touch();
@@ -330,8 +336,20 @@ void App::terrain_tool(bool clicked, bool released) {
       }
     }
   }
+  // the terrain under the square is the one it changes
+  if (!m_terrain_change && m_brush_hit_node && m_brush_hit_node != m_terrain_node)
+    if (const Node* h = scene.find(m_brush_hit_node); h && h->extras.contains("og_terrain_grid")) m_terrain_node = h->id;
   const BrushMode mode = io.KeyShift ? inverted(brush.mode) : brush.mode;
-  if (clicked && m_brush_valid && !m_terrain_change && !terrain_begin_stroke(mode)) return;
+  if (clicked && m_brush_valid && !m_terrain_change) {
+    if (!terrain_begin_stroke(mode)) return;
+    // erased at the click alone, ground and walls, not along the way
+    if (mode == BrushMode::Erase) {
+      const Vec3 at = scene.world(*scene.find(m_terrain_node)).inverse().point(m_brush_point);
+      terrain_apply(mode, at, at, 0);
+      terrain_end_stroke();
+      return;
+    }
+  }
   // held: the brush applied along the way
   const Node* node = scene.find(m_terrain_node);
   if (m_terrain_change && node && ImGui::IsMouseDown(ImGuiMouseButton_Left) && m_brush_valid) {
@@ -353,41 +371,57 @@ void App::terrain_tool(bool clicked, bool released) {
   if (released && m_terrain_change) terrain_end_stroke();
 }
 
+float App::terrain_sculpt_height() const {
+  // as far as the mouse went up (or down) on the screen, at the square's distance
+  const float per_px = 2.f * length(camera.pos - m_brush_point) * std::tan(radians(camera.fov_deg) * 0.5f) /
+                       std::max((float)m_vp_h, 1.f);
+  return std::clamp(m_sculpt_px * per_px, -100.f, 100.f);
+}
+
 bool App::terrain_right_button(Vec2 rel) {
-  const ImGuiIO& io = ImGui::GetIO();
-  if (!m_terrain_rmb) {
-    if (m_looking || !m_mouse_in_vp || !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) return false;
+  if (!m_terrain_rmb && !m_terrain_sculpting) {
+    if (m_looking || !m_mouse_in_vp || !m_brush_valid || !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) return false;
     m_terrain_rmb = true;
-    m_terrain_rmb_moved = 0;
+    m_terrain_rmb_drag = {0, 0};
   }
   if (!ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+    // released: the ground raised or dug as shown
     m_terrain_rmb = false;
     if (m_terrain_sculpting) {
       m_terrain_sculpting = false;
-      if (m_terrain_change) terrain_end_stroke();
+      SDL_SetWindowRelativeMouseMode(m_window, false);
+      const float h = terrain_sculpt_height();
+      const BrushMode mode = h > 0 ? BrushMode::Raise : BrushMode::Dig;
+      if (std::fabs(h) >= 0.01f && terrain_begin_stroke(mode)) {
+        const Vec3 at = scene.world(*scene.find(m_terrain_node)).inverse().point(m_brush_point);
+        terrain_apply(mode, at, at, std::fabs(h));
+        terrain_end_stroke();
+      }
     }
     return true;
   }
-  // the wheel: up raises, down digs, a notch a tenth of the strength (10 cm at least)
-  if (io.MouseWheel != 0 && (m_terrain_sculpting || m_brush_valid)) {
-    const BrushMode mode = io.MouseWheel > 0 ? BrushMode::Raise : BrushMode::Dig;
-    if (m_terrain_change || terrain_begin_stroke(mode)) {
-      m_terrain_sculpting = true;
-      if (const Node* node = scene.find(m_terrain_node)) {
-        const Vec3 at = scene.world(*node).inverse().point(m_brush_point);
-        terrain_apply(mode, at, at, std::fabs(io.MouseWheel) * std::max(0.1f, brush.strength * 0.1f));
-      }
-    }
+  if (m_terrain_sculpting) {
+    m_sculpt_px -= rel.y;
+    return true;
   }
-  // moved without the wheel: it looks around, as elsewhere
-  m_terrain_rmb_moved += std::fabs(rel.x) + std::fabs(rel.y);
-  if (!m_terrain_sculpting && m_terrain_rmb_moved > 6.f) {
-    m_terrain_rmb = false;
-    m_looking = true;
-    SDL_SetWindowRelativeMouseMode(m_window, true);
-    return false;
+  // not moved far yet: up or down raises or digs, sideways (or a key to fly) looks around
+  m_terrain_rmb_drag = m_terrain_rmb_drag + rel;
+  const bool* keys = SDL_GetKeyboardState(nullptr);
+  bool flying = false;
+  for (SDL_Scancode k : {SDL_SCANCODE_W, SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_Q, SDL_SCANCODE_E,
+                         SDL_SCANCODE_C, SDL_SCANCODE_SPACE})
+    flying |= keys[k];
+  const float ax = std::fabs(m_terrain_rmb_drag.x), ay = std::fabs(m_terrain_rmb_drag.y);
+  if (!flying && ax + ay <= 6.f) return true;
+  m_terrain_rmb = false;
+  SDL_SetWindowRelativeMouseMode(m_window, true);
+  if (!flying && ay > 2.f * ax) {
+    m_terrain_sculpting = true;
+    m_sculpt_px = -m_terrain_rmb_drag.y;
+    return true;
   }
-  return true;
+  m_looking = true;
+  return false;
 }
 
 void App::draw_terrain_overlay() {
@@ -399,12 +433,11 @@ void App::draw_terrain_overlay() {
   const Vec3 c = inv.point(m_brush_point);
   const float half = brush.size * 0.5f;
   const BrushMode mode = ImGui::GetIO().KeyShift ? inverted(brush.mode) : brush.mode;
-  // the right button held: green, the wheel raises or digs there
-  const uint32_t color = m_terrain_rmb ? IM_COL32(120, 240, 120, 255)
-                         : mode == BrushMode::Erase || mode == BrushMode::Dig || mode == BrushMode::Unwall
-                             ? IM_COL32(255, 115, 75, 255)
-                         : mode == BrushMode::Wall ? IM_COL32(240, 205, 90, 255)
-                                                   : IM_COL32(90, 230, 255, 255);
+  // the right button held: green, the mouse up or down raises or digs there
+  const uint32_t color = m_terrain_rmb || m_terrain_sculpting ? IM_COL32(120, 240, 120, 255)
+                         : mode == BrushMode::Erase ? IM_COL32(255, 115, 75, 255)
+                         : mode == BrushMode::Wall  ? IM_COL32(240, 205, 90, 255)
+                                                    : IM_COL32(90, 230, 255, 255);
   // the grid as the element has it (during a stroke, the one being drawn)
   if (node && !m_terrain_change && m_terrain_view_mesh != node->mesh.get()) {
     node_terrain(*node, &m_terrain_grid_view);
@@ -444,6 +477,72 @@ void App::draw_terrain_overlay() {
   renderer.line(ground(c.x - 0.3f, c.z), ground(c.x + 0.3f, c.z), color);
   renderer.line(ground(c.x, c.z - 0.3f), ground(c.x, c.z + 0.3f), color);
   renderer.flush(true, true);
+  // what it would do there, before it is done: the right button held, the ground raised or dug that
+  // much (its height next to it); else what the left button does (a smoothing or flattening done)
+  if (m_terrain_change) return;
+  TerrainGrid empty;
+  empty.cell = brush.cell;
+  const TerrainGrid& before = node ? grid : empty;
+  if (m_terrain_sculpting) {
+    const float h = terrain_sculpt_height();
+    draw_terrain_preview(before, terrain_stamp(h > 0 ? BrushMode::Raise : BrushMode::Dig, c, std::fabs(h), c.y), world);
+    Vec2 s;
+    if (renderer.project(m_brush_point, &s)) {
+      ImDrawList* dl = ImGui::GetForegroundDrawList();
+      const std::string text = strf("%+.2f m", h);
+      const ImVec2 at(m_vp_x + s.x + 16, m_vp_y + s.y - 8), size = ImGui::CalcTextSize(text.c_str());
+      dl->AddRectFilled(ImVec2(at.x - 5, at.y - 3), ImVec2(at.x + size.x + 5, at.y + size.y + 3), IM_COL32(20, 22, 26, 210), 4.f);
+      dl->AddText(at, IM_COL32(235, 235, 225, 255), text.c_str());
+    }
+    return;
+  }
+  if (m_terrain_rmb || (!node && mode != BrushMode::Paint && mode != BrushMode::Wall)) return;
+  const float amount = mode == BrushMode::Wall ? brush.wall_height : mode == BrushMode::Smooth || mode == BrushMode::Flatten ? 1.f : 0.f;
+  draw_terrain_preview(before, terrain_stamp(mode, c, amount, terrain_start_height(before, node)), world);
+}
+
+void App::draw_terrain_preview(const TerrainGrid& before, const BrushStroke& stamp, const Mat4& world) {
+  TerrainGrid after = before;
+  if (!apply_brush(after, stamp)) return;
+  const float cl = after.cell, half = stamp.size * 0.5f;
+  const auto changes =
+      terrain_changes(before, after, (int)std::floor((stamp.center.x - half) / cl) - 1, (int)std::floor((stamp.center.z - half) / cl) - 1,
+                      (int)std::floor((stamp.center.x + half) / cl) + 1, (int)std::floor((stamp.center.z + half) / cl) + 1);
+  const uint32_t color = stamp.mode == BrushMode::Wall ? IM_COL32(240, 205, 90, 0)
+                         : stamp.mode == BrushMode::Dig ? IM_COL32(255, 170, 60, 0)
+                                                        : IM_COL32(90, 230, 255, 0);
+  // seen where it is in front, and faintly through the ground (a hollow dug under it)
+  for (const uint32_t alpha : {110u, 45u}) {
+    for (const TerrainChange& ch : changes) {
+      const TerrainGrid& g = ch.removed ? before : after;
+      const uint32_t col = (ch.removed ? IM_COL32(255, 90, 60, 0) : color) | (alpha << 24);
+      const float x = ch.i * cl, z = ch.k * cl;
+      const float h[4] = {g.corner(ch.i, ch.k), g.corner(ch.i + 1, ch.k), g.corner(ch.i + 1, ch.k + 1), g.corner(ch.i, ch.k + 1)};
+      const Vec3 xz[4] = {{x, 0, z}, {x + cl, 0, z}, {x + cl, 0, z + cl}, {x, 0, z + cl}};
+      if (g.at(ch.i, ch.k) != TerrainGrid::Wall) {
+        Vec3 p[4];
+        for (int v = 0; v < 4; v++) p[v] = world.point({xz[v].x, h[v] + 0.05f, xz[v].z});
+        renderer.tri(p[0], p[1], p[2], col);
+        renderer.tri(p[0], p[2], p[3], col);
+        continue;
+      }
+      // a wall: its column, from the ground to its top
+      const float top = std::max({h[0], h[1], h[2], h[3]}) + g.wall[(size_t)(ch.k - g.z0) * g.w + (ch.i - g.x0)];
+      const float base = std::min({h[0], h[1], h[2], h[3]});
+      Vec3 lo[4], hi[4];
+      for (int v = 0; v < 4; v++) {
+        lo[v] = world.point({xz[v].x, base, xz[v].z});
+        hi[v] = world.point({xz[v].x, top, xz[v].z});
+      }
+      renderer.tri(hi[0], hi[1], hi[2], col);
+      renderer.tri(hi[0], hi[2], hi[3], col);
+      for (int e = 0; e < 4; e++) {
+        renderer.tri(lo[e], lo[(e + 1) % 4], hi[(e + 1) % 4], col);
+        renderer.tri(lo[e], hi[(e + 1) % 4], hi[e], col);
+      }
+    }
+    renderer.flush(alpha > 100u, true);
+  }
 }
 
 bool App::ui_terrain_texture(const char* key, std::string* texture, const std::string& style_texture) {
@@ -601,25 +700,30 @@ void App::ui_terrain_window() {
     }
   }
   if (node) tooltip(tr("terrain.style.apply.tip"));
-  // the modes, two per line
+  // the modes, two per line; the right button raises and digs in all of them
   ImGui::SeparatorText(tr("terrain.left_button"));
-  for (int m = 0; m < 8; m++) {
+  for (int m = 0; m < (int)std::size(kModes); m++) {
     if (m % 2) ImGui::SameLine(ImGui::GetContentRegionAvail().x * 0.5f + ImGui::GetCursorStartPos().x);
-    if (ImGui::RadioButton(tr_id(kModeKeys[m]).c_str(), (int)brush.mode == m)) brush.mode = (BrushMode)m;
+    if (ImGui::RadioButton(tr_id(kModeKeys[m]).c_str(), brush.mode == kModes[m])) brush.mode = kModes[m];
     tooltip(tr((std::string(kModeKeys[m]) + ".tip").c_str()));
   }
+  disabled_wrapped(tr("terrain.right_button"));
   ImGui::SetNextItemWidth(-100);
   ImGui::SliderFloat(tr_id("terrain.size").c_str(), &brush.size, 0.5f, 64.f, "%.1f m", ImGuiSliderFlags_Logarithmic);
   tooltip(tr("terrain.size.tip"));
-  ImGui::SetNextItemWidth(-100);
-  ImGui::SliderFloat(tr_id("terrain.strength").c_str(), &brush.strength, 0.1f, 20.f, "%.1f", ImGuiSliderFlags_Logarithmic);
-  tooltip(tr("terrain.strength.tip"));
+  if (brush.mode == BrushMode::Smooth || brush.mode == BrushMode::Flatten) {
+    ImGui::SetNextItemWidth(-100);
+    ImGui::SliderFloat(tr_id("terrain.strength").c_str(), &brush.strength, 0.1f, 20.f, "%.1f", ImGuiSliderFlags_Logarithmic);
+    tooltip(tr("terrain.strength.tip"));
+  }
   if (brush.mode == BrushMode::Wall) {
     ImGui::SetNextItemWidth(-100);
     ImGui::SliderFloat(tr_id("terrain.wall_height").c_str(), &brush.wall_height, 0.5f, 30.f, "%.1f m");
   }
-  ImGui::Checkbox(tr_id("terrain.relief").c_str(), &brush.relief);
-  tooltip(tr("terrain.relief.tip"));
+  if (brush.mode == BrushMode::Paint) {
+    ImGui::Checkbox(tr_id("terrain.relief").c_str(), &brush.relief);
+    tooltip(tr("terrain.relief.tip"));
+  }
   if (!node) {
     ImGui::SetNextItemWidth(-100);
     ImGui::SliderFloat(tr_id("terrain.cell").c_str(), &brush.cell, 0.5f, 4.f, "%.1f m");

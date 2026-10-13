@@ -549,9 +549,10 @@ class App {
   bool m_terrain_new = false, m_terrain_changed = false;
   float m_stroke_height = 0.f;  // the ground's height where the stroke started (its node's space)
   int m_stroke_look = 0;        // the look its cells take (in the grid's looks)
-  bool m_terrain_rmb = false;        // the right button held over the view (the wheel raises, digs)
-  bool m_terrain_sculpting = false;  // ... and the wheel turned: the square stays where it is
-  float m_terrain_rmb_moved = 0.f;   // pixels moved since (far enough: it looks around instead)
+  bool m_terrain_rmb = false;        // the right button held over the view, the mouse not moved far yet
+  bool m_terrain_sculpting = false;  // ... then moved up or down: the ground raised or dug, shown until released
+  Vec2 m_terrain_rmb_drag{0, 0};     // pixels moved since it was pressed (sideways: it looks around instead)
+  float m_sculpt_px = 0.f;           // sculpting: pixels the mouse went up (down: negative)
   float m_brush_plane = 0.f;    // where the brush is when the ray meets nothing
   Vec3 m_brush_point{0, 0, 0};
   bool m_brush_valid = false;
@@ -564,11 +565,19 @@ class App {
   void stop_terrain_brush();
   void terrain_end_stroke();
   bool terrain_begin_stroke(BrushMode mode);
+  // where a stroke starting now starts: the ground's height under the brush (the terrain's space)
+  float terrain_start_height(const TerrainGrid& g, const Node* node) const;
+  // a stamp of the brush as it is set, at `center` (the terrain's space)
+  BrushStroke terrain_stamp(BrushMode mode, Vec3 center, float amount, float height);
   void terrain_apply(BrushMode mode, Vec3 from, Vec3 to, float amount);
+  float terrain_sculpt_height() const;  // meters the right button held raises (digs: negative)
   void terrain_tool(bool clicked, bool released);
-  // the right button held with the brush: the wheel raises or digs; true while it has the mouse
+  // the right button held with the brush: up raises, down digs (sideways looks around); true while
+  // it has the mouse
   bool terrain_right_button(Vec2 rel);
   void draw_terrain_overlay();
+  // what a stamp would change, see-through, before it is done
+  void draw_terrain_preview(const TerrainGrid& before, const BrushStroke& stamp, const Mat4& world);
   void ui_terrain_window();
   void terrain_generate(Vec3 at);
   // a terrain's materials and texture sizes: the level style chosen, else the editor's grid

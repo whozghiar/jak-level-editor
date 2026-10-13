@@ -279,6 +279,24 @@ bool apply_brush(TerrainGrid& g, const BrushStroke& s) {
   return changed;
 }
 
+std::vector<TerrainChange> terrain_changes(const TerrainGrid& before, const TerrainGrid& after, int i0, int k0, int i1, int k1) {
+  std::vector<TerrainChange> out;
+  auto wall = [](const TerrainGrid& g, int i, int k) { return g.wall[(size_t)(k - g.z0) * g.w + (i - g.x0)]; };
+  for (int k = k0; k <= k1; k++)
+    for (int i = i0; i <= i1; i++) {
+      const uint8_t a = before.at(i, k), b = after.at(i, k);
+      if (b == TerrainGrid::None) {
+        if (a != TerrainGrid::None) out.push_back({i, k, true});
+        continue;
+      }
+      bool changed = a != b || (b == TerrainGrid::Wall && wall(before, i, k) != wall(after, i, k));
+      for (int dk = 0; dk <= 1 && !changed; dk++)
+        for (int di = 0; di <= 1; di++) changed |= std::fabs(before.corner(i + di, k + dk) - after.corner(i + di, k + dk)) > 1e-3f;
+      if (changed) out.push_back({i, k, false});
+    }
+  return out;
+}
+
 void generate_terrain(TerrainGrid& g, Vec3 center, Vec2 size, float hills, float roughness, int seed, int look) {
   const float c = g.cell;
   const int i0 = (int)std::floor((center.x - size.x * 0.5f) / c), i1 = (int)std::ceil((center.x + size.x * 0.5f) / c) - 1;

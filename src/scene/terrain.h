@@ -67,6 +67,14 @@ struct BrushStroke {
 // whether the terrain changed.
 bool apply_brush(TerrainGrid& g, const BrushStroke& s);
 
+// The cells of [i0, i1] x [k0, k1] that a change from `before` to `after` changed: laid, raised or
+// dug, walled (drawn from `after`), or taken away (`removed`: drawn from `before`)
+struct TerrainChange {
+  int i, k;
+  bool removed;
+};
+std::vector<TerrainChange> terrain_changes(const TerrainGrid& before, const TerrainGrid& after, int i0, int k0, int i1, int k1);
+
 // Hills over a rectangle around `center` (x, z: `size` meters), made by a fractal noise: `hills`
 // meters high at most, `roughness` 0..1 (smooth slopes to broken ground); its new ground painted with `look`
 void generate_terrain(TerrainGrid& g, Vec3 center, Vec2 size, float hills, float roughness, int seed, int look = 0);

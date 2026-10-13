@@ -384,10 +384,13 @@ floor or a wall that looks like it (its textures, their size, its light, how une
 
 ### The terrain brush
 
-**Terrain (B)** draws natural ground freehand, in its own small window: a square follows the mouse;
-hold the left button to **paint** ground, **raise** or **dig** it, **smooth** or **flatten** it,
-raise **walls**; **Generate hills** makes hilly ground at once. **Right button + wheel** raises or
-digs under the square. The ground takes the textures of a level's style automatically (the
+**Terrain (B)** draws natural ground freehand, in its own small window: a square follows the mouse,
+and what it would do shows see-through under it before you click. Hold the left button to **paint**
+ground, raise **walls**, **smooth** or **flatten** it; a click **erases** the ground and the walls
+under the square. Hold the **right button** and move the mouse **up** to raise the ground there,
+**down** to dig it: the new shape and its height show until you let go (moved sideways, the right
+button looks around as usual). **Generate hills** makes hilly ground at once. The brush changes the
+terrain under the square; the ground takes the textures of a level's style automatically (the
 desert's sand and rock, the slums' cobbles).
 
 ![The terrain brush in the style of the desert: hills, a riverbed dug, a walled yard, a hill raised](docs/captures/building/terrain.png)

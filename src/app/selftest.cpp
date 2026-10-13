@@ -2744,6 +2744,32 @@ int run_selftest() {
           "terrain brush: ground painted at the stroke's height, raised and dug in the square's middle, walls up and "
           "away, kept in the node, hills generated meeting the ground around, another style painted over a part, "
           "raise laying ground where there is none");
+
+  }
+  {
+    // what a stamp would change, shown before it is done: the cells laid, raised, walled, taken away
+    TerrainGrid none;
+    TerrainGrid laid = none;
+    BrushStroke stamp;
+    stamp.size = 4.f;
+    stamp.center = {2, 0, 2};
+    apply_brush(laid, stamp);
+    TerrainGrid raised = laid, walled = laid, erased = laid, repainted = laid;
+    stamp.mode = BrushMode::Raise;
+    stamp.amount = 1.f;
+    apply_brush(raised, stamp);
+    stamp.mode = BrushMode::Wall;
+    stamp.amount = 3.f;
+    apply_brush(walled, stamp);
+    stamp.mode = BrushMode::Erase;
+    apply_brush(erased, stamp);
+    stamp.mode = BrushMode::Paint;
+    apply_brush(repainted, stamp);
+    const auto new_cells = terrain_changes(none, laid, -2, -2, 6, 6), up = terrain_changes(laid, raised, -2, -2, 6, 6);
+    const auto walls_up = terrain_changes(laid, walled, -2, -2, 6, 6), gone = terrain_changes(laid, erased, -2, -2, 6, 6);
+    check(new_cells.size() == 16 && !new_cells[0].removed && !up.empty() && up.size() <= 16 && walls_up.size() == 16 &&
+              gone.size() == 16 && gone[0].removed && terrain_changes(laid, repainted, -2, -2, 6, 6).empty(),
+          "terrain brush preview: the cells a stamp lays, raises, walls or takes away, none painted over again");
   }
 
   {
