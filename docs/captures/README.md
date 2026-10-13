@@ -11,7 +11,7 @@ one folder per feature:
 | `groups/` | the Groups panel, a group being named |
 | `catalog/` | the objects, the interactive objects, the visual effects and their kinds, the models, the decor searched, the materials |
 | `prefabs/` | the game's prefabs, searched, a tower selected by its assembly, a prefab being made (the small pieces left out) |
-| `building/` | the shapes, a level's style, the terrain brush, the topology tool, the preview of an object, a level of Jak II |
+| `building/` | the shapes, a level's style, the terrain brush and the ground it raises, the topology tool, the preview of an object, a level of Jak II |
 | `holes/` | the holes of a yard found, in the editor and as an assistant sees them |
 | `game-rendering/` | the Game rendering window: noon, dusk, storm, night, haze; the effects |
 | `behaviors/` | an airlock that opens once a crate is broken |

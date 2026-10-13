@@ -307,7 +307,7 @@ json App::remote_status() {
               {"elements", scene.nodes.size()},
               {"actors", actors},
               {"unsaved", history.revision() != saved_revision && document_open()},
-              {"loading", m_level_future.valid() || level_adding()}}},
+              {"loading", m_level_future.valid() || level_adding() || m_ocean_land_future.valid()}}},
             {"camera",
              {{"position", vec3_json(camera.pos)},
               {"yaw_deg", round3(camera.yaw * 57.29578f)},

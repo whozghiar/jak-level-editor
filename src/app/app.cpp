@@ -1270,7 +1270,7 @@ int App::ui_screenshot(const AppOptions& opts, const std::string& in, const std:
         // loading, or the catalog not complete yet (the index of the library)
         bool loading = m_level_future.valid() || store.pending() > 0 || thumbs.pending() > 0 || extract.process ||
                        !m_index_applied || navmesh_busy() || palette.busy() ||
-                       level_adding() || !to_add.empty();
+                       level_adding() || !to_add.empty() || m_ocean_land_future.valid();
         // the levels added to it (--add), one after the other once it is loaded
         if (!to_add.empty() && !m_level_future.valid() && !level_adding() && frame_index > 1) {
           std::string err;

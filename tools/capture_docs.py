@@ -290,7 +290,11 @@ def building(args, e):
     e.call('set_camera', {'position': [62, 40, 62], 'look_at': [0, 0, 0]})
     e.ui(click(*TAB_BUILD) + [{'move': [800, 450]}, wait(3), {'key': 'B'}, wait(5)] + [{'key': ']'}, wait(2)] * 6 +
          [{'move': [700, 520]}, wait(20)], shot=out('building', 'terrain.png'))
-    e.ui([{'key': 'B'}, wait(3)])
+    # the right button held and the mouse moved up: the ground raised there, shown with its height
+    # until the button is let go (back where it started first: nothing done)
+    e.ui([{'move': [560, 600]}, wait(3), {'down': 'right'}, wait(2), {'rel': [0, -4]}, wait(2), {'rel': [0, -8]}, wait(2),
+          {'rel': [0, -70]}, wait(8)], shot=out('building', 'terrain-raise.png'))
+    e.ui([{'rel': [0, 82]}, wait(2), {'up': 'right'}, wait(3), {'key': 'B'}, wait(3)])
     # the atoll, a level of Jak II, opened in the game rendering
     if 'error' not in e.call('list_levels', {'game': 'jak2'}, check=False):
         e.call('new_level', {'discard_changes': True})

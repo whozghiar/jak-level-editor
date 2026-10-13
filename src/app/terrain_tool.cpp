@@ -380,7 +380,9 @@ float App::terrain_sculpt_height() const {
 
 bool App::terrain_right_button(Vec2 rel) {
   if (!m_terrain_rmb && !m_terrain_sculpting) {
-    if (m_looking || !m_mouse_in_vp || !m_brush_valid || !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) return false;
+    // (not during a stroke of the left button: it looks around)
+    if (m_looking || !m_mouse_in_vp || !m_brush_valid || m_terrain_change || !ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+      return false;
     m_terrain_rmb = true;
     m_terrain_rmb_drag = {0, 0};
   }

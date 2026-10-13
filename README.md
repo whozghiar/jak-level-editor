@@ -395,7 +395,9 @@ button looks around as usual). **Generate hills** makes hilly ground at once. Th
 terrain under the square; the ground takes the textures of a level's style automatically (the
 desert's sand and rock, the slums' cobbles).
 
-![The terrain brush in the style of the desert: hills, a riverbed dug, a walled yard, a hill raised](docs/captures/building/terrain.png)
+| The terrain brush in the style of the desert: hills, a riverbed dug, a walled yard, a hill raised | The right button held and the mouse moved up: the hill it raises, before it is let go |
+|---|---|
+| ![terrain](docs/captures/building/terrain.png) | ![raise](docs/captures/building/terrain-raise.png) |
 
 ### The shape of one piece: topology
 
