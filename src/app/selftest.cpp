@@ -2782,6 +2782,34 @@ int run_selftest() {
     check(new_cells.size() == 16 && !new_cells[0].removed && !up.empty() && up.size() <= 16 && walls_up.size() == 16 &&
               gone.size() == 16 && gone[0].removed && terrain_changes(laid, repainted, -2, -2, 6, 6).empty(),
           "terrain brush preview: the cells a stamp lays, raises, walls or takes away, none painted over again");
+
+    // the magnet brush: beside a platform (its top at 2 m, its bottom at 0) on a large ground, the
+    // square sticks to the platform's edge at its top, going under it; over it, or too far, nothing
+    Scene ms;
+    auto flat = [](float x0, float x1, float z0, float z1, float y) {
+      Primitive p;
+      p.pos = {{x0, y, z0}, {x1, y, z0}, {x1, y, z1}, {x0, y, z1}};
+      p.idx = {0, 1, 2, 0, 2, 3};
+      return p;
+    };
+    Node ground{}, platform{};
+    ground.kind = platform.kind = NodeKind::Render;
+    ground.mesh = std::make_shared<Mesh>();
+    ground.mesh->prims = {flat(-50, 50, -50, 50, 0)};
+    platform.mesh = std::make_shared<Mesh>();
+    platform.mesh->prims = {flat(0, 10, 0, 10, 0), flat(0, 10, 0, 10, 2)};
+    ms.add(ground);
+    const uint32_t platform_id = ms.add(platform);
+    ms.begin_frame();
+    Vec3 edge;
+    uint32_t on = 0;
+    const bool beside = nearest_decor_edge(ms, {12, 0, 5}, 4, 8, 0, &edge, &on);
+    const Vec3 square = magnet_center({12, 0, 5}, edge, 2, 0.55f);
+    const bool over = nearest_decor_edge(ms, {5, 2, 5}, 4, 8, 0, &edge);
+    const bool far = nearest_decor_edge(ms, {20, 0, 5}, 4, 8, 0, &edge);
+    check(beside && on == platform_id && std::fabs(square.x - 11.45f) < 1e-3f && std::fabs(square.y - 2.f) < 1e-3f &&
+              std::fabs(square.z - 5.f) < 1e-3f && !over && !far,
+          "magnet brush: beside a platform the square sticks to its edge at its top, half a cell under it; not over it nor far");
   }
 
   {

@@ -388,16 +388,27 @@ floor or a wall that looks like it (its textures, their size, its light, how une
 
 **Terrain (B)** draws natural ground freehand, in its own small window: a square follows the mouse,
 and what it would do shows see-through under it before you click. Hold the left button to **paint**
-ground, raise **walls**, **smooth** or **flatten** it; a click **erases** the ground and the walls
-under the square. Hold the **right button** and move the mouse **up** to raise the ground there,
-**down** to dig it: the new shape and its height show until you let go (moved sideways, the right
-button looks around as usual). **Generate hills** makes hilly ground at once. The brush changes the
-terrain under the square; the ground takes the textures of a level's style automatically (the
-desert's sand and rock, the slums' cobbles).
+ground, raise **walls** or **erase** ground and walls: the whole stroke shows see-through while you
+hold the button, and is done when you let go (**Esc** while holding: nothing done). **Smooth** and
+**flatten** change the ground as you go. Hold the **right button** and move the mouse **up** to
+raise the ground there, **down** to dig it: the new shape and its height show until you let go
+(moved sideways, the right button looks around as usual). **Generate hills** makes hilly ground at
+once. The brush changes the terrain under the square; the ground takes the textures of a level's
+style automatically (the desert's sand and rock, the slums' cobbles).
+
+**Free brush** or **Magnet brush** (**M**): with the magnet, the square sticks to the edge of the decor next
+to it (a platform, a quay, a floor; not small props), the piece named next to it. The ground laid
+there is at the height of the decor's top (2 cm under it), flat, and goes under its edge so that
+they meet with no gap and no step; a stroke started there keeps that height: a quay made longer
+over the water, a floor brought to a platform.
 
 | The terrain brush in the style of the desert: hills, a riverbed dug, a walled yard, a hill raised | The right button held and the mouse moved up: the hill it raises, before it is let go |
 |---|---|
 | ![terrain](docs/captures/building/terrain.png) | ![raise](docs/captures/building/terrain-raise.png) |
+
+| The magnet brush next to a block: the square stuck to its edge, at its top | Held from there: the platform made longer, shown before it is let go |
+|---|---|
+| ![magnet](docs/captures/building/terrain-magnet.png) | ![magnet held](docs/captures/building/terrain-magnet-held.png) |
 
 ### The shape of one piece: topology
 

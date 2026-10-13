@@ -295,6 +295,18 @@ def building(args, e):
     e.ui([{'move': [560, 600]}, wait(3), {'down': 'right'}, wait(2), {'rel': [0, -4]}, wait(2), {'rel': [0, -8]}, wait(2),
           {'rel': [0, -70]}, wait(8)], shot=out('building', 'terrain-raise.png'))
     e.ui([{'rel': [0, 82]}, wait(2), {'up': 'right'}, wait(3), {'key': 'B'}, wait(3)])
+    # the magnet brush next to a block 3 m high: the square stuck to its edge, then a stroke held from
+    # there, outwards (the platform made longer, shown before it is let go)
+    e.call('new_level', {'discard_changes': True})
+    e.loaded()
+    e.call('place', {'kind': 'shape', 'name': 'box', 'position': [0, 0, 0], 'size': [8, 3, 8]})
+    e.call('select', {'ids': []})
+    e.call('set_camera', {'position': [14, 14, 18], 'look_at': [6, 1, 0]})
+    e.ui([{'move': [900, 520]}, wait(3), {'key': 'B'}, wait(5), {'key': 'M'}, wait(2)] + [{'key': '['}, wait(2)] * 6 +
+         [{'move': [860, 470]}, wait(8)], shot=out('building', 'terrain-magnet.png'))
+    e.ui([{'down': 'left'}, wait(2), {'move': [880, 490]}, wait(2), {'move': [910, 520]}, wait(2), {'move': [950, 560]},
+          wait(8)], shot=out('building', 'terrain-magnet-held.png'))
+    e.ui([{'key': 'Escape'}, wait(3), {'up': 'left'}, wait(3), {'key': 'M'}, wait(2), {'key': 'B'}, wait(3)])
     # the atoll, a level of Jak II, opened in the game rendering
     if 'error' not in e.call('list_levels', {'game': 'jak2'}, check=False):
         e.call('new_level', {'discard_changes': True})

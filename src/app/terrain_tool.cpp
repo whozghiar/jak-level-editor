@@ -264,6 +264,7 @@ bool App::terrain_begin_stroke(BrushMode mode) {
   // the cells painted take the style chosen now
   m_stroke_look = m_terrain_grid.add_look(terrain_look());
   m_stroke_preview = mode == BrushMode::Paint || mode == BrushMode::Wall || mode == BrushMode::Erase;
+  m_stroke_stuck = m_magnet_valid;
   m_stroke_before = m_stroke_preview ? m_terrain_grid : TerrainGrid{};
   m_stroke_cells[0] = m_stroke_cells[1] = INT_MAX;
   m_stroke_cells[2] = m_stroke_cells[3] = INT_MIN;
@@ -279,7 +280,7 @@ bool App::terrain_begin_stroke(BrushMode mode) {
 float App::terrain_start_height(const TerrainGrid& g, const Node* node) const {
   const Mat4 to_node = node ? scene.world(*node).inverse() : Mat4::identity();
   const Vec3 at = to_node.point(m_brush_point);
-  if (!node || m_brush_hit_node != node->id) return at.y;
+  if (!node || m_brush_hit_node != node->id || m_magnet_valid) return at.y;
   Vec3 back = to_node.dir(camera.pos - m_brush_point);
   back.y = 0;
   const Vec3 probe = length(back) > 1e-4f ? at + normalize(back) * (g.cell * 0.5f) : at;
@@ -297,9 +298,10 @@ BrushStroke App::terrain_stamp(BrushMode mode, Vec3 center, float amount, float 
   st.seed = brush.seed;
   st.look = m_stroke_look;
   st.amount = amount;
-  // new ground with the relief of the style (raise and dig lay some where there is none)
+  // new ground with the relief of the style (raise and dig lay some where there is none); flat where
+  // it sticks to the decor (it meets it with no step)
   const LevelStyle* style = m_style_level.empty() ? nullptr : level_style(m_style_level);
-  if (brush.relief && style && mode != BrushMode::Wall) {
+  if (brush.relief && style && mode != BrushMode::Wall && !m_magnet_valid && !m_stroke_stuck) {
     st.bumps = style->bumps;
     st.bump_size = std::max(style->bump_size, 0.5f);
   }
@@ -357,6 +359,9 @@ void App::terrain_tool(bool clicked, bool released) {
     if (hit.hit()) {
       m_brush_point = hit.point;
       m_brush_valid = true;
+      // the magnet brush keeps the height of what it was over: off a quay, over the water, the square
+      // stays at its level (and sticks to its edge)
+      if (brush.magnet && !m_terrain_change) m_brush_plane = hit.point.y;
     } else if (std::fabs(ray.d.y) > 1e-4f) {
       const float t = (m_brush_plane - ray.o.y) / ray.d.y;
       if (t > 0) {
@@ -369,6 +374,32 @@ void App::terrain_tool(bool clicked, bool released) {
   if (!m_terrain_change && m_brush_hit_node && m_brush_hit_node != m_terrain_node)
     if (const Node* h = scene.find(m_brush_hit_node); h && h->extras.contains("og_terrain_grid")) m_terrain_node = h->id;
   const BrushMode mode = io.KeyShift ? inverted(brush.mode) : brush.mode;
+  // the magnet brush (ground, walls, flattening): the square stuck to the edge of the decor beside
+  // it, going under it by half a cell (the cells it lays reach the edge), at the decor's height just
+  // below (no flicker where they meet)
+  m_magnet_valid = false;
+  if (brush.magnet && m_brush_valid && (mode == BrushMode::Paint || mode == BrushMode::Wall || mode == BrushMode::Flatten)) {
+    const float cell = m_terrain_change ? m_terrain_grid.cell : scene.find(m_terrain_node) ? m_terrain_grid_view.cell : brush.cell;
+    const float half = std::max(brush.size * 0.5f, cell * 0.5f);
+    if (length(m_brush_point - m_magnet_asked) > 0.02f || brush.size != m_magnet_asked_size) {
+      m_magnet_asked = m_brush_point;
+      m_magnet_asked_size = brush.size;
+      m_magnet_node = 0;
+      if (!nearest_decor_edge(scene, m_brush_point, half + 1.5f, 8.f, m_terrain_node, &m_magnet_edge, &m_magnet_node))
+        m_magnet_node = 0;
+    }
+    if (m_magnet_node) {
+      m_magnet_valid = true;
+      m_brush_raw = m_brush_point;
+      m_brush_point = magnet_center(m_brush_point, m_magnet_edge, half, cell * 0.5f + 0.05f);
+      m_brush_point.y = m_magnet_edge.y - 0.02f;
+      // a stroke going on lays its ground at the height of what it sticks to from there on, flat
+      if (const Node* tn = m_terrain_change ? scene.find(m_terrain_node) : nullptr) {
+        m_stroke_height = scene.world(*tn).inverse().point(m_brush_point).y;
+        m_stroke_stuck = true;
+      }
+    }
+  }
   if (clicked && m_brush_valid && !m_terrain_change && !terrain_begin_stroke(mode)) return;
   // held: the brush applied along the way
   const Node* node = scene.find(m_terrain_node);
@@ -499,6 +530,25 @@ void App::draw_terrain_overlay() {
   renderer.line(ground(c.x - 0.3f, c.z), ground(c.x + 0.3f, c.z), color);
   renderer.line(ground(c.x, c.z - 0.3f), ground(c.x, c.z + 0.3f), color);
   renderer.flush(true, true);
+  // the magnet: from the cursor to the edge it sticks to, the piece's name next to it
+  if (m_magnet_valid) {
+    const uint32_t white = IM_COL32(255, 255, 255, 230);
+    const Vec3 e = m_magnet_edge + Vec3{0, 0.05f, 0};
+    renderer.line(m_brush_raw, e, white);
+    renderer.line(e - Vec3{0.4f, 0, 0}, e + Vec3{0.4f, 0, 0}, white);
+    renderer.line(e - Vec3{0, 0, 0.4f}, e + Vec3{0, 0, 0.4f}, white);
+    renderer.line(e, e + Vec3{0, 0.8f, 0}, white);
+    renderer.flush(false);
+    Vec2 s;
+    const Node* on = scene.find(m_magnet_node);
+    if (on && renderer.project(e, &s)) {
+      ImDrawList* dl = ImGui::GetForegroundDrawList();
+      const std::string text = strf(tr("terrain.magnet.on"), on->name.c_str());
+      const ImVec2 at(m_vp_x + s.x + 12, m_vp_y + s.y + 6), size = ImGui::CalcTextSize(text.c_str());
+      dl->AddRectFilled(ImVec2(at.x - 5, at.y - 3), ImVec2(at.x + size.x + 5, at.y + size.y + 3), IM_COL32(20, 22, 26, 210), 4.f);
+      dl->AddText(at, IM_COL32(235, 235, 225, 255), text.c_str());
+    }
+  }
   // what it would do there, before it is done: the right button held, the ground raised or dug that
   // much (its height next to it); else what the left button does (a smoothing or flattening done)
   if (m_terrain_change) {
@@ -740,6 +790,11 @@ void App::ui_terrain_window() {
     if (ImGui::RadioButton(tr_id(kModeKeys[m]).c_str(), brush.mode == kModes[m])) brush.mode = kModes[m];
     tooltip(tr((std::string(kModeKeys[m]) + ".tip").c_str()));
   }
+  if (ImGui::RadioButton(tr_id("terrain.free").c_str(), !brush.magnet)) brush.magnet = false;
+  tooltip(tr("terrain.free.tip"));
+  ImGui::SameLine(ImGui::GetContentRegionAvail().x * 0.5f + ImGui::GetCursorStartPos().x);
+  if (ImGui::RadioButton(tr_id("terrain.magnet").c_str(), brush.magnet)) brush.magnet = true;
+  tooltip(tr("terrain.magnet.tip"));
   disabled_wrapped(tr("terrain.right_button"));
   ImGui::SetNextItemWidth(-100);
   ImGui::SliderFloat(tr_id("terrain.size").c_str(), &brush.size, 0.5f, 64.f, "%.1f m", ImGuiSliderFlags_Logarithmic);

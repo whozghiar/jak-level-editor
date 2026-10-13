@@ -546,6 +546,7 @@ class App {
     float wall_height = 4.f;  // meters above the ground
     float cell = 1.f;         // a new terrain's cells (meters)
     bool relief = true;       // paint: the level style's bumps
+    bool magnet = false;      // the magnet brush: the square stuck to the edge of the decor beside it
     Vec2 gen_size{64, 64};    // generate: the rectangle (meters)
     float hills = 12.f, roughness = 0.5f;
     int seed = 1;
@@ -571,6 +572,13 @@ class App {
   Vec3 m_brush_point{0, 0, 0};
   bool m_brush_valid = false;
   uint32_t m_brush_hit_node = 0;  // what the brush is over (0: the plane)
+  // the magnet brush: where the cursor is, the edge of the decor the square sticks to, its piece
+  bool m_magnet_valid = false;
+  bool m_stroke_stuck = false;  // the stroke stuck to the decor once: flat all along (a platform made longer)
+  Vec3 m_brush_raw{0, 0, 0}, m_magnet_edge{0, 0, 0};
+  uint32_t m_magnet_node = 0;
+  Vec3 m_magnet_asked{1e30f, 0, 0};  // the last search (done again when the cursor moved)
+  float m_magnet_asked_size = 0;
   Vec3 m_last_stamp{0, 0, 0};
   bool m_has_stamp = false;
   TerrainGrid m_terrain_grid_view;  // the element's grid, for the square drawn over it

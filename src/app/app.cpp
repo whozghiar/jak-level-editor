@@ -1128,6 +1128,8 @@ void App::handle_shortcuts() {
   } else if (!ctrl && pressed(ImGuiKey_B)) {
     if (tool == ToolMode::Terrain) stop_terrain_brush();
     else start_terrain_brush();
+  } else if (tool == ToolMode::Terrain && !ctrl && pressed(ImGuiKey_M)) {
+    brush.magnet = !brush.magnet;  // the free brush or the magnet brush
   } else if (tool == ToolMode::Terrain && (pressed(ImGuiKey_LeftBracket) || pressed(ImGuiKey_RightBracket))) {
     brush.size = std::clamp(brush.size * (pressed(ImGuiKey_RightBracket) ? 1.25f : 0.8f), 0.5f, 64.f);
   } else if (!ctrl && pressed(ImGuiKey_T)) {

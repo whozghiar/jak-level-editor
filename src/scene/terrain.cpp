@@ -332,6 +332,85 @@ void generate_terrain(TerrainGrid& g, Vec3 center, Vec2 size, float hills, float
     }
 }
 
+bool nearest_decor_edge(const Scene& scene, Vec3 at, float reach, float window, uint32_t skip, Vec3* edge,
+                        uint32_t* node) {
+  const SceneCache& cache = scene.cache();
+  float best = std::numeric_limits<float>::max();
+  bool found = false;
+  for (size_t i = 0; i < scene.nodes.size() && i < cache.bounds.size(); i++) {
+    const Node& n = scene.nodes[i];
+    if (n.kind != NodeKind::Render || !n.mesh || n.id == skip || !cache.visible[i] || cache.actor[i]) continue;
+    const AABB& b = cache.bounds[i];
+    if (!b.valid() || b.lo.x > at.x + reach || b.hi.x < at.x - reach || b.lo.z > at.z + reach || b.hi.z < at.z - reach ||
+        b.lo.y > at.y + window || b.hi.y < at.y - window)
+      continue;
+    // of this piece: the point of its top nearest to `at` across; none when `at` is over it
+    float near = std::numeric_limits<float>::max(), top = 0;  // top: its surface facing up (m2)
+    Vec3 point{0, 0, 0};
+    bool under = false;
+    const Mat4& w = cache.worlds[i];
+    for (const Primitive& p : n.mesh->prims) {
+      for (size_t t = 0; t + 2 < p.idx.size() && !under; t += 3) {
+        const Vec3 a = w.point(p.pos[p.idx[t]]), bb = w.point(p.pos[p.idx[t + 1]]), c = w.point(p.pos[p.idx[t + 2]]);
+        const Vec3 nrm = cross(bb - a, c - a);
+        const float len = length(nrm);
+        if (len < 1e-6f || std::fabs(nrm.y) < 0.7f * len) continue;  // walls and slopes are no top
+        if (std::max({a.y, bb.y, c.y}) < at.y - window || std::min({a.y, bb.y, c.y}) > at.y + window) continue;
+        top += len * 0.5f;
+        if (std::min({a.x, bb.x, c.x}) > at.x + reach || std::max({a.x, bb.x, c.x}) < at.x - reach ||
+            std::min({a.z, bb.z, c.z}) > at.z + reach || std::max({a.z, bb.z, c.z}) < at.z - reach)
+          continue;
+        // the nearest point of the triangle across (x, z), and its height there
+        const float d = (bb.x - a.x) * (c.z - a.z) - (c.x - a.x) * (bb.z - a.z);
+        auto height = [&](float x, float z) {
+          const float u = ((bb.x - x) * (c.z - z) - (c.x - x) * (bb.z - z)) / d;
+          const float v = ((c.x - x) * (a.z - z) - (a.x - x) * (c.z - z)) / d;
+          return u * a.y + v * bb.y + (1 - u - v) * c.y;
+        };
+        const float u = ((bb.x - at.x) * (c.z - at.z) - (c.x - at.x) * (bb.z - at.z)) / d;
+        const float v = ((c.x - at.x) * (a.z - at.z) - (a.x - at.x) * (c.z - at.z)) / d;
+        if (u >= 0 && v >= 0 && u + v <= 1) {
+          under = true;  // it is under (or over) the square's middle: not beside it
+          break;
+        }
+        const Vec3 tri[3] = {a, bb, c};
+        for (int e = 0; e < 3; e++) {
+          const Vec3 p0 = tri[e], p1 = tri[(e + 1) % 3];
+          const float ex = p1.x - p0.x, ez = p1.z - p0.z, l2 = ex * ex + ez * ez;
+          const float s = l2 > 1e-12f ? std::clamp(((at.x - p0.x) * ex + (at.z - p0.z) * ez) / l2, 0.f, 1.f) : 0.f;
+          const float qx = p0.x + ex * s, qz = p0.z + ez * s;
+          const float dist = std::hypot(at.x - qx, at.z - qz);
+          const float y = std::fabs(d) > 1e-9f ? height(qx, qz) : p0.y + (p1.y - p0.y) * s;
+          // as near: the highest (a box's top, not its bottom)
+          if (dist < near - 1e-3f || (dist < near + 1e-3f && y > point.y)) {
+            near = std::min(near, dist);
+            point = {qx, y, qz};
+          }
+        }
+      }
+      if (under) break;
+    }
+    // not a prop (a plate, a crate's lid): a top of 4 m2 at least (a box's bottom counted too)
+    if (under || near > reach || near >= best || top < 8.f) continue;
+    best = near;
+    *edge = point;
+    if (node) *node = n.id;
+    found = true;
+  }
+  return found;
+}
+
+Vec3 magnet_center(Vec3 at, Vec3 edge, float half, float overlap) {
+  Vec3 c{at.x, edge.y, at.z};
+  const float dx = edge.x - at.x, dz = edge.z - at.z;
+  if (std::fabs(dx) >= std::fabs(dz)) {
+    if (std::fabs(dx) > 1e-6f) c.x = edge.x - std::copysign(half - overlap, dx);
+  } else {
+    c.z = edge.z - std::copysign(half - overlap, dz);
+  }
+  return c;
+}
+
 bool terrain_height(const TerrainGrid& g, float x, float z, float* y) {
   const float fi = x / g.cell, fk = z / g.cell;
   const int i = (int)std::floor(fi), k = (int)std::floor(fk);

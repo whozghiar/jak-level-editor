@@ -79,6 +79,18 @@ std::vector<TerrainChange> terrain_changes(const TerrainGrid& before, const Terr
 // meters high at most, `roughness` 0..1 (smooth slopes to broken ground); its new ground painted with `look`
 void generate_terrain(TerrainGrid& g, Vec3 center, Vec2 size, float hills, float roughness, int seed, int look = 0);
 
+// The magnet brush: the top of the decor nearest to `at` (world space) beside it, not under it: of the
+// surfaces facing up of the visible pieces (not props: 4 m2 of them at least; `skip` left out: the
+// terrain painted), within `reach`
+// meters across and `window` meters up or down, the one whose edge is nearest; `edge` gets the point
+// of that edge nearest to `at`, at the decor's height there. False when there is none (or only
+// decor under `at`).
+bool nearest_decor_edge(const Scene& scene, Vec3 at, float reach, float window, uint32_t skip, Vec3* edge,
+                        uint32_t* node = nullptr);
+// The middle of a square of half side `half` moved from `at` so that its side towards `edge` goes
+// `overlap` meters past it (along the axis of that side), its height the edge's
+Vec3 magnet_center(Vec3 at, Vec3 edge, float half, float overlap);
+
 // The terrain's height at (x, z) (bilinear over its cell); false where there is no ground
 bool terrain_height(const TerrainGrid& g, float x, float z, float* y);
 
