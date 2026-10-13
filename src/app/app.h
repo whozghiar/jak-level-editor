@@ -553,7 +553,7 @@ class App {
     float wall_height = 4.f;  // meters above the ground
     float cell = 1.f;         // a new terrain's cells (meters)
     bool relief = true;       // paint: the level style's bumps
-    bool magnet = false;      // the magnet brush: the square stuck to the edge of the decor beside it
+    bool magnet = false;      // the magnet brush: the ground laid at the level of the ground already there beside it
     Vec2 gen_size{64, 64};    // generate: the rectangle (meters)
     float hills = 12.f, roughness = 0.5f;
     int seed = 1;
@@ -579,8 +579,10 @@ class App {
   Vec3 m_brush_point{0, 0, 0};
   bool m_brush_valid = false;
   uint32_t m_brush_hit_node = 0;  // what the brush is over (0: the plane)
-  // the magnet brush: where the cursor is, the edge of the decor the square sticks to, its piece
+  // the magnet brush: where the cursor is, the point of the ground whose level it keeps, its piece,
+  // how far below it the ground is laid (the decor's: 2 cm, not to flicker)
   bool m_magnet_valid = false;
+  float m_magnet_below = 0.f;
   bool m_stroke_stuck = false;  // the stroke stuck to the decor once: flat all along (a platform made longer)
   Vec3 m_brush_raw{0, 0, 0}, m_magnet_edge{0, 0, 0};
   uint32_t m_magnet_node = 0;
@@ -607,7 +609,7 @@ class App {
   bool terrain_right_button(Vec2 rel);
   void draw_terrain_overlay();
   // what a stamp would change, see-through, before it is done
-  void draw_terrain_preview(const TerrainGrid& before, const BrushStroke& stamp, const Mat4& world);
+  bool draw_terrain_preview(const TerrainGrid& before, const BrushStroke& stamp, const Mat4& world);  // false: it changes nothing
   // the cells of [i0, i1] x [k0, k1] changed from `before` to `after`, see-through
   void draw_terrain_ghost(const TerrainGrid& before, const TerrainGrid& after, int i0, int k0, int i1, int k1,
                           BrushMode mode, const Mat4& world);

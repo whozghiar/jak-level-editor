@@ -299,12 +299,12 @@ def building(args, e):
     # there, outwards (the platform made longer, shown before it is let go)
     e.call('new_level', {'discard_changes': True})
     e.loaded()
-    e.call('place', {'kind': 'shape', 'name': 'box', 'position': [0, 0, 0], 'size': [8, 3, 8]})
+    e.call('terrain', {'mode': 'paint', 'position': [0, 3, 0], 'size': 10, 'relief': False})
     e.call('select', {'ids': []})
-    e.call('set_camera', {'position': [14, 14, 18], 'look_at': [6, 1, 0]})
-    e.ui([{'move': [900, 520]}, wait(3), {'key': 'B'}, wait(5), {'key': 'M'}, wait(2)] + [{'key': '['}, wait(2)] * 6 +
-         [{'move': [860, 470]}, wait(8)], shot=out('building', 'terrain-magnet.png'))
-    e.ui([{'down': 'left'}, wait(2), {'move': [880, 490]}, wait(2), {'move': [910, 520]}, wait(2), {'move': [950, 560]},
+    e.call('set_camera', {'position': [8, 16, 20], 'look_at': [8, 0, 0]})
+    e.ui([{'move': [810, 472]}, wait(3), {'key': 'B'}, wait(5), {'key': 'M'}, wait(2)] + [{'key': '['}, wait(2)] * 6 +
+         [{'move': [811, 472]}, wait(8)], shot=out('building', 'terrain-magnet.png'))
+    e.ui([{'down': 'left'}, wait(2), {'move': [870, 472]}, wait(2), {'move': [930, 500]}, wait(2), {'move': [960, 540]},
           wait(8)], shot=out('building', 'terrain-magnet-held.png'))
     e.ui([{'key': 'Escape'}, wait(3), {'up': 'left'}, wait(3), {'key': 'M'}, wait(2), {'key': 'B'}, wait(3)])
     # the atoll, a level of Jak II, opened in the game rendering

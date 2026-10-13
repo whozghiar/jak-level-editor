@@ -195,7 +195,7 @@ bool apply_brush(TerrainGrid& g, const BrushStroke& s) {
   auto corner = [&](int i, int k) -> float& { return g.height[(size_t)(k - g.z0) * (g.w + 1) + (i - g.x0)]; };
   auto cell = [&](int i, int k) -> uint8_t& { return g.cells[(size_t)(k - g.z0) * g.w + (i - g.x0)]; };
   auto look = [&](int i, int k) -> uint8_t& { return g.look[(size_t)(k - g.z0) * g.w + (i - g.x0)]; };
-  if ((s.mode == BrushMode::Raise || s.mode == BrushMode::Dig) &&
+  if ((s.mode == BrushMode::Raise || s.mode == BrushMode::Dig) && s.lay &&
       g.at((int)std::floor(m.x / c), (int)std::floor(m.z / c)) == TerrainGrid::None) {
     BrushStroke ground = s;
     ground.mode = BrushMode::Paint;
@@ -400,15 +400,20 @@ bool nearest_decor_edge(const Scene& scene, Vec3 at, float reach, float window, 
   return found;
 }
 
-Vec3 magnet_center(Vec3 at, Vec3 edge, float half, float overlap) {
-  Vec3 c{at.x, edge.y, at.z};
-  const float dx = edge.x - at.x, dz = edge.z - at.z;
-  if (std::fabs(dx) >= std::fabs(dz)) {
-    if (std::fabs(dx) > 1e-6f) c.x = edge.x - std::copysign(half - overlap, dx);
-  } else {
-    c.z = edge.z - std::copysign(half - overlap, dz);
-  }
-  return c;
+bool terrain_level_near(const TerrainGrid& g, Vec3 at, float reach, Vec3* point) {
+  const float c = g.cell;
+  float best = std::numeric_limits<float>::max();
+  const int i0 = (int)std::floor((at.x - reach) / c), i1 = (int)std::floor((at.x + reach) / c);
+  const int k0 = (int)std::floor((at.z - reach) / c), k1 = (int)std::floor((at.z + reach) / c);
+  for (int k = std::max(k0, g.z0); k <= std::min(k1, g.z0 + g.d - 1); k++)
+    for (int i = std::max(i0, g.x0); i <= std::min(i1, g.x0 + g.w - 1); i++) {
+      if (g.at(i, k) == TerrainGrid::None) continue;
+      const float x = (i + 0.5f) * c, z = (k + 0.5f) * c, d = std::hypot(x - at.x, z - at.z);
+      if (d > reach || d >= best) continue;
+      best = d;
+      *point = {x, (g.corner(i, k) + g.corner(i + 1, k) + g.corner(i, k + 1) + g.corner(i + 1, k + 1)) * 0.25f, z};
+    }
+  return best < std::numeric_limits<float>::max();
 }
 
 bool terrain_height(const TerrainGrid& g, float x, float z, float* y) {

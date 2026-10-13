@@ -298,6 +298,7 @@ BrushStroke App::terrain_stamp(BrushMode mode, Vec3 center, float amount, float 
   st.seed = brush.seed;
   st.look = m_stroke_look;
   st.amount = amount;
+  st.lay = brush.mode != BrushMode::Erase;  // the right button erasing: it raises or digs what is there only
   // new ground with the relief of the style (raise and dig lay some where there is none); flat where
   // it sticks to the decor (it meets it with no step)
   const LevelStyle* style = m_style_level.empty() ? nullptr : level_style(m_style_level);
@@ -374,25 +375,38 @@ void App::terrain_tool(bool clicked, bool released) {
   if (!m_terrain_change && m_brush_hit_node && m_brush_hit_node != m_terrain_node)
     if (const Node* h = scene.find(m_brush_hit_node); h && h->extras.contains("og_terrain_grid")) m_terrain_node = h->id;
   const BrushMode mode = io.KeyShift ? inverted(brush.mode) : brush.mode;
-  // the magnet brush (ground, walls, flattening): the square stuck to the edge of the decor beside
-  // it, going under it by half a cell (the cells it lays reach the edge), at the decor's height just
-  // below (no flicker where they meet)
+  // the magnet brush (ground, walls, flattening): the square goes where the cursor is, the ground it
+  // lays at the level of the ground already laid beside it: the terrain painted's nearest, else the
+  // top of the decor beside it (just under it: no flicker where they meet)
   m_magnet_valid = false;
   if (brush.magnet && m_brush_valid && (mode == BrushMode::Paint || mode == BrushMode::Wall || mode == BrushMode::Flatten)) {
-    const float cell = m_terrain_change ? m_terrain_grid.cell : scene.find(m_terrain_node) ? m_terrain_grid_view.cell : brush.cell;
-    const float half = std::max(brush.size * 0.5f, cell * 0.5f);
-    if (length(m_brush_point - m_magnet_asked) > 0.02f || brush.size != m_magnet_asked_size) {
+    const Node* tn = scene.find(m_terrain_node);
+    const TerrainGrid* g = m_terrain_change ? &m_terrain_grid : tn ? &m_terrain_grid_view : nullptr;
+    const float cell = g && g->w ? g->cell : brush.cell;
+    const float reach = std::max(brush.size * 0.5f, cell * 0.5f) + 2.f;
+    if (length(m_brush_point - m_magnet_asked) > 0.02f || brush.size != m_magnet_asked_size || m_terrain_change) {
       m_magnet_asked = m_brush_point;
       m_magnet_asked_size = brush.size;
       m_magnet_node = 0;
-      if (!nearest_decor_edge(scene, m_brush_point, half + 1.5f, 8.f, m_terrain_node, &m_magnet_edge, &m_magnet_node))
+      Vec3 level;
+      if (tn && g && g->w && terrain_level_near(*g, scene.world(*tn).inverse().point(m_brush_point), reach, &level)) {
+        m_magnet_edge = scene.world(*tn).point(level);
+        m_magnet_node = tn->id;
+        m_magnet_below = 0.f;
+      } else if (nearest_decor_edge(scene, m_brush_point, reach, 8.f, m_terrain_node, &m_magnet_edge, &m_magnet_node)) {
+        // another terrain beside: the one painted from now on, made larger at its level
+        const Node* found = scene.find(m_magnet_node);
+        const bool terrain = found && found->extras.contains("og_terrain_grid");
+        if (terrain && !m_terrain_change) m_terrain_node = found->id;
+        m_magnet_below = terrain ? 0.f : 0.02f;
+      } else {
         m_magnet_node = 0;
+      }
     }
     if (m_magnet_node) {
       m_magnet_valid = true;
       m_brush_raw = m_brush_point;
-      m_brush_point = magnet_center(m_brush_point, m_magnet_edge, half, cell * 0.5f + 0.05f);
-      m_brush_point.y = m_magnet_edge.y - 0.02f;
+      m_brush_point.y = m_magnet_edge.y - m_magnet_below;
       // a stroke going on lays its ground at the height of what it sticks to from there on, flat
       if (const Node* tn = m_terrain_change ? scene.find(m_terrain_node) : nullptr) {
         m_stroke_height = scene.world(*tn).inverse().point(m_brush_point).y;
@@ -562,9 +576,10 @@ void App::draw_terrain_overlay() {
   const TerrainGrid& before = node ? grid : empty;
   if (m_terrain_sculpting) {
     const float h = terrain_sculpt_height();
-    draw_terrain_preview(before, terrain_stamp(h > 0 ? BrushMode::Raise : BrushMode::Dig, c, std::fabs(h), c.y), world);
+    // its height next to it (nothing when it changes nothing: erasing over the void)
     Vec2 s;
-    if (renderer.project(m_brush_point, &s)) {
+    if (draw_terrain_preview(before, terrain_stamp(h > 0 ? BrushMode::Raise : BrushMode::Dig, c, std::fabs(h), c.y), world) &&
+        renderer.project(m_brush_point, &s)) {
       ImDrawList* dl = ImGui::GetForegroundDrawList();
       const std::string text = strf("%+.2f m", h);
       const ImVec2 at(m_vp_x + s.x + 16, m_vp_y + s.y - 8), size = ImGui::CalcTextSize(text.c_str());
@@ -578,13 +593,14 @@ void App::draw_terrain_overlay() {
   draw_terrain_preview(before, terrain_stamp(mode, c, amount, terrain_start_height(before, node)), world);
 }
 
-void App::draw_terrain_preview(const TerrainGrid& before, const BrushStroke& stamp, const Mat4& world) {
+bool App::draw_terrain_preview(const TerrainGrid& before, const BrushStroke& stamp, const Mat4& world) {
   TerrainGrid after = before;
-  if (!apply_brush(after, stamp)) return;
+  if (!apply_brush(after, stamp)) return false;
   const float cl = after.cell, half = stamp.size * 0.5f;
   draw_terrain_ghost(before, after, (int)std::floor((stamp.center.x - half) / cl) - 1, (int)std::floor((stamp.center.z - half) / cl) - 1,
                      (int)std::floor((stamp.center.x + half) / cl) + 1, (int)std::floor((stamp.center.z + half) / cl) + 1,
                      stamp.mode, world);
+  return true;
 }
 
 void App::draw_terrain_ghost(const TerrainGrid& before, const TerrainGrid& after, int i0, int k0, int i1, int k1,

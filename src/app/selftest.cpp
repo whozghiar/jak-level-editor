@@ -2846,12 +2846,34 @@ int run_selftest() {
     Vec3 edge;
     uint32_t on = 0;
     const bool beside = nearest_decor_edge(ms, {12, 0, 5}, 4, 8, 0, &edge, &on);
-    const Vec3 square = magnet_center({12, 0, 5}, edge, 2, 0.55f);
+    const Vec3 top = edge;
     const bool over = nearest_decor_edge(ms, {5, 2, 5}, 4, 8, 0, &edge);
     const bool far = nearest_decor_edge(ms, {20, 0, 5}, 4, 8, 0, &edge);
-    check(beside && on == platform_id && std::fabs(square.x - 11.45f) < 1e-3f && std::fabs(square.y - 2.f) < 1e-3f &&
-              std::fabs(square.z - 5.f) < 1e-3f && !over && !far,
-          "magnet brush: beside a platform the square sticks to its edge at its top, half a cell under it; not over it nor far");
+    // ... and of a terrain painted, the level of its ground nearest to the square (3 m up there)
+    TerrainGrid painted;
+    BrushStroke lay;
+    lay.size = 4.f;
+    lay.center = {2, 0, 2};
+    lay.height = 3.f;
+    apply_brush(painted, lay);
+    Vec3 level;
+    const bool near_terrain = terrain_level_near(painted, {6, 0, 2}, 4, &level);
+    const bool far_terrain = terrain_level_near(painted, {12, 0, 2}, 4, &level);
+    check(beside && on == platform_id && std::fabs(top.x - 10.f) < 1e-3f && std::fabs(top.y - 2.f) < 1e-3f && !over && !far &&
+              near_terrain && !far_terrain,
+          "magnet brush: the level of the platform beside the square (its top), of the terrain painted next to it; not over, not far");
+    // the right button erasing raises the ground there is, never lays any
+    TerrainGrid none2 = painted;
+    BrushStroke rise;
+    rise.mode = BrushMode::Raise;
+    rise.amount = 1.f;
+    rise.size = 4.f;
+    rise.center = {20, 0, 20};
+    rise.lay = false;
+    const bool laid_nothing = !apply_brush(none2, rise) && none2.at(20, 20) == TerrainGrid::None;
+    rise.lay = true;
+    check(laid_nothing && apply_brush(none2, rise) && none2.at(20, 20) == TerrainGrid::Ground,
+          "terrain brush: raising without laying ground (the right button erasing) leaves the void as it is");
   }
 
   {

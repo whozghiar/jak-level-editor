@@ -398,17 +398,18 @@ raise the ground there, **down** to dig it: the new shape and its height show un
 once. The brush changes the terrain under the square; the ground takes the textures of a level's
 style automatically (the desert's sand and rock, the slums' cobbles).
 
-**Free brush** or **Magnet brush** (**M**): with the magnet, the square sticks to the edge of the decor next
-to it (a platform, a quay, a floor; not small props), the piece named next to it. The ground laid
-there is at the height of the decor's top (2 cm under it), flat, and goes under its edge so that
-they meet with no gap and no step; a stroke started there keeps that height: a quay made longer
-over the water, a floor brought to a platform.
+**Free brush** or **Magnet brush** (**M**): both follow the cursor. The free brush lays its ground at the
+height where the stroke starts; the magnet brush keeps the level of the ground already laid beside
+the square: the terrain you are painting (made larger at its level), else the top of the decor
+next to it (a platform, a quay: 2 cm under it; not small props), named next to the square. The
+preview shows the ground at that level before you click and while you hold the button. The right
+button never lays ground while erasing: it raises or digs what is there.
 
 | The terrain brush in the style of the desert: hills, a riverbed dug, a walled yard, a hill raised | The right button held and the mouse moved up: the hill it raises, before it is let go |
 |---|---|
 | ![terrain](docs/captures/building/terrain.png) | ![raise](docs/captures/building/terrain-raise.png) |
 
-| The magnet brush next to a block: the square stuck to its edge, at its top | Held from there: the platform made longer, shown before it is let go |
+| The magnet brush next to a terrain laid 3 m up: the square at its level | Held from there: the terrain made larger at its level, shown before it is let go |
 |---|---|
 | ![magnet](docs/captures/building/terrain-magnet.png) | ![magnet held](docs/captures/building/terrain-magnet-held.png) |
 

@@ -59,6 +59,7 @@ struct BrushStroke {
   float bumps = 0.f, bump_size = 3.f;
   int seed = 1;
   int look = 0;  // paint, wall: the look given to the cells (in the grid's `looks`)
+  bool lay = true;  // raise, dig: ground laid first where there is none under its middle
 };
 
 // Applies the brush: the cells whose middle is in the square, the corners in it (for raise, dig,
@@ -87,9 +88,9 @@ void generate_terrain(TerrainGrid& g, Vec3 center, Vec2 size, float hills, float
 // decor under `at`).
 bool nearest_decor_edge(const Scene& scene, Vec3 at, float reach, float window, uint32_t skip, Vec3* edge,
                         uint32_t* node = nullptr);
-// The middle of a square of half side `half` moved from `at` so that its side towards `edge` goes
-// `overlap` meters past it (along the axis of that side), its height the edge's
-Vec3 magnet_center(Vec3 at, Vec3 edge, float half, float overlap);
+// The ground of a terrain nearest to `at` (its space) within `reach` meters across: the middle of
+// that cell at the height of its ground (a wall's foot for a wall); false when there is none
+bool terrain_level_near(const TerrainGrid& g, Vec3 at, float reach, Vec3* point);
 
 // The terrain's height at (x, z) (bilinear over its cell); false where there is no ground
 bool terrain_height(const TerrainGrid& g, float x, float z, float* y);
