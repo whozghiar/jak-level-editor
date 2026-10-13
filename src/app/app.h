@@ -369,6 +369,11 @@ class App {
   void toggle_select(uint32_t id);
   std::vector<uint32_t> selection_roots() const;  // selected nodes without selected ancestors
   Mat4 selection_frame() const;                   // gizmo pivot and orientation (once per frame)
+  // a move going on (the gizmo's, whatever its axis or plane, or the selection dragged): how far the
+  // selection went, false when none; where its pivot was, drawn with the selection there
+  bool move_delta(Vec3* d) const;
+  Vec3 m_drag_pivot0{0, 0, 0};
+  void draw_move_preview();
   mutable uint64_t m_selection_frame_key = ~0ull;
   mutable std::set<uint32_t> m_selection_frame_sel;
   mutable uint32_t m_selection_frame_primary = 0;

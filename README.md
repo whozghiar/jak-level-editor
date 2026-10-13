@@ -244,7 +244,9 @@ two arrows to slide on the ground (or another flat direction), a ring to turn ar
 Scale, the square at the end of an axis stretches along it.
 
 - **W** move, **E** rotate, **R** scale. While dragging, the value is written next to the cursor;
-  **Shift** is ten times finer, **Ctrl** snaps.
+  **Shift** is ten times finer, **Ctrl** snaps. A move, along any arrow or square (or the selection
+  dragged itself), leaves the selection **see-through where it was**, with the way from there (red
+  along X, blue along Z, green up) and how far it went: **Moved x +2.50 y +0.00 z +1.50 m**.
 - **Snap** (toolbar) moves by 0.5 m, turns by 15 degrees, scales by 0.1: walls placed side by side
   meet exactly. The arrow next to it changes the steps.
 - **Local** moves along the element's own axes (a catwalk set diagonally slides along its length).

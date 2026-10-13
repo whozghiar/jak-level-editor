@@ -698,8 +698,10 @@ void App::draw_cursor_info() {
     dl->PathArcTo(c, 16, -1.5708f, -1.5708f + 6.2832f * m_long_press_ring, 32);
     dl->PathStroke(IM_COL32(255, 170, 60, 230), 0, 3.f);
     text = tr("cursor.hold");
-  } else if (m_moving_selection) {
-    text = tr(ImGui::GetIO().KeyCtrl ? "cursor.moving_depth" : "cursor.moving");
+  } else if (Vec3 d; move_delta(&d)) {
+    // how far it went, whatever the way
+    text = strf(tr("cursor.move_delta"), d.x, d.y, d.z, length(d));
+    if (m_moving_selection) text += "\n" + std::string(tr(ImGui::GetIO().KeyCtrl ? "cursor.moving_depth" : "cursor.moving"));
   } else if (hovered && ImGui::GetTime() - m_hover_since > 0.35) {
     const Node* n = scene.find(hovered);
     if (!n) return;
@@ -715,6 +717,42 @@ void App::draw_cursor_info() {
   const ImVec2 size = ImGui::CalcTextSize(text.c_str());
   dl->AddRectFilled(ImVec2(at.x - 5, at.y - 3), ImVec2(at.x + size.x + 5, at.y + size.y + 3), IM_COL32(20, 22, 26, 210), 4.f);
   dl->AddText(at, IM_COL32(235, 235, 225, 255), text.c_str());
+}
+
+bool App::move_delta(Vec3* d) const {
+  if (m_drag_start.empty() || !(m_moving_selection || (gizmo.active() && gizmo.op == GizmoOp::Translate))) return false;
+  const auto& [id, start] = *m_drag_start.begin();
+  if (!scene.find(id)) return false;
+  *d = scene.world(id).col3(3) - start.col3(3);
+  return true;
+}
+
+void App::draw_move_preview() {
+  // where it was, see-through, and the way from there: along x (red), z (blue), y (green)
+  Vec3 d;
+  if (!move_delta(&d) || length(d) < 1e-3f) return;
+  const Mat4 back = Mat4::translate(d * -1.f);
+  const SceneCache& cache = scene.cache();
+  std::vector<uint32_t> tree;
+  size_t drawn = 0;
+  for (const auto& [id, start] : m_drag_start) {
+    const int i = scene.index_of(id);
+    if (i < 0) continue;
+    tree.clear();
+    scene.subtree((size_t)i, tree);
+    for (uint32_t k : tree) {
+      Node& n = scene.nodes[k];
+      // ponytail: 3000 pieces at most (a whole level dragged: its first ones)
+      if (n.kind != NodeKind::Render || !n.mesh || k >= cache.worlds.size() || ++drawn > 3000) continue;
+      renderer.draw_mesh(*n.mesh, back * cache.worlds[k], scene.materials, scene.textures, rs, {0.35f, 0.75f, 1.f, 0.3f}, 0.35f);
+    }
+  }
+  const Vec3 a = m_drag_pivot0, b{a.x + d.x, a.y, a.z}, c{a.x + d.x, a.y, a.z + d.z}, e = a + d;
+  renderer.line(a, b, IM_COL32(235, 80, 70, 255));
+  renderer.line(b, c, IM_COL32(80, 140, 255, 255));
+  renderer.line(c, e, IM_COL32(110, 220, 90, 255));
+  renderer.line(a, e, IM_COL32(255, 255, 255, 220));
+  renderer.flush(false);
 }
 
 void App::select_tool(bool clicked, bool released) {
@@ -763,6 +801,7 @@ void App::select_tool(bool clicked, bool released) {
       m_drag_change = std::make_unique<NodeChange>(scene);
       m_drag_start.clear();
       m_drag_scale.clear();
+      m_drag_pivot0 = selection_frame().col3(3);
       for (auto id : selection_roots()) {
         const Node* n = scene.find(id);
         if (!n) continue;
@@ -821,6 +860,7 @@ void App::select_tool(bool clicked, bool released) {
           }
         const PickHit h = pick(scene, camera.ray(m_box_start.x, m_box_start.y, m_vp_w, m_vp_h), pf);
         m_move_anchor = h.hit() ? h.point : selection_frame().col3(3);
+        m_drag_pivot0 = selection_frame().col3(3);
       } else {
         m_box_selecting = true;
       }
@@ -1018,6 +1058,10 @@ void App::draw_tool_overlays() {
   }
   if (tool == ToolMode::Terrain) {
     draw_terrain_overlay();
+    return;
+  }
+  if (tool == ToolMode::Select) {
+    draw_move_preview();
     return;
   }
   if (tool != ToolMode::Place || !m_place_valid) return;

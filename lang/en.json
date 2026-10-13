@@ -1294,6 +1294,7 @@
   "cursor.prefab": "Prefab: %s (%zu elements)",
   "cursor.select_group": "Double click, or hold the button: select it all",
   "cursor.hold": "Keep holding: the whole group",
+  "cursor.move_delta": "Moved x %+.2f  y %+.2f  z %+.2f m (%.2f m)",
   "cursor.moving": "Moving: left / right, up / down (Ctrl: forward / back, Shift: finer)",
   "cursor.moving_depth": "Moving: left / right, forward / back (Shift: finer)",
   "game.title": "Game rendering: sky, hour and weather",

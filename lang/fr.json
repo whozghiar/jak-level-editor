@@ -1294,6 +1294,7 @@
   "cursor.prefab": "Préfabriqué : %s (%zu éléments)",
   "cursor.select_group": "Double clic, ou bouton maintenu : tout sélectionner",
   "cursor.hold": "Maintenez : tout le groupe",
+  "cursor.move_delta": "Déplacé de x %+.2f  y %+.2f  z %+.2f m (%.2f m)",
   "cursor.moving": "Déplacement : gauche / droite, haut / bas (Ctrl : avant / arrière, Maj : plus fin)",
   "cursor.moving_depth": "Déplacement : gauche / droite, avant / arrière (Maj : plus fin)",
   "game.title": "Rendu du jeu : ciel, heure et météo",
