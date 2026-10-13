@@ -121,4 +121,47 @@ std::vector<PickHit> pick_all(Scene& scene, const Ray& ray, const PickFilter& f,
   return hits;
 }
 
+float covered_below(Scene& scene, size_t index, float gap) {
+  if (index >= scene.nodes.size() || !scene.nodes[index].mesh) return 0.f;
+  const Node& n = scene.nodes[index];
+  const Mat4 w = scene.cache().worlds[index];
+  // up to 64 points, one every 64th of the flat area: the middle of the triangle reached
+  struct Flat {
+    Vec3 mid;
+    float area;
+  };
+  std::vector<Flat> flats;
+  double total = 0;
+  for (const auto& p : n.mesh->prims)
+    for (size_t t = 0; t + 2 < p.idx.size(); t += 3) {
+      const Vec3 a = w.point(p.pos[p.idx[t]]), b = w.point(p.pos[p.idx[t + 1]]), c = w.point(p.pos[p.idx[t + 2]]);
+      const Vec3 nr = cross(b - a, c - a);
+      const float l = length(nr);
+      if (l < 1e-8f || std::fabs(nr.y) < 0.7f * l) continue;
+      flats.push_back({(a + b + c) * (1.f / 3.f), l * 0.5f});
+      total += l * 0.5f;
+    }
+  if (flats.empty()) return 0.f;
+  const std::vector<uint32_t> self{n.id};
+  PickFilter f;
+  f.actors = false;
+  f.include_locked = true;
+  f.exclude_list = &self;
+  const double step = total / 64.0;
+  double acc = 0, next = step * 0.5;
+  int samples = 0, covered = 0;
+  for (const Flat& fl : flats) {
+    acc += fl.area;
+    if (acc < next) continue;
+    while (next <= acc) next += step;
+    samples++;
+    const PickHit h = pick(scene, Ray{fl.mid - Vec3{0, 0.05f, 0}, {0, -1, 0}}, f);
+    if (!h.hit() || h.t <= gap || h.t > 80.f) continue;
+    const Node* under = scene.find(h.node);
+    if (under && under->mesh && under->mesh->extras.contains("og_backdrop")) continue;
+    covered++;
+  }
+  return samples ? (float)covered / samples : 0.f;
+}
+
 }  // namespace ogle

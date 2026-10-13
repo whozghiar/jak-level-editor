@@ -1229,6 +1229,30 @@ int run_selftest() {
       check(split && split_ground_piece(gs, 1) < 0 && gs.nodes.size() == 3,
             "level pieces: a wall the game merged with the ground is split off (selectable), a hill is not cut");
     }
+    // a large flat piece is ground only with nothing under it: a roof 10 m over a yard is not, a road
+    // laid 2 cm over it is still (an overlay), the yard itself is
+    {
+      Scene cs;
+      auto piece = [&](float x0, float x1, float z0, float z1, float y) {
+        Node n{};
+        n.kind = NodeKind::Render;
+        n.mesh = quad(x1 - x0, z1 - z0, false);
+        n.local.t = {x0, y, z0};
+        return cs.add(n);
+      };
+      piece(0, 100, 0, 100, 0);
+      piece(10, 80, 10, 80, 10);
+      piece(20, 90, 5, 95, 0.02f);
+      cs.begin_frame();
+      const float yard = covered_below(cs, 0), roof = covered_below(cs, 1), road = covered_below(cs, 2);
+      check(structure_texture("city-port-bridge-brace01-18") && structure_texture("sewer-brick-roof-02-94") &&
+                !structure_texture("city-port-grnd-cobl-01-5") && natural_ground("des-mount-sand-trans-7") &&
+                natural_ground("farm-grass-ground-02-20") && !natural_ground("freehq-monitor01-4"),
+            "level pieces: the textures of structures (a roof, a bridge's brace) are never ground, those of natural "
+            "ground (sand, grass) are even over other ground");
+      check(yard == 0.f && roof > 0.95f && road < 0.05f,
+            strf("level pieces: ground is what has nothing under it (yard %.2f, roof over it %.2f, road on it %.2f)", yard, roof, road).c_str());
+    }
 
     // a box behind a glow (an additive light beam): the click goes to the box, a second click to the glow
     Scene ps;

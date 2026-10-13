@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -480,6 +481,22 @@ bool ground_piece(Mesh& mesh) {
       if (std::fabs(n.y) > 0.7f * area) flat += area;
     }
   return all > 0 && flat >= 0.5 * all;
+}
+
+bool natural_ground(const std::string& name) {
+  std::string n = name;
+  for (auto& c : n) c = (char)std::tolower((unsigned char)c);
+  for (const char* w : {"sand", "grass", "rock", "dirt", "mud", "snow", "beach", "mount", "dune", "cliff", "lava", "ground"})
+    if (n.find(w) != std::string::npos) return true;
+  return false;
+}
+
+bool structure_texture(const std::string& name) {
+  std::string n = name;
+  for (auto& c : n) c = (char)std::tolower((unsigned char)c);
+  for (const char* w : {"roof", "bridge", "pillar", "palace", "tower-side", "monitor", "beam", "pipe", "brace"})
+    if (n.find(w) != std::string::npos) return true;
+  return false;
 }
 
 int split_ground_piece(Scene& scene, size_t index) {

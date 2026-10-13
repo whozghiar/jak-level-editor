@@ -1681,6 +1681,68 @@ void App::remote_dispatch(const std::string& tool, const json& args, RemoteReply
       return true;
     });
 
+  } else if (tool == "ground_report") {
+    // for the studies of the level pieces (not offered to the assistant): the large pieces of the
+    // levels' shell (og_terrain), the ground locked or not, what stands more than 3 m above their
+    // floor (flat: roofs, upright: walls), the walls split off
+    json pieces = json::array();
+    const SceneCache& cache = scene.cache();
+    for (size_t i = 0; i < scene.nodes.size(); i++) {
+      const Node& n = scene.nodes[i];
+      if (n.kind != NodeKind::Render || !n.mesh || !n.extras.contains("og_terrain")) continue;
+      const Mat4& w = cache.worlds[i];
+      std::vector<std::pair<float, float>> flats;  // height, area
+      double all = 0, flat = 0, walk = 0;
+      struct T { float area, ny, top, mid; };
+      std::vector<T> tris;
+      AABB b;
+      for (const auto& pr : n.mesh->prims)
+        for (size_t t = 0; t + 2 < pr.idx.size(); t += 3) {
+          const Vec3 a = w.point(pr.pos[pr.idx[t]]), bb = w.point(pr.pos[pr.idx[t + 1]]), c = w.point(pr.pos[pr.idx[t + 2]]);
+          b.add(a), b.add(bb), b.add(c);
+          const Vec3 nr = cross(bb - a, c - a);
+          const float l = length(nr);
+          if (l < 1e-8f) continue;
+          const T tri{l * 0.5f, std::fabs(nr.y) / l, std::max({a.y, bb.y, c.y}), (a.y + bb.y + c.y) / 3.f};
+          tris.push_back(tri);
+          all += tri.area;
+          if (tri.ny > 0.7f) flat += tri.area, flats.push_back({tri.mid, tri.area});
+          if (tri.ny > 0.5f) walk += tri.area;
+        }
+      if (all <= 0) continue;
+      std::sort(flats.begin(), flats.end());
+      float base = flats.empty() ? b.lo.y : flats.front().first;
+      for (double acc = 0; const auto& [y, ar] : flats) {
+        base = y;
+        if ((acc += ar) >= 0.2 * flat) break;
+      }
+      double above_flat = 0, above_up = 0;
+      float high = base;
+      for (const T& t : tris) {
+        const bool is_flat = t.ny >= 0.7f;
+        if (!(is_flat ? t.mid > base + 3.f : t.top > base + 3.f)) continue;
+        if (is_flat) above_flat += t.area;
+        else if (t.ny < 0.3f) above_up += t.area;
+        high = std::max(high, t.top);
+      }
+      pieces.push_back({{"id", n.id},
+                        {"name", n.name},
+                        {"locked", n.locked},
+                        {"split", n.extras.contains("og_split")},
+                        {"walls_piece", n.name.size() > 6 && n.name.compare(n.name.size() - 6, 6, "-walls") == 0},
+                        {"box", {vec3_json(b.lo), vec3_json(b.hi)}},
+                        {"area", all},
+                        {"flat", flat / all},
+                        {"walkable", walk / all},
+                        {"base", base},
+                        {"above_flat", above_flat},
+                        {"above_upright", above_up},
+                        {"high", high - base},
+                        {"covered1", covered_below(scene, i, 1.f)},
+                        {"covered3", covered_below(scene, i, 3.f)}});
+    }
+    reply(ok({{"level", scene.settings.level}, {"pieces", pieces}}));
+
   } else if (tool == "ui_input") {
     // for the tests of the interface (not offered to the assistant): mouse events one frame after
     // the other ({"move": [x, y]} in the window's pixels, {"move_to_node": id}, {"rel": [dx, dy]},

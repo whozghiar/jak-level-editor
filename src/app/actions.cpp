@@ -181,7 +181,7 @@ void prepare_level_nodes(Scene& scene, const AssetLibrary& library, const GameDa
       // the extractor marks every piece 60 m across; only the ground stays locked (a facade or a
       // door of the shell as large is selected like the rest), the walls the game made one with a
       // ground given a piece of their own (selected like a facade)
-      if (terrain->get<bool>() && n.mesh && ground_piece(*n.mesh)) {
+      if (terrain->get<bool>() && level_ground(scene, i)) {
         if (split_ground_piece(scene, i) >= 0) scene.nodes[i].extras["og_split"] = true;
         Node& g = scene.nodes[i];
         g.locked = ground_piece(*g.mesh);
@@ -267,6 +267,12 @@ std::string unique_name(const std::string& base, std::unordered_set<std::string>
 // document operations (no window needed)
 // ------------------------------------------------------------------------------------------------
 
+bool level_ground(Scene& scene, size_t i) {
+  const Node& n = scene.nodes[i];
+  if (!n.mesh || !ground_piece(*n.mesh) || structure_texture(n.name)) return false;
+  return natural_ground(n.name) || covered_below(scene, i) < 0.5f;
+}
+
 bool open_project(Scene& scene, const std::string& path, std::string* error) {
   const std::string ext = lower_ext(path);
   if (ext != ".glb" && ext != ".gltf") {
@@ -282,7 +288,7 @@ bool open_project(Scene& scene, const std::string& path, std::string* error) {
   for (size_t i = 0; i < scene.nodes.size(); i++) {
     Node& n = scene.nodes[i];
     if (!n.locked || n.kind != NodeKind::Render || !n.mesh || !n.extras.contains("og_terrain")) continue;
-    if (!ground_piece(*n.mesh)) {
+    if (!ground_piece(*n.mesh) || (!n.extras.contains("og_split") && !level_ground(scene, i))) {
       n.locked = false;
       center_piece_origin(n);
       continue;

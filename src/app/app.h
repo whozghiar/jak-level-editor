@@ -142,6 +142,10 @@ struct AppOptions {
 
 // ---- document operations usable without a window (tests) ----
 bool open_project(Scene& scene, const std::string& path, std::string* error);
+// Whether a large piece of a level's shell is its ground (locked): large and flat (ground_piece), not
+// named after a structure's texture (a roof, a bridge, a pillar...), and natural ground (sand, grass,
+// rock...) or with nothing under it (not a roof, a ceiling, debris lying on the ground, a water surface)
+bool level_ground(Scene& scene, size_t index);
 bool save_project(const Scene& scene, const std::string& path, std::string* error);
 // A level of the library: its decor, its actors with the model the library has for each, and its
 // collision (kept, not shown). The terrain is locked: clicks go to the objects on it. With the

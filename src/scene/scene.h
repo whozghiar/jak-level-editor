@@ -255,6 +255,13 @@ bool ground_piece(Mesh& mesh);
 // (the game's palettes) goes with each part. Returns the new node's index, -1 when there is nothing
 // to split. The nodes may move in memory.
 int split_ground_piece(Scene& scene, size_t index);
+// A piece whose texture is of natural ground (sand, grass, rock, dirt, mud, snow, a beach, a mountain,
+// a dune, a cliff, lava, "ground"): ground even over other ground (a ledge, a terrace); the level's
+// pieces are named after their texture
+bool natural_ground(const std::string& name);
+// ... and of a structure (a roof, a bridge, a pillar, the palace, a tower's side, a monitor, a beam,
+// a pipe, a brace): never ground, however large and flat
+bool structure_texture(const std::string& name);
 
 // Whether a node of an extracted level is one of its trees of instanced decor, <level>-tie-<n> or
 // <level>-shrub-<n>: its children are the prototypes of its decor, their children the instances.

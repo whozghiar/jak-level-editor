@@ -113,6 +113,33 @@ mesh), its collision (a node per surface: `collide_pat`) and its actors. Every p
 game's lighting in `og_tod`. `level.json` lists the actors by type with the data of one of each
 (the catalog's templates) and the level's regions (`region_trees`).
 
+### Ground and decor
+
+When a level opens, its ground is locked (clicks and boxes go to what stands on it; **Select the
+ground** reaches it). The shell's pieces are cut by texture, so a piece named `city-port-grnd-cobl`
+holds every triangle of that cobblestone, the walls built with it included. A piece marked
+`og_terrain` is ground when:
+
+1. it is large and flat: 60 m across at least, half of its surface flat (`ground_piece`);
+2. its texture is not a structure's: `roof`, `bridge`, `pillar`, `palace`, `tower-side`, `monitor`,
+   `beam`, `pipe`, `brace` are never ground;
+3. its texture is natural ground (`sand`, `grass`, `rock`, `dirt`, `mud`, `snow`, `beach`, `mount`,
+   `dune`, `cliff`, `lava`, `ground`), or nothing lies under it: down rays from 64 points of its flat
+   surfaces, whichever way their triangles face, meet another piece (not a backdrop) more than 1 m
+   below for less than half of them. A roof, a ceiling, a bridge, a slab of debris lying on the
+   ground, a water surface over its bed have something under them.
+
+A ground keeping walls more than 3 m above its floor (40 % of what stands there upright) has them
+moved to a piece of their own, `<name>-walls`, selected like the rest. Projects saved before get the
+same when they are opened.
+
+Over the 94 levels of Jak 3 with a shell (9 130 large pieces), this leaves 449 grounds of the 647 the
+first rule alone gives: 198 pieces are selected like decor again (59 of the far views of the city,
+53 floors, plates and rubble lying on others, 34 roofs and ceilings, 28 pieces of the palace, pillars,
+beams, braces and bridges, 24 water surfaces), and 33 grounds had walls split off. Still taken for
+ground: a structure standing on nothing modeled in its own level and named like ground, and the
+upper floors of interiors (caves, the Precursor levels), which are walked on.
+
 ## 4. Game data
 
 `data/jak3/game-data.json` is what the editor knows of the game beyond the extracted files: names

@@ -35,4 +35,10 @@ PickHit pick(Scene& scene, const Ray& ray, const PickFilter& filter);
 // same place goes through, one after the other.
 std::vector<PickHit> pick_all(Scene& scene, const Ray& ray, const PickFilter& filter, size_t max = 32);
 
+// How much of the flat surfaces of the piece at `index` (0..1, by area) has another piece more than
+// `gap` meters under it (the backdrops left out): a ground has nothing under it, a roof, a ceiling, a
+// bridge or a slab lying on the ground has. Down rays from points spread over them, whichever way
+// their triangles face.
+float covered_below(Scene& scene, size_t index, float gap = 1.f);
+
 }  // namespace ogle
