@@ -165,12 +165,16 @@ bool level_listed(const LevelEntry& level, const GameData* data);
 // square of 3 m of the map (rows along z, map.size * 32 squares a side), 1 under a surface of a
 // render piece of `land` lying above the water (walls left out).
 std::vector<uint8_t> ocean_land(const OceanMap& map, float ocean_y, const Scene& land);
+// The squares of the map with water (its mid ocean's cells, its near ocean's squares), as above.
+std::vector<uint8_t> ocean_water(const OceanMap& map);
 // The land hiding the ocean around the document's levels, from such masks (side x side): `doc` its
 // levels', `around` the levels the game shows with them, `far` views of the map from afar (the one
-// placed like the document's levels, if one is). Never in the box of the document's own land.
+// placed like the document's levels, if one is); with `water` (ocean_water), the water the land
+// closes in too. Never in the box of the document's own land.
 std::vector<uint8_t> ocean_land_around(int side, const std::vector<std::vector<uint8_t>>& doc,
                                        const std::vector<std::vector<uint8_t>>& around,
-                                       const std::vector<std::vector<uint8_t>>& far);
+                                       const std::vector<std::vector<uint8_t>>& far,
+                                       const std::vector<uint8_t>& water = {});
 Clipboard copy_nodes(const Scene& scene, const std::vector<uint32_t>& roots);
 // Adds copies of the clipboard's nodes (under their old parent when it is still there, at the
 // same place). Returns the new roots.

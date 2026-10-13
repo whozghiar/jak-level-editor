@@ -641,9 +641,25 @@ std::vector<uint8_t> ocean_land(const OceanMap& map, float ocean_y, const Scene&
   return out;
 }
 
+std::vector<uint8_t> ocean_water(const OceanMap& map) {
+  const int size = map.size;
+  const size_t side = (size_t)size * 32;
+  std::vector<uint8_t> out(side * side, 0);
+  for (int r = 0; r < size; r++)
+    for (int c = 0; c < size; c++) {
+      const auto it = map.near.find(r * size + c);
+      const bool near = it != map.near.end() && it->second.size() >= 32;
+      const bool all = it != map.near.end() ? it->second.empty() : map.cells[(size_t)r * size + c] != 0;
+      for (int row = 0; row < 32; row++)
+        for (int x = 0; x < 32; x++)
+          out[((size_t)r * 32 + row) * side + (size_t)c * 32 + x] = all || (near && (it->second[row] >> x & 1u));
+    }
+  return out;
+}
+
 std::vector<uint8_t> ocean_land_around(int side, const std::vector<std::vector<uint8_t>>& doc,
                                        const std::vector<std::vector<uint8_t>>& around,
-                                       const std::vector<std::vector<uint8_t>>& far) {
+                                       const std::vector<std::vector<uint8_t>>& far, const std::vector<uint8_t>& water) {
   const size_t count = (size_t)side * side;
   std::vector<uint8_t> own(count, 0), out(count, 0);
   for (const auto& d : doc)
@@ -724,6 +740,29 @@ std::vector<uint8_t> ocean_land_around(int side, const std::vector<std::vector<u
   };
   grow(false), grow(true), grow(true), grow(false);
   clear_box();
+  // the water the land closes in (squares of the map's ocean under the city, a canal cut off): none;
+  // the sea goes on to the map's edge, or into the document's own box
+  if (water.size() == count) {
+    std::vector<uint8_t> seen(count, 0);
+    std::vector<size_t> todo;
+    auto reach = [&](int x, int z) {
+      const size_t i = (size_t)z * side + x;
+      if (water[i] && !out[i] && !seen[i]) seen[i] = 1, todo.push_back(i);
+    };
+    for (int k = 0; k < side; k++) reach(k, 0), reach(k, side - 1), reach(0, k), reach(side - 1, k);
+    for (int z = z0; z <= z1; z++)
+      for (int x = x0; x <= x1; x++) reach(x, z);
+    while (!todo.empty()) {
+      const int x = (int)(todo.back() % side), z = (int)(todo.back() / side);
+      todo.pop_back();
+      if (x > 0) reach(x - 1, z);
+      if (x < side - 1) reach(x + 1, z);
+      if (z > 0) reach(x, z - 1);
+      if (z < side - 1) reach(x, z + 1);
+    }
+    for (size_t i = 0; i < count; i++)
+      if (water[i] && !out[i] && !seen[i]) out[i] = 1;
+  }
   return out;
 }
 
@@ -812,7 +851,7 @@ void App::update_ocean() {
         }
         return out;
       };
-      return ocean_land_around(m.size * 32, read(doc, false), read(around, false), read(far, true));
+      return ocean_land_around(m.size * 32, read(doc, false), read(around, false), read(far, true), ocean_water(m));
     });
   }
   const bool masked = want == m_ocean_land_key && !m_ocean_land.empty();
@@ -833,19 +872,16 @@ void App::update_ocean() {
     p.nrm.insert(p.nrm.end(), 4, Vec3{0, 1, 0});
     p.idx.insert(p.idx.end(), {base, base + 2, base + 1, base, base + 3, base + 2});
   };
+  std::vector<uint8_t> water = ocean_water(*map);
+  if (masked)
+    for (size_t i = 0; i < water.size(); i++) water[i] &= !m_ocean_land[i];
   // the 32 rows of water squares of a cell (bit x of row z); true when it is water everywhere
   auto rows = [&](int r, int c, uint32_t out[32]) {
-    const auto it = map->near.find(r * size + c);
-    const bool near = it != map->near.end() && it->second.size() >= 32;
-    const bool all = it != map->near.end() ? it->second.empty() : map->cells[(size_t)r * size + c] != 0;
     bool whole = true;
     for (int row = 0; row < 32; row++) {
-      uint32_t bits = all ? ~0u : near ? it->second[row] : 0u;
-      if (masked && bits) {
-        const uint8_t* l = &m_ocean_land[((size_t)r * 32 + row) * side + (size_t)c * 32];
-        for (int x = 0; x < 32; x++)
-          if (l[x]) bits &= ~(1u << x);
-      }
+      const uint8_t* w = &water[((size_t)r * 32 + row) * side + (size_t)c * 32];
+      uint32_t bits = 0;
+      for (int x = 0; x < 32; x++) bits |= (uint32_t)w[x] << x;
       out[row] = bits;
       whole &= bits == ~0u;
     }

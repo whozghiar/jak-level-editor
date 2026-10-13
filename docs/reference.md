@@ -225,7 +225,8 @@ documentation's screenshots). The tools, their arguments and the rules of an age
 - **Several levels**: each is loaded whole; one ocean map is drawn.
 - **The ocean** is left out where the ground of the levels around (the game's neighbors, the city
   seen from afar) stands above it, in squares of 3 m: land thinner than 27 m (a sea wall) keeps its
-  water; inside the box of the document's own levels, their pieces alone hide it.
+  water, water closed in by that land (not reaching the map's edge nor the document's own levels)
+  goes too; inside the box of the document's own levels, their pieces alone hide it.
 - **Nav meshes**: the meshes of a large ground are not linked; they do not follow the decor.
 - **Behaviors**: the generated code compiles and the level builds; "the object is there" is
   checked when the level loads.

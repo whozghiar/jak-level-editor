@@ -1305,6 +1305,18 @@ int run_selftest() {
     check(at(40, 10) && at(8, 8) && !at(25, 25) && !at(5, 55) && !at(10, 47) && !at(8, 38),
           "ocean: the city seen from afar hides it beyond the level (not an island, not a moved model), "
           "a neighbor too, not a thin wall nor the level's own box");
+    // a pond the city closes in (water of the map under it) goes; the sea open to the edge, the water
+    // of the level's own box stay
+    std::vector<uint8_t> pond_city, all_water(side * side, 1);
+    block(pond_city, 20, 29, 20, 29);
+    block(pond_city, 30, 63, 0, 63);
+    for (int z = 20; z <= 29; z++)
+      for (int x = 45; x <= 54; x++) pond_city[z * side + x] = 0;  // a pond 30 m across in the city
+    const auto open = ocean_land_around(side, {doc}, {}, {pond_city});
+    const auto closed = ocean_land_around(side, {doc}, {}, {pond_city}, all_water);
+    auto shut = [&](int x, int z) { return closed[z * side + x] != 0; };
+    check(!open[25 * side + 50] && shut(50, 25) && shut(40, 10) && !shut(10, 30) && !shut(25, 25) && !shut(5, 55),
+          "ocean: the water the land around closes in is left out, the sea open to the edge and the level's own kept");
   }
 
   // the remote control of the MCP server: a request and its answer, one line each
