@@ -71,8 +71,16 @@ fn to_json(l: &LevelIndex) -> Value {
     .parts
     .iter()
     .map(|p| {
-      json!([p.name, p.mesh_node, (p.kind == PartKind::Piece) as i32, p.triangles, p.copies,
-             p.key, p.surface, p.edges])
+      json!([
+        p.name,
+        p.mesh_node,
+        (p.kind == PartKind::Piece) as i32,
+        p.triangles,
+        p.copies,
+        p.key,
+        p.surface,
+        p.edges
+      ])
     })
     .collect();
   json!({"version": K_INDEX_VERSION, "background": l.background, "stamp": l.stamp,
@@ -240,8 +248,8 @@ fn at<T>(v: &[T], i: i64) -> Option<&T> {
 /// the textures of its decor (`level`, `background` and `stamp` are left to the caller).
 pub fn index_level(background: &str) -> Result<LevelIndex, String> {
   let (text, _) = glb_json_chunk(background)?;
-  let j: Doc = serde_json::from_slice(&text)
-    .map_err(|_| format!("unreadable glTF JSON: {background}"))?;
+  let j: Doc =
+    serde_json::from_slice(&text).map_err(|_| format!("unreadable glTF JSON: {background}"))?;
   drop(text);
   let mut out = LevelIndex::default();
   let n = j.nodes.len();
@@ -442,7 +450,11 @@ impl LibraryIndex {
     self.total = levels.len();
     self.done = Arc::new(AtomicUsize::new(0));
     self.cancel = Arc::new(AtomicBool::new(false));
-    let (done, cancel, cache_dir) = (self.done.clone(), self.cancel.clone(), cache_dir.to_string());
+    let (done, cancel, cache_dir) = (
+      self.done.clone(),
+      self.cancel.clone(),
+      cache_dir.to_string(),
+    );
     self.work = Some(std::thread::spawn(move || {
       if !cache_dir.is_empty() && write_cache {
         let _ = std::fs::create_dir_all(&cache_dir);
@@ -580,4 +592,179 @@ pub fn all_decor(index: &LibraryIndex, library: &AssetLibrary) -> Vec<DecorEntry
     }
   }
   out
+}
+
+#[cfg(test)]
+mod tests {
+  use std::collections::BTreeSet;
+  use std::time::Instant;
+
+  use super::*;
+  use crate::io::asset_library::file_mtime;
+  use crate::io::catalog::{build_catalog, jak2_creatures, list_catalog_models};
+  use crate::io::game_data::{GameData, game_data_path, level_listed};
+  use crate::io::jak2_import::jak2_structure;
+  use crate::io::test_library::real_library;
+  use crate::io::texture_palette::{all_textures, recurring_textures};
+  use crate::prefs::Prefs;
+
+  /// JSON values alike but for the last digits of their numbers (two parsers)
+  fn alike(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+      (Value::Number(x), Value::Number(y)) => {
+        let (x, y) = (x.as_f64().unwrap(), y.as_f64().unwrap());
+        (x - y).abs() <= 1e-9 * x.abs().max(y.abs()).max(1.0)
+      }
+      (Value::Array(x), Value::Array(y)) => {
+        x.len() == y.len() && x.iter().zip(y).all(|(x, y)| alike(x, y))
+      }
+      (Value::Object(x), Value::Object(y)) => {
+        x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| alike(v, w)))
+      }
+      _ => a == b,
+    }
+  }
+
+  /// The index made of a game's folder (`game`: "jak3", "jak2"), compared with the C++ editor's
+  /// cache of it (<its preferences>/index/<game>) for every level whose file has not changed since.
+  fn index_of_real(game: &str) -> Option<(AssetLibrary, LibraryIndex)> {
+    let root = real_library()?;
+    let mut library = AssetLibrary::default();
+    library.scan(root.join(game).to_str().unwrap()).ok()?;
+    let data = GameData::load(&game_data_path()).ok();
+    let data = data.as_ref().filter(|_| game == "jak3");
+    library.set_listed(|l| level_listed(&l.name, &l.level, l.collision_triangles as usize, data));
+    let mut index = LibraryIndex::default();
+    let t = Instant::now();
+    index.start(&library, "", false);
+    index.wait();
+    let time = t.elapsed();
+    assert!(index.ready() && index.levels().len() == library.levels().len());
+    let parts: usize = index.levels().iter().map(|l| l.parts.len()).sum();
+    eprintln!(
+      "{game}: {} levels indexed in {:.2} s ({parts} parts)",
+      index.levels().len(),
+      time.as_secs_f64()
+    );
+    let cpp = format!("{}index/{game}", Prefs::old_dir());
+    let (mut compared, mut stale) = (0, 0);
+    for l in index.levels() {
+      // its path as the C++ editor had it (the library's real folder)
+      let real = std::fs::canonicalize(&l.background).unwrap();
+      let real = real.to_string_lossy().replace('\\', "/");
+      let Some(j) = std::fs::read(cache_file(&cpp, real.trim_start_matches("//?/")))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+      else {
+        continue;
+      };
+      // the C++ editor's dates: 100 ns since 1601
+      let stamp = file_mtime(&l.background) / 100 + 116444736000000000;
+      if j["stamp"].as_i64() != Some(stamp) {
+        stale += 1;
+        continue;
+      }
+      let c = from_json(&j).unwrap();
+      let sorted = |p: &[CatalogPart]| {
+        let mut p = p.to_vec();
+        p.sort_by(|a, b| {
+          (&a.name, &a.mesh_node, &a.key, a.triangles, a.copies).cmp(&(
+            &b.name,
+            &b.mesh_node,
+            &b.key,
+            b.triangles,
+            b.copies,
+          ))
+        });
+        p
+      };
+      let (mine, theirs) = (sorted(&l.parts), sorted(&c.parts));
+      assert_eq!(mine.len(), theirs.len(), "{}: parts", l.level);
+      for (a, b) in mine.iter().zip(&theirs) {
+        let close = |x: f64, y: f64| (x - y).abs() <= 1e-9 * x.abs().max(1.0);
+        assert!(
+          (&a.name, &a.mesh_node, a.kind, a.triangles, a.copies, &a.key)
+            == (&b.name, &b.mesh_node, b.kind, b.triangles, b.copies, &b.key)
+            && close(a.surface, b.surface)
+            && close(a.edges, b.edges),
+          "{}: {a:?} {b:?}",
+          l.level
+        );
+      }
+      assert_eq!(l.art_names, c.art_names, "{}: art-names", l.level);
+      assert_eq!(l.textures, c.textures, "{}: textures", l.level);
+      assert!(
+        alike(&json!(l.art_lumps), &json!(c.art_lumps)),
+        "{}: art lumps",
+        l.level
+      );
+      compared += 1;
+    }
+    eprintln!(
+      "{game}: {compared} levels the same as the C++ editor's index ({stale} changed since)"
+    );
+    Some((library, index))
+  }
+
+  #[test]
+  fn real_library_index_and_catalog() {
+    let Some((library, index)) = index_of_real("jak3") else {
+      eprintln!("skipped: no library/jak3/library.json");
+      return;
+    };
+    let data = GameData::load(&game_data_path()).unwrap();
+    let t = Instant::now();
+    let objects = build_catalog(&library, Some(&data), Some(&index));
+    let models = list_catalog_models(&library, Some(&data), &objects, &BTreeSet::new());
+    let decor = all_decor(&index, &library);
+    let catalog_time = t.elapsed();
+    let prototypes = decor
+      .iter()
+      .filter(|e| e.part.kind == PartKind::Prototype)
+      .count();
+    let families: BTreeSet<&str> = objects.iter().map(|o| o.family.as_str()).collect();
+    let effects = objects.iter().filter(|o| o.family == "effect").count();
+    let palette = recurring_textures(&index, &library, 600);
+    let textures = all_textures(&index, &library, "");
+    eprintln!(
+      "jak3: {} objects ({effects} effects, families {families:?}), {} models, {} decor parts ({prototypes} prototypes, {} pieces), palette {} of {} textures; catalog in {:.2} s",
+      objects.len(),
+      models.len(),
+      decor.len(),
+      decor.len() - prototypes,
+      palette.len(),
+      textures.len(),
+      catalog_time.as_secs_f64()
+    );
+    // the C++ editor's on the same library (2026-10-21): 747 objects (451 effects), 197 models,
+    // 6261 decor parts; Jak II's 535 models, 7265 structures
+    assert!(
+      objects.len() > 500
+        && effects > 300
+        && families.contains("crate")
+        && families.contains("water")
+    );
+    assert!(models.len() > 150 && prototypes > 1000 && decor.len() > prototypes);
+    if let Ok(path) = std::env::var("JLE_DUMP_CATALOG") {
+      std::fs::write(path, serde_json::to_string(&objects).unwrap()).unwrap();
+    }
+    assert!(palette.len() > 100 && palette.len() <= 600 && textures.len() > palette.len());
+    assert!(
+      objects
+        .iter()
+        .all(|o| o.lump.is_object() && o.lump.get("name").is_none()),
+      "objects without their level's data"
+    );
+
+    let Some((library2, index2)) = index_of_real("jak2") else {
+      return;
+    };
+    let structures = all_decor(&index2, &library2)
+      .into_iter()
+      .filter(|e| jak2_structure(&e.part))
+      .count();
+    let models2 = list_catalog_models(&library2, None, &[], &jak2_creatures());
+    eprintln!("jak2: {structures} structures, {} models", models2.len());
+    assert!(structures > 5000 && models2.len() > 300);
+  }
 }
