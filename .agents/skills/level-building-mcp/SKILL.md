@@ -1,13 +1,15 @@
 ---
 name: level-building-mcp
-description: Build or change a Jak 3 level in the OpenGOAL Level Editor through its MCP tools (place prefabs and decor, make prefabs, place facades, check for holes, light and weather, save, export). Use whenever the user asks to build, decorate or fix a level with the editor, and before creating prefabs.
+description: Build or change a Jak 3 level in Jak Level Editor through its MCP tools (place prefabs and decor, make prefabs, place facades, check for holes, light and weather, save, export). Use whenever the user asks to build, decorate or fix a level with the editor, and before creating prefabs.
 ---
 
 # Building levels through the MCP server
 
-The editor's MCP server (`open-goal-level-editor --mcp`, configured in `.mcp.json`) acts on the
-editor window the user sees. The full guide, with examples, is `docs/mcp-agent-guide.md`: read it
-the first time. Positions are meters, Y is up; every change is undone with `undo`.
+The editor's MCP server (`jak-level-editor-mcp`, the server `jak-level-editor` of `.mcp.json`: its
+tools are `mcp__jak-level-editor__<tool>`) acts on the editor window the user sees, and starts the
+editor when none runs (build both first: the build-and-test skill). The full guide, with
+examples, is `docs/mcp-agent-guide.md`: read it the first time. Positions are meters, Y is up;
+every change is undone with `undo`.
 
 ## The four rules (always)
 

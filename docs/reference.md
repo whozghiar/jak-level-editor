@@ -18,31 +18,32 @@ writes, the game data, what the export does, and what the editor does not do (ye
 ## 1. Command line
 
 ```text
-open-goal-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>] [--hidden]
-open-goal-level-editor --screenshot <in> <image.png> [setup] [--size WxH] [--library <folder>] [--lang <code>]
-                       [--camera x,y,z,yaw,pitch] [--story off|<step>|<node>] [--select a,b,...]
-                       [--add a,b,...] [--game <hour>]
-open-goal-level-editor --mcp [--remote-port <port>]
-open-goal-level-editor --selftest
+jak-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>] [--hidden]
+                 [--open-level <name>]
+jak-level-editor-mcp [--remote-port <port>]
 ```
 
-- `--library` chooses the folder of the extracted games (instead of `library/`), `--lang` the
-  language, for one session.
-- `--screenshot` runs the whole editor in a hidden window and saves a picture of it
-  (`tools/capture_docs.py` makes the documentation's this way). Setups: `levels`, `select`,
-  `scale`, `prefab`, `catalog`, `models`, `decor`, `decor-all`, `materials`, `effects` (the Effects
-  of the catalog; `--select` searches them), `actors` (the level with its actors: its effects
-  running), `navmesh`, `export` (exported to a temporary folder), `extract` (`<in>` is a disc,
-  extracted to a temporary folder), `guide`, `tools`, `help`, `build`, `textures`, `project`
-  (`<in>` is a project; `select`, `scale`, `prefab` and `navmesh` take one too). `--story` shows
-  every state (`off`), a step or the state just after a task node; `--select` names the elements
-  used (a level added: selected whole); `--add` adds levels; `--game` shows the game rendering at
-  that hour.
-- `--mcp` is the MCP server; `--remote-port` the port of the editor's remote control (47821; `0`
-  turns it off); `--hidden` runs the editor without a window and without touching the preferences.
-- The command line modes never change the preferences. The preferences, the thumbnail cache and
-  what the catalog read of the levels are in `%APPDATA%/OpenGOAL/open-goal-level-editor` on Windows
-  (`~/.local/share/OpenGOAL/open-goal-level-editor` on Linux).
+- `project.glb` is opened at the start; `--open-level` opens a level of the library instead
+  (`--open-level ctyinda`).
+- `--library` chooses the folder of the extracted games (instead of the one used last, else
+  `library/`), `--lang` the language, for one session.
+- `--remote-port` is the port of the editor's remote control (47821; `0` turns it off);
+  `--hidden` runs the editor without a window and without touching the preferences (scripts).
+- `jak-level-editor-mcp` is the MCP server ([7](#7-the-remote-control-and-the-mcp-server)).
+- Opened from the OpenGOAL Launcher, the editor has no command line: the library and the language
+  are the preferences'.
+- The C++ editor's other modes have their equivalents: `--selftest` is
+  `cargo test -p jak-level-editor-core`, `--mcp` is `jak-level-editor-mcp`, and the pictures of
+  `--screenshot` are taken through the remote control and the web view's DevTools
+  ([captures](captures/README.md)).
+- The preferences, the panels' pictures (`thumbs/`) and what the catalog read of the levels
+  (`index/`) are in `%APPDATA%/OpenGOAL/jak-level-editor` on Windows
+  (`~/.local/share/OpenGOAL/jak-level-editor` on Linux, `~/Library/Application Support/...` on
+  macOS). While that folder has no preferences, the C++ editor's (`OpenGOAL/open-goal-level-editor`)
+  are read, and saved into the new folder the next time they change.
+- The translations (`lang/`) and the game's tables (`data/`) are read from the application's
+  resources (`bundle.resources` of `src-tauri/tauri.conf.json`; a build copies them next to the
+  program in `target/<profile>/`: build again after changing them), else from the repository.
 
 ## 2. The extraction
 
@@ -56,6 +57,24 @@ An `.iso` is read in place: only the files read (the `DGO` and `CGO` folders, ab
 copied to a work folder of the destination, deleted when done. Measured with Jak 3 NTSC
 (SCUS-97330) on a 16-core processor and an SSD: 272 levels in 1 minute 10 to 1 minute 30, 3.7 GB.
 [`extractor/README.md`](../extractor/README.md) has the details.
+
+ogle-extract is a C++ program of its own, built with CMake from the repository's root (which
+builds nothing else):
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build      # build/bin/ogle-extract(.exe) and its tables, build/bin/ogle-extract-data/
+```
+
+The editor runs the first it finds: next to its own program, in its resources, in `build/bin/` of
+the repository it was built from, else the file `$JLE_EXTRACTOR` names; its tables
+(`ogle-extract-data/`) next to it. To ship it in the installer, build it first, then add to
+`bundle.resources` of `src-tauri/tauri.conf.json` (a missing path there fails `tauri build`):
+
+```json
+"../build/bin/ogle-extract.exe": "ogle-extract.exe",
+"../build/bin/ogle-extract-data/": "ogle-extract-data/"
+```
 
 ```text
 library/jak3/library.json                          the game, its version, the levels extracted
@@ -167,22 +186,22 @@ and rules read in OpenGOAL's decompiled code, no asset.
 | `data/jak2/creatures.json` | `python tools/gen_jak2_creatures.py` |
 | `data/jak3/prefabs.json`, `data/jak2/prefabs.json` | `python tools/gen_prefab_recipes.py library --game jak3` (`jak2`); `tools/prefab_review.json` keeps the review |
 
-Read a checkout of the game's own code (read only), then rebuild: the editor reads the copies in
-`build/bin/data/`.
+Read a checkout of the game's own code (read only), then build the editor again: it reads the
+copy of `data/` a build puts next to its program (the engine's tests read `data/` itself).
 
 ## 5. The game rendering
 
-- **The renderer**: OpenGOAL's background renderer (`TFragment` and its shaders, vendored in
-  `extractor/opengoal`) draws the decor as the level builder makes it of the export, with the
-  game's camera. The level is made in chunks (the pieces sharing a palette in a cell of 128 m); an
-  edit makes again the chunks it touched.
-- **The time of day and the weather** (`src/game_view/game_mood.cpp`): Jak 3's mood code
+- **The renderer**: the shader of OpenGOAL's background renderer (`TFragment`'s `tfrag3`, ported
+  to WebGL2 in `ui/render/game_view.ts`) draws the decor as the level builder makes it of the export
+  (`crates/core/src/game/view.rs`), with the game's camera. The level is made in chunks (the pieces
+  sharing a palette in a cell of 128 m); an edit makes again the chunks it touched.
+- **The time of day and the weather** (`crates/core/src/game/mood.rs`): Jak 3's mood code
   (`init-weather!` and `update-mood-exterior`): the 9 fog tables (no cloud: haze, clear, smog;
   overcast: fog, clear, rain; storm: fog, clear, rain), the 3 color tables and the 3 channel groups
   of `mood-tables.gc` mixed for the weather's `cloud` and `fog`, then the two snapshots of the hour
   (`*mood-interp-table*`) mixed: the 8 palettes' weights, the fog, the sky color, the models' lights.
   The level's lamps follow the city's (palette 5 at night).
-- **The sky** (`src/game_view/sky.cpp`): drawn behind the level: the mood's sky color high up, its
+- **The sky** (`ui/render/sky.ts`): drawn behind the level: the mood's sky color high up, its
   fog color at the horizon, the sun and the moon moving along an arc through the day (from the
   morning's light direction, +x, to the evening's), stars at night, procedural clouds drifting,
   covering as much of the sky as the weather's `mood-clouds` (`cloud-min` .. `cloud-max`), lit by
@@ -191,8 +210,10 @@ Read a checkout of the game's own code (read only), then rebuild: the editor rea
 - **Rain and lightning**: rain streaks fall around the camera (`rain` 0..1); a storm (cloud above
   0.75) flashes every 5 to 10 seconds (`gen-lightning-and-thunder!`), brightening the light from
   above.
-- **Effects**: the particle effects run by the game's rules (`data/jak3/particles.json`); some
-  parts launch only at some hours; in the game rendering they fade in the fog by their distance.
+- **Effects**: the particle effects run by the game's rules (`data/jak3/particles.json`,
+  `ui/render/particles.ts`; `crates/core/src/scene/particles.rs` is the reference its tests prove);
+  some parts launch only at some hours; in the game rendering they fade in the fog by their
+  distance.
 
 ## 6. The export for the game
 
@@ -226,12 +247,24 @@ replacement), build with `(mi)`, then `(start 'play (get-continue-by-name *game-
 
 ## 7. The remote control and the MCP server
 
-The editor listens on 127.0.0.1:47821 (one JSON line per request: `{"id", "tool", "args"}`, one
-per answer: `{"id", "ok", "result" | "error", "image"}`). `--mcp` forwards MCP tool calls to it, and
-starts the editor when none runs. Besides the MCP tools, the remote control has `ui_input` (mouse and
-key events one frame after the other, pictures of the whole window: the interface's tests and the
-documentation's screenshots). The tools, their arguments and the rules of an agent:
-[the guide for AI agents](mcp-agent-guide.md).
+The editor listens on 127.0.0.1:47821 (`--remote-port`; one JSON line per request: `{"id", "tool",
+"args"}`, one per answer: `{"id", "ok", "result" | "error", "image"}`;
+`crates/core/src/editor/remote.rs`). Its tools are the MCP server's, carried out under the
+engine's lock like the user's actions: they show at once and can be undone. `capture_view` asks the
+interface for a picture of its 3D view (the event `jle:request`, answered with `frontend_reply`).
+
+`jak-level-editor-mcp` (`crates/mcp`) speaks MCP on its standard input and output and forwards each
+tool call to the editor, and starts `jak-level-editor` (found next to it, else in
+`target/release/` or `target/debug/`) when none runs. The tools, their arguments and the rules of
+an agent: [the guide for AI agents](mcp-agent-guide.md).
+
+The C++ editor's `ui_input` (mouse and key events, pictures of the whole window) is gone: the
+interface is a web page now. Its tests and the documentation's pictures drive it through the
+DevTools protocol of its web view: start the editor with
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` (Windows), then
+`Page.captureScreenshot`, `Input.dispatchMouseEvent`, and
+`window.__TAURI_INTERNALS__.invoke("plugin:jak-level-editor|call", {name, args})` for any call of
+the engine ([captures](captures/README.md)).
 
 ## 8. Known limitations
 
@@ -270,28 +303,36 @@ documentation's screenshots). The tools, their arguments and the rules of an age
 ## 9. Repository layout
 
 ```text
-src/core/      math, log, preferences, translations, undo history
-src/scene/     the document, picking, the story, the particles, the light of what is placed (relight),
-               shapes, topology, skeletons, a level's style, assemblies, the terrain, holes in the
-               decor (gaps)
-src/io/        glTF, the library, prefabs and the game's prefabs, game data, the catalog, nav meshes and
-               the export for the game, behaviors, Jak II's structures
-src/render/    camera, renderer, thumbnails, offscreen captures, the palette of materials, the guide's
-               animations
-src/game_view/ the game rendering: the game's renderer (game_view), the time of day and the weather
-               (game_mood), the sky (sky)
-src/tools/     the gizmo, the nav mesh generator (Recast, then the game's limits)
-src/app/       the window and its loop, document actions, panels, groups, the Game rendering window
-               (game_window), building tools (holes, small pieces), the guide, behaviors,
-               the preview, the topology and terrain tools, extraction, the remote control and the MCP
-               server, the self-test
-lang/          translations (en.json, fr.json)
-data/          what the editor knows of the games (made by tools/gen_*.py)
-tools/         gen_game_data.py, gen_particles.py, gen_jak2_creatures.py, gen_prefab_recipes.py: data/;
-               capture_docs.py: the documentation's screenshots
-docs/          reference.md (this page), mcp-agent-guide.md, behaviors.md, captures/
-extractor/     ogle-extract, built from OpenGOAL's decompiler (opengoal/, ISC), and the game's renderer
-third-party/   Dear ImGui, glad, tinygltf, nlohmann json, stb, Recast
-.claude/skills/ skills for Claude Code working on this repository
-.mcp.json      the MCP server, for Claude Code started in this folder
+crates/core/          the engine (jak-level-editor-core, lib jle_core), no Tauri:
+  src/scene/          the document, picking (BVH), the story, the particles, the light of what is placed
+                      (relight), shapes, topology, skeletons, a level's style, assemblies, the ground,
+                      the terrain, holes in the decor (gaps)
+  src/io/             glTF, the library and its index, prefabs and the game's prefabs, game data, the
+                      catalog, behaviors, the export for the game and its nav meshes, Jak II's structures
+  src/game/           the game rendering's data: the chunks (view), the time of day and the weather (mood)
+  src/editor/         the application without its interface: the document open, the selection, the
+                      history, the tools, the jobs, the extraction, the API (api.rs), the jle:// encoders
+                      (protocol.rs), the remote control and its tools
+  src/navmesh.rs      the nav mesh generator (rerecast, then the game's limits)
+  tests/              tests of the whole engine
+crates/tauri-plugin/  the engine in a Tauri app: its command, its events, the jle:// protocol, the
+                      remote control started
+crates/mcp/           jak-level-editor-mcp, the MCP server
+ui/                   the interface (Svelte 5, Tailwind, Flowbite): LevelEditor.svelte, lib/ (calls,
+                      translations, stores), components/ (menus, panels, inspector, windows, guide),
+                      render/ (the WebGL2 viewport, the game view, the sky, the gizmo, the tools)
+src/, index.html      the standalone app's page (mounts ui/LevelEditor.svelte)
+src-tauri/            the standalone app (jak-level-editor): Tauri, the plugin, its command line
+lang/                 translations (en.json, fr.json)
+data/                 what the editor knows of the games (made by tools/gen_*.py)
+tools/                gen_game_data.py, gen_particles.py, gen_jak2_creatures.py, gen_prefab_recipes.py:
+                      data/; capture_docs.py: the documentation's screenshots
+docs/                 reference.md (this page), rust-architecture.md, mcp-agent-guide.md, behaviors.md,
+                      captures/
+extractor/            ogle-extract, built from OpenGOAL's decompiler (opengoal/, ISC); CMakeLists.txt at
+                      the root builds it
+third-party/          where the third-party code is, and its licenses
+.claude/skills/       skills for Claude Code working on this repository (.agents/skills/: the same, for
+                      other agents)
+.mcp.json             the MCP server, for Claude Code started in this folder
 ```

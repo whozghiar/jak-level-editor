@@ -20,6 +20,20 @@ ogle-extract --list <game.iso | folder>     # the levels of the disc (json)
 An `.iso` is read in place: `--detect` and `--list` read its file table, and an extraction copies
 only the files it reads (the `DGO` and `CGO` folders, about 400 MB of a 4 GB disc).
 
+## Building it
+
+It is the only C++ of the repository, built on its own with CMake 3.20+, Ninja and a C++20
+compiler (tested with Clang 19 on Windows), from the repository's root:
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+`build/bin/` then holds `ogle-extract` (`.exe` on Windows) and its tables (`ogle-extract-data/`,
+copies of `data/` here, made again at every build): the editor looks there (after its own folder
+and its resources), so keep that build folder, or point `JLE_EXTRACTOR` at the program.
+
 The extractor reads nothing but the disc and its tables, and writes nothing outside the output
 folder: the decompiler code it is built from looks for its files below a "project" folder, which
 is always the output folder (the folder of the executable for `--detect` and `--list`), never a
@@ -66,7 +80,7 @@ goes to `<level>-<dgo>`.
 
 A disc of **Jak II** is extracted too, to `<output>/jak2/`, in the same layout and with the same
 writer: the editor offers its structures (buildings, the palace, pillars, cables) to Jak 3 levels
-and converts them when they are placed (see the editor's README, *Structures of Jak II*). Its tables
+and converts them when they are placed (see the editor's README, *Jak II's buildings*). Its tables
 are in `data/jak2/`. A disc of another game is recognized (`--detect` says which) but not extracted
 (`not_jak3`). Nothing of the game is in this repository: everything written comes from the user's
 disc.
@@ -119,13 +133,6 @@ Changes from jak-project:
   checkout from the executable's path (the original code took a sibling `jak-project` folder for
   it when the path contained that name).
 - `stubs.cpp` (outside `opengoal/`): the only symbol of the code analysis the link needs.
-
-`opengoal/game/graphics/` is not part of the extractor: it is the game's background renderer
-(`TFragment`, `background_common`, `Shader`, `BucketRenderer` and the shaders `tfrag3.*`), copied from
-jak-project's `game/graphics` and built into the editor for its game view (`src/game_view`), with
-the editor's stand-ins for what the game's renderer takes from the running game (`Loader.h`,
-`Profiler.h`, `TexturePool.h`, `pipelines/opengl.h`: marked `ogle:`) and its shaders compiled when
-first used (`Shader.*`).
 
 `data/jak3/` (and `data/jak2/` for Jak II) holds the tables of jak-project the reading needs: type
 definitions (`all-types.gc`), the files of the disc and its levels (`inputs.json`), the textures some

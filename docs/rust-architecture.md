@@ -1,51 +1,78 @@
-# Jak Level Editor: architecture of the Rust version
+# Jak Level Editor: architecture
 
-The editor (formerly *OpenGOAL Level Editor*, C++/ImGui/OpenGL) is rewritten in Rust with the same
-approach as the [OpenGOAL Launcher](https://github.com/open-goal/launcher): **Tauri 2** for the
-native side, **Svelte 5 + Tailwind CSS 4 + Flowbite** for the interface. It is split so that the
-editor is a self-contained module: it runs as its own application (*Jak Level Editor*) and plugs
-into the launcher (a *Level Editor* button) with two lines of Rust and one Svelte import.
+The editor (version 1, *OpenGOAL Level Editor*, was C++/ImGui/OpenGL) is written in Rust with the
+same approach as the [OpenGOAL Launcher](https://github.com/open-goal/launcher): **Tauri 2** for
+the native side, **Svelte 5 + Tailwind CSS 4 + Flowbite** for the interface. The editor is a
+self-contained module: it runs as its own application (*Jak Level Editor*) and plugs into the
+launcher (a *Level Editor* button) with two lines of Rust and one Svelte import.
 
 ## 1. Layout
 
 ```text
-Cargo.toml                        the Rust workspace
+Cargo.toml                        the Rust workspace: crates/core, crates/tauri-plugin, crates/mcp, src-tauri
 crates/
   core/                           jak-level-editor-core (lib jle_core): the engine, no Tauri
-    src/math.rs ...               vectors, quaternions, matrices, boxes, rays (core/math.h)
-    src/scene/ ...                the document: nodes, meshes, materials, BVH, picking, gaps,
-                                  terrain, topology, shapes, story, relight... (src/scene/*)
-    src/io/ ...                   glTF, the library, the catalog, prefabs, the game's data, the
-                                  export for the game and its nav meshes (src/io/*)
-    src/game/ ...                 the game's mood: hour, weather, fog, lights (src/game_view/*)
-    src/navmesh.rs                nav mesh generation (rerecast, a Rust port of Recast)
-    src/editor/ ...               the application without its interface: the document open,
-                                  the selection, the history, the tools, the jobs, the API
-                                  (src/app/actions.cpp, groups.cpp, extract.cpp...)
-  tauri-plugin/                   tauri-plugin-jak-level-editor: the engine inside a Tauri app
-                                  (commands, events, the jle:// protocol, the remote control)
+    src/math.rs                   vectors, quaternions, matrices, boxes, rays
+    src/history.rs, log.rs,       the undo history, the log, the translations (printf arguments),
+      i18n.rs, prefs.rs           the preferences
+    src/scene/                    the document: nodes, meshes, materials, the BVH and picking, holes
+                                  (gaps), the ground, the terrain, topology, shapes, the story,
+                                  assemblies, the light of what is placed (relight), particles,
+                                  skeletons, a level's style
+    src/io/                       glTF, the library and its index, the catalog, prefabs and the
+                                  game's prefab recipes, the game's data, the texture palette,
+                                  behaviors, the export for the game and its nav meshes, Jak II's
+                                  structures
+    src/game/                     the game view's chunks (view.rs), the game's mood: hour, weather,
+                                  fog, lights (mood.rs)
+    src/navmesh.rs, navmesh/      nav mesh generation (rerecast, a Rust port of Recast; recast.rs:
+                                  Recast's own steps where rerecast differs)
+    src/editor/                   the application without its interface: the Editor (mod.rs), the
+                                  dispatch of `call` (api.rs), get_state (state.rs), levels,
+                                  project, selection, groups, placement, the tools (terrain_tool,
+                                  topology_tool, preview), inspector, panels, catalog, thumbnails,
+                                  export, extraction, effects, ocean, surfaces, behaviors, the
+                                  jle:// encoders (protocol.rs), the remote control and its tools
+                                  (remote.rs, remote_tools.rs)
+    tests/                        tests of the whole engine
+  tauri-plugin/                   tauri-plugin-jak-level-editor: the engine inside a Tauri app (its
+                                  command, its events, the jle:// protocol, the remote control, the
+                                  command line)
   mcp/                            jak-level-editor-mcp: the MCP server (stdio) for AI assistants
 ui/                               the interface module: <LevelEditor/> and everything under it
   LevelEditor.svelte              the root component the standalone app and the launcher mount
-  lib/                            rpc (calls to the engine), i18n, stores
-  render/                         the WebGL2 viewport: renderer, game view, gizmo, overlays
-  components/                     menus, toolbar, panels, inspector, windows
-src/, index.html, package.json    the standalone app's frontend (mounts ui/LevelEditor.svelte)
-src-tauri/                        the standalone app (binary jak-level-editor): Tauri + the plugin
-extractor/                        ogle-extract (C++, from OpenGOAL's decompiler): unchanged
+  lib/                            rpc.ts (calls to the engine, jleUrl), engine.svelte.ts (its state
+                                  and events), i18n.ts, actions, shortcuts, windows
+  render/                         the WebGL2 viewport: renderer, camera and controls, the game view,
+                                  the sky, particles, the gizmo, labels, overlays, the tools (select,
+                                  place, terrain, topology, preview), the panels' pictures; dev/: the
+                                  viewport alone on a mock engine (http://localhost:3001/ui/render/dev/
+                                  with `npx vite`)
+  components/                     frame/ (title bar, menus, toolbar, story bar), panels/, inspector/,
+                                  windows/, guide/, common/
+src/, index.html, package.json    the standalone app's frontend (mounts ui/LevelEditor.svelte), its
+                                  fonts
+src-tauri/                        the standalone app (binary jak-level-editor): Tauri + the plugin,
+                                  tauri.conf.json, its capability, its icons
+extractor/                        ogle-extract (C++, from OpenGOAL's decompiler), built by the root
+                                  CMakeLists.txt (nothing else is C++)
 data/, lang/                      the game's tables, the interface's texts (en, fr)
+tools/                            Python: data/ made again from the game's code, the documentation's
+                                  pictures
 ```
 
-`extractor/` stays a native tool the engine runs, as the launcher runs OpenGOAL's own extractor,
-compiler and game: it is OpenGOAL's decompiler, not the editor.
+`extractor/` stays a native tool the engine runs (`crates/core/src/editor/extract.rs`), as the
+launcher runs OpenGOAL's own extractor, compiler and game: it is OpenGOAL's decompiler, not the
+editor. `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build` writes
+`build/bin/ogle-extract(.exe)` and its tables `build/bin/ogle-extract-data/`, where the engine
+looks for it (after the program's own folder and its resources; `$JLE_EXTRACTOR` last).
 
 ## 2. Who does what
 
 - **The engine (Rust, `jle_core`)** owns the document and everything computed from it: nodes,
   meshes, materials, textures, history, selection, tools, picking (BVH ray casts), the catalog,
   prefabs, levels, story, nav meshes, holes, export, extraction, the remote tools of the MCP
-  server. It never draws. It is tested with `cargo test -p jak-level-editor-core` (the C++
-  `--selftest`).
+  server. It never draws. It is tested with `cargo test -p jak-level-editor-core`.
 - **The interface (Svelte + TypeScript)** shows the engine's state and sends the user's actions.
   Its viewport draws with WebGL2 what the engine gives it (the meshes, their world matrices, the
   materials and textures, the game's palettes), and handles the mouse: the camera, the gizmo,
@@ -67,13 +94,16 @@ impl Editor {
 }
 ```
 
-`call` dispatches on `name` (snake_case, the names of the C++ functions where there is one). Errors
-are translation keys with their arguments when the interface shows them (`"error.no_library"`), or
+`call` dispatches on `name` (snake_case, the names of the C++ editor's functions). Errors
+are translation keys with their arguments when the interface shows them (`"levels.no_library"`), or
 English text. `get_state` answers what the interface shows besides the scene (the document, the
 selection, the tool, the history's labels, the jobs, the log's last lines, the view's settings).
 
 The engine tells the interface something changed with **one event**, `jle:changed`, whose
-payload says what (`{"revision": 12, "scene": true, "selection": true, "state": true}`), plus
+payload says what (`{"revision": 12, "scene": true, "selection": true, "state": true}`; also
+`document`, `materials`, `textures`, `gameview`): `call` compares the engine before and after
+(the history's revision, the scene, the selection, the state the interface shows) and emits it
+once, the queries (`get_state`, `node`, `pick`...) never. Besides it,
 `jle:log` (a line of the log), `jle:progress` (a job) and `jle:request` (the engine needs the
 interface: a capture of the view for the MCP server, a camera move; the interface answers with
 `call("frontend_reply", {id, ...})`).
@@ -89,7 +119,6 @@ The plugin serves the viewport's data on a URI scheme (`jle://localhost/<path>` 
 | `mesh/<uid>` | a mesh's primitives: positions, normals, uvs, colors, indices, material |
 | `texture/<index>` | a texture of the document: `u32 width, u32 height`, RGBA bytes |
 | `materials` | JSON: the document's materials (texture, color, alpha, blend, cutoff, two sides) |
-| `tod/<node id>` | the node's game lighting: its palette (8 RGBA per color) and the color of each vertex |
 | `thumb/<name>` | a thumbnail the interface drew before (PNG of <preferences>/thumbs), 404 until then |
 | `preview/<kind>?...` | what a thumbnail draws: a mesh with its own materials and textures (`JLEP`) |
 | `palette?game=&background=&name=` | the image of a texture of the games, as `texture/<index>` |
@@ -169,8 +198,11 @@ palette), `u16 0`; then `u32 idx[indices]`. The normal tree's draws come first.
 The plugin keeps the engine in an `Arc<Mutex<Editor>>`. Long work (a level read, the catalog's
 index, the game's prefabs, a nav mesh, an export, the extraction) runs on a worker thread that
 holds what it reads (`Arc`s of the library) and applies its result under the lock when done, then
-emits `jle:changed`. The remote control (MCP) listens on `127.0.0.1:47821` and runs its tools
-under the same lock: what an assistant does shows at once and can be undone.
+emits `jle:progress` while it goes and `jle:changed` when done (`Editor::run_job`). The remote
+control (MCP) listens on `127.0.0.1:47821` and runs its tools under the same lock: what an
+assistant does shows at once and can be undone; a tool that waits (a level loading, a job, a
+picture of the view) is asked again every few milliseconds, the lock let go in between. A timer of
+the plugin calls `Editor::tick` every 50 ms (the game view's hour passing, a storm's lightning).
 
 ## 6. In the launcher
 
@@ -189,32 +221,46 @@ tauri-plugin-jak-level-editor = { path = "../level-editor/crates/tauri-plugin" }
 ```svelte
 <!-- a route of the launcher -->
 <script> import LevelEditor from "$level-editor/LevelEditor.svelte"; </script>
-<LevelEditor embedded />
+<LevelEditor embedded locale="fr-FR" />
 ```
 
-with the capability `jak-level-editor:default` and the alias `$level-editor` to
-`level-editor/ui`. Its sidebar's *Level Editor* button opens the editor in a window of its own.
+with the capability `jak-level-editor:default` (the plugin's one command, `call`) and the alias
+`$level-editor` to `level-editor/ui` (vite's `resolve.alias` and tsconfig's `paths`, as this
+repository's own). Its sidebar's *Level Editor* button opens the editor in a window of its own.
+`embedded` leaves out the editor's own title bar (the launcher's window has its frame); `locale`
+is the launcher's language. `init()` takes no command line: the library and the language are the
+preferences', and the remote control listens on its default port. The editor's translations and
+tables go in the launcher's resources under `jak-level-editor/` (`lang/`, `data/`), apart from
+its own.
 
 The standalone app gives the plugin its command line instead:
 `tauri_plugin_jak_level_editor::Builder::new().args(std::env::args()).build()`, which reads
 `[project.glb] --library <folder> --lang <code> --remote-port <port> --hidden --open-level <name>`
 (`--hidden`: no window, the preferences left unchanged; `--open-level`: a level of the library
 opened at the start). The plugin takes the translations and the game's tables from the app's
-resources (`lang/`, `data/`: `bundle.resources` of src-tauri/tauri.conf.json), else next to the
-executable, else the repository's. ogle-extract is found next to the executable, in the resources
-or in the repository's `build/bin/`: to ship it with the app, add `"../build/bin/ogle-extract.exe":
-"ogle-extract.exe"` and `"../build/bin/ogle-extract-data/": "ogle-extract-data/"` to
-`bundle.resources` once it is built (a missing path there fails `tauri build`).
+resources (`lang/`, `data/`: `bundle.resources` of src-tauri/tauri.conf.json; a build copies them
+into `target/<profile>/`), else the repository's. ogle-extract is found next to the executable,
+in the resources or in the repository's `build/bin/`: to ship it with the app, add
+`"../build/bin/ogle-extract.exe": "ogle-extract.exe"` and `"../build/bin/ogle-extract-data/":
+"ogle-extract-data/"` to `bundle.resources` once it is built (a missing path there fails
+`tauri build`).
 
-## 7. Porting conventions
+## 7. Conventions
 
-- The Rust code follows the C++ one file for file (`src/scene/terrain.cpp` -> `crates/core/src/scene/terrain.rs`),
-  with the same names in snake_case, the same comments (the C++ comments explain the game: keep
-  them), and the same behavior: the editor must not lose a feature.
+- The Rust code follows the C++ editor's file for file (`src/scene/terrain.cpp` ->
+  `crates/core/src/scene/terrain.rs`), with the same names in snake_case, the same comments (they
+  explain the game) and the same behavior. The comments still name the C++ files they come from:
+  read them with `git show <commit>:src/...`, `<commit>` being the one before they were removed
+  (`git log -1 --format=%H --diff-filter=D -- src/main.cpp`, then its parent: `<hash>^`).
 - Shared data: `Arc<Mesh>` (copy on write with `Arc::make_mut`), meshes' derived data (bounds,
   BVH) computed lazily behind `OnceLock`/`RwLock`.
-- JSON: `serde_json::Value` where the C++ uses `nlohmann::json` (extras, game data).
+- JSON: `serde_json::Value` for what the C++ kept in `nlohmann::json` (extras, game data).
 - Interface texts: `lang/<code>.json`, the same keys as the C++ editor; printf arguments (`%s`,
-  `%d`, `%zu`, `%.1f`) are formatted by `ui/lib/i18n.ts` (interface) and `jle_core::i18n` (log,
-  MCP answers).
-- The C++ editor's sources stay on `main` (and in this branch's history): `git show main:src/...`.
+  `%d`, `%zu`, `%.1f`) are formatted by `ui/lib/i18n.ts` (interface: `t("key")`) and
+  `jle_core::i18n` (log, MCP answers: `tr("key")`). A test checks every key of `en.json` in every
+  language, with the same arguments.
+- Tests: `cargo test -p jak-level-editor-core` (the C++ `--selftest`'s checks, as `#[cfg(test)]`
+  modules and `crates/core/tests/`; those needing the extracted game skip themselves when
+  `library/jak3/library.json` is missing), `cargo test -p jak-level-editor-mcp`, and for the
+  interface `npx svelte-check --tsconfig ./tsconfig.json` and `npx vite build`.
+- Formatting: `rustfmt.toml` (2 spaces), prettier for the interface (`npx yarn format`).

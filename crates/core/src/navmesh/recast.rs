@@ -1,5 +1,5 @@
-//! Recast's own steps where rerecast (its Rust port) differs from it, from
-//! third-party/recast/Source:
+//! Recast's own steps where rerecast (its Rust port) differs from it, from Recast/Source of
+//! recastnavigation (commit 9f4ce64, the C++ editor's third-party/recast):
 //! - RecastRasterization.cpp, rcRasterizeTriangles: the triangles cut in voxels. Rerecast's
 //!   divides an empty polygon without saying it is empty: the last row of a triangle is voxelized
 //!   again in the next row (spans where nothing is), and it keeps heights over Recast's 13 bits;

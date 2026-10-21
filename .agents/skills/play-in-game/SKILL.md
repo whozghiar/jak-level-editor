@@ -5,6 +5,9 @@ description: Export a level made in the editor and check it in the real game (Op
 
 # From the editor to the game
 
+0. **The editor**: `target/release/jak-level-editor.exe` (or `target/debug/`, or
+   `npx yarn tauri dev`; build it first: the build-and-test skill), with `--library <folder>` when
+   the levels are not in `library/`; or the MCP server, which starts it.
 1. **Export**: `Level > Export for the game...` or the MCP tool `export_level` (`name`, `replaces`
    for a level taking the place of one of the game's). It writes `library/export/<project>/` laid
    out like a jak-project checkout, with a `README.md` giving the exact lines to add.

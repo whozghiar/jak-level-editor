@@ -1,4 +1,4 @@
-# OpenGOAL Level Editor
+# Jak Level Editor
 
 A level editor for **Jak 3**, for [OpenGOAL](https://github.com/open-goal/jak-project): the project
 that rebuilds the PlayStation 2 game so that it runs natively on PC, from your own disc. The editor
@@ -10,12 +10,19 @@ play in the game.
 You do not need to have used a level editor before. This guide explains each idea the first time it
 appears, with an example, and shows each tool in a picture.
 
+> The pictures of this guide show the previous interface of the editor (C++ and Dear ImGui, when it
+> was called *OpenGOAL Level Editor*); they will be taken again. The menus, tools and keys are the same.
+
 ![The editor: the levels on the left, the level in the middle as the game draws it, the inspector on the right](docs/captures/getting-started/window.png)
 
 - **Nothing of the game is in this repository.** Everything comes from your disc: you extract it once.
 - **It needs nothing else**: not OpenGOAL, not the game, to build or to run. To *play* what you
   exported you need **jak-project**, OpenGOAL's source code, built on your computer (see
   [15](#15-playing-it-in-the-game-export)).
+- **On its own or in the OpenGOAL Launcher**: it is made like the
+  [OpenGOAL Launcher](https://github.com/open-goal/launcher) (an engine in Rust, an interface in
+  Svelte, in a Tauri window), so the same editor runs as its own program or opens from the
+  launcher's *Level Editor* button ([how](docs/rust-architecture.md#6-in-the-launcher)).
 - **An AI assistant can build for you** (Claude Code, or any program that speaks MCP, the protocol
   that lets an AI assistant use the editor's tools): see [the guide for AI agents](docs/mcp-agent-guide.md).
 - The interface is in **English and French** (View > Language).
@@ -94,7 +101,10 @@ after a fall.
 
 ### What you need
 
-- Windows 10/11 or Linux, 64-bit, a graphics card with OpenGL 3.3 (4.1 for the game rendering).
+- Windows 10/11 or Linux, 64-bit, a graphics card with WebGL2 (any card of the last ten years).
+- On Windows, **WebView2**, the web view the interface is drawn in: part of Windows 11, and of
+  Windows 10 once Edge is up to date (else the
+  [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/)).
 - **Your copy of Jak 3** for the PlayStation 2: the disc image (`.iso`) or the folder of the disc.
   Put it in `iso_data/` of this folder if you like (git ignores it), or anywhere.
 - About 4 GB of disk for the extracted levels, 5 GB of free memory while they are extracted.
@@ -102,28 +112,58 @@ after a fall.
 
 ### Build it
 
-You need CMake 3.20+, Ninja and a C++20 compiler (tested with Clang 19 on Windows); the first build
-downloads SDL3 (a few minutes). There is no ready-made download yet.
+There is no ready-made download yet. You need:
+
+- [Rust](https://rustup.rs), stable (1.89 or later). On Windows, rustup offers to install the
+  Visual Studio C++ build tools Rust links with: accept.
+- [Node.js](https://nodejs.org) 22. Yarn, the interface's package manager, comes through `npx`:
+  nothing more to install.
+- For **ogle-extract**, the extractor (C++, from OpenGOAL's decompiler): CMake 3.20+, Ninja and a
+  C++20 compiler (tested with Clang 19 on Windows).
+- On Linux, the system packages of a Tauri application:
+  [Tauri's prerequisites](https://v2.tauri.app/start/prerequisites/) (webkit2gtk 4.1 and others).
 
 On **Windows**, step by step:
 
-1. Install the tools once, for example with [Scoop](https://scoop.sh) in a PowerShell window:
-   `scoop install git cmake ninja llvm python` (or with `winget`: `Kitware.CMake`, `Ninja-build.Ninja`,
-   `LLVM.LLVM`, `Git.Git`).
+1. Install the tools once: Rust with [rustup](https://rustup.rs), Node.js 22, and for the extractor
+   with [Scoop](https://scoop.sh) in a PowerShell window `scoop install git cmake ninja llvm python`
+   (or with `winget`: `Kitware.CMake`, `Ninja-build.Ninja`, `LLVM.LLVM`, `Git.Git`).
 2. Get this repository (`git clone ...`, or the ZIP of the repository's page) and open a terminal
    in its folder.
-3. Type the four lines below. The last one starts the editor; next time, double-click
-   `build\bin\open-goal-level-editor.exe`.
+3. Build the extractor, then the editor. The last line builds the editor and starts it (the first
+   time takes a few minutes).
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-./build/bin/open-goal-level-editor --selftest   # the editor's own tests: "OK (0 failures)"
-./build/bin/open-goal-level-editor              # start it
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # ogle-extract, once
+cmake --build build                                        # build/bin/ogle-extract and its tables
+npx yarn install                                           # the interface's packages, once
+npx yarn tauri dev                                         # build the editor and start it
 ```
 
-Keep the files of `build/bin/` together (the editor, `ogle-extract`, `data/`, `lang/`,
-`game-shaders/`).
+`npx yarn tauri dev` is for working on the editor (the interface reloads when its files change).
+To make the program itself and its installers:
+
+```bash
+npx yarn tauri build
+```
+
+It writes `target/release/jak-level-editor.exe` (`jak-level-editor` on Linux): next time,
+double-click it. The installers are in `target/release/bundle/` (`.msi`, `.deb`, `.AppImage`).
+The editor finds `ogle-extract` next to itself, in its resources, or in `build/bin/` of this
+folder: keep the extractor built there (or see the [reference](docs/reference.md#2-the-extraction)
+to put it in the installer).
+
+The tests:
+
+```bash
+cargo test -p jak-level-editor-core           # the engine's own tests
+npx svelte-check --tsconfig ./tsconfig.json   # the interface's types
+```
+
+The engine's tests need no game data (those that read the extracted levels skip themselves when
+`library/jak3/library.json` is missing) and check, among others: the scene, glTF round trips,
+prefabs and groups, the export for the game, the translations, the game view, the holes finder,
+the weathers, the terrain brush, the nav meshes.
 
 ### Extract your game
 
@@ -607,11 +647,16 @@ Then, to play it (the export's `README.md` gives the exact lines for your level)
 ## 16. Building with an AI assistant
 
 An AI assistant can build in the editor for you, through its **MCP server**
-(`open-goal-level-editor --mcp`; MCP is the protocol that lets an assistant use a program's tools):
+(`jak-level-editor-mcp`; MCP is the protocol that lets an assistant use a program's tools):
 you describe the level, it opens it, places the decor and the prefabs, checks the holes, looks at the
-result and shows it to you, in your window, every change undoable.
+result and shows it to you, in your window, every change undoable. The server starts the editor
+when none is running.
 
-- **Claude Code**: start it in this folder (it reads `.mcp.json`) and accept the server.
+- **Build it** with the editor: `npx vite build`, then
+  `cargo build --release -p jak-level-editor -p jak-level-editor-mcp` (both land in
+  `target/release/`).
+- **Claude Code**: start it in this folder (it reads `.mcp.json`) and accept the server
+  `jak-level-editor`.
 - Then ask, for example: *"Open the slums, build a little square with a fountain and two trees in
   front of the tower, and show me a picture at dusk"*.
 
@@ -655,8 +700,11 @@ library/                 everything made from your game (git ignores it)
 iso_data/                put your disc images here if you like (git ignores them)
 data/                    what the editor knows of the game: names and rules, no asset
 lang/                    the interface texts (en.json, fr.json)
+crates/                  the engine (core/), the engine in a Tauri app (tauri-plugin/), the MCP server (mcp/)
+ui/                      the interface: menus, panels, windows, the 3D view (Svelte, WebGL2)
+src/, src-tauri/         the editor as a program of its own: its page and its Tauri app
+extractor/               ogle-extract, the extractor (C++)
 docs/                    this documentation's other pages and its screenshots
-src/, extractor/         the editor and the extractor
 tools/                   scripts that regenerate data/ and the screenshots
 .claude/skills/          skills for Claude Code working on this repository
 ```
@@ -664,10 +712,17 @@ tools/                   scripts that regenerate data/ and the screenshots
 Only `library/prefabricated/.gitkeep` of `library/` is in git: prefabs, projects and exports hold
 the game's data and stay on your computer.
 
+Your preferences (the library, the disc, the language, the recent projects), the pictures of the
+panels and what the catalog read of the levels are kept in `%APPDATA%/OpenGOAL/jak-level-editor`
+on Windows (`~/.local/share/OpenGOAL/jak-level-editor` on Linux). The first time, the editor takes
+the preferences of its previous version (`OpenGOAL/open-goal-level-editor`).
+
 ## 19. More
 
 - [Technical reference](docs/reference.md): the command line, the file formats, the game data, the
   details of the export and the known limitations.
+- [Architecture](docs/rust-architecture.md): the engine, the interface, their protocol, and how the
+  launcher embeds the editor.
 - [What the decor can do in the game](docs/behaviors.md): a study of the game's code.
 - [The guide for AI agents](docs/mcp-agent-guide.md).
 - [How the screenshots are made](docs/captures/README.md).
@@ -676,8 +731,8 @@ the game's data and stay on your computer.
 
 ISC (see [`LICENSE`](LICENSE)), the license of OpenGOAL. This editor is built on the work of the
 [OpenGOAL](https://github.com/open-goal/jak-project) team: its extractor is made of the data readers
-of OpenGOAL's decompiler, its game rendering of the game's renderer (`extractor/opengoal/`, ISC
-license), its game data is generated from OpenGOAL's decompiled code. It is an independent project,
+of OpenGOAL's decompiler (`extractor/opengoal/`, ISC license), its game rendering draws with the
+game's own shader (TFragment), its game data is generated from OpenGOAL's decompiled code. It is an independent project,
 not affiliated with the OpenGOAL team nor endorsed by it. Third-party code keeps its own license
 (`third-party/README.md`). Jak 3 belongs to Sony Interactive Entertainment and was developed by
 Naughty Dog: no data of the game is in this repository; the screenshots show levels extracted from a

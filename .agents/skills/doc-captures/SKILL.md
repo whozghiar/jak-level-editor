@@ -5,35 +5,44 @@ description: Make the screenshots of the documentation again (README.md, docs/mc
 
 # Documentation captures
 
-The editor takes its own screenshots, in hidden windows (1600 x 900, English interface). They go
-in `docs/captures/<feature>/<name>.png`, one folder per feature of the README (getting-started,
-levels, selecting, groups, catalog, prefabs, building, holes, game-rendering,
-behaviors, nav-meshes, export, mcp).
+The pictures go in `docs/captures/<feature>/<name>.png`, one folder per feature of the README
+(getting-started, levels, selecting, groups, catalog, prefabs, building, holes, game-rendering,
+behaviors, nav-meshes, export, mcp), 1600 x 900, the interface in English.
 
 ```bash
-python tools/capture_docs.py                       # all of them (needs Jak 3 extracted)
-python tools/capture_docs.py --only groups,holes   # some features
-python tools/capture_docs.py --only selecting --quick   # only those made through the remote control
-python tools/capture_docs.py --disc "<your Jak 3 .iso or folder>"   # with the extraction window
+python tools/capture_docs.py                            # all of them (needs Jak 3 extracted, the editor built)
+python tools/capture_docs.py --only groups,holes        # some features
+python tools/capture_docs.py --only levels --out <dir>  # elsewhere, to compare before replacing
 ```
 
-Two ways, both in the script:
+The script starts the editor (`target/release`, else `target/debug` `jak-level-editor`;
+`--editor <program>` for a copy) and drives it two ways:
 
-- **Setups** of the editor: `open-goal-level-editor --screenshot <level|project|disc> <out.png>
-  <setup> --lang en [--camera x,y,z,yaw,pitch] [--game <hour>] [--select ...] [--add ...]
-  [--story ...]` (setups: levels, select, scale, prefab, catalog, models, decor, decor-all,
-  materials, effects, actors, navmesh, export, extract, guide, tools, help, build, project).
-- **The remote control** of a hidden editor (`Editor` in the script): the MCP tools, plus
-  `ui_input` with mouse and key events (`move`, `move_to_node`, `down`, `up`, `click`, `wheel`,
-  `key` with `mods`, `text`, `wait` frames, `shot`) and `capture_view` for the 3D view alone.
+- **The remote control** (`Editor.call`: the MCP server's tools, one JSON line per request on
+  `--remote-port`) sets up the scene: `open_level`, `add_level`, `place`, `select`, `set_camera`,
+  `set_view`, `set_story`, `find_gaps`... `capture_view` gives a picture of the 3D view alone; it
+  answers once the interface is up (the script waits for it).
+- **The web view's DevTools** (`Editor.web`): the editor started with
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` and a
+  `WEBVIEW2_USER_DATA_FOLDER` of its own (one shared with a running editor keeps the window from
+  appearing). `shot(path)` is `Page.captureScreenshot` of the whole window (the page set to
+  1600 x 900 with `Emulation.setDeviceMetricsOverride`), `click("Levels")` the first shown button
+  or entry with that text or aria-label, `key("F1")` a key for the interface's shortcuts,
+  `engine(name, args)` any call of the engine as the interface makes it
+  (`window.__TAURI_INTERNALS__.invoke("plugin:jak-level-editor|call", {name, args})`).
+
+Not done by the script (it prints the list): the pictures of the mouse over the 3D view (the
+cursor's label, a box being drawn, the button held, a drag, the terrain brush and the topology
+tool), the windows naming a prefab or a group, and the extraction window. Take them by hand, or
+with `Input.dispatchMouseEvent` / `Input.dispatchKeyEvent` over the same DevTools connection (the
+viewport's coordinates are the page's).
 
 Tips:
 
-- Tools that wait a moment (the hover label: 0.35 s, the held button: 0.6 s) need real time, not
-  frames: `time.sleep` between two `ui` calls.
-- `move_to_node` puts the cursor over a visible point of an element; the answer gives the cursor
-  (`mouse`), for drags from there.
-- Close the windows a section opened before the next one (they stay open in the same editor).
+- Wait for the view to draw before a picture (`shot(path, settle=seconds)`): meshes, textures and
+  the game rendering's chunks come after the call that made them.
+- Close the windows a section opened before the next one (`close_windows()`: Escape closes only
+  the modal ones, and the first "Close" of the page is the editor's own).
 - Look at every picture (a contact sheet of several helps) before using it in the docs.
 - The pictures show the game's levels: never put the extracted files themselves in git, only the
   pictures.

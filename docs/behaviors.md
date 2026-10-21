@@ -12,10 +12,11 @@ and move with its versions. Distances are in game units in the code: 4096 per me
 
 ## What the editor offers
 
-Select a piece of decor: the inspector's **In the game** section (`ui_decor_behavior`,
-`src/app/behavior_panel.cpp`) sets it, for every selected piece at once, undone like any change.
-It is kept in the node's extras (`og_decor`, `src/io/decor_behaviors.h`), saved with the project and
-in prefabs, and written by **Level > Export for the game** (`src/io/game_export.cpp`). The MCP tool
+Select a piece of decor: the inspector's **In the game** section
+(`ui/components/inspector/DecorBehavior.svelte`) sets it, for every selected piece at once, undone
+like any change. It is kept in the node's extras (`og_decor`, `crates/core/src/io/decor_behaviors.rs`),
+saved with the project and in prefabs, and written by **Level > Export for the game**
+(`crates/core/src/io/game_export.rs`). The MCP tool
 `set_decor` sets the same.
 
 | Behavior | How it is made | Code generated |
@@ -63,7 +64,7 @@ So, for a piece of decor:
 | seen, walked through (cables, light shafts, foliage) | `set_collision: 1, ignore: 1` |
 | not seen, solid (an invisible wall) | `set_collision: 1, set_invisible: 1` |
 | deadly, endless fall, burns, melts | `collide_event` 1, 2, 3, 6 (4 and 5: deadly and burn throwing Jak up) |
-| its surface (the sound and dust of the steps; ice slides) | `collide_material`, in the builder's numbering (`builder_material`, `src/io/decor_behaviors.cpp`) |
+| its surface (the sound and dust of the steps; ice slides) | `collide_material`, in the builder's numbering (`builder_material`, `crates/core/src/io/decor_behaviors.rs`) |
 
 How Jak 3 reacts (`react-to-pat!`, `goal_src/jak3/engine/collide/collide-shape.gc:737-894`): deadly
 is an `'attack` of 2 damage that shoves Jak 3 m up (777-792), burn the same in the burn mode
@@ -128,7 +129,7 @@ and the `'touched` it finds is forwarded as `'touch` (`target-handler.gc:1005, 1
 collide-with includes `crate`. The vent types themselves live in the DGOs of the Industrial Zone
 and the port, not loaded with a custom level: the editor derives `bouncer` itself.
 
-**What the editor generates** (`bounce_code`, `src/io/decor_behaviors.cpp`): for each piece set to
+**What the editor generates** (`bounce_code`, `crates/core/src/io/decor_behaviors.rs`): for each piece set to
 bounce, a type `<level>-<piece>-bounce` deriving `bouncer`, whose `init-skel!` does nothing and
 whose `init-collision!` makes one sphere (prim-id 9: dive and board; collide-as `crate`,
 collide-with `jak player-list`, overlap only) of the piece's half width (1 to 20 m), 0.5 m above
@@ -245,9 +246,10 @@ animation. The route is the one of [Breakable](#breakable).
 
 ## What was checked
 
-- `--selftest` exports a level with a slab of deadly ice, a cable Jak goes through, a pad that
-  bounces and a ramp that launches, and checks the extras, the actors (their place, their
-  `spring-height`) and the code the export writes (*export: the decor's collision...*).
+- The engine's tests (`the_decors_behaviors`, `crates/core/src/io/game_export.rs`) export a
+  level with a slab of deadly ice, a cable Jak goes through, a pad that bounces and a ramp that
+  launches, and check the extras, the actors (their place, their `spring-height`) and the code the
+  export writes.
 - The study above was made by reading jak-project's code (read only; nothing of it was changed).
 - **Not checked yet**: the generated bounce and propulsion code compiled by OpenGOAL's compiler and
   played in the game. The behaviors of the game's own objects (doors, board vents, elevators) were

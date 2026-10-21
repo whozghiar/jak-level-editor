@@ -1,4 +1,6 @@
 build/
+# other CMake build folders of ogle-extract (cmake -S . -B build-<name>)
+build-*/
 # the levels extracted from the user's game, its projects, exports and prefabs: they hold the game's
 # data (never in the repository); library/prefabricated/ is kept, empty, by its .gitkeep
 library/*

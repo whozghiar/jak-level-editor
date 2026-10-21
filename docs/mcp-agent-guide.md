@@ -2,7 +2,7 @@
 
 This guide is for an AI agent (Claude Code or any other client of the
 [Model Context Protocol](https://modelcontextprotocol.io)) that builds or changes levels of Jak 3 in
-the OpenGOAL Level Editor, and for the person who sets it up. It explains what the editor's tools
+Jak Level Editor, and for the person who sets it up. It explains what the editor's tools
 do, the ideas behind them (what a level, a facade, a prefab or a hole in the decor is) and the
 rules that make a level look right in the game, with complete examples.
 
@@ -41,21 +41,25 @@ The server tells your client its rules when it starts (its `instructions`): they
 
 ## 2. Setting it up
 
-1. Build the editor and its MCP server (`npx vite build`, then `cargo build --release -p
-   jak-level-editor -p jak-level-editor-mcp`: both land in `target/release/`) and extract the game
+1. Build the editor and its MCP server ([README, Build it](../README.md#build-it): `npx yarn
+   install` once, `npx vite build`, then `cargo build --release -p jak-level-editor -p
+   jak-level-editor-mcp`: both land in `target/release/`) and extract the game
    ([README, Extract your game](../README.md#extract-your-game)): without the extracted levels,
-   there is nothing to build with. The MCP server starts the editor found next to it.
+   there is nothing to build with. The MCP server starts the editor found next to it (else in
+   `target/debug/`), in its own window, when none is running; one already open is used.
 2. **Claude Code**: the repository has a `.mcp.json`. Start Claude Code in the repository's folder
-   and accept the server `open-goal-level-editor`. From another folder, add it once:
+   and accept the server `jak-level-editor` (its tools are then named
+   `mcp__jak-level-editor__<tool>`). From another folder, add it once:
 
    ```bash
    # Windows, the repository in D:\levels\open-goal-level-builder
-   claude mcp add open-goal-level-editor -- "D:/levels/open-goal-level-builder/target/release/jak-level-editor-mcp.exe"
+   claude mcp add jak-level-editor -- "D:/levels/open-goal-level-builder/target/release/jak-level-editor-mcp.exe"
    # Linux, the repository in ~/open-goal-level-builder
-   claude mcp add open-goal-level-editor -- ~/open-goal-level-builder/target/release/jak-level-editor-mcp
+   claude mcp add jak-level-editor -- ~/open-goal-level-builder/target/release/jak-level-editor-mcp
    ```
 
-3. **Another client**: run `<repository>/target/release/jak-level-editor-mcp` as a stdio server.
+3. **Another client**: run `<repository>/target/release/jak-level-editor-mcp` as a stdio server
+   (`--remote-port <port>` if the editor was started with another port than 47821).
 4. Check: ask the assistant to call `get_status` (*"call get_status of the level editor"*). Its
    answer gives the library and the document, for example
    `{"levels": 272, "document": {"open": true, "level": "ctysluma", "elements": 13193, ...}, ...}`. The

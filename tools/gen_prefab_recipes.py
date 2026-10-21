@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Adds recipes of prefabs to data/<game>/prefabs.json: the assemblies of the extracted levels, as
-the editor finds them (scene/assemblies.h) and as "Select its assembly" selects them: a house of the
+the editor finds them (crates/core/src/scene/assemblies.rs) and as "Select its assembly" selects them: a house of the
 slums with its facades, roof and windows, a building of Haven, a tower of Spargus, a bridge with its
 pillars. It drives a hidden editor through its remote control: each level opened, its assemblies
 listed (list_assemblies), the ones too small, too thin (a pole, a pipe, a plank) or already met
@@ -18,8 +18,8 @@ levels looked at. The recipes written by hand
 stay first and are kept; the ones this script made before ("auto") are made again.
 
 Only names are written (levels, elements) and boxes: no data of the game. Run it from the
-repository root after building the editor, with the games extracted, then rebuild (the data files
-are copied next to the executable):
+repository root after building the editor (target/release, else target/debug), with the games
+extracted, then build it again (a build copies data/ next to the program):
 
   python tools/gen_prefab_recipes.py [--game jak3|jak2] [--levels a,b] [--per-level 36] [--min-elements 10]
       [--min-size 12] [--min-thickness 4] [--min-triangles 300] [--max-size 60]
@@ -35,7 +35,9 @@ import subprocess
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EDITOR = os.path.join(REPO, 'build', 'bin', 'open-goal-level-editor' + ('.exe' if os.name == 'nt' else ''))
+EXE = 'jak-level-editor' + ('.exe' if os.name == 'nt' else '')
+EDITOR = next((p for p in (os.path.join(REPO, 'target', profile, EXE) for profile in ('release', 'debug'))
+               if os.path.isfile(p)), os.path.join(REPO, 'target', 'release', EXE))
 
 # where a level is, by the beginning of its name (the first that matches)
 PLACES = {

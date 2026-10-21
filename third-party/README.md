@@ -1,16 +1,12 @@
 # Third-party code
 
-Copied from jak-project's `third-party/` folder (same versions), so the editor builds on its own,
-except `recast/`.
+The C++ editor's copies (Dear ImGui, glad, tinygltf, nlohmann json, stb, Recast) are gone with it.
+What the editor uses of others' code now, and where its licenses are:
 
-| Folder | Library | License |
+| Where | What | License |
 |---|---|---|
-| `imgui/` | Dear ImGui 1.92.6, with the SDL3 and OpenGL 3 backends | MIT (`imgui/LICENSE.txt`) |
-| `glad/` | glad 0.1.34 OpenGL loader (GL 4.3 compatibility profile) | MIT / public domain; `khrplatform.h` under the Khronos license in its header |
-| `tinygltf/` | tinygltf | MIT (header) |
-| `json/` | nlohmann json 3.12.0 | MIT (header) |
-| `stb/` | stb_image, stb_image_write | MIT or public domain (headers) |
-| `recast/` | Recast, the nav mesh generator of [recastnavigation](https://github.com/recastnavigation/recastnavigation) (its `Recast/` folder only, commit 9f4ce64, February 2026) | zlib (`recast/License.txt`) |
-
-`recast/` does not come from jak-project: the editor generates nav meshes with it (Tools > Nav
-meshes). SDL3 is not copied: see "Building" in the main README.
+| `Cargo.toml`, `Cargo.lock` | the Rust crates (Tauri, serde, image, glam, rerecast...), downloaded by cargo | each crate's own (MIT or Apache-2.0 for most) |
+| `package.json`, `yarn.lock` | the interface's packages (Svelte, Tailwind CSS, Flowbite, Tauri's API, Material Design Icons), downloaded by yarn | each package's own (MIT for most; the icons: Apache-2.0) |
+| `crates/core/src/navmesh/recast.rs` | the steps of Recast ([recastnavigation](https://github.com/recastnavigation/recastnavigation), commit 9f4ce64) where its Rust port rerecast differs, ported | zlib (in the file's header) |
+| `extractor/opengoal/` | the data readers of OpenGOAL's decompiler, and the libraries they need (`opengoal/third-party/`: fmt, fpng, lzokay, zstd's xxhash, stb_image, tinygltf, nlohmann json, dragonbox, ghc filesystem) | ISC (`extractor/opengoal/LICENSE`); each library its own, in its files |
+| `src/assets/fonts/` | Inter, Noto Sans and Noto Sans Mono | SIL Open Font License (`LICENSE.txt`, `OFL.txt` beside them) |

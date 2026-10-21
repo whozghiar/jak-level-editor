@@ -1,6 +1,6 @@
-[mcp_servers.open-goal-level-editor]
-command = "build/bin/open-goal-level-editor.exe"
-args = ["--mcp"]
+[mcp_servers.jak-level-editor]
+command = "target/release/jak-level-editor-mcp.exe"
+args = []
 
 [mcp_servers.thrixel]
 command = "uvx"

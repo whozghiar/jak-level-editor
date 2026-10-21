@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "open-goal-level-editor": {
+    "jak-level-editor": {
       "command": "target/release/jak-level-editor-mcp.exe",
       "args": []
     }
