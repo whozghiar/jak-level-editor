@@ -1,0 +1,7 @@
+[mcp_servers.open-goal-level-editor]
+command = "build/bin/open-goal-level-editor.exe"
+args = ["--mcp"]
+
+[mcp_servers.thrixel]
+command = "uvx"
+args = ["thrixel-mcp@latest"]
