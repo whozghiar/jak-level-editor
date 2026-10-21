@@ -84,7 +84,7 @@ impl BlobWriter {
     self.words.len() * 4
   }
   fn align16(&mut self) {
-    while self.words.len() % 4 != 0 {
+    while !self.words.len().is_multiple_of(4) {
       self.words.push(0);
     }
   }

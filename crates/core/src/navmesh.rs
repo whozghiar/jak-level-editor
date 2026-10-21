@@ -1,18 +1,18 @@
 //! Navigation meshes: where the creatures of a level walk (the enemies and citizens of Jak 3 follow
 //! them). Generated from the level's walkable surfaces with Recast (rerecast, its Rust port, and
-//! Recast's own polygon step: poly_mesh.rs): the surfaces are cut in voxels, kept where they are not too steep, where a creature has room above
-//! them and can step from one to the next, shrunk by the creature's radius, then outlined and cut
-//! in convex polygons of at most 4 corners. Then the limits of the game apply (the game's nav-mesh,
-//! see goal_src/jak3/engine/nav/nav-mesh-h.gc): at most 255 polygons per mesh, each mesh in one
-//! piece (its route table must reach every polygon), polygons facing up.
+//! Recast's own steps where rerecast differs: recast.rs): the surfaces are cut in voxels, kept
+//! where they are not too steep, where a creature has room above them and can step from one to the
+//! next, shrunk by the creature's radius, then outlined and cut in convex polygons of at most 4
+//! corners: the same polygons as the C++ editor's. Then the limits of the game apply (the game's
+//! nav-mesh, see goal_src/jak3/engine/nav/nav-mesh-h.gc): at most 255 polygons per mesh, each mesh
+//! in one piece (its route table must reach every polygon), polygons facing up.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
-use glam::{UVec3, Vec3A};
-use rerecast::{AreaType, BuildContoursFlags, HeightfieldBuilder, TriMesh};
+use rerecast::{AreaType, BuildContoursFlags, HeightfieldBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -22,9 +22,7 @@ use crate::math::{AABB, K_PI, Vec3, cross, length};
 use crate::scene::{AlphaMode, BlendMode, Material, Mesh, Node, NodeKind, Primitive, Scene};
 use crate::strf;
 
-mod poly_mesh;
-#[cfg(test)]
-mod diag_tmp;
+mod recast;
 
 /// the game's poly-count is a byte, 255 marks "no polygon"
 const K_MAX_POLYS: usize = 255;
@@ -271,7 +269,9 @@ pub fn build_navmeshes(
   // face up)
   let reach = region.expanded(params.agent_radius + params.cell_size);
   let min_up = (params.max_slope * K_PI / 180.0).cos();
-  let mut trimesh = TriMesh::default();
+  let mut fv: Vec<[f32; 3]> = Vec::new();
+  let mut ft: Vec<[u32; 3]> = Vec::new();
+  let mut areas = Vec::new();
   let mut remap = vec![u32::MAX; verts.len()];
   let mut used = AABB::default();
   for t in tris.chunks_exact(3) {
@@ -291,9 +291,8 @@ pub fn build_navmeshes(
     let mut tri = [0u32; 3];
     for (k, &v) in t.iter().enumerate() {
       if remap[v as usize] == u32::MAX {
-        remap[v as usize] = trimesh.vertices.len() as u32;
-        let p = verts[v as usize];
-        trimesh.vertices.push(Vec3A::new(p.x, p.y, p.z));
+        remap[v as usize] = fv.len() as u32;
+        fv.push(verts[v as usize].into());
       }
       tri[k] = remap[v as usize];
     }
@@ -304,18 +303,16 @@ pub fn build_navmeshes(
     );
     let n = cross(b - a, c - a);
     let len = length(n);
-    trimesh.indices.push(UVec3::from(tri));
-    trimesh
-      .area_types
-      .push(if len > 0.0 && n.y.abs() / len >= min_up {
-        AreaType::DEFAULT_WALKABLE
-      } else {
-        AreaType::NOT_WALKABLE
-      });
+    ft.push(tri);
+    areas.push(if len > 0.0 && n.y.abs() / len >= min_up {
+      AreaType::DEFAULT_WALKABLE
+    } else {
+      AreaType::NOT_WALKABLE
+    });
     used.add_box(&tb);
   }
-  st.triangles = trimesh.indices.len();
-  if trimesh.indices.is_empty() {
+  st.triangles = ft.len();
+  if ft.is_empty() {
     return Err("no surface in the region".into());
   }
   // the grid: the region where there is something, a little wider than the creature needs
@@ -370,9 +367,8 @@ pub fn build_navmeshes(
   }
   .build()
   .map_err(|_| "not enough memory for the voxels".to_string())?;
-  hf.rasterize_triangles(&trimesh, walkable_climb)
-    .map_err(|_| "the surfaces could not be cut in voxels".to_string())?;
-  drop(trimesh);
+  recast::rasterize_triangles(&mut hf, &fv, &ft, &areas, walkable_climb as i32);
+  drop((fv, ft, areas));
   // steps, ledges, and floors without head room are not walkable
   hf.filter_low_hanging_walkable_obstacles(walkable_climb);
   hf.filter_ledge_spans(walkable_height, walkable_climb);
@@ -386,14 +382,15 @@ pub fn build_navmeshes(
   chf
     .build_regions(0, min_region_area, merge_region_area)
     .map_err(|_| regions_failed.to_string())?;
-  let cset = chf.build_contours(
+  let mut cset = chf.build_contours(
     params.max_error,
     max_edge_len,
     BuildContoursFlags::TESSELLATE_SOLID_WALL_EDGES,
   );
   drop(chf);
+  recast::merge_holes(&mut cset);
   let nvp = max_verts_per_poly;
-  let (pm_verts, pm_polys) = poly_mesh::build_poly_mesh(&cset, nvp)
+  let (pm_verts, pm_polys) = recast::build_poly_mesh(&cset, nvp)
     .map_err(|_| "the polygons could not be built".to_string())?;
   let npolys = pm_polys.len() / (2 * nvp);
   st.recast_polys = npolys;
@@ -417,11 +414,11 @@ pub fn build_navmeshes(
     let nb = &pm_polys[(i * 2 + 1) * nvp..(i + 1) * 2 * nvp];
     let q = &mut all[i];
     for j in 0..nvp {
-      if p[j] == poly_mesh::NULL_IDX {
+      if p[j] == recast::NULL_IDX {
         break;
       }
       q.v[q.count] = p[j] as usize;
-      q.adj[q.count] = if nb[j] == poly_mesh::NULL_IDX || nb[j] & 0x8000 != 0 {
+      q.adj[q.count] = if nb[j] == recast::NULL_IDX || nb[j] & 0x8000 != 0 {
         -1
       } else {
         nb[j] as i32
@@ -576,7 +573,7 @@ pub fn build_navmeshes(
     pieces.retain(|p| !p.is_empty());
   }
   // largest first, like the game's levels list their meshes
-  pieces.sort_by(|a, b| b.len().cmp(&a.len()));
+  pieces.sort_by_key(|p| Reverse(p.len()));
 
   let mut out = Vec::with_capacity(pieces.len());
   let mut local_poly = vec![-1i32; all.len()];
@@ -614,7 +611,7 @@ pub fn build_navmeshes(
     // the origin is the center of its corners, as in the game's meshes
     m.origin = vb.center();
     for v in &mut m.verts {
-      *v = *v - m.origin;
+      *v -= m.origin;
     }
     st.polys += m.polys.len();
     out.push(m);
@@ -944,7 +941,7 @@ pub fn world_navmeshes(scene: &Scene) -> (Vec<NavMeshData>, Vec<String>) {
     }
     m.origin = b.center();
     for v in &mut m.verts {
-      *v = *v - m.origin;
+      *v -= m.origin;
     }
     meshes.push(m);
     names.push(n.name.clone());
