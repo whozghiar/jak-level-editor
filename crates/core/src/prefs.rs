@@ -29,6 +29,13 @@ pub struct Prefs {
   pub recent_projects: Vec<String>,
   /// the guided tour was shown (at the first start)
   pub guide_seen: bool,
+  /// the user chose where the library goes (the first-run assistant); preferences of before it
+  /// whose library holds an extracted game count as chosen
+  pub library_chosen: bool,
+  /// the standalone app's game runtime: a jak-project checkout ("" none: the OpenGOAL Launcher's
+  /// isolated game when it is there), and the folder of its goalc and gk ("" its build's)
+  pub runtime_folder: String,
+  pub runtime_bin: String,
 }
 
 /// The settings folder of an application, as SDL_GetPrefPath makes it ('/' separated, ending
@@ -52,17 +59,24 @@ fn pref_path(org: &str, app: &str) -> String {
 }
 
 impl Prefs {
-  /// folder of the preferences and of the thumbnail cache (created on demand), '/' separated
+  /// folder of the preferences and of the thumbnail cache (created on demand), '/' separated;
+  /// $JLE_PREFS_DIR when set (tests of the application with fresh preferences)
   pub fn dir() -> String {
     static DIR: OnceLock<String> = OnceLock::new();
     DIR
-      .get_or_init(|| pref_path("OpenGOAL", "jak-level-editor"))
+      .get_or_init(|| match std::env::var("JLE_PREFS_DIR") {
+        Ok(d) if !d.is_empty() => format!("{}/", d.replace('\\', "/").trim_end_matches('/')),
+        _ => pref_path("OpenGOAL", "jak-level-editor"),
+      })
       .clone()
   }
 
-  /// the C++ editor's folder
+  /// the C++ editor's folder (none with $JLE_PREFS_DIR: fresh preferences)
   pub fn old_dir() -> String {
-    pref_path("OpenGOAL", "open-goal-level-editor")
+    match std::env::var_os("JLE_PREFS_DIR") {
+      Some(d) if !d.is_empty() => Self::dir(),
+      _ => pref_path("OpenGOAL", "open-goal-level-editor"),
+    }
   }
 
   pub fn get() -> MutexGuard<'static, Prefs> {
@@ -88,6 +102,10 @@ impl Prefs {
     match serde_json::from_slice::<Prefs>(&text) {
       Ok(p) => *self = p,
       Err(e) => crate::log_warn!("unreadable preferences (%s): defaults used", e.to_string()),
+    }
+    // before the first-run assistant: a library holding the extracted game was the user's choice
+    if !crate::io::asset_library::game_folder(&self.library_root).is_empty() {
+      self.library_chosen = true;
     }
   }
 
@@ -148,7 +166,41 @@ mod tests {
     std::fs::remove_file(old.join(K_FILE)).unwrap();
     again.load_from(&new, &old);
     assert_eq!(again, p, "written to the new folder");
-    assert!(Prefs::dir().ends_with("OpenGOAL/jak-level-editor/") || Prefs::dir() == "./");
+    assert!(
+      Prefs::dir().ends_with("OpenGOAL/jak-level-editor/")
+        || Prefs::dir() == "./"
+        || std::env::var_os("JLE_PREFS_DIR").is_some()
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+  }
+
+  // the first-run assistant: asked until a library is chosen; preferences of before it whose
+  // library holds the extracted game count as chosen (the user's library kept)
+  #[test]
+  fn library_chosen_migrated() {
+    let tmp = std::env::temp_dir().join(format!("jle-prefs-chosen-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let (dir, old, lib) = (tmp.join("prefs"), tmp.join("old"), tmp.join("lib"));
+    std::fs::create_dir_all(lib.join("jak3")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    let write = |root: &std::path::Path| {
+      let j = serde_json::json!({ "library_root": root.to_string_lossy() });
+      std::fs::write(dir.join(K_FILE), j.to_string()).unwrap();
+    };
+    let load = || {
+      let mut p = Prefs::default();
+      p.load_from(&dir, &old);
+      p
+    };
+    write(&lib);
+    assert!(!load().library_chosen, "no game there yet: asked");
+    std::fs::write(lib.join("jak3/library.json"), r#"{"game": "jak3"}"#).unwrap();
+    assert!(
+      load().library_chosen,
+      "an extracted game: the user's choice"
+    );
+    write(&tmp.join("elsewhere"));
+    assert!(!load().library_chosen);
     let _ = std::fs::remove_dir_all(&tmp);
   }
 }

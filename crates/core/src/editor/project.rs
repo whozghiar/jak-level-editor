@@ -9,7 +9,6 @@ use serde_json::{Value, json};
 use super::levels::{open_project, save_project};
 use super::{CameraState, Editor};
 use crate::i18n::tr;
-use crate::io::asset_library::default_projects_dir;
 use crate::io::nav_export::export_navmeshes;
 use crate::scene::{LevelSettings, NodeKind, Scene};
 use crate::{log_error, log_info, log_warn};
@@ -71,16 +70,17 @@ impl Editor {
     Ok(())
   }
 
-  /// <library>/projects
+  /// <library>/projects (the library's default before one is chosen)
   pub fn projects_root(&self) -> String {
-    if self.library_root.is_empty() {
-      default_projects_dir()
+    let root = if self.library_root.is_empty() {
+      self.default_library()
     } else {
-      Path::new(&self.library_root)
-        .join("projects")
-        .to_string_lossy()
-        .into_owned()
-    }
+      self.library_root.clone()
+    };
+    Path::new(&root)
+      .join("projects")
+      .to_string_lossy()
+      .into_owned()
   }
 
   /// its folder's name, or the level's

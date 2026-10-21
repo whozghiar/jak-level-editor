@@ -1,0 +1,141 @@
+name: Release
+
+# A tag vX.Y.Z (or a manual run: the version of package.json) makes a draft release with, per
+# platform, the installers, a portable zip, ogle-extract alone (the OpenGOAL Launcher downloads
+# ogle-extract-<platform>.zip) and the MCP server. RELEASING.md tells how to make one.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  draft:
+    name: Draft release
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the versions
+        id: version
+        run: |
+          package=$(node -p "require('./package.json').version")
+          tauri=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cargo=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          tag="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          tag="${tag:-v$package}"
+          echo "tag $tag, package.json $package, Cargo.toml $cargo, src-tauri/tauri.conf.json $tauri"
+          for version in "$package" "$cargo" "$tauri"; do
+            if [ "v$version" != "$tag" ]; then
+              echo "::error::The versions differ: tag $tag, package.json $package, Cargo.toml $cargo, src-tauri/tauri.conf.json $tauri (see RELEASING.md)"
+              exit 1
+            fi
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create the draft release
+        id: draft
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 ||
+            gh release create "$TAG" --draft --generate-notes --target "$GITHUB_SHA" --title "Jak Level Editor $TAG"
+          id=$(gh api "repos/$GH_REPO/releases" --paginate --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n 1)
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+          - os: ubuntu-24.04
+            platform: linux-x64
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ needs.draft.outputs.tag }}
+      # Windows: the C runtime inside the programs, which then run without the VC++ redistributable
+      RUSTFLAGS: ${{ matrix.os == 'windows-latest' && '-C target-feature=+crt-static' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: yarn
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.os }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev clang ninja-build zip
+
+      - name: Set up MSVC (headers and libraries for Clang)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # build-release/bin/: ogle-extract and ogle-extract-data/, the resources
+      # src-tauri/tauri.release.conf.json adds to the installers
+      - name: Build ogle-extract
+        shell: bash
+        run: |
+          cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build-release
+
+      - name: Install the interface's packages
+        run: yarn install --frozen-lockfile
+
+      - name: Build the editor and its installers
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          # --ignore-version-mismatches: @tauri-apps/* (yarn.lock) are a minor version ahead of the
+          # tauri crates (Cargo.lock); drop it once they are aligned
+          args: --config src-tauri/tauri.release.conf.json --ignore-version-mismatches
+
+      - name: Build the MCP server
+        run: cargo build --release -p jak-level-editor-mcp
+
+      - name: Make the zips and upload them
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=.exe
+          zip_dir() { # zip_dir <folder> <zip>: the folder's content at the zip's root
+            if [ "$RUNNER_OS" = Windows ]; then (cd "$1" && 7z a -tzip -bso0 "$2" .)
+            else (cd "$1" && zip -qr "$2" .); fi
+          }
+          rm -rf stage && mkdir -p stage/portable stage/ogle-extract stage/mcp stage/dist
+          out="$PWD/stage/dist"
+          cp -r build-release/bin/. stage/ogle-extract/
+          cp -r build-release/bin/. lang data "target/release/jak-level-editor$exe" stage/portable/
+          cp "target/release/jak-level-editor-mcp$exe" stage/mcp/
+          zip_dir stage/portable "$out/jak-level-editor-portable-$PLATFORM.zip"
+          zip_dir stage/ogle-extract "$out/ogle-extract-$PLATFORM.zip"
+          zip_dir stage/mcp "$out/jak-level-editor-mcp-$PLATFORM.zip"
+          ls -l stage/dist
+          gh release upload "$TAG" stage/dist/*.zip --clobber

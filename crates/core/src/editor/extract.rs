@@ -19,6 +19,8 @@ use std::time::Instant;
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::io::asset_library::default_iso_data_dir;
+
 const MAX_LOG_LINES: usize = 400;
 const EXTRACTOR: &str = if cfg!(windows) {
   "ogle-extract.exe"
@@ -91,29 +93,12 @@ fn repo() -> Option<PathBuf> {
   (repo.join("Cargo.toml").is_file() && repo.join("crates").is_dir()).then(|| repo.to_path_buf())
 }
 
-// This editor's own tree (the repository it was built from), else the folder of the executable:
-// never jak-project's, which this editor neither builds against nor runs.
-fn editor_tree() -> PathBuf {
-  repo().or_else(exe_dir).unwrap_or_default()
-}
-
-/// The library folder when the user chose none: library/ of the editor's tree.
-pub fn default_library_root() -> String {
-  editor_tree().join("library").to_string_lossy().into_owned()
-}
-
-/// Where the disc dialogs start when no disc was chosen yet: iso_data/ of the editor's tree.
-pub fn default_iso_data_dir() -> String {
-  editor_tree()
-    .join("iso_data")
-    .to_string_lossy()
-    .into_owned()
-}
-
-// Where ogle-extract may be: next to the running executable, in the application's resources, in
-// the repository's build/bin/ (the C++ editor's build, in development).
-fn extractor_dirs(resource_dir: Option<&Path>) -> Vec<PathBuf> {
+// Where ogle-extract may be: the host's (Host::extractor, or the one its provider fetched), next to
+// the running executable, in the application's resources, in the repository's build/bin/ (the C++
+// editor's build, in development).
+fn extractor_dirs(host: Option<&Path>, resource_dir: Option<&Path>) -> Vec<PathBuf> {
   [
+    host.and_then(Path::parent).map(Path::to_path_buf),
     exe_dir(),
     resource_dir.map(Path::to_path_buf),
     repo().map(|r| r.join("build").join("bin")),
@@ -131,14 +116,17 @@ fn found(paths: impl Iterator<Item = PathBuf>, is: fn(&Path) -> bool) -> String 
     .unwrap_or_default()
 }
 
-/// ogle-extract: next to the editor, in its resources, in the repository's build/bin/, else
-/// $JLE_EXTRACTOR; "" when missing.
-pub fn extractor_path(resource_dir: Option<&Path>) -> String {
+/// ogle-extract: the host's, next to the editor, in its resources, in the repository's build/bin/,
+/// else $JLE_EXTRACTOR; "" when missing.
+pub fn extractor_path(host: Option<&Path>, resource_dir: Option<&Path>) -> String {
   let env = std::env::var_os("JLE_EXTRACTOR").map(PathBuf::from);
+  let dirs = extractor_dirs(None, resource_dir);
+  let paths = dirs.into_iter().map(|d| d.join(EXTRACTOR));
   found(
-    extractor_dirs(resource_dir)
+    host
+      .map(Path::to_path_buf)
       .into_iter()
-      .map(|d| d.join(EXTRACTOR))
+      .chain(paths)
       .chain(env),
     Path::is_file,
   )
@@ -146,11 +134,11 @@ pub fn extractor_path(resource_dir: Option<&Path>) -> String {
 
 /// Where ogle-extract is looked for (the Extract window's help when it is missing): the folders of
 /// `extractor_path`, then JLE_EXTRACTOR's path when it is set
-pub fn extractor_places(resource_dir: Option<&Path>) -> Vec<String> {
+pub fn extractor_places(host: Option<&Path>, resource_dir: Option<&Path>) -> Vec<String> {
   let env =
     std::env::var_os("JLE_EXTRACTOR").map(|e| format!("JLE_EXTRACTOR={}", e.to_string_lossy()));
   let mut places: Vec<String> = Vec::new();
-  for d in extractor_dirs(resource_dir) {
+  for d in extractor_dirs(host, resource_dir) {
     // as the user writes it (Windows' resources come as \\?\D:\...), once
     let d = d.to_string_lossy();
     let d = d.strip_prefix(r"\\?\").unwrap_or(&d).to_string();
@@ -164,10 +152,10 @@ pub fn extractor_places(resource_dir: Option<&Path>) -> Vec<String> {
 
 /// The game's tables of ogle-extract (ogle-extract-data/), looked for as `extractor_path`; "" when
 /// missing.
-pub fn extractor_data_path(resource_dir: Option<&Path>) -> String {
+pub fn extractor_data_path(host: Option<&Path>, resource_dir: Option<&Path>) -> String {
   let env =
     std::env::var_os("JLE_EXTRACTOR").and_then(|e| Path::new(&e).parent().map(Path::to_path_buf));
-  let dirs = extractor_dirs(resource_dir).into_iter().chain(env);
+  let dirs = extractor_dirs(host, resource_dir).into_iter().chain(env);
   found(dirs.map(|d| d.join(EXTRACTOR_DATA)), Path::is_dir)
 }
 
@@ -300,6 +288,10 @@ fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
 pub struct Extraction {
   /// the application's resources (the plugin sets it): where ogle-extract may be installed
   pub resource_dir: Option<PathBuf>,
+  /// the host's ogle-extract (Host::extractor, or the one its provider fetched): looked at first
+  pub extractor: Option<PathBuf>,
+  /// why the host's provider could not fetch ogle-extract (extract_fetch), "" when it did
+  pub fetch_error: String,
   hook: Option<ExtractionHook>,
   state: Arc<Mutex<State>>,
   child: Option<Child>,
@@ -362,7 +354,7 @@ impl Extraction {
       ended: now,
       ..Default::default()
     };
-    let exe = extractor_path(self.resource_dir.as_deref());
+    let exe = extractor_path(self.extractor.as_deref(), self.resource_dir.as_deref());
     if exe.is_empty() {
       s.error = Some(Text::key("extract.missing"));
       return false;
@@ -370,7 +362,7 @@ impl Extraction {
     let mut cmd = Command::new(&exe);
     cmd.args(args);
     // the game's tables: next to it (ogle-extract's default), else where the application has them
-    let data = extractor_data_path(self.resource_dir.as_deref());
+    let data = extractor_data_path(self.extractor.as_deref(), self.resource_dir.as_deref());
     if !Path::new(&exe).with_file_name(EXTRACTOR_DATA).is_dir() && !data.is_empty() {
       cmd.arg("--data").arg(data);
     }
@@ -458,16 +450,14 @@ impl Extraction {
   }
 
   /// The window's first values (open_extract_window, open_dialog): `source`, the disc chosen last
-  /// (the preferences' `extract_source`); `output`, the library folder (`library_root`, else
-  /// default_library_root()); `library` {root, levels} when one is loaded (`library_levels`);
-  /// `iso_dir` where the disc dialogs start; `extractor_found`, `extractor_dirs` (where it is
-  /// looked for). The folders the dialogs start in are created, as the C++ editor did.
+  /// (the preferences' `extract_source`, else the one the host already extracted); `output`, the
+  /// library folder (`library_root`, its default before one is chosen); `library` {root, levels}
+  /// when one is loaded (`library_levels`); `iso_dir` where the disc dialogs start;
+  /// `extractor` (its path, "" when missing), `extractor_found`, `extractor_dirs` (where it is
+  /// looked for), `fetch_error`. The folders the dialogs start in are created, as the C++ editor
+  /// did.
   pub fn defaults(&self, extract_source: &str, library_root: &str, library_levels: usize) -> Value {
-    let output = if library_root.is_empty() {
-      default_library_root()
-    } else {
-      library_root.to_string()
-    };
+    let output = library_root.to_string();
     let detected = lock(&self.state).detected.source.clone();
     let chosen = if detected.is_empty() {
       extract_source
@@ -478,15 +468,20 @@ impl Extraction {
       Some(p) if !chosen.is_empty() => p.to_string_lossy().into_owned(),
       _ => default_iso_data_dir(),
     };
-    let _ = std::fs::create_dir_all(&iso_dir);
-    let _ = std::fs::create_dir_all(&output);
+    for dir in [&iso_dir, &output].into_iter().filter(|d| !d.is_empty()) {
+      let _ = std::fs::create_dir_all(dir);
+    }
+    let (host, res) = (self.extractor.as_deref(), self.resource_dir.as_deref());
+    let extractor = extractor_path(host, res);
     json!({
       "source": extract_source,
       "output": output,
       "library": (library_levels > 0).then(|| json!({ "root": library_root, "levels": library_levels })),
       "iso_dir": iso_dir,
-      "extractor_found": !extractor_path(self.resource_dir.as_deref()).is_empty(),
-      "extractor_dirs": extractor_places(self.resource_dir.as_deref()),
+      "extractor_found": !extractor.is_empty(),
+      "extractor": extractor,
+      "extractor_dirs": extractor_places(host, res),
+      "fetch_error": self.fetch_error,
     })
   }
 }
@@ -547,7 +542,7 @@ mod tests {
   #[test]
   fn extractor_places_as_written() {
     let dir = r"C:\Program Files\host\jak-level-editor";
-    let twice = extractor_places(Some(Path::new(&format!(r"\\?\{dir}"))));
+    let twice = extractor_places(None, Some(Path::new(&format!(r"\\?\{dir}"))));
     assert!(twice.iter().any(|p| p == dir), "{twice:?}");
     assert!(twice.iter().all(|p| !p.starts_with(r"\\?\")));
     let mut unique = twice.clone();
@@ -647,7 +642,7 @@ mod tests {
 
   #[test]
   fn extract_detect_missing() {
-    if extractor_path(None).is_empty() {
+    if extractor_path(None, None).is_empty() {
       return; // ogle-extract not built
     }
     let events = Arc::new(Mutex::new(Vec::new()));

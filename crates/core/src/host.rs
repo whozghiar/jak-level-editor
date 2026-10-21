@@ -120,6 +120,11 @@ pub trait GameRuntime: Send + Sync {
     self.launch(&m.game, &m.name, events)?;
     Ok(PlayOutcome::Started)
   }
+  /// what the editor's settings show of it beyond `info` (the standalone app's: the OpenGOALs it
+  /// can use, which one it uses), null when nothing
+  fn settings(&self) -> serde_json::Value {
+    serde_json::Value::Null
+  }
 }
 
 /// A host that can fetch ogle-extract when it is missing (the launcher downloads the one of the

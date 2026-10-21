@@ -16,7 +16,6 @@ pub use jle_core::host::{
   PlayOutcome, RuntimeInfo,
 };
 use jle_core::i18n::{i18n_init, i18n_select, i18n_system_language, lang_dir, set_lang_dir, tr};
-use jle_core::io::asset_library::{default_library_root, game_folder};
 use jle_core::io::game_data::set_data_dir;
 use jle_core::prefs::{Prefs, READ_ONLY};
 use jle_core::{log_error, log_info, log_warn};
@@ -140,7 +139,14 @@ pub const EDITOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// folder is known once its settings are read, and the user can move it).
 pub fn set_host<R: Runtime>(app: &tauri::AppHandle<R>, host: Host) {
   if let Some(state) = app.try_state::<EditorState>() {
-    state.lock().host = host;
+    let mut ed = state.lock();
+    let before = ed.default_library();
+    ed.set_host(host);
+    // a library not chosen yet follows the host's default (the first-run assistant offers it)
+    let default = ed.default_library();
+    if !Prefs::get().library_chosen && default != before {
+      let _ = ed.call("set_library", &serde_json::json!({ "path": default }));
+    }
   }
 }
 
@@ -189,20 +195,20 @@ fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options, host: Host) {
   });
   let mut editor = Editor::new();
   editor.extraction.resource_dir = resources;
-  editor.host = host;
+  editor.set_host(host);
   let shared = editor.shared(Some(notify));
   {
     let mut ed = jle_core::editor::lock(&shared);
-    // the library: the session's, else the one used last when it holds an extracted game, else
-    // library/ in the editor's own tree
+    // the library: the session's (a choice: no first-run assistant), else the one the user chose
+    // (or used last with an extracted game: Prefs::load), else the host's default until the
+    // first-run assistant asks (Editor::default_library)
     let mut root = options.library.clone();
-    if root.is_empty() {
-      let last = Prefs::get().library_root.clone();
-      root = if game_folder(&last).is_empty() {
-        default_library_root()
-      } else {
-        last
-      };
+    if !root.is_empty() {
+      Prefs::get().library_chosen = true;
+    } else if Prefs::get().library_chosen {
+      root = Prefs::get().library_root.clone();
+    } else {
+      root = ed.default_library();
     }
     ed.set_library(&root);
     ed.new_document();

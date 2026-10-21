@@ -33,6 +33,14 @@ use crate::{log_error, log_info, log_warn};
 /// the ids the exported nav meshes take by default (App::nav_first_aid)
 pub const K_NAV_FIRST_AID: u32 = 60000;
 
+/// An export done on a worker: its report or why it failed, the level's name, the levels as
+/// extracted it read
+pub(super) type ExportResult = (
+  Result<LevelExportReport, String>,
+  String,
+  Vec<(String, Arc<Scene>)>,
+);
+
 /// The Export window's (App::export_options, m_export_report, m_export_error)
 #[derive(Default)]
 pub struct ExportState {
@@ -170,10 +178,28 @@ impl Editor {
 
   /// Writes the level for the game (App::export_for_game) on a worker; `wait`: in this call (the
   /// remote control's). Its report, or why it failed, in `export` once done (export_state).
-  pub fn export_for_game(&mut self, mut o: LevelExportOptions, wait: bool) -> Result<(), String> {
+  pub fn export_for_game(&mut self, o: LevelExportOptions, wait: bool) -> Result<(), String> {
     if self.busy("export") {
       return Err("an export is going on".into());
     }
+    let work = self.export_work(o)?;
+    if wait {
+      let r = work();
+      self.export_done(r);
+    } else {
+      self.run_job("export", tr("export.title").into(), work, |ed, r| {
+        ed.export_done(r)
+      });
+    }
+    Ok(())
+  }
+
+  /// The export of the document with `o`, to run on a worker (export_for_game, play_level), then
+  /// given to export_done
+  pub(super) fn export_work(
+    &mut self,
+    mut o: LevelExportOptions,
+  ) -> Result<impl FnOnce() -> ExportResult + Send + 'static, String> {
     // the models as they are, not as the animation preview draws them
     self.stop_preview();
     if !self.document_open() {
@@ -239,25 +265,10 @@ impl Editor {
       let r = export_level(&scene, data.as_deref(), &o);
       (r, o.name, read)
     };
-    if wait {
-      let r = work();
-      self.export_done(r);
-    } else {
-      self.run_job("export", tr("export.title").into(), work, |ed, r| {
-        ed.export_done(r)
-      });
-    }
-    Ok(())
+    Ok(work)
   }
 
-  fn export_done(
-    &mut self,
-    (r, name, read): (
-      Result<LevelExportReport, String>,
-      String,
-      Vec<(String, Arc<Scene>)>,
-    ),
-  ) {
+  pub(super) fn export_done(&mut self, (r, name, read): ExportResult) {
     self.export.originals.extend(read);
     self.export.generation += 1;
     match r {
@@ -670,7 +681,7 @@ mod tests {
     let d = ed.call("export_defaults", &json!({})).unwrap();
     let mut o: LevelExportOptions = serde_json::from_value(d["options"].clone()).unwrap();
     assert!(
-      o.name == "my-testlvl" && o.folder.ends_with("/export/my-testlvl") && o.base_id == 90000,
+      o.name == "my-testlvl" && o.folder.ends_with("/exports/my-testlvl") && o.base_id == 90000,
       "export: the default options ({} in {})",
       o.name,
       o.folder

@@ -346,7 +346,7 @@ terrain {"id": 88, "mode": "flatten", "position": [20, 6, -25], "size": 22, "hei
 ```text
 save_project {"name": "main-town-street"}     -> library/projects/main-town-street/
 export_level {"name": "mtstreet", "nickname": "mts"}
-                                              -> library/export/main-town-street/: the folder takes
+                                              -> library/exports/main-town-street/: the folder takes
                                                  the project's name, the level in the game "mtstreet";
                                                  its README.md says how to add it to the game
 ```
@@ -414,7 +414,7 @@ export_level {"name": "mtstreet", "nickname": "mts"}
 | Tool | What it does |
 |---|---|
 | `save_project`, `open_project` | save the document in `library/projects/<name>/`, open one |
-| `export_level` | write the level for OpenGOAL's level builder (`library/export/<project>/`) |
+| `export_level` | write the level for OpenGOAL's level builder (`library/exports/<project>/`) |
 | `generate_navmesh`, `export_navmesh` | where the game's creatures walk |
 | `undo`, `redo` | take back, do again |
 

@@ -21,12 +21,16 @@
     return true;
   }
 
-  // the guided tour, the first time the editor starts (App::run): guide_seen in the preferences
-  call<{ guide_seen?: boolean }>("get_prefs", {}, true).then((p) => {
+  /**
+   * The guided tour, the first time the editor starts (App::run): guide_seen in the preferences. Once
+   * the library is chosen (WelcomeWindow calls it).
+   */
+  export async function firstRunGuide(): Promise<void> {
+    const p = await call<{ guide_seen?: boolean }>("get_prefs", {}, true);
     if (!p || p.guide_seen) return;
     call("set_prefs", { guide_seen: true }, true);
     windows.open("guide", { tab: 0 });
-  });
+  }
 
   // in a plain browser (npx vite): ?window=guide[&tab=1][&tutorial=move][&step=2] opens it, for screenshots
   if (import.meta.env.DEV) {

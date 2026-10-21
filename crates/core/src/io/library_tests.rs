@@ -9,7 +9,7 @@ use std::time::Instant;
 use serde_json::{Value, json};
 
 use super::asset_library::{
-  AssetLibrary, game_folder, library_root_of, load_model_asset, merge_mesh, strip_lod,
+  AssetLibrary, from_path, game_folder, library_root_of, load_model_asset, merge_mesh, strip_lod,
 };
 use super::gltf::{
   ExportMode, ExportOptions, ImportOptions, export_glb, import_gltf, load_skeleton,
@@ -1119,29 +1119,29 @@ fn real_library_scan_and_largest_level() {
 
 #[test]
 fn editor_tree_defaults() {
-  // this editor's own tree: never jak-project's, which it neither builds against nor runs
-  use super::asset_library::{default_iso_data_dir, default_library_root, default_projects_dir};
-  let (library, iso, projects) = (
-    default_library_root(),
-    default_iso_data_dir(),
-    default_projects_dir(),
-  );
-  for p in [&library, &iso, &projects] {
+  // this editor's own tree when the program runs from it (the tests do): never jak-project's,
+  // which it neither builds against nor runs; an installed editor has none (its host's library)
+  use super::asset_library::{default_iso_data_dir, default_library_root, editor_tree};
+  let Some(tree) = editor_tree() else {
+    return; // a target folder outside the tree: an installed editor's case
+  };
+  let (library, iso) = (default_library_root(), default_iso_data_dir());
+  for p in [&library, &iso] {
     assert!(!p.contains('\\') && !p.contains("/jak-project/"), "{p}");
   }
-  let (library, iso, projects) = (Path::new(&library), Path::new(&iso), Path::new(&projects));
+  let (library, iso) = (Path::new(&library), Path::new(&iso));
   assert_eq!(iso.parent(), library.parent());
-  assert_eq!(projects.parent(), Some(library));
+  assert_eq!(iso.file_name().unwrap(), "iso_data");
+  assert!(tree.join("crates/core/Cargo.toml").is_file());
+  assert_eq!(library, tree.join("library"));
+  // the editor's library before one is chosen: the host's, else this tree's
+  let mut ed = crate::editor::Editor::new();
+  assert_eq!(ed.default_library(), from_path(library));
+  assert_eq!(Path::new(&ed.projects_root()), library.join("projects"));
+  ed.host.default_library = Some("C:/Users/x/Documents/Jak Level Editor".into());
   assert_eq!(
-    (iso.file_name().unwrap(), projects.file_name().unwrap()),
-    ("iso_data".as_ref(), "projects".as_ref())
-  );
-  assert!(
-    library
-      .parent()
-      .unwrap()
-      .join("crates/core/Cargo.toml")
-      .is_file()
+    ed.default_library(),
+    "C:/Users/x/Documents/Jak Level Editor"
   );
 }
 

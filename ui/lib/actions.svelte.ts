@@ -88,3 +88,10 @@ export function toggleView(key: string): void {
 export function changeLanguage(code: string): void {
   call("set_language", { code: setLanguage(code) });
 }
+
+/** Level > Play in the game (the toolbar's Play): the Play window, and the game runtime started on
+ * the level unless it works already. */
+export function playLevel(): void {
+  windows.open("play");
+  if (!engine.jobs.play) call("play_level");
+}

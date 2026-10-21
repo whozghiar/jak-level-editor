@@ -36,6 +36,7 @@ impl Editor {
       self.levels.add_error,
       self.jobs.keys().collect::<Vec<_>>(),
       self.remote_clients,
+      self.runtime_state(),
       self.placement_key(),
       self.brush_state(),
       self.topology_key(),
@@ -116,6 +117,8 @@ impl Editor {
       "catalog": self.catalog_state(),
       "library_empty": self.library.is_empty(),
       "library_root": self.library_root,
+      // the host's game runtime (RuntimeInfo), null without one: the Play button
+      "runtime": self.runtime_state(),
       "jak2_available": !self.library_jak2.is_empty(),
       "load_actors": self.load_actors,
       "language": i18n_language(),

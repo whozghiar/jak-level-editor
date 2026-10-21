@@ -22,11 +22,13 @@ crates/
     src/io/                       glTF, the library and its index, the catalog, prefabs and the
                                   game's prefab recipes, the game's data, the texture palette,
                                   behaviors, the export for the game and its nav meshes, Jak II's
-                                  structures
+                                  structures, the level package's installer (level_package.rs)
     src/game/                     the game view's chunks (view.rs), the game's mood: hour, weather,
                                   fog, lights (mood.rs)
     src/navmesh.rs, navmesh/      nav mesh generation (rerecast, a Rust port of Recast; recast.rs:
                                   Recast's own steps where rerecast differs)
+    src/runtime.rs                the game runtimes: an OpenGOAL the editor drives, the standalone
+                                  app's (section 6)
     src/editor/                   the application without its interface: the Editor (mod.rs), the
                                   dispatch of `call` (api.rs), get_state (state.rs), levels,
                                   project, selection, groups, placement, the tools (terrain_tool,
@@ -215,7 +217,17 @@ which application hosts it: it uses what it is given and hides what it is not.
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
 | `extract_source` | none (the user's disc) | `<install>/active/jak3/data/iso_data/jak3`: the disc it already extracted |
 | `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version |
-| `runtime` | a jak-project checkout with the builder's fixes, or a compatible OpenGOAL installation | the launcher's isolated game `<install>/features/jak3/level_edited/` |
+| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (with the builder's fixes), else the OpenGOAL Launcher's game for the editor when it is installed | the launcher's isolated game `<install>/features/jak3/level_edited/` |
+
+**The library** (`crates/core/src/editor/library.rs`): until the user chose one (the preference
+`library_chosen`; preferences of before it whose library holds an extracted game count as chosen),
+the interface shows the first-run assistant (`library_setup`, `choose_library {path}`) offering
+`default_library`; File > Settings changes it later (another folder is used as it is: nothing is
+moved or deleted). `default_library` falls back to `library/` of the editor's repository only when
+the program runs from it (a development build), never to the program's folder. The Extract
+window's disc is `extract_source` while the user has chosen none; ogle-extract is `extractor`
+first, and when it is missing the window offers `extractor_provider`'s download (`extract_fetch`,
+a job: `jle:progress` "extract_fetch").
 
 **The game runtime** (`GameRuntime`): `install_level` (copies a level exported for the game into the
 game's sources, registers it in `game.gp` and `level-info.gc`, builds the game), `remove_level`,
@@ -224,6 +236,57 @@ its own interface: the launcher runs it as one of its jobs, with its progress ba
 writes `jle-level.json` (`LevelManifest`) next to its README: what the README tells a person to do,
 for a runtime to do it. Without a runtime the editor has no Play button: it exports and points to
 the README.
+
+**The level package** (`crates/core/src/io/level_package.rs`, used by every runtime, the launcher's
+too): `apply(data_dir, &LevelPackage)` and `remove(data_dir, game, name)` on an OpenGOAL data folder
+(the one holding `goal_src/<game>` and `custom_assets/<game>`: a jak-project checkout's root, an
+OpenGOAL distribution's `data/`). `apply` copies the export's files, adds its `game.gp` lines (next
+to the test-zone's) and its definition to `engine/level/level-info.gc` (with an `:index` no other
+level has), or, for a level replacing one of the game's, changes that level's `:nickname`; each
+inside `;; jak-level-editor: begin <name>` / `;; jak-level-editor: end <name>` lines, a line it
+replaces kept there as `;; jak-level-editor: was <line>`. Applying again changes nothing; another
+version of the level replaces its blocks in place. Each file edited is backed up once
+(`<file>.jle-backup`, deleted when the file is back as it was), and `<data_dir>/jle-installed.json`
+records what is installed (name, game, replaces, version: a hash of its files, files, continue
+point, index), so that `remove` takes out exactly what `apply` put. One level at a time may replace
+a given level. The manifest is checked first (names, files only under the level's folders, only the
+`game.gp` lines an export writes).
+
+**The runtimes** (`crates/core/src/runtime.rs`): `OpenGoal` is an OpenGOAL the editor drives, and a
+`GameRuntime`: `OpenGoal::checkout(root, bin, game)` (a jak-project checkout and its build's
+programs, its settings in `out/jle-settings`, the game's files from its `iso_data/jak3`, else the
+ones the launcher extracted) or `OpenGoal::distribution(kind, folder, iso_data)` (`extractor`, `gk`,
+`goalc` and `data/`, as the launcher installs them, its settings in `<folder>/_settings`). Both
+build with `extractor <iso_data> --folder --compile --game jak3 --proj-path <data>`
+(`compile_command`: goalc's `(mi)`, what the launcher runs for mods; `goalc --cmd` ignores
+`--iso-path`). Every program gets `--proj-path`: without it they take the project from the last
+"jak-project" in their own path. Jak 3's kernel cannot start at a continue point, so `launch`
+writes `goal_src/user/jle/startup-jak3.gc` (`startup_code`: `(make-group "all-code")`, `(lt)`,
+then, run once it listens, `(start 'play (get-continue-by-name *game-info* "<continue>"))`), starts
+`gk -v --game jak3 --proj-path <data> --config-path <settings> -- -boot -fakeiso -debug`
+(`launch_command`; `-debug` opens its listener), then goalc's REPL as that user on free ports with
+its stdin held open (`repl_command`: a REPL that ends resets the game), and kills goalc once the
+game's output says `Displaying level <name>` (killed, it leaves the game as it is); a second launch
+stops the game started before (`stop_game`), as a build does. `run_logged` runs a tool, its lines
+and the make system's `[ 42%]` as `HostEvent`s. The launcher can use the same pieces. The builder a data folder has is its
+`custom_assets/<game>/jle-builder.json` (`{"builder": "jle-1"}`, written by the editor's
+jak-project branch), or, for a checkout of before it, the fixes' code. `StandaloneRuntime`, the
+standalone app's, reads the preferences at each call: the jak-project checkout chosen in File >
+Settings (`runtime_folder`, its programs in `runtime_bin` or its build's `out/build/Release/bin`),
+else the OpenGOAL Launcher's game for the editor (`installationDir` of
+`%APPDATA%/OpenGOAL-Launcher/settings.json`, then `features/jak3/level_edited/`, when its data has
+the builder). `GameRuntime::settings` (a default method answering null) is what the Settings window
+shows besides `info`. `info` is asked at each `get_state`: a runtime keeps it cheap.
+
+**Play** (`crates/core/src/editor/runtime.rs`): `get_state.runtime` is the runtime's `RuntimeInfo`
+(null without one). `play_level {options?, wait?}` exports the document with the Export window's
+options into `<library>/exports/<project>/`, then calls `play` on the job `play` (`jle:progress` at
+each step); `play_state` answers `{busy, action, name, steps: [{key, args}], done, total, log,
+outcome: "started" | "handed_over" | null, error, seconds, generation}`; `runtime_levels` (the
+levels installed), `runtime_remove {name, wait?}`, `runtime_launch {name, wait?}`,
+`runtime_settings` (`{info, settings}`). The interface shows the toolbar's Play, Level > Play in the
+game and the Play window only when `runtime.available`; without it the Export window points to the
+README and to File > Settings.
 
 **The level builder**: OpenGOAL's builder needs fixes for the editor's exports (a level without
 regions, nav meshes, flat collision fragments, translucent surfaces, collision on both sides per

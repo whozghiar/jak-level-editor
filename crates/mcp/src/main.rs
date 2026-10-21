@@ -690,7 +690,7 @@ fn tools() -> Value {
     tool(
       "export_level",
       "Writes what the view shows as a custom level of OpenGOAL for Jak 3, in the project's \
-       export folder (<library>/export/<project>/ by default) laid out like the jak-project \
+       export folder (<library>/exports/<project>/ by default) laid out like the jak-project \
        checkout: custom_assets/jak3/levels/<name>/ (the .glb, the .jsonc and the .gd its level \
        builder takes, level-info.gc), goal_src/jak3/levels/<name>/ (the behaviors' code) and \
        README.md (how to bring it into the game); notes says what changed or was left out, \
@@ -721,7 +721,7 @@ fn tools() -> Value {
           "folder",
           str(
             "the export's folder (README.md, custom_assets/..., goal_src/... in it): by default \
-             <library>/export/<project>/",
+             <library>/exports/<project>/",
           ),
         ),
         (

@@ -9,6 +9,7 @@
     newLevel,
     openProject,
     openProjectFile,
+    playLevel,
     quit,
     save,
     toggleView,
@@ -64,6 +65,8 @@
         { label: t("menu.file.save_as"), keys: "Ctrl+Shift+S", enabled: doc, run: () => save(true) },
         null,
         { label: t("menu.file.import_model"), enabled: doc, run: importModel },
+        null,
+        { label: t("menu.file.settings"), run: () => windows.open("settings") },
         null,
         { label: t("menu.file.quit"), run: quit },
       ],
@@ -196,6 +199,8 @@
         },
         null,
         { label: t("menu.file.export_game"), guide: "export", run: () => windows.open("export") },
+        // only with a game runtime the host gives (no runtime: the export and its README)
+        ...(s.runtime?.available ? [{ label: t("menu.level.play"), tip: t("menu.level.play.tip"), run: playLevel }] : []),
       ],
     },
     {

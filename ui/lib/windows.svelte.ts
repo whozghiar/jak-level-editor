@@ -15,9 +15,12 @@ import LogWindow from "../components/windows/LogWindow.svelte";
 import NavMeshWindow from "../components/windows/NavMeshWindow.svelte";
 import NewGroupWindow from "../components/windows/NewGroupWindow.svelte";
 import NewPrefabWindow from "../components/windows/NewPrefabWindow.svelte";
+import PlayWindow from "../components/windows/PlayWindow.svelte";
 import SaveAsWindow from "../components/windows/SaveAsWindow.svelte";
+import SettingsWindow from "../components/windows/SettingsWindow.svelte";
 import TerrainWindow from "../components/windows/TerrainWindow.svelte";
 import TexturesWindow from "../components/windows/TexturesWindow.svelte";
+import WelcomeWindow from "../components/windows/WelcomeWindow.svelte";
 
 export interface WindowDef {
   title: string; // its translation key
@@ -51,6 +54,9 @@ export const registry: Record<string, WindowDef> = {
   new_group: { title: "group.new_title", component: NewGroupWindow, width: 400, modal: true }, // groups.cpp
   discard: { title: "discard.title", component: DiscardWindow, modal: true }, // confirm_discard
   log: { title: "log.title", component: LogWindow, width: 760, height: 360 }, // View > Log
+  play: { title: "play.title", component: PlayWindow, width: 560 }, // Level > Play in the game (the host's game runtime)
+  settings: { title: "settings.title", component: SettingsWindow, width: 520 }, // File > Settings
+  welcome: { title: "welcome.title", component: WelcomeWindow, width: 600, modal: true }, // the first start: the library
 };
 
 export type OpenWindow = { id: string; props: Record<string, any>; z: number; opened: number };

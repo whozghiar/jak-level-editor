@@ -10,12 +10,14 @@
   import IconDelete from "~icons/mdi/delete";
   import IconMagnet from "~icons/mdi/magnet";
   import IconPrefab from "~icons/mdi/package-variant-plus";
+  import IconPlay from "~icons/mdi/play";
   import IconRedo from "~icons/mdi/redo";
   import IconScale from "~icons/mdi/resize";
   import IconRotate from "~icons/mdi/rotate-3d-variant";
   import IconTerrain from "~icons/mdi/terrain";
   import IconUndo from "~icons/mdi/undo";
   import IconTopology from "~icons/mdi/vector-polyline";
+  import { playLevel } from "../../lib/actions.svelte";
   import { engine, type GizmoMode } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
@@ -131,4 +133,9 @@
   <div class="mx-1 h-6 border-l border-neutral-800"></div>
   {@render button(IconUndo, t("toolbar.undo"), () => call("undo"), { enabled: s.history.can_undo, tip: s.history.undo_label || t("toolbar.undo"), short: true })}
   {@render button(IconRedo, t("toolbar.redo"), () => call("redo"), { enabled: s.history.can_redo, tip: s.history.redo_label || t("toolbar.redo"), short: true })}
+  <!-- the level played in the game: only with a game runtime the host gives -->
+  {#if s.runtime?.available}
+    <div class="mx-1 h-6 border-l border-neutral-800"></div>
+    {@render button(IconPlay, t("toolbar.play"), playLevel, { enabled: s.document.open, on: !!engine.jobs.play, tip: t("menu.level.play.tip") })}
+  {/if}
 </div>

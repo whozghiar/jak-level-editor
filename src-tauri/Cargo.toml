@@ -12,6 +12,7 @@ default-run = "jak-level-editor"
 tauri-build = { version = "2.5.1", features = [] }
 
 [dependencies]
+dirs = "6"
 serde_json.workspace = true
 tauri = { workspace = true, features = ["protocol-asset", "devtools"] }
 tauri-plugin-dialog = "2.7.0"

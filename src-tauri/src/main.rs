@@ -8,6 +8,22 @@
 //   jak-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>]
 //                    [--hidden] [--open-level <name>]
 
+use tauri::Manager;
+use tauri_plugin_jak_level_editor::jle_core::runtime::StandaloneRuntime;
+use tauri_plugin_jak_level_editor::{Host, set_host};
+
+// what this app gives the editor (docs/rust-architecture.md §6): the library in Documents/Jak Level
+// Editor (known before the app, so the editor starts on it), the game runtime of the settings (a
+// jak-project checkout, else the OpenGOAL Launcher's game for the editor)
+fn host() -> Host {
+  Host {
+    name: "standalone".into(),
+    default_library: dirs::document_dir().map(|d| d.join("Jak Level Editor")),
+    runtime: Some(std::sync::Arc::new(StandaloneRuntime::default())),
+    ..Default::default()
+  }
+}
+
 fn main() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
@@ -15,8 +31,29 @@ fn main() {
     .plugin(
       tauri_plugin_jak_level_editor::Builder::new()
         .args(std::env::args())
+        .host(host())
         .build(),
     )
+    // and the ogle-extract installed with it, once the app knows its resources
+    .setup(|app| {
+      let exe = if cfg!(windows) {
+        "ogle-extract.exe"
+      } else {
+        "ogle-extract"
+      };
+      let extractor = app.path().resource_dir().ok().map(|d| d.join(exe));
+      let extractor = extractor.filter(|e| e.is_file());
+      if extractor.is_some() {
+        set_host(
+          app.handle(),
+          Host {
+            extractor,
+            ..host()
+          },
+        );
+      }
+      Ok(())
+    })
     .run(tauri::generate_context!())
     .expect("Jak Level Editor could not start");
 }

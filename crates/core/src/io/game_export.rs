@@ -1,5 +1,5 @@
 //! A document exported as a custom level of OpenGOAL for Jak 3: the files its level builder
-//! (goalc/build_level) takes, laid out in <folder> (the project's export: <library>/export/<project>/)
+//! (goalc/build_level) takes, laid out in <folder> (the project's export: <library>/exports/<project>/)
 //! as in the jak-project checkout they are copied into:
 //!
 //! ```text
@@ -38,6 +38,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::host::{LevelManifest, LevelPackage};
 use crate::i18n::{tr, tr_en};
 use crate::io::behaviors::{
   Condition, ConditionKind, behavior_code, behavior_type_name, condition_of,
@@ -1336,7 +1337,7 @@ pub fn untaken_nickname(nickname: &str, data: Option<&GameData>) -> String {
 }
 
 /// The options of a first export of the document (App::default_export_options): a name the game
-/// does not have ("my-" and the level's), the folder <library_root>/export/<project_folder>
+/// does not have ("my-" and the level's), the folder <library_root>/exports/<project_folder>
 /// (`library_root` "": the editor's preferences folder; `project_folder` "": the name), the start
 /// point. `project_folder`: the project's name as a folder can have it (App::project_folder_name of
 /// App::project_name).
@@ -1373,7 +1374,7 @@ pub fn default_export_options(
   o.iso_name = default_iso_name(&name);
   o.base_id = K_DEFAULT_BASE_ID;
   // the project's export, next to the extracted game (not in the editor's sources: the level holds
-  // its textures): <library>/export/<project>/
+  // its textures): <library>/exports/<project>/
   let root = if library_root.is_empty() {
     Prefs::dir()
   } else {
@@ -1384,7 +1385,7 @@ pub fn default_export_options(
   } else {
     project_folder
   };
-  o.folder = from_path(&Path::new(&root).join("export").join(project));
+  o.folder = from_path(&Path::new(&root).join("exports").join(project));
   o.name = name;
   o.start = export_start_point(scene, data);
   o
@@ -2451,6 +2452,24 @@ pub fn export_level(
 
   rep.notes = notes.list();
 
+  // the lines of game.gp: the level, its code (after the common code and the code of the game it
+  // derives from), its DGO
+  let mut game_gp = vec![format!("(build-custom-level \"{}\")", o.name)];
+  if !generated.is_empty() {
+    let mut line = format!(
+      "(goal-src \"levels/{}/{code_stem}.gc\" \"entity-debug\"",
+      o.name
+    );
+    for f in &code_files {
+      line += &format!(" \"{f}\"");
+    }
+    game_gp.push(line + ")");
+  }
+  game_gp.push(format!(
+    "(custom-level-cgo \"{nick_upper}.DGO\" \"{0}/{0}.gd\")",
+    o.name
+  ));
+
   // how to add it to the game
   let readme = readme(
     scene,
@@ -2461,11 +2480,47 @@ pub fn export_level(
     &code_dir,
     &code_stem,
     &generated,
-    &code_files,
+    &game_gp,
   );
   let md_path = top.join("README.md");
   write_text(&md_path, &readme)?;
+
+  // the same for a program (a game runtime: the editor's Play, the OpenGOAL Launcher)
+  let (continue_point, start) = match replaced.and_then(|r| r.continues.first()) {
+    Some(c) => (c.name.clone(), c.position),
+    None if replacing => (format!("{}-start", o.replaces), o.start),
+    None => (format!("{}-start", o.name), o.start),
+  };
+  let manifest = LevelManifest {
+    format: 1,
+    game: "jak3".into(),
+    name: o.name.clone(),
+    nickname: o.nickname.clone(),
+    replaces: o.replaces.clone(),
+    dgo: format!("{nick_upper}.DGO"),
+    continue_point,
+    start: [start.x, start.y, start.z],
+    game_gp,
+    level_info: if replacing {
+      String::new()
+    } else {
+      format!("{install_dir}level-info.gc")
+    },
+    files: rep
+      .files
+      .iter()
+      .filter_map(|f| Path::new(f).strip_prefix(&top).ok().map(from_path))
+      .collect(),
+    editor_version: env!("CARGO_PKG_VERSION").into(),
+    // every export of the editor needs the fixes of its jak-project branch: a level without regions
+    // (it crashed the builder), the translucent tree, collision on both sides, the visible list
+    builder: "jle-1".into(),
+  };
+  let manifest_path = top.join(LevelPackage::MANIFEST);
+  let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+  write_text(&manifest_path, &(text + "\n"))?;
   rep.files.push(from_path(&md_path));
+  rep.files.push(from_path(&manifest_path));
   Ok(rep)
 }
 
@@ -2480,7 +2535,7 @@ fn readme(
   code_dir: &str,
   code_stem: &str,
   generated: &str,
-  code_files: &[String],
+  game_gp: &[String],
 ) -> String {
   let name = &o.name;
   let nick_upper = o.nickname.to_ascii_uppercase();
@@ -2521,6 +2576,9 @@ It is laid out like the jak-project checkout (OpenGOAL's source folder, the one 
 `custom_assets`) it goes into:
 
 - `{install_dir}`: the level for OpenGOAL's level builder: `{name}.glb` (its decor and collision), `{name}.jsonc` (its names and actors), `{name}.gd` (its DGO, {nick_upper}.DGO), `level-info.gc` (its definition in the game's code){}.
+- `jle-level.json`: what this README says to do, for a program: the editor's Play button and the
+  OpenGOAL Launcher install the level with it (the files, the lines of `game.gp` and `level-info.gc`)
+  and start the game on it.
 ",
     if rep.navmeshes > 0 {
       format!(", `{name}-nav.json` (its nav meshes)")
@@ -2542,7 +2600,6 @@ It is laid out like the jak-project checkout (OpenGOAL's source folder, the one 
 2. In `goal_src/jak3/game.gp`, next to the lines of the test-zone:
 
    ```
-   (build-custom-level \"{name}\")
 ",
     if has_code {
       "s `custom_assets` and `goal_src`"
@@ -2552,15 +2609,10 @@ It is laid out like the jak-project checkout (OpenGOAL's source folder, the one 
     if has_code { "they merge" } else { "it merges" },
     if has_code { "s" } else { "" }
   );
-  if has_code {
-    // after the common code and the code of the game it derives from
-    md += &format!("   (goal-src \"levels/{name}/{code_stem}.gc\" \"entity-debug\"");
-    for f in code_files {
-      md += &format!(" \"{f}\"");
-    }
-    md += ")\n";
+  for line in game_gp {
+    md += &format!("   {line}\n");
   }
-  md += &format!("   (custom-level-cgo \"{nick_upper}.DGO\" \"{name}/{name}.gd\")\n   ```\n\n");
+  md += "   ```\n\n";
   if let Some(r) = replaced {
     let rep_name = &o.replaces;
     let first = r
@@ -2943,7 +2995,7 @@ mod tests {
     let dir = out.join("custom_assets/jak3/levels/my-test");
     let code = out.join("goal_src/jak3/levels/my-test/my-test-obs.gc");
     assert!(
-      r.files.len() == 6
+      r.files.len() == 7
         && r.behaviors == 2
         && out.join("README.md").is_file()
         && code.is_file()
@@ -2960,6 +3012,29 @@ mod tests {
     ] {
       assert!(dir.join(f).is_file(), "{f}");
     }
+    // the manifest: what the README says, for a runtime
+    let m = LevelPackage::read(&out).expect("jle-level.json").manifest;
+    assert!(
+      m.name == "my-test"
+        && m.dgo == "MTE.DGO"
+        && m.replaces.is_empty()
+        && m.continue_point == "my-test-start"
+        && m.start == [1.0, 2.0, 3.0]
+        && m.builder == "jle-1"
+        && m.level_info == "custom_assets/jak3/levels/my-test/level-info.gc"
+        && m.files.len() == 5
+        && m
+          .files
+          .iter()
+          .all(|f| out.join(f).is_file() && !f.ends_with(".md"))
+        && m
+          .files
+          .contains(&"goal_src/jak3/levels/my-test/my-test-obs.gc".to_string())
+        && m.game_gp.len() == 3
+        && m.game_gp[1].starts_with("(goal-src \"levels/my-test/my-test-obs.gc\" \"entity-debug\"")
+        && m.game_gp[2] == "(custom-level-cgo \"MTE.DGO\" \"my-test/my-test.gd\")",
+      "export: the manifest ({m:?})"
+    );
     let level = read_jsonc(&dir.join("my-test.jsonc"));
     let by_name: HashMap<String, &Value> = level["actors"]
       .as_array()
@@ -3187,6 +3262,16 @@ mod tests {
       read_text(&tmp.join("export-replace/README.md")),
     );
     let rextras = glb_extras(&read_glb_json(&rdir.join("my-ctyb.glb")));
+    let rm = LevelPackage::read(&tmp.join("export-replace"))
+      .expect("jle-level.json")
+      .manifest;
+    assert!(
+      rm.replaces == "ctyindb"
+        && rm.level_info.is_empty()
+        && rm.continue_point == data.level("ctyindb").unwrap().continues[0].name
+        && rm.dgo == "MCY.DGO",
+      "export: the manifest of a replacement ({rm:?})"
+    );
     let counts: HashMap<&str, usize> = rr.notes.iter().map(|n| (n.key.as_str(), n.count)).collect();
     let (at_part, at_obs) = (
       rgd.find("\"ctyindb-part.o\"").unwrap_or(usize::MAX),
@@ -3563,7 +3648,16 @@ mod tests {
       }
       scene.begin_frame();
       export_level(&scene, Some(&data), &o).expect("exported");
-      let (theirs, ours) = (export_texts(&export), export_texts(&tmp.join(project)));
+      let (theirs, mut ours) = (export_texts(&export), export_texts(&tmp.join(project)));
+      // the manifest (jle-level.json) and its lines in the README: new since
+      if !theirs.contains_key(LevelPackage::MANIFEST) {
+        ours.remove(LevelPackage::MANIFEST);
+        if let Some(md) = ours.get_mut("README.md") {
+          let at = md.find("- `jle-level.json`").unwrap_or(md.len());
+          let end = md[at..].find(".\n").map_or(at, |e| at + e + 2);
+          md.replace_range(at..end, "");
+        }
+      }
       assert_eq!(
         theirs.keys().collect::<Vec<_>>(),
         ours.keys().collect::<Vec<_>>(),

@@ -25,10 +25,12 @@ jak-level-editor-mcp [--remote-port <port>]
 
 - `project.glb` is opened at the start; `--open-level` opens a level of the library instead
   (`--open-level ctyinda`).
-- `--library` chooses the folder of the extracted games (instead of the one used last, else
-  `library/`), `--lang` the language, for one session.
+- `--library` chooses the library folder (instead of the one chosen at the first start, else the
+  host's default: `Documents/Jak Level Editor`, `library/` of the repository when the program runs
+  from it; no first-run assistant then), `--lang` the language, for one session.
 - `--remote-port` is the port of the editor's remote control (47821; `0` turns it off);
   `--hidden` runs the editor without a window and without touching the preferences (scripts).
+- `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones).
 - `jak-level-editor-mcp` is the MCP server ([7](#7-the-remote-control-and-the-mcp-server)).
 - Opened from the OpenGOAL Launcher, the editor has no command line: the library and the language
   are the preferences'.
@@ -66,15 +68,40 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build      # build/bin/ogle-extract(.exe) and its tables, build/bin/ogle-extract-data/
 ```
 
-The editor runs the first it finds: next to its own program, in its resources, in `build/bin/` of
-the repository it was built from, else the file `$JLE_EXTRACTOR` names; its tables
-(`ogle-extract-data/`) next to it. To ship it in the installer, build it first, then add to
-`bundle.resources` of `src-tauri/tauri.conf.json` (a missing path there fails `tauri build`):
+The editor runs the first it finds: the one its host gives (the OpenGOAL Launcher downloads it on
+demand: **Download ogle-extract** in the Extract window), next to its own program, in its
+resources, in `build/bin/` of the repository it was built from, else the file `$JLE_EXTRACTOR` names; its tables
+(`ogle-extract-data/`) next to it. The installers ship it when they are built with
+`src-tauri/tauri.release.conf.json`, which adds `build-release/bin/` (ogle-extract and its tables)
+to the resources, as the releases do:
 
-```json
-"../build/bin/ogle-extract.exe": "ogle-extract.exe",
-"../build/bin/ogle-extract-data/": "ogle-extract-data/"
+```bash
+cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
+      -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+cmake --build build-release
+npx yarn tauri build --config src-tauri/tauri.release.conf.json --ignore-version-mismatches
 ```
+
+(`MultiThreaded`: the C runtime inside the program, which then runs on a Windows without the VC++
+redistributable; the releases build the editor the same way, `RUSTFLAGS=-C
+target-feature=+crt-static`.) Without that file, `tauri build` makes installers without the
+extractor (a build for working on the editor).
+
+The releases (`.github/workflows/release.yaml`, made from a tag `vX.Y.Z`:
+[RELEASING.md](../RELEASING.md)) hold, per platform (`windows-x64`, `linux-x64`):
+
+| Asset | Content |
+|---|---|
+| `*_x64-setup.exe`, `*_x64_en-US.msi` | the Windows installers (NSIS, for the current user; MSI): the editor, `lang/`, `data/`, `ogle-extract.exe` and `ogle-extract-data/` in its folder |
+| `*_amd64.deb`, `*_amd64.AppImage` | the Linux packages, the same resources |
+| `jak-level-editor-portable-<platform>.zip` | at its root: `jak-level-editor(.exe)`, `lang/`, `data/`, `ogle-extract(.exe)`, `ogle-extract-data/` (the editor finds them next to itself) |
+| `ogle-extract-<platform>.zip` | at its root: `ogle-extract(.exe)` and `ogle-extract-data/`; the OpenGOAL Launcher downloads `https://github.com/whozghiar/open-goal-level-builder/releases/download/v<version>/ogle-extract-<platform>.zip` |
+| `jak-level-editor-mcp-<platform>.zip` | `jak-level-editor-mcp(.exe)`, the MCP server ([7](#7-the-remote-control-and-the-mcp-server)): it starts the editor found next to it |
+
+`.github/workflows/build.yaml` checks every push: the engine's and the MCP server's tests, the
+interface (types, Prettier on `ui/`, `src/` and the configuration files, build), ogle-extract and
+the editor, on Windows and Linux. There is no macOS build: ogle-extract is compiled with `-mavx`
+(x86 only) and the editor was never tried there.
 
 ```text
 library/jak3/library.json                          the game, its version, the levels extracted
@@ -87,7 +114,7 @@ library/jak2/...                                   Jak II's levels, the same way
 library/prefabricated/*.glb                        the user's prefabs
 library/prefabricated/game/*.glb                   the game's prefabs (game/jak2/: Jak II's)
 library/projects/<name>/                           a saved project
-library/export/<project>/                          a level exported for the game
+library/exports/<project>/                         a level exported for the game
 ```
 
 ## 3. Files
@@ -217,7 +244,7 @@ copy of `data/` a build puts next to its program (the engine's tests read `data/
 
 ## 6. The export for the game
 
-What **Export for the game...** and `export_level` write, in `library/export/<project>/`:
+What **Export for the game...** and `export_level` write, in `library/exports/<project>/`:
 
 | File | What it is |
 |---|---|
@@ -335,4 +362,5 @@ third-party/          where the third-party code is, and its licenses
 .claude/skills/       skills for Claude Code working on this repository (.agents/skills/: the same, for
                       other agents)
 .mcp.json             the MCP server, for Claude Code started in this folder
+.github/workflows/    build.yaml (the checks of every push), release.yaml (the releases, RELEASING.md)
 ```

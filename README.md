@@ -17,8 +17,9 @@ appears, with an example, and shows each tool in a picture.
 
 - **Nothing of the game is in this repository.** Everything comes from your disc: you extract it once.
 - **It needs nothing else**: not OpenGOAL, not the game, to build or to run. To *play* what you
-  exported you need **jak-project**, OpenGOAL's source code, built on your computer (see
-  [15](#15-playing-it-in-the-game-export)).
+  exported you need **jak-project**, OpenGOAL's source code, built on your computer with the
+  editor's level builder, or the OpenGOAL Launcher's game for the editor; **Play** then installs
+  it and starts the game in it (see [15](#15-playing-it-in-the-game-export)).
 - **On its own or in the OpenGOAL Launcher**: it is made like the
   [OpenGOAL Launcher](https://github.com/open-goal/launcher) (an engine in Rust, an interface in
   Svelte, in a Tauri window), so the same editor runs as its own program or opens from the
@@ -110,9 +111,26 @@ after a fall.
 - About 4 GB of disk for the extracted levels, 5 GB of free memory while they are extracted.
 - Optional: your copy of **Jak II**, for its buildings (Haven City as it was, the palace).
 
+### Download it
+
+Each [release](https://github.com/whozghiar/open-goal-level-builder/releases) has, for Windows
+(`windows-x64`) and Linux (`linux-x64`):
+
+- an **installer**: `..._x64-setup.exe` (Windows, for your user alone, no administrator rights) or
+  the `.msi` (for all users); the `.deb` or the `.AppImage` on Linux;
+- a **portable** zip, `jak-level-editor-portable-<platform>.zip`: unzip it anywhere and run
+  `jak-level-editor` (`.exe` on Windows); nothing is installed;
+- `ogle-extract-<platform>.zip`, the extractor alone (the OpenGOAL Launcher downloads it);
+- `jak-level-editor-mcp-<platform>.zip`, the MCP server for an AI assistant (optional, see
+  [16](#16-building-with-an-ai-assistant)): put it next to the editor's program.
+
+The installers and the portable zip hold ogle-extract. A release is made from a tag `vX.Y.Z`:
+GitHub builds the editor on Windows and Linux and makes a draft release with these files, published
+by hand ([RELEASING.md](RELEASING.md)). There is no macOS version.
+
 ### Build it
 
-There is no ready-made download yet. You need:
+To build it yourself (to work on it, or a version not released yet), you need:
 
 - [Rust](https://rustup.rs), stable (1.89 or later). On Windows, rustup offers to install the
   Visual Studio C++ build tools Rust links with: accept.
@@ -151,7 +169,7 @@ It writes `target/release/jak-level-editor.exe` (`jak-level-editor` on Linux): n
 double-click it. The installers are in `target/release/bundle/` (`.msi`, `.deb`, `.AppImage`).
 The editor finds `ogle-extract` next to itself, in its resources, or in `build/bin/` of this
 folder: keep the extractor built there (or see the [reference](docs/reference.md#2-the-extraction)
-to put it in the installer).
+to put it in the installers, as the releases do).
 
 The tests:
 
@@ -165,13 +183,25 @@ The engine's tests need no game data (those that read the extracted levels skip 
 prefabs and groups, the export for the game, the translations, the game view, the holes finder,
 the weathers, the terrain brush, the nav meshes.
 
+### Your library
+
+The first time, the editor asks where to keep your **library**: the folder that holds the extracted
+game (`jak3/`, `jak2/`), your projects (`projects/`), your levels exported for the game (`exports/`)
+and your prefabs (`prefabricated/`). It offers `Documents/Jak Level Editor` (in the OpenGOAL
+Launcher: `jak-level-editor/` of its installation folder; the editor built and started from this
+folder: `library/` here, which git ignores); **Choose another folder...** takes any other.
+**File > Settings...** shows it and changes it later: the editor then uses the new folder, and
+neither moves nor deletes anything in the old one (extract the game again there, or copy the old
+folder's content by hand). The same window has the language and where ogle-extract was found.
+
 ### Extract your game
 
-The first time, the editor asks for your game: **File > Extract game assets...**
+Then it asks for your game: **File > Extract game assets...**
 
 1. **Your Jak 3 disc**: choose the `.iso` (**.iso file...**) or the folder (**Folder...**). The editor
-   tells which game and version it is (for example *Jak 3 - ntsc_v1 - SCUS-97330*).
-2. **Where to write the levels**: `library/` in this folder by default (git ignores it).
+   tells which game and version it is (for example *Jak 3 - ntsc_v1 - SCUS-97330*). In the OpenGOAL
+   Launcher, the disc it already extracted is chosen for you.
+2. **Where to write the levels**: your library.
 3. **Extract all the levels**: about a minute and a half for the 272 levels of Jak 3.
 
 ![The extraction window after Jak 3's 272 levels were extracted](docs/captures/getting-started/extraction.png)
@@ -604,7 +634,7 @@ your back.
 ## 15. Playing it in the game: export
 
 **Level > Export for the game...** writes the level as a **custom level of OpenGOAL**, in
-`library/export/<project>/`, laid out like jak-project, with a `README.md` that gives the exact lines
+`library/exports/<project>/`, laid out like jak-project, with a `README.md` that gives the exact lines
 to add and how to build and go there.
 
 ![The export window and its report](docs/captures/export/export-window.png)
@@ -631,7 +661,25 @@ blue ghost to compare), **Place it where the original is**, check where the game
 
 ![A level made the replacement of ctyindb: the inspector's section](docs/captures/export/replace.png)
 
-Then, to play it (the export's `README.md` gives the exact lines for your level):
+**Play** (the toolbar's button, **Level > Play in the game**) does the rest for you when the editor
+has a game to play in, chosen in **File > Settings > Game**:
+
+- a **jak-project checkout** with the editor's level builder (the branch of jak-project with its
+  fixes for the editor's exports: its `custom_assets/jak3/jle-builder.json` says `jle-1`), built,
+  with your Jak 3 extracted in it;
+- or the **OpenGOAL Launcher's game for the editor** (`<install>/features/jak3/level_edited/`, which
+  the launcher installs), found by itself.
+
+It exports the level into `library/exports/<project>/`, installs it in that game (its files, and
+its lines in `game.gp` and `level-info.gc` between `;; jak-level-editor: begin <name>` and `end`
+lines; each file edited is backed up once as `<file>.jle-backup`), builds the game (a few minutes)
+and starts it in your level. The Play window shows each step and the compiler's lines; **Remove**
+takes the level out of that game again and builds it: its files are as they were. In the OpenGOAL
+Launcher, the launcher does it in its own window. The export's `jle-level.json` is what Play reads:
+the same as its README, for a program.
+
+Without a game to play in, the Play button is not there. To play it by hand (the export's
+`README.md` gives the exact lines for your level):
 
 1. Get **jak-project** (OpenGOAL's source code) and build it, as its own
    [README](https://github.com/open-goal/jak-project#readme) explains, with your Jak 3 extracted in
@@ -692,11 +740,12 @@ with recipes.
 ## 18. Files and folders
 
 ```text
-library/                 everything made from your game (git ignores it)
+library/                 the library: everything made from your game (git ignores it; installed,
+                         the folder chosen at the first start, see File > Settings)
   jak3/                  the extracted levels of Jak 3 (jak2/: Jak II's)
   prefabricated/         the prefabs: yours, and the game's in prefabricated/game/
   projects/<name>/       your saved projects
-  export/<project>/      the levels exported for the game
+  exports/<project>/     the levels exported for the game (older exports: export/<project>/)
 iso_data/                put your disc images here if you like (git ignores them)
 data/                    what the editor knows of the game: names and rules, no asset
 lang/                    the interface texts (en.json, fr.json)

@@ -44,6 +44,10 @@
     iso_dir: string;
     extractor_found: boolean;
     extractor_dirs: string[]; // where it is looked for
+    host_source: string; // the disc the host already extracted (the launcher's)
+    can_fetch: boolean; // the host downloads ogle-extract (extract_fetch)
+    fetching: boolean;
+    fetch_error: string;
   };
 
   let ex = $state<Extraction>();
@@ -107,9 +111,24 @@
     if (typeof path === "string") output = path;
   }
 
+  // the host's download of ogle-extract (extract_fetch): its progress, then the disc read again
+  let download = $state<{ done: number; total: number }>();
+  async function fetchExtractor() {
+    download = { done: 0, total: 1 };
+    if (!(await call("extract_fetch"))) download = undefined;
+  }
+  async function fetched(p: { id: string; done: number; total: number; finished: boolean }) {
+    if (p?.id !== "extract_fetch") return;
+    download = p.finished ? undefined : p;
+    if (!p.finished) return;
+    defaults = await call<Defaults>("extract_defaults");
+    if (source && defaults?.extractor_found) detect();
+  }
+
   onMount(() => {
     const timer = setInterval(() => ex?.running && refresh(), 500);
     const off = onEngine("jle:progress", refresh);
+    const offFetch = onEngine("jle:progress", fetched);
     (async () => {
       defaults = await call<Defaults>("extract_defaults");
       if (!defaults) return;
@@ -124,6 +143,7 @@
     return () => {
       clearInterval(timer);
       off();
+      offFetch();
     };
   });
 
@@ -145,10 +165,36 @@
 
 {#if defaults && !defaults.extractor_found}
   <p class={bad}>{t("extract.missing")}</p>
-  <p class="mt-1 text-sm text-neutral-400">{t("extract.missing.help")}</p>
-  <ul class="mt-1 list-disc pl-5 text-sm break-all text-neutral-400">
-    {#each defaults.extractor_dirs as dir}<li>{dir}</li>{/each}
-  </ul>
+  {#if defaults.can_fetch}
+    <p class="mt-1 text-sm text-neutral-400">{t("extract.fetch.help")}</p>
+    <button
+      class="mt-3 rounded border border-orange-600 bg-orange-600 px-6 py-2 font-semibold text-white hover:bg-orange-500 disabled:pointer-events-none disabled:opacity-40"
+      disabled={!!download || defaults.fetching}
+      onclick={fetchExtractor}
+      >{download || defaults.fetching
+        ? t("extract.fetching")
+        : t("extract.fetch")}</button
+    >
+    {#if download && download.total > 1}
+      <div class="mt-3">
+        <Progressbar
+          color="orange"
+          size="h-2"
+          progress={Math.round((100 * download.done) / download.total)}
+        />
+      </div>
+    {/if}
+    {#if defaults.fetch_error && !download}
+      <p class="mt-2 {bad}">
+        {t("extract.fetch_failed", defaults.fetch_error)}
+      </p>
+    {/if}
+  {:else}
+    <p class="mt-1 text-sm text-neutral-400">{t("extract.missing.help")}</p>
+    <ul class="mt-1 list-disc pl-5 text-sm break-all text-neutral-400">
+      {#each defaults.extractor_dirs as dir}<li>{dir}</li>{/each}
+    </ul>
+  {/if}
 {:else if defaults}
   <div class="flex flex-col gap-4 text-sm">
     <div>
@@ -202,6 +248,9 @@
           <p class={bad}>{text(ex.detected.error)}</p>
         {:else if !source}
           <p class={muted}>{t("extract.disc.choose")}</p>
+        {/if}
+        {#if source && source === defaults.host_source}
+          <p class="mt-1 {muted}">{t("extract.host_disc")}</p>
         {/if}
       </div>
     </section>

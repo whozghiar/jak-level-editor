@@ -82,38 +82,31 @@ pub fn library_root_of(folder: &str) -> String {
   }
 }
 
-/// This editor's own tree (the source tree it was built from), else the folder of the executable:
-/// never jak-project's, which this editor neither builds against nor runs.
-fn editor_tree() -> PathBuf {
-  let project = Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2);
-  if let Some(project) = project
-    && project.join("Cargo.toml").is_file()
+/// This editor's own tree when the program runs from it (a development build: target/<profile>/
+/// of the source tree it was built from), else None: an installed editor has no folder of its own
+/// to write to (C:\Program Files\... is not writable); its host gives the library's
+/// (crate::host::Host::default_library). Never jak-project's, which this editor neither builds
+/// against nor runs.
+pub fn editor_tree() -> Option<PathBuf> {
+  let project = absolute(Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2)?);
+  let exe = std::env::current_exe().ok()?;
+  (project.join("Cargo.toml").is_file()
     && project.join("crates").join("core").is_dir()
-  {
-    return project.to_path_buf();
-  }
-  std::env::current_exe()
-    .ok()
-    .and_then(|e| e.parent().map(Path::to_path_buf))
-    .unwrap_or_default()
+    && exe.starts_with(&project))
+  .then_some(project)
 }
 
-/// The library folder when none holds an extracted game: library/ in the editor's own tree (the
-/// source tree it was built from, else the folder of the executable). This editor is independent
-/// of jak-project (it neither builds against it nor runs it): nothing here ever points there.
+/// library/ in the editor's own tree (a development build), "" otherwise: the library's default
+/// is then the host's (Editor::default_library).
 pub fn default_library_root() -> String {
-  from_path(&editor_tree().join("library"))
+  editor_tree().map_or_else(String::new, |t| from_path(&t.join("library")))
 }
 
-/// Where the user's own disc images and disc folders go, so File > Extract has a folder of its own
-/// to suggest: iso_data/ next to library/ (its .gitignore keeps them out of this repository).
+/// Where the user's own disc images and disc folders go in a development build, so File > Extract
+/// has a folder of its own to suggest: iso_data/ next to library/ (its .gitignore keeps them out of
+/// this repository); "" otherwise.
 pub fn default_iso_data_dir() -> String {
-  from_path(&editor_tree().join("iso_data"))
-}
-
-/// Where a new project is saved by default: library/projects/ (created on first use).
-pub fn default_projects_dir() -> String {
-  from_path(&editor_tree().join("library").join("projects"))
+  editor_tree().map_or_else(String::new, |t| from_path(&t.join("iso_data")))
 }
 
 /// The folder of the extracted game in a library folder (<library>/jak3, absolute, '/' separated),

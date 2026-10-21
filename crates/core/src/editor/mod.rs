@@ -17,6 +17,9 @@
 //!   effects.rs    the particle effects the view runs
 //!   protocol.rs   the jle:// protocol's encoders (the plugin serves them)
 //!   extract.rs    the extraction of the game's assets (extract.cpp)
+//!   library.rs    where the library lives (the host's default, the first-run assistant, the
+//!                 settings), the extraction's help from the host
+//!   runtime.rs    the game runtime the host gives: the document played in the game (Play)
 //!   api.rs        `call`: every call by name
 //!   placement.rs  the Place tool, prefabs, Light like here, a level's style (actions.cpp)
 //!   catalog.rs    the catalog, the library's index, the palette, the game's prefabs: the panels'
@@ -37,6 +40,7 @@ pub mod extract;
 mod groups;
 mod inspector;
 pub mod levels;
+mod library;
 mod ocean;
 mod panels;
 mod pick_calls;
@@ -46,6 +50,7 @@ mod project;
 pub mod protocol;
 pub mod remote;
 mod remote_tools;
+pub mod runtime;
 mod selection;
 mod state;
 mod surfaces;
@@ -345,6 +350,8 @@ pub struct Editor {
   /// what the application hosting the editor gives it (crate::host): the default library, a disc
   /// already extracted, the extractor, the game runtime
   pub host: crate::host::Host,
+  /// the Play window's: the game runtime's operation going on or the last one (runtime.rs)
+  pub play: Arc<Mutex<runtime::PlayState>>,
 }
 
 impl Default for Editor {
@@ -395,6 +402,7 @@ impl Editor {
       replies: BTreeMap::new(),
       extraction: extract::Extraction::default(),
       host: Default::default(),
+      play: Default::default(),
       placing: Default::default(),
       catalog: Default::default(),
       terrain: Default::default(),

@@ -1,7 +1,13 @@
-src-tauri/
-node_modules/
-dist/
-bundle-test/
-out/
-.yarn/
-src/assets/translations/
+# Prettier formats the interface (ui/, src/) and the configuration files, nothing else: Rust (crates/,
+# rustfmt), C++ (extractor/), the game data (data/), the translations (lang/, edited by hand in a
+# set order), the docs, the tools and the user's files (library/...) stay as they are written.
+/*
+!/ui/
+!/src/
+!/src-tauri/
+/src-tauri/gen/
+!/.github/
+!/*.json
+!/*.ts
+!/*.js
+!/index.html

@@ -38,6 +38,8 @@ const QUERIES: &[&str] = &[
   "shape",
   "materials",
   "export_state",
+  "play_state",
+  "runtime_levels",
   "export_check",
   "navmesh_state",
   "navmesh_data",
@@ -53,6 +55,7 @@ const QUERIES: &[&str] = &[
   "thumb_store",
   "level_textures",
   "preview_options",
+  "library_setup",
 ];
 
 fn u(a: &Value, k: &str) -> u32 {
@@ -144,6 +147,9 @@ impl Editor {
         self.set_library(s(a, "path"));
         done
       }
+      // the first-run assistant, the settings (library.rs)
+      "library_setup" => Ok(self.library_setup()),
+      "choose_library" => self.choose_library(s(a, "path")),
       // the window closed without saving where the engine outlives it (the launcher): nothing
       // open, as at the start
       "close_document" => {
@@ -423,15 +429,8 @@ impl Editor {
       }
 
       // ---- File > Extract game assets (extract.rs)
-      "extract_defaults" => {
-        let source = Prefs::get().extract_source.clone();
-        let levels = self.library.levels().len();
-        Ok(
-          self
-            .extraction
-            .defaults(&source, &self.library_root, levels),
-        )
-      }
+      "extract_defaults" => Ok(self.extract_defaults()),
+      "extract_fetch" => self.extract_fetch().map(|_| self.extract_defaults()),
       "extract_detect" => {
         self.extraction.detect(s(a, "source"));
         Ok(self.extraction.snapshot())
@@ -462,12 +461,24 @@ impl Editor {
 
       // ---- the terrain brush, the topology tool, the animation preview (terrain_tool.rs,
       // topology_tool.rs, preview.rs)
-      "start_terrain_brush" | "stop_terrain_brush" | "set_brush" | "brush_hover" | "brush_press"
-      | "brush_drag" | "brush_release" | "brush_cancel" | "brush_sculpt" | "terrain_generate"
-      | "terrain_apply_style" | "terrain_start_new" | "level_textures" => self.terrain_call(name, a),
-      "start_topology" | "stop_topology" | "topology_delete" | "topology_view" | "topology_pick"
-      | "topology_box" | "topology_select" | "topology_drag" | "topology_drag_end"
-      | "topology_extrude" | "topology_subdivide" | "topology_flip" => self.topology_call(name, a),
+      "start_terrain_brush"
+      | "stop_terrain_brush"
+      | "set_brush"
+      | "brush_hover"
+      | "brush_press"
+      | "brush_drag"
+      | "brush_release"
+      | "brush_cancel"
+      | "brush_sculpt"
+      | "terrain_generate"
+      | "terrain_apply_style"
+      | "terrain_start_new"
+      | "level_textures" => self.terrain_call(name, a),
+      "start_topology" | "stop_topology" | "topology_delete" | "topology_view"
+      | "topology_pick" | "topology_box" | "topology_select" | "topology_drag"
+      | "topology_drag_end" | "topology_extrude" | "topology_subdivide" | "topology_flip" => {
+        self.topology_call(name, a)
+      }
       "preview_options" | "start_preview" | "stop_preview" | "preview_frame" => {
         self.preview_call(name, a)
       }
@@ -485,6 +496,13 @@ impl Editor {
         Ok(self.export_state())
       }
       "export_state" => Ok(self.export_state()),
+      // ---- the game runtime of the host: Play (runtime.rs)
+      "play_level" => self.play_level(get(a, "options"), b(a, "wait").unwrap_or(false)),
+      "play_state" => Ok(self.play_state()),
+      "runtime_levels" => self.runtime_levels(),
+      "runtime_remove" => self.runtime_remove(s(a, "name"), b(a, "wait").unwrap_or(false)),
+      "runtime_launch" => self.runtime_launch(s(a, "name"), b(a, "wait").unwrap_or(false)),
+      "runtime_settings" => Ok(self.runtime_settings()),
       "generate_navmesh" => {
         self.generate_navmesh_call(a)?;
         Ok(self.navmesh_state())
@@ -503,11 +521,24 @@ impl Editor {
       "gaps_report" => Ok(self.gaps_report()),
       // ---- the Place tool, prefabs, the catalog, the textures of the games (placement.rs,
       // catalog.rs, thumbs.rs)
-      "start_shape_placement" | "start_model_placement" | "start_object_placement"
-      | "start_part_placement" | "start_prefab_placement" | "start_style_placement"
-      | "import_model" | "stop_placement" | "turn_placement" | "set_placement"
-      | "placement_preview" | "place_at" | "place_here" | "relight_selection" | "create_prefab"
-      | "prefab_dialog" | "delete_prefab" | "level_style" => self
+      "start_shape_placement"
+      | "start_model_placement"
+      | "start_object_placement"
+      | "start_part_placement"
+      | "start_prefab_placement"
+      | "start_style_placement"
+      | "import_model"
+      | "stop_placement"
+      | "turn_placement"
+      | "set_placement"
+      | "placement_preview"
+      | "place_at"
+      | "place_here"
+      | "relight_selection"
+      | "create_prefab"
+      | "prefab_dialog"
+      | "delete_prefab"
+      | "level_style" => self
         .placement_call(name, a)
         .unwrap_or_else(|| Err(format!("unknown call: {name}"))),
       "catalog" | "prefabs" | "want_game_prefabs" | "game_prefabs" | "texture_list"
