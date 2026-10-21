@@ -1263,6 +1263,7 @@
   "tuto.terrain.title": "Dessiner un terrain",
   "tuto.terrain.start.title": "Le pinceau",
   "tuto.terrain.start.text": "Appuyez sur B (ou Terrain (B) dans la barre d'outils) : le pinceau démarre et sa petite fenêtre s'ouvre sur la vue. Son style de niveau est celui du niveau ouvert : choisissez-en un autre dans sa liste (ou dans le panneau Construction) pour peindre avec ses textures de sol et de mur et ses bosses. Un carré suit la souris sur le niveau ; Ctrl + molette ou [ et ] changent sa taille. B à nouveau, Échap ou la croix de la fenêtre le terminent.",
+  "tuto.terrain.start.action": "Montrer le panneau Construire",
   "tuto.terrain.paint.title": "Peindre le sol",
   "tuto.terrain.paint.text": "Peindre le sol, puis maintenez le clic gauche et bougez : du sol est posé sous le carré, à la hauteur où le coup a commencé, avec les bosses et la texture de sol du style. Sur du sol déjà là, il prend le style choisi : changez de style et peignez un chemin, une place, un champ. Maj efface. Le premier coup crée un élément de terrain et les suivants s'y ajoutent ; pour le peindre à nouveau plus tard, sélectionnez-le, puis B.",
   "tuto.terrain.shape.title": "Monter, creuser, adoucir",
@@ -1278,6 +1279,7 @@
   "tuto.assembly.prefab.text": "Édition > Créer un préfabriqué, un nom : il est enregistré avec vos préfabriqués (l'onglet Préfabriqués) et se pose dans n'importe quel niveau, se copie, se tourne.",
   "tuto.assembly.game.title": "Les assemblages du jeu",
   "tuto.assembly.game.text": "L'onglet Préfabriqués propose les assemblages de tous les niveaux de Jak 3 et de Jak II trouvés ainsi (maisons, immeubles, tours, ponts, machines, formations rocheuses), et des monuments pris en entier : le palais de Haven sur son pilier, son toit, ses jardins. Ils sont fabriqués depuis vos niveaux quand le panneau les montre.",
+  "tuto.assembly.game.action": "Montrer les Préfabriqués",
   "help.editing.11": "Ctrl+G : sélectionner toute la structure dont l'élément fait partie (son assemblage : une maison avec ses façades, son toit et ses fenêtres)",
   "help.editing.12": "B : le pinceau de terrain ; maintenir le clic gauche pour peindre, monter, creuser ou élever des murs ; Ctrl + molette ou [ ] : sa taille ; Maj : l'inverse",
 

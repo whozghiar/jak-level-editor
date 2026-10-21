@@ -1263,6 +1263,7 @@
   "tuto.terrain.title": "Draw a terrain",
   "tuto.terrain.start.title": "The brush",
   "tuto.terrain.start.text": "Press B (or Terrain (B) in the toolbar): the brush starts and its small window opens over the view. Its level style is the open level's: choose another one in its list (or in the Build panel) to paint with its floor and wall textures and its bumps. A square follows the mouse over the level; Ctrl + wheel or [ and ] change its size. B again, Esc or the window's cross end it.",
+  "tuto.terrain.start.action": "Show the Build panel",
   "tuto.terrain.paint.title": "Paint the ground",
   "tuto.terrain.paint.text": "Paint ground, then hold the left button and move: ground is laid under the square, at the height where the stroke started, with the style's bumps and floor texture. Over ground already there it takes the style chosen: change the style and paint a path, a square, a field. Shift erases. The first stroke makes a terrain element and the next ones add to it; to paint it again later, select it, then B.",
   "tuto.terrain.shape.title": "Raise, dig, smooth",
@@ -1278,6 +1279,7 @@
   "tuto.assembly.prefab.text": "Edit > Create a prefab, a name: it is saved with your prefabs (the Prefabs tab) and can be put in any level, copied, turned.",
   "tuto.assembly.game.title": "The game's assemblies",
   "tuto.assembly.game.text": "The Prefabs tab offers the assemblies of every level of Jak 3 and Jak II found so (houses, buildings, towers, bridges, machines, rock formations), and landmarks taken whole: the palace of Haven on its pillar, its roof, its gardens. They are made from your levels when the panel shows them.",
+  "tuto.assembly.game.action": "Show the Prefabs",
   "help.editing.11": "Ctrl+G: select the whole structure the element is part of (its assembly: a house with its facades, roof and windows)",
   "help.editing.12": "B: the terrain brush; hold the left button to paint, raise, dig or wall; Ctrl + wheel or [ ]: its size; Shift: the other way",
 
