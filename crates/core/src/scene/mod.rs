@@ -18,6 +18,7 @@ pub mod bvh;
 pub mod gaps;
 mod ground;
 pub mod level_style;
+pub mod particles;
 pub mod pick;
 pub mod relight;
 pub mod shapes;

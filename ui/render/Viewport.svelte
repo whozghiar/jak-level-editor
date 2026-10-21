@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { engine } from "../lib/engine.svelte";
   import { gameView } from "./game_view";
+  import { effects } from "./particles";
   import { viewport } from "./viewport_api";
 
   let box: HTMLDivElement;
@@ -15,6 +16,7 @@
       .attach(canvas, overlay)
       .catch((e) => console.error("[viewport]", e));
     const offGame = gameView.attach();
+    const offEffects = effects.attach();
     const fit = () => {
       const r = box.getBoundingClientRect();
       viewport.resize(r.width, r.height, window.devicePixelRatio || 1);
@@ -28,6 +30,7 @@
       ro.disconnect();
       dpr.removeEventListener("change", fit);
       offGame();
+      offEffects();
       viewport.detach();
     };
   });
@@ -38,6 +41,13 @@
       gameView.setOn(
         !!engine.state.view.game_view && engine.state.document.open,
       );
+  });
+
+  // View > Effects, and the game view's hour (some effects run only at some hours)
+  $effect(() => {
+    if (!engine.ready) return;
+    effects.hour = engine.state.weather?.mood?.hour ?? 12;
+    effects.setOn(!!engine.state.view.effects);
   });
 </script>
 

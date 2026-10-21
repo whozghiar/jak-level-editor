@@ -1,7 +1,9 @@
 // A pretend engine for `npx vite` in a browser (no Tauri): a small scene encoded in the jle://
 // protocol's exact formats (JLES, JLEM, texture, materials, the game view's JLGL, JLGC, JLGP), and
 // the calls the viewport makes (pick, set_camera_state, transform_nodes, game_mood) plus `select`
-// and `set_view` for the dev page. `?game=<hour>` starts in the game view at that hour.
+// and `set_view` for the dev page. `?game=<hour>` starts in the game view at that hour. Two
+// effects run (`effect_emitters`: ctyindb's steam, a city light; the particles from the dev
+// server's data/, the sprites a white disc); `?fx=1` places the camera on them.
 
 import { Camera } from "../camera";
 import type { transport as Transport } from "../engine";
@@ -900,6 +902,7 @@ export function install(t: typeof Transport) {
 
   t.fetch = async (path: string) => {
     await new Promise((r) => setTimeout(r, 5));
+    if (path.startsWith("asset?path=")) return asset(decodeURIComponent(path.slice(11)));
     if (path.startsWith("scene")) {
       const full = path.includes("full=1");
       const out = full ? nodes : nodes.filter((n) => dirty.has(n.id));
@@ -999,6 +1002,8 @@ export function install(t: typeof Transport) {
         emit("jle:changed", { selection: true });
         return null;
       }
+      case "effect_emitters":
+        return EFFECTS;
       case "game_mood":
         return game_hour >= 18 || game_hour < 6 ? NIGHT : NOON;
       case "set_view":
@@ -1015,5 +1020,38 @@ export function install(t: typeof Transport) {
   // in the page's console: gameView, call("set_view", {hour: 22}) (the mood of 22:00)
   Object.assign(window, { gameView, call: t.call });
   if (game_param) setTimeout(() => gameView.setOn(true), 0);
+  // once the level is framed
+  if (new URLSearchParams(location.search).has("fx"))
+    setTimeout(() => emit("jle:request", { kind: "camera", pos: [2, 3, 13], look_at: [0, 2.5, 4] }), 1500);
   console.info("[viewport] dev mock engine");
+}
+
+// ---------------------------------------------------------------------------------------------
+// the effects
+
+// ctyindb's fast steam (its vent's z turned up) and a light of the city, beside the selected box
+const up = rotate(axisAngle([1, 0, 0], -Math.PI / 2));
+const EFFECTS = [
+  { id: 900, group: "group-ctyindb-fast-steam", world: [...matMul(translate([2, 0, 4]), up)] },
+  { id: 901, group: "group-citylights-newslums", world: [...translate([-2, 4, 4])] },
+];
+
+// a file of asset?path=: the game's tables from the dev server (it serves the repository), the
+// sprites a soft white disc (their alpha the PS2's: 128 is opaque)
+async function asset(file: string): Promise<ArrayBuffer> {
+  if (file.startsWith("data/")) {
+    const r = await fetch(`/${file}`);
+    if (!r.ok) throw new Error(`404 ${file}`);
+    return r.arrayBuffer();
+  }
+  if (file.endsWith("index.json")) return new TextEncoder().encode("{}").buffer as ArrayBuffer;
+  if (!file.endsWith(".png")) throw new Error(`404 ${file}`);
+  const c = new OffscreenCanvas(32, 32),
+    ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, "rgba(255, 255, 255, 0.5)");
+  g.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 32, 32);
+  return (await c.convertToBlob()).arrayBuffer();
 }

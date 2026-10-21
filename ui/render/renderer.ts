@@ -644,6 +644,10 @@ export class Renderer {
   get viewMatrix(): Mat4 {
     return this.view;
   }
+  // what the draws use: the editor camera's matrix, or the game camera's over the game view
+  get drawViewProj(): Mat4 {
+    return this.draw_vp;
+  }
 
   // What is drawn next goes over the game view: with the game camera's matrix (world -> clip
   // space) and its depth (reversed: 1 near, 0 far). null: the editor's.
@@ -652,7 +656,7 @@ export class Renderer {
     this.draw_vp = clip ?? this.viewproj;
   }
   // a depth test of the editor's (LESS, LEQUAL) over the game view's reversed depth
-  private depthFunc(f: number): number {
+  depthFunc(f: number): number {
     const gl = this.gl;
     if (!this.game) return f;
     return f === gl.LESS ? gl.GREATER : f === gl.LEQUAL ? gl.GEQUAL : f;
