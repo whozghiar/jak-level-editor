@@ -69,7 +69,7 @@ use crate::i18n::{i18n_select, tr};
 use crate::io::asset_library::{AssetLibrary, LevelEntry, game_folder, library_root_of};
 use crate::io::game_data::{GameData, game_data_path, level_listed};
 use crate::log::Log;
-use crate::math::Vec3;
+use crate::math::{AABB, Vec3, normalize};
 use crate::prefs::Prefs;
 use crate::scene::Scene;
 use crate::scene::story::StoryView;
@@ -223,6 +223,22 @@ impl CameraState {
     let (y, p) = (self.yaw, self.pitch);
     Vec3::new(-y.sin() * p.cos(), p.sin(), -y.cos() * p.cos())
   }
+
+  /// Frames a box: keeps the orientation, backs off so the box fits (render/camera.h)
+  pub fn frame(&mut self, b: AABB) {
+    if !b.valid() {
+      return;
+    }
+    let r = b.radius().max(0.5);
+    let dist = r / (self.fov.to_radians() * 0.5).tan() * 1.1;
+    self.pos = b.center() - self.forward() * dist;
+  }
+
+  pub fn look_at(&mut self, target: Vec3) {
+    let d = normalize(target - self.pos);
+    self.pitch = d.y.clamp(-0.999, 0.999).asin();
+    self.yaw = (-d.x).atan2(-d.z);
+  }
 }
 
 /// A work going on (jle:progress): `{id, label, done, total, finished}`
@@ -324,6 +340,8 @@ pub struct Editor {
   pub write_prefs: bool,
   /// the assistants connected through the MCP server (remote.rs)
   pub remote_clients: usize,
+  /// the interface's viewport listens (call `frontend_ready`): it can make the pictures of the view
+  pub interface_ready: bool,
 }
 
 impl Default for Editor {
@@ -383,6 +401,7 @@ impl Editor {
       gaps: None,
       write_prefs: true,
       remote_clients: 0,
+      interface_ready: false,
     }
   }
 
@@ -521,7 +540,7 @@ impl Editor {
     for b in self.state_key().bytes() {
       state = fnv(state, b as u64);
     }
-    let mut gameview = fnv(0, self.view.game_view as u64);
+    let mut gameview = fnv(self.game_chunks.filter_serial(), self.view.game_view as u64);
     for b in serde_json::to_string(&self.weather)
       .unwrap_or_default()
       .bytes()

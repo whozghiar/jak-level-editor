@@ -2328,7 +2328,7 @@ pub fn export_level(
   let auto_walls = rep.collision_from_decor > 0 || !o.game_collision;
   let art_list: Vec<String> = art_groups.iter().map(|ag| format!("\"{ag}\"")).collect();
   let mut j = format!(
-    "// {name}: exported by the OpenGOAL Level Editor for Jak 3 from {from}.
+    "// {name}: exported by Jak Level Editor for Jak 3 from {from}.
 // To add it to the game: README.md, at the top of the export's folder.
 {{
   \"long_name\": \"{name}\",
@@ -2377,7 +2377,7 @@ pub fn export_level(
       ";;-*-Lisp-*-
 (in-package goal)
 
-;; {}: the behaviors of its objects, set in the OpenGOAL Level Editor. Each object
+;; {}: the behaviors of its objects, set in Jak Level Editor. Each object
 ;; whose behavior differs from the game's has a type of its own deriving the game's.
 
 {generated}",
@@ -2398,7 +2398,7 @@ pub fn export_level(
   // the DGO
   let nick_upper = o.nickname.to_ascii_uppercase();
   let mut gd = format!(
-    ";; DGO definition file for {}, exported by the OpenGOAL Level Editor for Jak 3.\n(\"{nick_upper}.DGO\"\n (\n",
+    ";; DGO definition file for {}, exported by Jak Level Editor for Jak 3.\n(\"{nick_upper}.DGO\"\n (\n",
     o.name
   );
   // the code of the game its objects need beyond the common code, then its own
@@ -2486,7 +2486,7 @@ fn readme(
   let nick_upper = o.nickname.to_ascii_uppercase();
   let has_code = !generated.is_empty();
   let mut md = format!(
-    "# {name} for Jak 3{}\n\nExported by the OpenGOAL Level Editor from {}: {} meshes ({} triangles), {} collision triangles of the game, {} actors, {} art groups",
+    "# {name} for Jak 3{}\n\nExported by Jak Level Editor from {}: {} meshes ({} triangles), {} collision triangles of the game, {} actors, {} art groups",
     if replaced.is_some() {
       format!(", in place of {}", o.replaces)
     } else {
@@ -3570,7 +3570,9 @@ mod tests {
         "{project}: the files"
       );
       for (path, text) in &theirs {
-        if let Some(d) = first_difference(text, &ours[path]) {
+        // the editor's name in the comments and the README: renamed since
+        let text = text.replace("the OpenGOAL Level Editor", "Jak Level Editor");
+        if let Some(d) = first_difference(&text, &ours[path]) {
           panic!("{project}/{path}: {d}");
         }
       }

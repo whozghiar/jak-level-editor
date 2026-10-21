@@ -361,6 +361,11 @@ impl Editor {
         self.replies.insert(u(a, "id") as u64, a.clone());
         done
       }
+      // the viewport listens to the engine's requests (the MCP server's captures can be made)
+      "frontend_ready" => {
+        self.interface_ready = true;
+        done
+      }
       "escape" => {
         self.escape();
         done
@@ -379,10 +384,27 @@ impl Editor {
         {
           return Err(format!("no weather '{id}'"));
         }
-        self.weather = merged(&self.weather, a);
+        // what the call gives, the lightning's clock kept (not serialized)
+        let w = merged(&self.weather, a);
+        self.weather.mood = w.mood;
+        self.weather.time = w.time;
+        self.weather.time_passes = w.time_passes;
+        self.weather.time_speed = w.time_speed;
+        self.weather.lightning = w.lightning;
         done
       }
       "effect_emitters" => Ok(self.effect_emitters_call()),
+      // nodes left out of the game view's chunks for a while: {hide: ids} (a drag's pieces),
+      // {only: ids} (a capture of these alone), {} everything again
+      "game_view_filter" => {
+        let filter = match (a.get("only"), a.get("hide")) {
+          (Some(_), _) => Some((true, ids(a, "only").into_iter().collect())),
+          (_, Some(_)) => Some((false, ids(a, "hide").into_iter().collect())),
+          _ => None,
+        };
+        self.game_chunks.set_filter(filter);
+        done
+      }
 
       // ---- File > Extract game assets (extract.rs)
       "extract_defaults" => {
@@ -527,6 +549,8 @@ impl Editor {
       return;
     }
     self.scene.settings.replaces = level.to_string();
+    // the export's options made again for it (C++ m_export_level.clear())
+    self.export.level.clear();
     let after = level.to_string();
     self.history.push(crate::history::HistoryEntry::new(
       tr("undo.replaces"),

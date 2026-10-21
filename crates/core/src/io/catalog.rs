@@ -789,6 +789,8 @@ pub fn list_parts(level: &Scene) -> Vec<CatalogPart> {
       add_piece(&mut pieces, &mut piece_of, part);
     }
   }
+  // ponytail: a stable sort, where C++'s std::sort left parts of the same name (two prototypes
+  // tpl-med-wall-rock-01.mb in templex) in an order of its own: place picks the other one
   prototypes.sort_by(|a, b| a.name.cmp(&b.name));
   pieces.sort_by(|a, b| a.name.cmp(&b.name));
   prototypes.append(&mut pieces);

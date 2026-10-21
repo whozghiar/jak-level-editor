@@ -189,6 +189,9 @@ pub struct GameViewChunks {
   next_chunk: u32,
   // what the chunks were last made from: the scene's cache, its nodes, the materials
   seen: Option<(u64, usize, u32, u32, u64)>,
+  // nodes left out for a while (set_filter): (only, ids)
+  filter: Option<(bool, HashSet<u32>)>,
+  filter_serial: u64,
   pub stats: Stats,
 }
 
@@ -361,6 +364,23 @@ impl GameViewChunks {
     self.palettes.clear();
     self.level_palettes.clear();
     self.seen = None;
+    self.filter = None;
+  }
+
+  /// Leaves nodes out of the chunks for a while (the call `game_view_filter`): `ids` (a drag's
+  /// pieces, which the editor's renderer draws where they go), or with `only` all the others (a
+  /// capture of these alone, as the C++ hid them); None draws everything again.
+  pub fn set_filter(&mut self, filter: Option<(bool, HashSet<u32>)>) {
+    if filter != self.filter {
+      self.filter = filter;
+      self.filter_serial += 1;
+      self.seen = None;
+    }
+  }
+
+  /// changes with each new filter (the interface reads the chunks again)
+  pub fn filter_serial(&self) -> u64 {
+    self.filter_serial
   }
 
   /// The chunks the scene's decor falls in, made again where it changed: the ids of the chunks
@@ -416,6 +436,11 @@ impl GameViewChunks {
         continue;
       }
       if cache.reference.get(i) == Some(&true) || invisible(&n.extras) {
+        continue;
+      }
+      if let Some((only, ids)) = &self.filter
+        && ids.contains(&n.id) != *only
+      {
         continue;
       }
       let pal = n
@@ -788,6 +813,26 @@ mod tests {
     assert_eq!(gv.stats.chunks, 2);
     assert!(gv.encode_palette(level.palette).is_none());
     assert!(gv.encode_chunk(level.id).is_none());
+  }
+
+  #[test]
+  fn filter_leaves_nodes_out() {
+    let (doc, ground, box_id) = document();
+    let mut gv = GameViewChunks::default();
+    gv.update(&doc);
+    let serial = gv.filter_serial();
+    // a drag's piece hidden: its chunk made again without it
+    gv.set_filter(Some((false, HashSet::from([box_id]))));
+    assert_ne!(gv.filter_serial(), serial);
+    assert_eq!(gv.update(&doc).len(), 1);
+    assert_eq!(gv.stats.triangles, 4);
+    // only the ground: the new geometry's chunk is gone
+    gv.set_filter(Some((true, HashSet::from([ground]))));
+    gv.update(&doc);
+    assert_eq!((gv.stats.chunks, gv.stats.triangles), (1, 2));
+    gv.set_filter(None);
+    gv.update(&doc);
+    assert_eq!((gv.stats.chunks, gv.stats.triangles), (2, 6));
   }
 
   #[test]

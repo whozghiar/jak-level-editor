@@ -341,6 +341,8 @@ pub fn find_gaps(scene: &Scene, o: &GapOptions) -> GapReport {
   }
   report.spots = spots.into_values().collect();
   // the gaps between pieces first: the edges may be wanted
+  // ponytail: a stable sort, where C++'s std::sort ordered spots of as many rays its own way (with
+  // a limit, find_gaps may list others of the same count)
   report
     .spots
     .sort_by(|a, b| a.edge.cmp(&b.edge).then(b.rays.cmp(&a.rays)));

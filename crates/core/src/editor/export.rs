@@ -38,7 +38,7 @@ pub const K_NAV_FIRST_AID: u32 = 60000;
 pub struct ExportState {
   /// the options of the last export, for the level `level` (open_export_window)
   pub options: LevelExportOptions,
-  level: String,
+  pub(super) level: String,
   /// the levels as extracted, read once (m_export_originals): the export compares their decor
   pub(super) originals: BTreeMap<String, Arc<Scene>>,
   pub report: Option<LevelExportReport>,
@@ -171,10 +171,11 @@ impl Editor {
   /// Writes the level for the game (App::export_for_game) on a worker; `wait`: in this call (the
   /// remote control's). Its report, or why it failed, in `export` once done (export_state).
   pub fn export_for_game(&mut self, mut o: LevelExportOptions, wait: bool) -> Result<(), String> {
-    // ponytail: an animation preview is stopped here when the preview tool comes (stop_preview)
     if self.busy("export") {
       return Err("an export is going on".into());
     }
+    // the models as they are, not as the animation preview draws them
+    self.stop_preview();
     if !self.document_open() {
       return Err(tr("export.no_document").into());
     }
@@ -411,7 +412,7 @@ impl Editor {
         }
         Some(r) => {
           region = box_of(r)
-            .ok_or("region: \"all\", \"selection\" or {\"lo\": [x, y, z], \"hi\": [x, y, z]}")?
+            .ok_or("region: \"all\", \"selection\" or {\"min\": [x, y, z], \"max\": [x, y, z]}")?
         }
       }
     }

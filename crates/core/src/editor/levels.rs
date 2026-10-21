@@ -761,6 +761,7 @@ impl Editor {
     self.history.clear();
     self.saved_revision = self.history.revision();
     self.story_document_changed();
+    self.frame_all();
     let actors = self
       .scene
       .nodes
@@ -947,7 +948,7 @@ impl Editor {
       .history
       .push(change.commit(&self.scene, strf!(tr("undo.add_level"), &name), None));
     self.story_document_changed();
-    self.frame_box(self.scene.focus_bounds());
+    self.frame_all();
     log_info!(tr("log.level_added"), &name, elements);
   }
 
@@ -1142,11 +1143,26 @@ impl Editor {
     dot(to * (1.0 / dist), self.camera.forward()) > cos_fov
   }
 
-  /// The viewport frames a box (jle:request), keeping its orientation.
+  /// The camera frames a box, keeping its orientation: computed here (the MCP tools answer it at
+  /// once, as the C++ did), then given to the viewport (jle:request; the box for its speed).
   pub(crate) fn frame_box(&mut self, b: AABB) {
     if b.valid() {
-      self.request(json!({"kind": "camera", "frame": {"lo": b.lo, "hi": b.hi}}));
+      self.camera.frame(b);
+      let c = self.camera;
+      self.request(
+        json!({"kind": "camera", "pos": c.pos, "yaw": c.yaw, "pitch": c.pitch,
+        "frame": {"lo": b.lo, "hi": b.hi}}),
+      );
     }
+  }
+
+  /// Everything framed, from above at an angle (app.cpp frame_all): a level opened or added, a
+  /// project opened, Home
+  pub fn frame_all(&mut self) {
+    self.camera.yaw = 0.6;
+    self.camera.pitch = -0.45;
+    let b = self.scene.focus_bounds();
+    self.frame_box(b);
   }
 
   /// A whole level selected (Ctrl+L): its group, or the roots of the level opened

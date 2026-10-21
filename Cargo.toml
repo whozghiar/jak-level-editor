@@ -11,7 +11,8 @@ rust-version = "1.89"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.149"
+# float_roundtrip: numbers read correctly rounded, as the C++ (strtod) read the game's data
+serde_json = { version = "1.0.149", features = ["float_roundtrip"] }
 tauri = { version = "2.11.2" }
 
 [profile.dev.package."*"]

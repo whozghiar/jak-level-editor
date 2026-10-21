@@ -1055,7 +1055,7 @@ fn tools() -> Value {
   ])
 }
 
-const K_INSTRUCTIONS: &str = "Tools of the OpenGOAL Level Editor (levels of Jak 3), acting on the \
+const K_INSTRUCTIONS: &str = "Tools of Jak Level Editor (levels of Jak 3), acting on the \
   editor window the user sees (started when needed). Positions are in meters, Y is up. A typical \
   session: get_status; open_level (or new_level); find_nodes / raycast to know where things are; \
   list_catalog, list_decor and list_prefabs to choose what to put; place; capture_view to check; \

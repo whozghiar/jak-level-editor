@@ -40,6 +40,8 @@ type R = Result<Value, String>;
 
 /// how long a capture waits for the interface's picture
 const K_CAPTURE_WAIT: Duration = Duration::from_secs(30);
+/// how long a capture waits for the interface to start (frontend_ready)
+const K_INTERFACE_WAIT: Duration = Duration::from_secs(15);
 
 const UNSAVED: &str =
   "the document has unsaved changes: save_project first, or discard_changes: true";
@@ -132,22 +134,6 @@ fn camera_json(c: &CameraState) -> Value {
     "pitch_deg": round3(c.pitch.to_degrees()),
     "forward": v3(c.forward()),
   })
-}
-
-// render/camera.h frame, look_at
-fn frame_camera(c: &mut CameraState, b: AABB) {
-  if !b.valid() {
-    return;
-  }
-  let r = b.radius().max(0.5);
-  let dist = r / (radians(c.fov) * 0.5).tan() * 1.1;
-  c.pos = b.center() - c.forward() * dist;
-}
-
-fn look_at(c: &mut CameraState, target: Vec3) {
-  let d = normalize(target - c.pos);
-  c.pitch = d.y.clamp(-0.999, 0.999).asin();
-  c.yaw = (-d.x).atan2(-d.z);
 }
 
 impl Editor {
@@ -360,13 +346,18 @@ impl Editor {
         "elements": self.scene.nodes.len(),
         "actors": actors,
         "unsaved": self.unsaved(),
-        "loading": self.levels.opening.is_some() || self.levels.adding.is_some(),
+        // a level read or added, the land around the ocean (the C++'s m_ocean_land_future)
+        "loading": self.levels.opening.is_some()
+          || self.levels.adding.is_some()
+          || self.busy("ocean_land"),
       },
       "camera": camera_json(&self.camera),
       "selection": self.selection,
       "can_undo": self.history.can_undo(),
       "can_redo": self.history.can_redo(),
       "view": self.view_json(),
+      // the interface is there to make the pictures of the view (capture_view)
+      "interface_ready": self.interface_ready,
     });
     if let Some(data) = self.document_game_data().filter(|d| d.has_story()) {
       let after_node = |step: i32| data.node(step as usize - 1).name.clone();
@@ -1046,11 +1037,11 @@ impl Editor {
       "region": [v3(region.lo), v3(region.hi)],
       "spots": spots,
     });
-    // listed and drawn in the editor too (the Holes window)
-    if flag(a, "show", true) {
-      self.gaps = Some(GapsFound { report: r, region });
-      self.emit("jle:changed", json!({"gaps": true}));
-    }
+    // listed and drawn in the editor too: the Holes window, opened unless show is false (its spots
+    // are drawn while it is open, in the captures too)
+    self.gaps = Some(GapsFound { report: r, region });
+    let show = flag(a, "show", true);
+    self.emit("jle:changed", json!({"gaps": true, "show_gaps": show}));
     Ok(answer)
   }
 
@@ -1888,13 +1879,13 @@ impl Editor {
           framed = framed.expanded(2.0);
         }
       }
-      frame_camera(&mut cam, framed);
+      cam.frame(framed);
     }
     if let Some(p) = vec3_arg(a, "position") {
       cam.pos = p;
     }
     if let Some(t) = vec3_arg(a, "look_at") {
-      look_at(&mut cam, t);
+      cam.look_at(t);
     }
     if let Some(y) = num_opt(a, "yaw_deg") {
       cam.yaw = radians(y);
@@ -1913,6 +1904,23 @@ impl Editor {
   }
 
   fn tool_capture_view(&mut self, a: &Value) -> Reply {
+    // the picture is the interface's: asked once it listens (frontend_ready), a few seconds after
+    // the editor started
+    if !self.interface_ready {
+      let (a, start) = (a.clone(), Instant::now());
+      return Reply::wait(move |ed| {
+        if ed.interface_ready {
+          return Some(ed.tool_capture_view(&a));
+        }
+        (start.elapsed() > K_INTERFACE_WAIT).then(|| {
+          Err(
+            "the view could not be captured: the editor's interface is not ready (its window is              still starting, or there is none)"
+              .to_string(),
+          )
+          .into()
+        })
+      });
+    }
     let w = int(a, "width", 960).clamp(64, 2048);
     let h = int(a, "height", 600).clamp(64, 2048);
     // what the user's view shows by default: the game rendering at its hour when it is on
@@ -2886,14 +2894,127 @@ mod tests {
     );
   }
 
+  // what was opened is framed at once (app.cpp frame_all): the answer gives the camera the C++
+  // gave, not the one before the viewport framed it
+  #[test]
+  fn a_project_opened_is_framed() {
+    let ed = editor();
+    test_document(&ed);
+    let dir = crate::io::test_library::temp_dir("remote-framed");
+    let path = dir.join("framed.glb").to_string_lossy().replace('\\', "/");
+    ok(&ed, "save_project", json!({ "path": path }));
+    let status = ok(&ed, "open_project", json!({ "path": path }));
+    let cam = &status["camera"];
+    assert_eq!(cam["yaw_deg"], json!(round3(0.6f32.to_degrees())));
+    assert_eq!(cam["pitch_deg"], json!(round3((-0.45f32).to_degrees())));
+    // the middle of what is open straight ahead
+    let f = |v: &Value, k: usize| v[k].as_f64().unwrap();
+    let b = &status["document"]["bounds"];
+    let to: Vec<f64> = (0..3)
+      .map(|k| (f(&b["min"], k) + f(&b["max"], k)) / 2.0 - f(&cam["position"], k))
+      .collect();
+    let d = to.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let along: f64 = (0..3).map(|k| to[k] / d * f(&cam["forward"], k)).sum();
+    assert!(along > 0.999, "{along}");
+    let _ = std::fs::remove_dir_all(dir);
+  }
+
+  // the land around the ocean still being made: the document is loading (the C++ waited on it)
+  #[test]
+  fn loading_while_the_ocean_land_is_made() {
+    let ed = editor();
+    test_document(&ed);
+    assert_eq!(
+      ok(&ed, "get_status", json!({}))["document"]["loading"],
+      false
+    );
+    let job = Default::default();
+    ed.lock().unwrap().jobs.insert("ocean_land".into(), job);
+    assert_eq!(
+      ok(&ed, "get_status", json!({}))["document"]["loading"],
+      true
+    );
+  }
+
+  // the export writes the models as they are: an animation preview going on is stopped first
+  // (App::export_for_game's stop_preview)
+  #[test]
+  fn export_stops_the_animation_preview() {
+    let ed = editor();
+    test_document(&ed);
+    let model = {
+      let mut e = ed.lock().unwrap();
+      let a = e.scene.add(Node {
+        name: "fac-elevator".into(),
+        kind: NodeKind::Actor,
+        extras: json!({"etype": "fac-elevator"}),
+        ..Default::default()
+      });
+      let m = e.scene.add(Node {
+        name: "fac-elevator-model".into(),
+        parent: a,
+        kind: NodeKind::Render,
+        mesh: Some(crate::io::test_library::make_box("fac-elevator", -1)),
+        extras: json!({"og_actor_visual": "fac-elevator"}),
+        ..Default::default()
+      });
+      e.scene.begin_frame();
+      e.call("start_preview", &json!({"id": a, "what": "motion"}))
+        .unwrap();
+      m
+    };
+    assert_eq!(ed.lock().unwrap().get_state()["preview"]["node"], model);
+    let dir = crate::io::test_library::temp_dir("remote-export-preview");
+    let folder = dir.to_string_lossy().replace('\\', "/");
+    run_tool(
+      &ed,
+      "export_level",
+      &json!({"name": "qatest", "folder": folder}),
+    );
+    assert_eq!(ed.lock().unwrap().get_state()["preview"]["node"], 0);
+    let _ = std::fs::remove_dir_all(dir);
+  }
+
+  // the region's error names the keys the tool's description gives (the C++ text)
+  #[test]
+  fn navmesh_region_error_says_min_max() {
+    let ed = editor();
+    test_document(&ed);
+    assert_eq!(
+      fail(
+        &ed,
+        "generate_navmesh",
+        json!({"region": {"min": [0, 0, 0]}})
+      ),
+      "region: \"all\", \"selection\" or {\"min\": [x, y, z], \"max\": [x, y, z]}"
+    );
+  }
+
+  // the game's numbers read as the C++ read them (strtod, correctly rounded): an actor's bsphere of
+  // hiphog was one ulp off in the projects saved (serde_json's float_roundtrip)
+  #[test]
+  fn numbers_read_correctly_rounded() {
+    let text = "13.193374633789063";
+    let v: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(v.as_f64(), text.parse::<f64>().ok());
+  }
+
   #[test]
   fn capture_view_answers_the_viewports_picture() {
     let ed = std::sync::Arc::new(editor());
     test_document(&ed);
-    // the viewport: answers the request it was sent (jle:request {kind: "capture", id: 1})
+    assert_eq!(ok(&ed, "get_status", json!({}))["interface_ready"], false);
+    // the viewport: ready a moment later (the capture waits for it), then answers the request it
+    // was sent (jle:request {kind: "capture", id: 1})
     let viewport = {
       let ed = ed.clone();
       std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(ed.lock().unwrap().next_request, 1);
+        ed.lock()
+          .unwrap()
+          .call("frontend_ready", &Value::Null)
+          .unwrap();
         for _ in 0..2000 {
           {
             let mut e = ed.lock().unwrap();
@@ -2918,6 +3039,7 @@ mod tests {
     assert_eq!(a["image"], "iVBORw0KGgo=");
     assert_eq!(a["result"]["width"], 320);
     assert_eq!(a["result"]["camera"]["position"], json!([1.0, 2.0, 3.0]));
+    assert_eq!(ok(&ed, "get_status", json!({}))["interface_ready"], true);
   }
 
   #[test]

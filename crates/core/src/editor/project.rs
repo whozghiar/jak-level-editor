@@ -62,6 +62,7 @@ impl Editor {
     self.project_path = path.to_string();
     self.save_prefs(|p| p.add_recent_project(path));
     self.story_document_changed();
+    self.frame_all();
     log_info!(tr("log.project_opened"), path);
     let lit = self.restore_level_lighting();
     if lit > 0 {
