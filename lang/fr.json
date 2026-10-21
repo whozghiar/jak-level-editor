@@ -2,6 +2,11 @@
   "_language": "Français",
 
   "title.untitled": "sans titre",
+  "app.title": "Jak Level Editor",
+  "window.minimize": "Réduire",
+  "window.maximize": "Agrandir",
+  "window.close": "Fermer",
+  "common.todo": "À faire",
   "kind.group": "Groupe",
   "kind.render": "Objet",
   "kind.collision": "Collision",
