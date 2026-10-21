@@ -1,0 +1,2 @@
+# written by the plugin's build script with LF line endings
+crates/tauri-plugin/permissions/** text eol=lf
