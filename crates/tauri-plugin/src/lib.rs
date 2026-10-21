@@ -129,6 +129,21 @@ impl Builder {
   }
 }
 
+/// The editor's engine, for a host that needs more than the plugin (the launcher installs the
+/// levels exported for the game with `jle_core::io`).
+pub use jle_core;
+
+/// The version of the editor this plugin is: its release holds the ogle-extract a host downloads.
+pub const EDITOR_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// What the application gives the editor, changed while it runs (the launcher's installation
+/// folder is known once its settings are read, and the user can move it).
+pub fn set_host<R: Runtime>(app: &tauri::AppHandle<R>, host: Host) {
+  if let Some(state) = app.try_state::<EditorState>() {
+    state.lock().host = host;
+  }
+}
+
 /// The plugin without options (the OpenGOAL Launcher's): the library and the language of the
 /// preferences.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
