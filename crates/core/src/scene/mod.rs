@@ -13,9 +13,18 @@
 //! derived data (bounds, BVH) is made lazily and is thread safe, and a Scene is Send + Sync: an
 //! `Arc<Scene>` (a clone of the document) can go to a worker thread.
 
+pub mod assemblies;
 pub mod bvh;
+pub mod gaps;
 mod ground;
+pub mod level_style;
 pub mod pick;
+pub mod relight;
+pub mod shapes;
+pub mod skeleton;
+pub mod story;
+pub mod terrain;
+pub mod topology;
 #[cfg(test)]
 mod tests;
 

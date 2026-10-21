@@ -13,3 +13,9 @@ name = "jle_core"
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+# the textures of the glTF files (PNG, JPEG), written as PNG; an image as a shape's texture (also
+# TGA, BMP)
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
+# nav meshes: Recast's Rust port, and the vectors of its API
+rerecast = { version = "0.4.0", default-features = false, features = ["std"] }
+glam = "0.32"

@@ -5,9 +5,12 @@
 //! OpenGOAL. `docs/rust-architecture.md` explains how it is split; the interface is `ui/`.
 
 pub mod editor;
+pub mod game;
 pub mod history;
 pub mod i18n;
+pub mod io;
 pub mod log;
 pub mod math;
+pub mod navmesh;
 pub mod prefs;
 pub mod scene;
