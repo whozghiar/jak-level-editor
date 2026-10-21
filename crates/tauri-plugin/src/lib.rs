@@ -126,8 +126,12 @@ fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options) {
     READ_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
   }
   // the translations and the game's tables: the application's resources when it is bundled with
-  // them (tauri.conf.json bundle.resources), else next to the executable or the repository's
-  let resources = app.path().resource_dir().ok();
+  // them (tauri.conf.json bundle.resources), else next to the executable or the repository's. In a
+  // host application (the launcher) they are under jak-level-editor/, apart from its own.
+  let resources = app.path().resource_dir().ok().map(|dir| {
+    let own = dir.join("jak-level-editor");
+    if own.is_dir() { own } else { dir }
+  });
   if let Some(dir) = &resources {
     if dir.join("lang").is_dir() {
       set_lang_dir(dir.join("lang"));
