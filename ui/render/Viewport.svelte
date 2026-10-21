@@ -2,6 +2,8 @@
   // The 3D view: a WebGL2 canvas filling its container, a 2D canvas over it for the gizmo and the
   // readouts. Everything else is `viewport` (viewport_api.ts).
   import { onMount } from "svelte";
+  import { engine } from "../lib/engine.svelte";
+  import { gameView } from "./game_view";
   import { viewport } from "./viewport_api";
 
   let box: HTMLDivElement;
@@ -12,6 +14,7 @@
     viewport
       .attach(canvas, overlay)
       .catch((e) => console.error("[viewport]", e));
+    const offGame = gameView.attach();
     const fit = () => {
       const r = box.getBoundingClientRect();
       viewport.resize(r.width, r.height, window.devicePixelRatio || 1);
@@ -24,8 +27,17 @@
     return () => {
       ro.disconnect();
       dpr.removeEventListener("change", fit);
+      offGame();
       viewport.detach();
     };
+  });
+
+  // View > Game rendering (G), a document open; once the engine answered (not on the dev page)
+  $effect(() => {
+    if (engine.ready)
+      gameView.setOn(
+        !!engine.state.view.game_view && engine.state.document.open,
+      );
   });
 </script>
 

@@ -109,6 +109,37 @@ distance)` followed by its arrays `f32 pos[3n]`, `f32 nrm[3n]`, `f32 uv[2n]` (if
 texture, base_color, alpha: "opaque"|"mask"|"blend", blend: ""|"add"|"add_alpha"|"subtract"|"half",
 cutoff, double_sided, translucent, water}`.
 
+### Game view
+
+View > Game rendering (G) draws the decor as the game does (`ui/render/game_view.ts`, the game's
+TFragment shader): in chunks, the pieces sharing a palette (a tree of an extracted level, or the
+new geometry) in a cell of 128 m, made by `jle_core::game::view::GameViewChunks` from the document
+and made again only where an edit touched them. The mood (the palettes' weights, the fog, the sky)
+comes from the call `game_mood`.
+
+| Path | Answer |
+|---|---|
+| `gameview` | `GameViewChunks::update(&scene)`, then `encode_chunk_list()`: the chunks |
+| `gameview/chunk/<id>` | `encode_chunk(id)`: a chunk's vertices, indices and draws |
+| `gameview/palette/<key>` | `encode_palette(key)`: a palette the chunks use |
+
+`gameview` (format `JLGL` 1): `u32 magic "JLGL"`, `u32 version`, `u32 count`, then per chunk (40
+bytes) `u32 id, u32 version, u32 palette, u32 triangles, f32 lo[3], f32 hi[3]` (its box, meters).
+A chunk's version and a palette's key are new each time it is made (unique for the life of the
+program): the interface keeps chunks by (id, version) and palettes by key.
+
+`gameview/chunk/<id>` (format `JLGC` 1): `u32 magic "JLGC"`, `u32 version`, `u32 id, u32 chunk
+version, u32 palette, u32 vertices, u32 indices, u32 draws, f32 lo[3], f32 hi[3]` (56 bytes),
+then per draw (16 bytes) `u32 first, u32 count` (into the indices), `i32 texture` (the document's,
+-1 a white one), `u8 flags` (1 translucent tree, 2 depth write, 4 alpha test, 8 a texture of the
+editor's: its alpha halved), `u8 aref` (alpha test: what is under aref / 127 is not drawn), `u8
+blend` (0 none, 1 alpha, 2 add alpha, 3 add, 4 subtract, 5 half: the PS2's), `u8 0`; then per
+vertex (24 bytes) `f32 x, y, z` (game units: 4096 per meter), `f32 s, t`, `u16 color` (in the
+palette), `u16 0`; then `u32 idx[indices]`. The normal tree's draws come first.
+
+`gameview/palette/<key>` (format `JLGP` 1): `u32 magic "JLGP"`, `u32 version`, `u32 colors`, then
+32 bytes per color: its 8 palettes' RGBA (128 is 1.0), palette k at k * 4.
+
 ## 5. Threads
 
 The plugin keeps the engine in an `Arc<Mutex<Editor>>`. Long work (a level read, the catalog's

@@ -1,8 +1,21 @@
 // A pretend engine for `npx vite` in a browser (no Tauri): a small scene encoded in the jle://
-// protocol's exact formats (JLES, JLEM, texture, materials), and the calls the viewport makes
-// (pick, set_camera_state, transform_nodes) plus `select` for the dev page.
+// protocol's exact formats (JLES, JLEM, texture, materials, the game view's JLGL, JLGC, JLGP), and
+// the calls the viewport makes (pick, set_camera_state, transform_nodes, game_mood) plus `select`
+// and `set_view` for the dev page. `?game=<hour>` starts in the game view at that hour.
 
+import { Camera } from "../camera";
 import type { transport as Transport } from "../engine";
+import {
+  AlphaBlend,
+  DrawFlag,
+  gameCamera,
+  gameView,
+  parseChunk,
+  parseChunkList,
+  parsePalette,
+  type ChunkDraw,
+  type GameMood,
+} from "../game_view";
 import {
   aabb,
   aabbAdd,
@@ -11,6 +24,7 @@ import {
   identity,
   inverse,
   matMul,
+  point,
   rotate,
   scale,
   translate,
@@ -18,8 +32,14 @@ import {
   type Mat4,
   type Vec3,
 } from "../math";
-import { parseMesh, parseScene } from "../protocol";
-import { NodeFlag, NodeKind } from "../types";
+import { parseMaterials, parseMesh, parseScene } from "../protocol";
+import {
+  AlphaMode,
+  BlendMode,
+  NodeFlag,
+  NodeKind,
+  type Material,
+} from "../types";
 
 interface Prim {
   pos: number[];
@@ -469,6 +489,351 @@ function scene() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// the game view (crates/core/src/game/view.rs): the decor's chunks in their formats, the mood
+
+// game_mood (crates/core/src/game/mood.rs) at noon and at 22:00 in the game's start weather
+// (cloud 0.25, fog 0.5)
+const NOON: GameMood = {
+  times: [
+    [0.4199, 0.5195, 0.5976, 1],
+    [1.8412, 1.685, 1.4374, 0],
+    [1.8412, 1.685, 1.4374, 0.5],
+    [1.8412, 1.685, 1.4374, 0.5],
+    [1.8412, 1.685, 1.4374, 0],
+    [1, 1, 1, 0],
+    [1, 1, 1, 1],
+    [1, 1, 1, 0.9],
+  ],
+  fog_color: [128, 180, 243],
+  fog_start: 131072,
+  fog_end: 4096000,
+  fog_max: 255,
+  fog_min: 162,
+  sky_color: [89, 113, 200],
+  light_ambient: [0.4199, 0.5195, 0.5976],
+  light_dir: [
+    [0.5, 0.814, 0.296],
+    [-0.5, 0.814, 0.296],
+    [0, 0, 0],
+  ],
+  light_color: [
+    [0.9206, 0.8425, 0.7187],
+    [0.9206, 0.8425, 0.7187],
+    [0, 0, 0],
+  ],
+  sun_dir: [0, 0.95073, 0.31002],
+  moon_dir: [0, -0.95073, 0.31002],
+  sun_color: [1.8412, 1.685, 1.4374],
+  moon_color: [0.1097, 0.384, 0.8232],
+  cloud_min: 0.333,
+  cloud_max: 0.555,
+  cloud_dark: 0.0625,
+  haze: 0,
+  flash: 0,
+};
+const NIGHT: GameMood = {
+  ...NOON,
+  times: [
+    [0.271825, 0.32555, 0.4614, 1],
+    [0.165075, 0.32525, 0.7424, 0],
+    [0.165075, 0.32525, 0.7424, 0.94],
+    [0.165075, 0.32525, 0.7424, 0],
+    [0.165075, 0.32525, 0.7424, 0.06],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [1, 1, 1, 0.9],
+  ],
+  fog_color: [3.2, 20.8, 58.4],
+  sky_color: [9.5, 12, 30],
+  light_ambient: [0.271825, 0.32555, 0.4614],
+  light_dir: [
+    [0.5, 0.814, 0.296],
+    [-0.906, 0.397, 0.143],
+    [0, 0, 0],
+  ],
+  light_color: [
+    [0.15517, 0.305735, 0.697856],
+    [0.0099, 0.019515, 0.044544],
+    [0, 0, 0],
+  ],
+  sun_dir: [-0.50642, -0.80698, 0.30385],
+  moon_dir: [0.50642, 0.80698, 0.30385],
+  sun_color: [0.165075, 0.32525, 0.7424],
+};
+
+interface MockChunk {
+  id: number;
+  version: number;
+  palette: number;
+  box: AABB;
+  draws: ChunkDraw[];
+  verts: number[]; // x, y, z (game units), s, t, color per vertex
+  idx: number[];
+  rgba: number[]; // its palette
+}
+
+// view.rs draw_mode: how the level builder draws a material
+function drawMode(
+  m: Material | null,
+): Omit<ChunkDraw, "first" | "count" | "texture"> {
+  let flags: number = DrawFlag.DepthWrite,
+    aref = 0,
+    blend: number = AlphaBlend.Disabled;
+  if (!m) return { flags, aref, blend };
+  const cutoff = m.base_color[3] > 1.5 ? Math.min(1, m.cutoff * 2) : m.cutoff;
+  if (m.alpha !== AlphaMode.Opaque) {
+    flags |= DrawFlag.AlphaTest;
+    aref = Math.min(255, Math.max(0, Math.trunc(cutoff * 127)));
+  }
+  // translucent_in_game
+  if (
+    m.alpha === AlphaMode.Blend &&
+    (m.blend !== BlendMode.Alpha || m.translucent || m.base_color[3] <= 1.5)
+  ) {
+    flags = (flags & ~DrawFlag.DepthWrite) | DrawFlag.Translucent;
+    blend = [
+      AlphaBlend.SrcDstSrcDst,
+      AlphaBlend.Src0FixDst,
+      AlphaBlend.Src0SrcDst,
+      AlphaBlend.ZeroSrcSrcDst,
+      AlphaBlend.SrcDstFixDst,
+    ][m.blend];
+  }
+  // the editor's materials: their textures' alpha halved
+  if (m.texture >= 0 && m.base_color[3] <= 1.5) flags |= DrawFlag.OwnTexture;
+  return { flags, aref, blend };
+}
+
+// The decor's two chunks: the ground and the far mountains lit by a level's palettes (the ambient
+// light, the sun, a lamp in the middle that the night lights), the rest new geometry lit from its
+// color (tod_from_color, with a district of the city's ratios)
+function gameChunks(
+  nodes: MockNode[],
+  meshes: Map<number, ArrayBuffer>,
+): MockChunk[] {
+  const materials = parseMaterials({ materials: MATERIALS }).materials;
+  const ratios = [0.986, 0.117, 0.17, 0.164, 0.135, 0.007, 0.043, 0.037];
+  const level = new Set([2, 11]);
+  const byte = (v: number) => Math.min(255, Math.max(0, Math.round(v)));
+  return [true, false].map((lit, i): MockChunk => {
+    const c: MockChunk = {
+      id: i + 1,
+      version: i + 1,
+      palette: 100 + i,
+      box: aabb(),
+      draws: [],
+      verts: [],
+      idx: [],
+      rgba: [],
+    };
+    const colors = new Map<string, number>();
+    const by_mat = new Map<number, number[]>(); // material * 2 + translucent
+    for (const n of nodes) {
+      if (
+        n.kind !== NodeKind.Render ||
+        !(n.flags & NodeFlag.Visible) ||
+        n.flags & (NodeFlag.UnderActor | NodeFlag.Reference) ||
+        level.has(n.id) !== lit
+      )
+        continue;
+      const buf = meshes.get(n.mesh)!;
+      for (const p of parseMesh(buf, n.mesh, 1).prims) {
+        const pos = new Float32Array(buf, p.pos, p.vertices * 3);
+        const uv =
+          p.uv >= 0 ? new Float32Array(buf, p.uv, p.vertices * 2) : null;
+        const col =
+          p.col >= 0 ? new Uint8Array(buf, p.col, p.vertices * 4) : null;
+        const mat = materials[p.material] ?? null;
+        const base = c.verts.length / 6;
+        for (let v = 0; v < p.vertices; v++) {
+          const q = point(n.world, [
+            pos[v * 3],
+            pos[v * 3 + 1],
+            pos[v * 3 + 2],
+          ]);
+          aabbAdd(c.box, q);
+          const rgb = col
+            ? [col[v * 4], col[v * 4 + 1], col[v * 4 + 2]]
+            : [255, 255, 255];
+          const lamp = Math.max(0, 1 - Math.hypot(q[0], q[2]) / 30);
+          const pal: number[] = [];
+          for (let k = 0; k < 8; k++)
+            for (let ch = 0; ch < 4; ch++)
+              pal.push(
+                ch === 3
+                  ? 128
+                  : lit // the ambient light: the vertex's color; the sun some of it; the lamp
+                    ? byte(
+                        k === 0
+                          ? rgb[ch]
+                          : k <= 4
+                            ? rgb[ch] * 0.45
+                            : k === 5
+                              ? [230, 150, 60][ch] * lamp
+                              : 0,
+                      )
+                    : byte(
+                        (rgb[ch] / 255) *
+                          (mat ? mat.base_color[ch] : 1) *
+                          ratios[k] *
+                          127.5,
+                      ),
+              );
+          const key = pal.join();
+          if (!colors.has(key)) {
+            colors.set(key, colors.size);
+            c.rgba.push(...pal);
+          }
+          c.verts.push(
+            q[0] * 4096,
+            q[1] * 4096,
+            q[2] * 4096,
+            uv ? uv[v * 2] : 0,
+            uv ? uv[v * 2 + 1] : 0,
+            colors.get(key)!,
+          );
+        }
+        const k =
+          p.material * 2 + (drawMode(mat).flags & DrawFlag.Translucent ? 1 : 0);
+        const list = by_mat.get(k) ?? [];
+        by_mat.set(k, list);
+        for (const ix of new Uint32Array(buf, p.idx, p.indices))
+          list.push(ix + base);
+      }
+    }
+    // the normal tree's draws, then the translucent tree's
+    const keys = [...by_mat.keys()].sort((a, b) => (a & 1) - (b & 1) || a - b);
+    for (const k of keys) {
+      const mat = materials[k >> 1] ?? null;
+      const idx = by_mat.get(k)!;
+      c.draws.push({
+        first: c.idx.length,
+        count: idx.length,
+        texture: mat ? mat.texture : -1,
+        ...drawMode(mat),
+      });
+      c.idx.push(...idx);
+    }
+    return c;
+  });
+}
+
+function encodeChunkList(chunks: MockChunk[]): ArrayBuffer {
+  const dv = new DataView(new ArrayBuffer(12 + chunks.length * 40));
+  [..."JLGL"].forEach((c, i) => dv.setUint8(i, c.charCodeAt(0)));
+  dv.setUint32(4, 1, true);
+  dv.setUint32(8, chunks.length, true);
+  chunks.forEach((c, i) => {
+    const o = 12 + i * 40;
+    [c.id, c.version, c.palette, c.idx.length / 3].forEach((v, k) =>
+      dv.setUint32(o + k * 4, v, true),
+    );
+    [...c.box.lo, ...c.box.hi].forEach((v, k) =>
+      dv.setFloat32(o + 16 + k * 4, v, true),
+    );
+  });
+  return dv.buffer as ArrayBuffer;
+}
+
+function encodeChunk(c: MockChunk): ArrayBuffer {
+  const nv = c.verts.length / 6;
+  const dv = new DataView(
+    new ArrayBuffer(56 + c.draws.length * 16 + nv * 24 + c.idx.length * 4),
+  );
+  [..."JLGC"].forEach((ch, i) => dv.setUint8(i, ch.charCodeAt(0)));
+  [1, c.id, c.version, c.palette, nv, c.idx.length, c.draws.length].forEach(
+    (v, k) => dv.setUint32(4 + k * 4, v, true),
+  );
+  [...c.box.lo, ...c.box.hi].forEach((v, k) =>
+    dv.setFloat32(32 + k * 4, v, true),
+  );
+  let o = 56;
+  for (const d of c.draws) {
+    dv.setUint32(o, d.first, true);
+    dv.setUint32(o + 4, d.count, true);
+    dv.setInt32(o + 8, d.texture, true);
+    dv.setUint8(o + 12, d.flags);
+    dv.setUint8(o + 13, d.aref);
+    dv.setUint8(o + 14, d.blend);
+    o += 16;
+  }
+  for (let v = 0; v < nv; v++, o += 24) {
+    for (let k = 0; k < 5; k++)
+      dv.setFloat32(o + k * 4, c.verts[v * 6 + k], true);
+    dv.setUint16(o + 20, c.verts[v * 6 + 5], true);
+  }
+  c.idx.forEach((ix, i) => dv.setUint32(o + i * 4, ix, true));
+  return dv.buffer as ArrayBuffer;
+}
+
+function encodePalette(rgba: number[]): ArrayBuffer {
+  const b = new Uint8Array(12 + rgba.length);
+  b.set([..."JLGP"].map((c) => c.charCodeAt(0)));
+  const dv = new DataView(b.buffer);
+  dv.setUint32(4, 1, true);
+  dv.setUint32(8, rgba.length / 32, true);
+  b.set(rgba, 12);
+  return b.buffer;
+}
+
+// the game view reads what the encoders write; the game camera places things where the editor's
+// does (selftest.cpp's game view)
+function gameSelfcheck(chunks: MockChunk[]) {
+  const list = parseChunkList(encodeChunkList(chunks));
+  console.assert(
+    list.length === 2 &&
+      list[1].palette === 101 &&
+      list[0].triangles === chunks[0].idx.length / 3,
+    "JLGL",
+  );
+  const c = parseChunk(encodeChunk(chunks[1]));
+  const v = new DataView(c.vertices.buffer, c.vertices.byteOffset);
+  console.assert(
+    c.draws.length === chunks[1].draws.length &&
+      c.indices.length === chunks[1].idx.length &&
+      v.getFloat32(0, true) === Math.fround(chunks[1].verts[0]) &&
+      v.getUint16(20, true) === chunks[1].verts[5],
+    "JLGC",
+  );
+  const p = parsePalette(encodePalette(chunks[0].rgba));
+  console.assert(
+    p.colors * 32 === chunks[0].rgba.length &&
+      p.rgba[33] === chunks[0].rgba[33],
+    "JLGP",
+  );
+  const cam = new Camera();
+  cam.pos = [0, 8, 25];
+  cam.lookAt([0, 0, 0]);
+  const clip = gameCamera(cam, 16 / 9, NOON).clip,
+    editor = matMul(cam.proj(16 / 9), cam.view());
+  const project = (m: Mat4, q: Vec3) => {
+    const x = [0, 1, 2, 3].map(
+      (r) => m[r] * q[0] + m[4 + r] * q[1] + m[8 + r] * q[2] + m[12 + r],
+    );
+    return [x[0] / x[3], x[1] / x[3], x[2] / x[3], x[3]];
+  };
+  for (const q of [
+    [5, 1, -3],
+    [-8, 4, 2],
+    [0, 0, 0],
+  ] as Vec3[]) {
+    const a = project(clip, q),
+      b = project(editor, q);
+    console.assert(
+      a[3] > 0 &&
+        Math.abs(a[0] - b[0]) < 1e-3 &&
+        Math.abs(a[1] - b[1]) < 1e-3 &&
+        a[2] > -1 &&
+        a[2] < 1,
+      "game camera",
+      q,
+      a,
+      b,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 
 function slab(box: AABB, o: Vec3, d: Vec3): { t: number; normal: Vec3 } | null {
   let t0 = 0,
@@ -499,6 +864,9 @@ function slab(box: AABB, o: Vec3, d: Vec3): { t: number; normal: Vec3 } | null {
 
 export function install(t: typeof Transport) {
   const { meshes, nodes } = scene();
+  const game = gameChunks(nodes, meshes);
+  const game_param = new URLSearchParams(location.search).get("game");
+  let game_hour = game_param ? Number(game_param) || 0 : 12;
   const by_id = new Map(nodes.map((n) => [n.id, n]));
   const bounds = new Map<number, AABB>();
   for (const [uid, buf] of meshes) {
@@ -551,6 +919,12 @@ export function install(t: typeof Transport) {
     if (path === "materials")
       return new TextEncoder().encode(JSON.stringify({ materials: MATERIALS }))
         .buffer as ArrayBuffer;
+    // ponytail: the chunks are made once, an edit on the dev page does not make them again
+    if (path === "gameview") return encodeChunkList(game);
+    const chunk = game.find((c) => path === `gameview/chunk/${c.id}`);
+    if (chunk) return encodeChunk(chunk);
+    const pal = game.find((c) => path === `gameview/palette/${c.palette}`);
+    if (pal) return encodePalette(pal.rgba);
     throw new Error(`404 ${path}`);
   };
 
@@ -625,10 +999,21 @@ export function install(t: typeof Transport) {
         emit("jle:changed", { selection: true });
         return null;
       }
+      case "game_mood":
+        return game_hour >= 18 || game_hour < 6 ? NIGHT : NOON;
+      case "set_view":
+        if (typeof args.hour === "number") game_hour = args.hour;
+        if (typeof args.game_view === "boolean") gameView.setOn(args.game_view);
+        emit("jle:changed", { gameview: true, state: true });
+        return null;
       default:
         return null; // set_camera_state, frontend_reply...
     }
   };
   selfcheck();
+  gameSelfcheck(game);
+  // in the page's console: gameView, call("set_view", {hour: 22}) (the mood of 22:00)
+  Object.assign(window, { gameView, call: t.call });
+  if (game_param) setTimeout(() => gameView.setOn(true), 0);
   console.info("[viewport] dev mock engine");
 }

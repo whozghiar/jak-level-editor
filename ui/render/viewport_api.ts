@@ -68,6 +68,8 @@ class ViewportApi {
   // the rest of the hovered element's group
   outlineHover: number[] | null = null;
   outlineGroup: number[] = [];
+  // the ocean's look as drawn: the game view gives it the hour's (game_view.ts oceanLook)
+  waterLook: ((look: WaterLook, rs: RenderSettings) => WaterLook) | null = null;
 
   private overlay: HTMLCanvasElement | null = null;
   private passes: { stage: PassStage; fn: Pass; capture: boolean }[] = [];
@@ -312,13 +314,20 @@ class ViewportApi {
     // nothing is pointed at while the camera moves
     r.drawScene(store, rs, capture || this.controls?.busy ? 0 : this.hovered);
     for (const p of passes) if (p.stage === "translucent") p.fn(r, rs);
-    if (rs.show_ocean && this.ocean && this.ocean_entry && store.nodes.size > 0)
+    if (
+      rs.show_ocean &&
+      this.ocean &&
+      this.ocean_entry &&
+      store.nodes.size > 0
+    ) {
+      const look = this.ocean.look ?? defaultWaterLook();
       r.drawWater(
         this.ocean_entry,
         translate([0, this.ocean.height, 0]),
-        this.ocean.look ?? defaultWaterLook(),
+        this.waterLook?.(look, rs) ?? look,
         rs,
       );
+    }
     for (const p of passes) if (p.stage === "overlay") p.fn(r, rs);
     r.setGameDepth(null);
   }
