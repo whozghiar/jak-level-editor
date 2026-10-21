@@ -1,0 +1,15 @@
+[package]
+name = "jak-level-editor-core"
+description = "The engine of Jak Level Editor: the document, its tools, the library, the export"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "jle_core"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,7 @@
+src-tauri/
+node_modules/
+dist/
+bundle-test/
+out/
+.yarn/
+src/assets/translations/

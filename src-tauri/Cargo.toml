@@ -1,0 +1,23 @@
+[package]
+name = "jak-level-editor"
+description = "Jak Level Editor: a level editor for Jak 3 (OpenGOAL)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+default-run = "jak-level-editor"
+
+[build-dependencies]
+tauri-build = { version = "2.5.1", features = [] }
+
+[dependencies]
+serde_json.workspace = true
+tauri = { workspace = true, features = ["protocol-asset", "devtools"] }
+tauri-plugin-dialog = "2.7.0"
+tauri-plugin-opener = "2.5.3"
+tauri-plugin-jak-level-editor = { path = "../crates/tauri-plugin" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

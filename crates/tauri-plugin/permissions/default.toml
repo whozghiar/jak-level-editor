@@ -1,0 +1,3 @@
+[default]
+description = "Everything the editor's interface needs: its one command"
+permissions = ["allow-call"]

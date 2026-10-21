@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Jak Level Editor",
+  "mainBinaryName": "jak-level-editor",
+  "version": "2.0.0",
+  "identifier": "org.opengoal.jak-level-editor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:3001/",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Jak Level Editor",
+        "label": "main",
+        "width": 1600,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 650,
+        "center": true,
+        "decorations": false,
+        "resizable": true,
+        "maximized": true,
+        "url": "/",
+        "useHttpsScheme": true
+      }
+    ],
+    "security": {
+      "capabilities": ["default"],
+      "assetProtocol": { "enable": true, "scope": ["**"] }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "deb", "appimage"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Game",
+    "shortDescription": "A level editor for Jak 3 (OpenGOAL)"
+  }
+}

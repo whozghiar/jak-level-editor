@@ -1,0 +1,12 @@
+[package]
+name = "jak-level-editor-mcp"
+description = "The MCP server of Jak Level Editor: an AI assistant uses the editor's tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

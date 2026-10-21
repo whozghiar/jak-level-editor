@@ -1,0 +1,18 @@
+[package]
+name = "tauri-plugin-jak-level-editor"
+description = "Jak Level Editor inside a Tauri application (the OpenGOAL Launcher, or its own)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+links = "tauri-plugin-jak-level-editor"
+
+[dependencies]
+jak-level-editor-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+
+[build-dependencies]
+tauri-plugin = { version = "2.5", features = ["build"] }

@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@plugin 'flowbite/plugin';
+@source "../node_modules/flowbite-svelte/dist";
+@source "../ui";
+
+:root {
+  --launcher-font-family: "Noto Sans";
+  --launcher-font-mono-family: "Noto Sans Mono";
+}
+
+html,
+body {
+  font-family: var(--launcher-font-family), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  color: white;
+  background: #141414;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+*::-webkit-scrollbar-track {
+  background: #18181b;
+  border-radius: 5px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #18181b;
+  border-radius: 2px;
+  border: 3px solid #c2410c;
+}
