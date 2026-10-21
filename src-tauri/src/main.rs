@@ -1,4 +1,7 @@
-#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+#![cfg_attr(
+  all(not(debug_assertions), target_os = "windows"),
+  windows_subsystem = "windows"
+)]
 
 // Jak Level Editor on its own: the same editor the OpenGOAL Launcher opens with its Level Editor
 // button (crates/tauri-plugin, ui/).

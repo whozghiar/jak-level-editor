@@ -22,7 +22,11 @@ impl EditorState {
 }
 
 #[tauri::command]
-async fn call(state: tauri::State<'_, EditorState>, name: String, args: Option<Value>) -> Result<Value, String> {
+async fn call(
+  state: tauri::State<'_, EditorState>,
+  name: String,
+  args: Option<Value>,
+) -> Result<Value, String> {
   let state = state.inner().clone();
   let args = args.unwrap_or(Value::Null);
   tauri::async_runtime::spawn_blocking(move || state.lock().call(&name, &args))
@@ -32,7 +36,10 @@ async fn call(state: tauri::State<'_, EditorState>, name: String, args: Option<V
 
 fn serve(state: &EditorState, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
   let _ = (state, request);
-  Response::builder().status(StatusCode::NOT_FOUND).body(Vec::new()).unwrap()
+  Response::builder()
+    .status(StatusCode::NOT_FOUND)
+    .body(Vec::new())
+    .unwrap()
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
