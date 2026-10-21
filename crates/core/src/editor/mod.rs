@@ -2,6 +2,7 @@
 //! selection, the tools, the jobs. The interface reaches it through `Editor::call` (api.rs).
 
 mod api;
+pub mod extract;
 
 use serde_json::Value;
 
@@ -11,6 +12,7 @@ pub type Notify = Box<dyn Fn(&str, Value) + Send + Sync>;
 
 pub struct Editor {
   notify: Option<Notify>,
+  pub(crate) extraction: extract::Extraction,
 }
 
 impl Default for Editor {
@@ -21,7 +23,7 @@ impl Default for Editor {
 
 impl Editor {
   pub fn new() -> Self {
-    Self { notify: None }
+    Self { notify: None, extraction: extract::Extraction::default() }
   }
 
   pub fn set_notify(&mut self, notify: Notify) {
