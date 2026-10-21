@@ -25,9 +25,9 @@ pub mod shapes;
 pub mod skeleton;
 pub mod story;
 pub mod terrain;
-pub mod topology;
 #[cfg(test)]
 mod tests;
+pub mod topology;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};

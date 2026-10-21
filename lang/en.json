@@ -724,6 +724,8 @@
   "runtime.old_builder": "Its level builder lacks the fixes the editor's exports need (jle-1): use the editor's branch of jak-project.",
   "runtime.no_game_files": "The game's files (iso_data/jak3) are missing: extract the game in the OpenGOAL Launcher first.",
   "runtime.busy": "The game is being prepared: wait for it to end.",
+  "runtime.step.download": "Downloading the game for the editor's levels (once)",
+  "runtime.step.decompile": "Decompiling the game (a few minutes, once)",
   "runtime.step.export": "Exporting %s",
   "runtime.step.install": "Installing %s in the game",
   "runtime.step.compile": "Building the game (a few minutes)",

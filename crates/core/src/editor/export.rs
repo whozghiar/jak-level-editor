@@ -47,6 +47,8 @@ pub struct ExportState {
   /// the options of the last export, for the level `level` (open_export_window)
   pub options: LevelExportOptions,
   pub(super) level: String,
+  /// the start the options were given, not the user's: made again with the level, which moves
+  pub(super) start: Vec3,
   /// the levels as extracted, read once (m_export_originals): the export compares their decor
   pub(super) originals: BTreeMap<String, Arc<Scene>>,
   pub report: Option<LevelExportReport>,
@@ -142,6 +144,12 @@ impl Editor {
     if self.export.options.name.is_empty() || self.export.level != self.scene.settings.level {
       self.export.options = self.default_export_options();
       self.export.level = self.scene.settings.level.clone();
+      self.export.start = self.export.options.start;
+    } else if self.export.options.start == self.export.start {
+      // the C++ kept the start of the first export: the ground moved since, the player fell
+      let start = self.export_start_point();
+      self.export.options.start = start;
+      self.export.start = start;
     }
     let data = self.document_game_data();
     let mut replaceable: Vec<String> = Vec::new();
@@ -667,6 +675,31 @@ mod tests {
     let bx = ed.scene.add(bx);
     ed.scene.begin_frame();
     (floor, bx)
+  }
+
+  #[test]
+  fn the_start_follows_the_level_unless_chosen() {
+    let mut ed = editor();
+    let (floor, _) = small_level(&mut ed);
+    let start = |ed: &mut Editor| {
+      let d = ed.call("export_defaults", &json!({})).unwrap();
+      serde_json::from_value::<LevelExportOptions>(d["options"].clone())
+        .unwrap()
+        .start
+    };
+    assert!(start(&mut ed).y < 1.5, "the start on the floor");
+    ed.scene.find_mut(floor).unwrap().local.t.y = 400.0;
+    ed.scene.begin_frame();
+    assert!(
+      start(&mut ed).y > 399.0,
+      "the start follows the floor moved up"
+    );
+    ed.export.options.start = Vec3::new(1.0, 2.0, 3.0);
+    assert_eq!(
+      start(&mut ed),
+      Vec3::new(1.0, 2.0, 3.0),
+      "a start chosen stays"
+    );
   }
 
   #[test]

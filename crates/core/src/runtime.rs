@@ -137,7 +137,8 @@ pub fn launcher_iso_data(install: &Path, game: &str) -> PathBuf {
   install
     .join("active")
     .join(game)
-    .join("data/iso_data")
+    .join("data")
+    .join("iso_data")
     .join(game)
 }
 
