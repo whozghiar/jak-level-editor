@@ -12,6 +12,7 @@
     "core:window:allow-set-title",
     "dialog:default",
     "opener:default",
+    { "identifier": "opener:allow-open-path", "allow": [{ "path": "**" }] },
     "jak-level-editor:default"
   ]
 }

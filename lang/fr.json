@@ -662,6 +662,7 @@
   "export.install": "README.md, en haut de ce dossier, explique comment le mettre dans le jeu : les dossiers à copier dans jak-project, les lignes à ajouter à son code (game.gp, level-info.gc), comment le construire et s'y rendre.",
   "export.open_folder": "Ouvrir le dossier",
   "export.open_readme": "Ouvrir le README",
+  "export.dense_go": "Les endroits les plus denses des sols (mètres : triangles) : cliquez sur l'un d'eux, la caméra y va.",
   "export.note.collision_from_decor": "%zu éléments ont une collision faite depuis leur forme (par le constructeur, avec des murs automatiques) : ceux placés, et les niveaux sans la collision du jeu.",
   "export.note.collision_taken_out": "%zu triangles de la collision du jeu retirés là où des morceaux du décor ne sont plus (%s morceaux supprimés, déplacés ou masqués) : ce qui a été ouvert l'est aussi dans le jeu.",
   "export.note.collision_dense": "%zu endroits des sols où Jak rencontre plus de triangles de collision que le jeu n'en rassemble à la fois (461) : il peut y passer à travers le sol. Gardez la collision du jeu, ou moins de petits éléments à ces endroits. Les plus denses (mètres : triangles) : %s",

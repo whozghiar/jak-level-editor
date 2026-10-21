@@ -937,40 +937,77 @@ export function install(t: typeof Transport) {
     return () => listeners.get(event)?.delete(cb);
   };
 
+  // what a ray meets, the nearest first (pick, pick_all)
+  const pickAll = (origin: Vec3, dir: Vec3) => {
+    const out: {
+      node: number;
+      selectable: number;
+      point: Vec3;
+      normal: Vec3;
+      distance: number;
+    }[] = [];
+    for (const n of nodes) {
+      // ponytail: boxes, not triangles (the far mountains' box holds everything: left out)
+      if (
+        n.kind !== NodeKind.Render ||
+        !(n.flags & NodeFlag.Visible) ||
+        n.flags & NodeFlag.Reference ||
+        n.mesh === 6
+      )
+        continue;
+      const hit = slab(aabbTransformed(bounds.get(n.mesh)!, n.world), origin, dir);
+      if (!hit) continue;
+      const p: Vec3 = [0, 1, 2].map((a) => origin[a] + dir[a] * hit.t) as Vec3;
+      // an actor's model: the actor
+      const node = n.flags & NodeFlag.UnderActor ? n.parent : n.id;
+      out.push({ node, selectable: node, point: p, normal: hit.normal, distance: hit.t });
+    }
+    return out.sort((a, b) => a.distance - b.distance);
+  };
+  const selectedIds = () =>
+    new Set(nodes.filter((n) => n.flags & NodeFlag.Selected).map((n) => n.id));
+  const setSelection = (ids: Set<number>) => {
+    for (const n of nodes) {
+      if (ids.has(n.id) !== !!(n.flags & NodeFlag.Selected)) {
+        n.flags ^= NodeFlag.Selected;
+        dirty.add(n.id);
+      }
+    }
+    emit("jle:changed", { selection: true });
+  };
+  // the elements whose middle a box of the view holds (box_nodes)
+  const boxNodes = (a: any): number[] => {
+    const m = a.view_proj as number[];
+    const [x0, x1] = [Math.min(a.a[0], a.b[0]), Math.max(a.a[0], a.b[0])];
+    const [y0, y1] = [Math.min(a.a[1], a.b[1]), Math.max(a.a[1], a.b[1])];
+    return nodes
+      .filter((n) => {
+        if (
+          (n.kind !== NodeKind.Render && n.kind !== NodeKind.Actor) ||
+          !(n.flags & NodeFlag.Visible) ||
+          n.flags & (NodeFlag.Reference | NodeFlag.UnderActor) ||
+          n.mesh === 6
+        )
+          return false;
+        const b = n.mesh ? aabbTransformed(bounds.get(n.mesh)!, n.world) : null;
+        const c = b
+          ? b.lo.map((v, i) => (v + b.hi[i]) / 2)
+          : point(n.world, [0, 0, 0]);
+        const w = m[3] * c[0] + m[7] * c[1] + m[11] * c[2] + m[15];
+        if (w <= 1e-5) return false;
+        const x = ((m[0] * c[0] + m[4] * c[1] + m[8] * c[2] + m[12]) / w * 0.5 + 0.5) * a.width;
+        const y = (1 - ((m[1] * c[0] + m[5] * c[1] + m[9] * c[2] + m[13]) / w * 0.5 + 0.5)) * a.height;
+        return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+      })
+      .map((n) => n.id);
+  };
+
   t.call = async (name: string, args: any = {}) => {
     switch (name) {
-      case "pick": {
-        let best: {
-          node: number;
-          point: Vec3;
-          normal: Vec3;
-          distance: number;
-        } | null = null;
-        for (const n of nodes) {
-          // ponytail: boxes, not triangles (the far mountains' box holds everything: left out)
-          if (
-            n.kind !== NodeKind.Render ||
-            !(n.flags & NodeFlag.Visible) ||
-            n.flags & NodeFlag.Reference ||
-            n.mesh === 6
-          )
-            continue;
-          const hit = slab(
-            aabbTransformed(bounds.get(n.mesh)!, n.world),
-            args.origin,
-            args.dir,
-          );
-          if (hit && (!best || hit.t < best.distance)) {
-            const p: Vec3 = [0, 1, 2].map(
-              (a) => args.origin[a] + args.dir[a] * hit.t,
-            ) as Vec3;
-            // an actor's model: the actor
-            const node = n.flags & NodeFlag.UnderActor ? n.parent : n.id;
-            best = { node, point: p, normal: hit.normal, distance: hit.t };
-          }
-        }
-        return best;
-      }
+      case "pick":
+        return pickAll(args.origin, args.dir)[0] ?? null;
+      case "pick_all":
+        return pickAll(args.origin, args.dir);
       case "transform_nodes": {
         (args.ids as number[]).forEach((id, i) => {
           const root = by_id.get(id);
@@ -991,17 +1028,59 @@ export function install(t: typeof Transport) {
         return null;
       }
       case "select": {
-        const ids = new Set<number>(args.ids ?? []);
-        for (const n of nodes) {
-          const sel = ids.has(n.id);
-          if (sel !== !!(n.flags & NodeFlag.Selected)) {
-            n.flags ^= NodeFlag.Selected;
-            dirty.add(n.id);
-          }
-        }
-        emit("jle:changed", { selection: true });
+        const ids: number[] = args.ids ?? [];
+        const sel = selectedIds();
+        if (args.mode === "add") ids.forEach((id) => sel.add(id));
+        else if (args.mode === "remove") ids.forEach((id) => sel.delete(id));
+        else if (args.mode === "toggle")
+          ids.forEach((id) => (sel.has(id) ? sel.delete(id) : sel.add(id)));
+        setSelection(args.mode ? sel : new Set(ids));
         return null;
       }
+      case "select_only":
+        setSelection(new Set(args.id ? [args.id] : []));
+        return null;
+      case "toggle_select": {
+        const sel = selectedIds();
+        if (!sel.delete(args.id)) sel.add(args.id);
+        setSelection(sel);
+        return null;
+      }
+      // ponytail: the whole group is what stands beside it (the same parent)
+      case "select_whole": {
+        const parent = by_id.get(args.id)?.parent ?? 0;
+        setSelection(
+          new Set(
+            nodes
+              .filter(
+                (n) =>
+                  n.parent === parent &&
+                  (n.kind === NodeKind.Render || n.kind === NodeKind.Actor),
+              )
+              .map((n) => n.id),
+          ),
+        );
+        return true;
+      }
+      case "box_nodes":
+        return { ids: boxNodes(args) };
+      case "select_box": {
+        const ids = boxNodes(args);
+        await t.call("select", { ids, mode: args.mode === "replace" ? undefined : args.mode });
+        return { ids };
+      }
+      case "labels":
+        return nodes
+          .filter((n) => n.kind === NodeKind.Actor || n.flags & NodeFlag.Selected)
+          .map((n) =>
+            n.kind === NodeKind.Actor
+              ? { id: n.id, name: `actor-${n.id}`, etype: "crate" }
+              : { id: n.id, name: `piece-${n.id}` },
+          );
+      case "node":
+        return by_id.has(args.id)
+          ? { id: args.id, name: `piece-${args.id}`, group: null }
+          : null;
       case "effect_emitters":
         return EFFECTS;
       case "game_mood":

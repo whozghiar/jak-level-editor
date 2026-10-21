@@ -113,7 +113,7 @@ pub fn all_textures(
   out
 }
 
-fn base64_decode(input: &[u8]) -> Vec<u8> {
+pub(crate) fn base64_decode(input: &[u8]) -> Vec<u8> {
   let mut out = Vec::with_capacity(input.len() * 3 / 4);
   let (mut acc, mut bits) = (0u32, 0);
   for &c in input {

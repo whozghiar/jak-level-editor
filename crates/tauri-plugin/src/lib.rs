@@ -9,12 +9,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use jle_core::editor::protocol::{ProtocolState, content_type, encode_mesh, materials_json};
+use jle_core::editor::remote::{K_REMOTE_PORT, start_remote};
 use jle_core::editor::{Editor, Notify, SharedEditor};
-use jle_core::i18n::{i18n_init, i18n_select, i18n_system_language, lang_dir, set_lang_dir};
+use jle_core::i18n::{i18n_init, i18n_select, i18n_system_language, lang_dir, set_lang_dir, tr};
 use jle_core::io::asset_library::{default_library_root, game_folder};
 use jle_core::io::game_data::set_data_dir;
 use jle_core::prefs::{Prefs, READ_ONLY};
-use jle_core::{log_error, log_info};
+use jle_core::{log_error, log_info, log_warn};
 use serde_json::Value;
 use tauri::http::{Request, Response, StatusCode};
 use tauri::plugin::TauriPlugin;
@@ -182,13 +183,15 @@ fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options) {
       log_error!("%s", e);
     }
   }
-  log_info!(
-    "Jak Level Editor %s (remote port %s)",
-    env!("CARGO_PKG_VERSION"),
-    options
-      .remote_port
-      .map_or("default".to_string(), |p| p.to_string())
-  );
+  log_info!("Jak Level Editor %s", env!("CARGO_PKG_VERSION"));
+  // the remote control of the MCP server (0: none)
+  let port = options.remote_port.unwrap_or(K_REMOTE_PORT);
+  if port != 0 {
+    match start_remote(&shared, port) {
+      Ok(()) => log_info!(tr("log.remote_ready"), port),
+      Err(e) => log_warn!(tr("log.remote_failed"), e),
+    }
+  }
   // the game view's hour passing, a storm's lightning (GameWeather::update)
   let weather = shared.clone();
   std::thread::spawn(move || {
@@ -305,7 +308,14 @@ fn serve(
         None => bytes(None),
       }
     }
-    // thumb/<key>: no thumbnail cache yet; tod/<node>: superseded by gameview
+    // the panels' pictures: preview/<kind>, thumb/<name>, palette (editor/thumbs.rs)
+    "preview" | "thumb" | "palette" => {
+      match jle_core::editor::thumbs::serve(&editor.0, route, rest, &param) {
+        Some((ct, b)) => answer(StatusCode::OK, ct, b),
+        None => bytes(None),
+      }
+    }
+    // tod/<node>: superseded by gameview
     _ => bytes(None),
   }
 }

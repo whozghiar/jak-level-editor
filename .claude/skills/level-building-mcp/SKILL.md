@@ -5,7 +5,7 @@ description: Build or change a Jak 3 level in the OpenGOAL Level Editor through 
 
 # Building levels through the MCP server
 
-The editor's MCP server (`open-goal-level-editor --mcp`, configured in `.mcp.json`) acts on the
+The editor's MCP server (`jak-level-editor-mcp`, configured in `.mcp.json`) acts on the
 editor window the user sees. The full guide, with examples, is `docs/mcp-agent-guide.md`: read it
 the first time. Positions are meters, Y is up; every change is undone with `undo`.
 

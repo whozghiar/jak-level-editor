@@ -113,6 +113,12 @@ impl Editor {
     if let Some(o) = self.ocean_mesh() {
       snap.meshes.insert(o.uid as u32, o.clone());
     }
+    if let Some(p) = self.placement_preview_mesh() {
+      snap.meshes.insert(p.uid as u32, p.clone());
+    }
+    if let Some(i) = self.preview_icon_mesh() {
+      snap.meshes.insert(i.uid as u32, i);
+    }
     snap
   }
 

@@ -4,7 +4,13 @@
   import { onMount } from "svelte";
   import { engine } from "../lib/engine.svelte";
   import { gameView } from "./game_view";
+  import { attachNavmeshOverlay } from "./navmesh_overlay";
   import { effects } from "./particles";
+  import { attachPlaceTool } from "./place_tool.svelte";
+  import { attachPreview } from "./preview.svelte";
+  import { selectTool } from "./select_tool";
+  import { attachTerrainTool } from "./terrain_tool.svelte";
+  import { attachTopologyTool } from "./topology_tool.svelte";
   import { viewport } from "./viewport_api";
 
   let box: HTMLDivElement;
@@ -17,6 +23,10 @@
       .catch((e) => console.error("[viewport]", e));
     const offGame = gameView.attach();
     const offEffects = effects.attach();
+    const offNavmesh = attachNavmeshOverlay();
+    const offSelect = selectTool.attach();
+    const offPlace = attachPlaceTool();
+    const offTools = [attachTerrainTool(), attachTopologyTool(), attachPreview()];
     const fit = () => {
       const r = box.getBoundingClientRect();
       viewport.resize(r.width, r.height, window.devicePixelRatio || 1);
@@ -31,6 +41,10 @@
       dpr.removeEventListener("change", fit);
       offGame();
       offEffects();
+      offNavmesh();
+      offSelect();
+      offPlace();
+      offTools.forEach((f) => f());
       viewport.detach();
     };
   });
@@ -50,7 +64,7 @@
     effects.setOn(!!engine.state.view.effects);
   });
 
-  // the View menu's toggles, the level's ocean (once per change of it), the hovered element's group
+  // the View menu's toggles, the level's ocean (once per change of it)
   let oceanKey = "";
   $effect(() => {
     if (!engine.ready) return;
@@ -68,8 +82,10 @@
       oceanKey = key;
       viewport.setOcean(ocean);
     }
-    viewport.outlineGroup = engine.state.hovered_group?.roots ?? [];
   });
+
+  // the gizmo's mode, space and snap, the tool, the hovered element's group (select_tool.ts)
+  $effect(() => selectTool.sync());
 </script>
 
 <div class="viewport" bind:this={box}>

@@ -35,6 +35,11 @@ impl Editor {
       self.levels.adding,
       self.levels.add_error,
       self.jobs.keys().collect::<Vec<_>>(),
+      self.remote_clients,
+      self.placement_key(),
+      self.brush_state(),
+      self.topology_key(),
+      self.preview_state(),
       i18n_language(),
     ])
     .to_string()
@@ -65,6 +70,7 @@ impl Editor {
       }
     };
     let story = self.story_state();
+    let topology = self.topology_state();
     let s = &self.game_chunks.stats;
     json!({
       "document": {
@@ -94,10 +100,17 @@ impl Editor {
       "tool": self.tool,
       "gizmo": self.gizmo,
       "brush": self.brush_state(),
+      "topology": topology,
+      "preview": self.preview_state(),
       "view": self.view,
       "story": story,
-      "loading": self.levels.opening.is_some() || self.levels.adding.is_some(),
-      "remote_clients": 0,
+      // a level read or added, a model or a level's decor being read (the status bar)
+      "loading": self.levels.opening.is_some()
+        || self.levels.adding.is_some()
+        || self.catalog.store.pending() > 0,
+      "remote_clients": self.remote_clients,
+      "placement": self.placement_state(),
+      "catalog": self.catalog_state(),
       "library_empty": self.library.is_empty(),
       "library_root": self.library_root,
       "jak2_available": !self.library_jak2.is_empty(),

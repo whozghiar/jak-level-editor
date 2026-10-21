@@ -24,10 +24,10 @@ when they first appear. The user's guide of the editor itself is the [README](..
 ## 1. How it works
 
 ```text
- you (the agent)  --MCP, stdio-->  open-goal-level-editor --mcp  --TCP 127.0.0.1:47821-->  the editor window
+ you (the agent)  --MCP, stdio-->  jak-level-editor-mcp  --TCP 127.0.0.1:47821-->  the editor window
 ```
 
-- `open-goal-level-editor --mcp` is the MCP server. It speaks the protocol on its standard input
+- `jak-level-editor-mcp` is the MCP server. It speaks the protocol on its standard input
   and output and forwards every tool call to **the editor running on the user's computer**. When
   no editor runs, it starts one (it takes a few seconds the first time).
 - Everything you do happens **in the window the user sees**: the user watches you build, and can
@@ -41,20 +41,21 @@ The server tells your client its rules when it starts (its `instructions`): they
 
 ## 2. Setting it up
 
-1. Build the editor ([README, Building](../README.md#build-it)) and extract the game
+1. Build the editor and its MCP server (`npx vite build`, then `cargo build --release -p
+   jak-level-editor -p jak-level-editor-mcp`: both land in `target/release/`) and extract the game
    ([README, Extract your game](../README.md#extract-your-game)): without the extracted levels,
-   there is nothing to build with.
+   there is nothing to build with. The MCP server starts the editor found next to it.
 2. **Claude Code**: the repository has a `.mcp.json`. Start Claude Code in the repository's folder
    and accept the server `open-goal-level-editor`. From another folder, add it once:
 
    ```bash
    # Windows, the repository in D:\levels\open-goal-level-builder
-   claude mcp add open-goal-level-editor -- "D:/levels/open-goal-level-builder/build/bin/open-goal-level-editor.exe" --mcp
+   claude mcp add open-goal-level-editor -- "D:/levels/open-goal-level-builder/target/release/jak-level-editor-mcp.exe"
    # Linux, the repository in ~/open-goal-level-builder
-   claude mcp add open-goal-level-editor -- ~/open-goal-level-builder/build/bin/open-goal-level-editor --mcp
+   claude mcp add open-goal-level-editor -- ~/open-goal-level-builder/target/release/jak-level-editor-mcp
    ```
 
-3. **Another client**: run `<repository>/build/bin/open-goal-level-editor --mcp` as a stdio server.
+3. **Another client**: run `<repository>/target/release/jak-level-editor-mcp` as a stdio server.
 4. Check: ask the assistant to call `get_status` (*"call get_status of the level editor"*). Its
    answer gives the library and the document, for example
    `{"levels": 272, "document": {"open": true, "level": "ctysluma", "elements": 13193, ...}, ...}`. The

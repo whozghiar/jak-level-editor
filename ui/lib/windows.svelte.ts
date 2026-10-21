@@ -34,7 +34,7 @@ export const registry: Record<string, WindowDef> = {
   export: { title: "export.title", component: ExportWindow, width: 560 }, // Level > Export for the game
   navmesh: { title: "navmesh.title", component: NavMeshWindow, width: 430 }, // Level > Nav meshes
   gaps: { title: "gaps.title", component: GapsWindow, width: 460 }, // Level > Find holes (building_tools.cpp)
-  game: { title: "game.title", component: GameWindow, width: 420 }, // View > Sky, hour and weather (game_window.cpp)
+  game: { title: "game.title", component: GameWindow, width: 440, anchor: "top-right" }, // View > Sky, hour and weather (game_window.cpp)
   guide: { title: "guide.title", component: GuideWindow, width: 780, height: 560 }, // Help, F1 (guide_panel.cpp)
   // the terrain brush's: open while the tool is (terrain_tool.cpp); closed, the brush ends
   terrain: {

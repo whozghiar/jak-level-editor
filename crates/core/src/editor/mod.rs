@@ -8,6 +8,9 @@
 //!   project.rs    projects: open, save (only when the user asks), new documents
 //!   selection.rs  the selection, the clipboard, moves, the inspector's edits, picking
 //!   groups.rs     the groups of the document (groups.cpp)
+//!   inspector.rs  the inspector: its counts, the selection's group, its edits (panels.cpp)
+//!   behaviors.rs  an actor's behavior and parameters, a piece of decor's (behavior_panel.cpp)
+//!   surfaces.rs   a shape's size, the materials, a model imported (surface_panel.cpp)
 //!   ocean.rs      the ocean of the level
 //!   state.rs      what the interface shows: get_state, a node, the levels' list
 //!   tools.rs      placeholders of the Place, topology and terrain tools (their areas replace them)
@@ -15,20 +18,43 @@
 //!   protocol.rs   the jle:// protocol's encoders (the plugin serves them)
 //!   extract.rs    the extraction of the game's assets (extract.cpp)
 //!   api.rs        `call`: every call by name
+//!   placement.rs  the Place tool, prefabs, Light like here, a level's style (actions.cpp)
+//!   catalog.rs    the catalog, the library's index, the palette, the game's prefabs: the panels'
+//!                 lists and the workers making them
+//!   thumbs.rs     the panels' pictures: what the interface draws, the PNGs it drew
+//!   remote.rs     the remote control (MCP server): a local port, one JSON line per request
+//!   remote_tools.rs  the tools of the MCP server
+//!   terrain_tool.rs  the terrain brush (terrain_tool.cpp)
+//!   topology_tool.rs the points and faces of one element's mesh (topology_tool.cpp)
+//!   preview.rs    the inspector's preview of an animation or an effect (preview.cpp)
 
 mod api;
+mod behaviors;
+mod catalog;
 mod effects;
+pub mod export;
 pub mod extract;
 mod groups;
+mod inspector;
 pub mod levels;
 mod ocean;
+mod panels;
+mod pick_calls;
+pub mod placement;
+mod preview;
 mod project;
 pub mod protocol;
+pub mod remote;
+mod remote_tools;
 mod selection;
 mod state;
+mod surfaces;
+pub mod terrain_tool;
+pub mod thumbs;
 #[cfg(test)]
 mod tests;
 mod tools;
+mod topology_tool;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
@@ -240,6 +266,8 @@ pub struct Editor {
   pub clipboard: Clipboard,
   /// the inspector's field being dragged: the node before it (edit_begin)
   edit_before: Option<crate::scene::Node>,
+  /// the inspector's edit going on (a field dragged): the nodes before it (inspector.rs)
+  inspector_change: Option<crate::history::NodeChange>,
   /// levels are opened and added with their actors (the objects: the creatures never come), or
   /// with their decor alone (Levels panel)
   pub load_actors: bool,
@@ -281,8 +309,21 @@ pub struct Editor {
   pub replies: BTreeMap<u64, Value>,
   // ---- extraction (extract.rs)
   pub extraction: extract::Extraction,
+  // ---- the Place tool, prefabs (placement.rs); the library's lists and workers (catalog.rs)
+  pub(crate) placing: placement::PlacingState,
+  pub(crate) catalog: catalog::CatalogState,
+  // ---- the terrain brush, the topology tool, the animation preview
+  pub terrain: terrain_tool::TerrainState,
+  pub(crate) topology: topology_tool::TopologyState,
+  pub(crate) preview: preview::PreviewState,
+  // ---- the export for the game, the nav meshes, the holes found (export.rs)
+  pub export: export::ExportState,
+  pub nav: export::NavState,
+  pub gaps: Option<export::GapsFound>,
   /// the preferences changed are written (not in the tests)
   pub write_prefs: bool,
+  /// the assistants connected through the MCP server (remote.rs)
+  pub remote_clients: usize,
 }
 
 impl Default for Editor {
@@ -308,6 +349,7 @@ impl Editor {
       saved_revision: 0,
       clipboard: Clipboard::default(),
       edit_before: None,
+      inspector_change: None,
       load_actors: false,
       library_root: String::new(),
       library: Arc::default(),
@@ -331,7 +373,16 @@ impl Editor {
       next_request: 1,
       replies: BTreeMap::new(),
       extraction: extract::Extraction::default(),
+      placing: Default::default(),
+      catalog: Default::default(),
+      terrain: Default::default(),
+      topology: Default::default(),
+      preview: Default::default(),
+      export: Default::default(),
+      nav: Default::default(),
+      gaps: None,
       write_prefs: true,
+      remote_clients: 0,
     }
   }
 
@@ -416,6 +467,8 @@ impl Editor {
   /// `dt` seconds later: the hour passing, a storm's lightning (the game window's); the plugin
   /// calls it on a timer. Whether the weather moves (the timer can sleep otherwise).
   pub fn tick(&mut self, dt: f32) -> bool {
+    // the library's workers, the files the Place tool waits for (catalog.rs)
+    self.poll_library_work();
     if !self.weather.time_passes && !self.weather.lightning {
       return false;
     }
@@ -563,6 +616,7 @@ impl Editor {
     };
     let data = self.game_data();
     let mut library = AssetLibrary::default();
+    self.export.originals.clear();
     let folder = game_folder(&self.library_root);
     if !folder.is_empty() {
       match library.scan(&folder) {
@@ -582,8 +636,8 @@ impl Editor {
       jak2.set_listed(|l| listed(l, None));
     }
     self.library_jak2 = Arc::new(jak2);
-    // ponytail: the catalog, its index, the prefabs and the palette of materials (set_library's
-    // rest in the C++) are refreshed by their own areas when they come
+    // the catalog, its index, the palette of materials, the prefabs (catalog.rs)
+    self.library_changed();
     let root = self.library_root.clone();
     self.save_prefs(|p| p.library_root = root);
   }

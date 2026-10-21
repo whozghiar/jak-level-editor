@@ -11,7 +11,6 @@ use crate::game::mood::{MoodSettings, game_mood, weather_presets};
 use crate::i18n::{i18n_languages, tr};
 use crate::math::{AABB, Mat4, Ray};
 use crate::prefs::Prefs;
-use crate::scene::gaps::{GapOptions, find_gaps};
 use crate::{log_error, log_info};
 
 // the calls that only read: no change to look for after them (a pick at each mouse move)
@@ -19,6 +18,8 @@ const QUERIES: &[&str] = &[
   "ping",
   "get_state",
   "pick",
+  "pick_all",
+  "labels",
   "node",
   "list_levels",
   "get_level_info",
@@ -31,6 +32,27 @@ const QUERIES: &[&str] = &[
   "document_junction",
   "effect_emitters",
   "languages",
+  "inspector",
+  "actor_behavior",
+  "decor_behavior",
+  "shape",
+  "materials",
+  "export_state",
+  "export_check",
+  "navmesh_state",
+  "navmesh_data",
+  "gaps_report",
+  "replace_info",
+  "project_save_path",
+  "catalog",
+  "prefabs",
+  "placement_preview",
+  "prefab_dialog",
+  "texture_list",
+  "selection_meshes",
+  "thumb_store",
+  "level_textures",
+  "preview_options",
 ];
 
 fn u(a: &Value, k: &str) -> u32 {
@@ -88,8 +110,6 @@ fn merged<T: serde::Serialize + serde::de::DeserializeOwned>(base: &T, args: &Va
     serde_json::from_value(serde_json::to_value(base).unwrap_or_default()).unwrap()
   })
 }
-
-const NOT_YET: &str = "not yet";
 
 impl Editor {
   pub fn call(&mut self, name: &str, args: &Value) -> Result<Value, String> {
@@ -172,6 +192,9 @@ impl Editor {
         self.set_replaces(s(a, "level"));
         done
       }
+      // the Replace section and the Save window (panels.rs)
+      "replace_info" => Ok(self.replace_info()),
+      "project_save_path" => Ok(self.project_save_path(s(a, "name"))),
       "restore_level_effects" => {
         let (added, left_out) = self.restore_level_effects();
         log_info!(tr("log.effects_restored"), added, left_out);
@@ -266,6 +289,8 @@ impl Editor {
         );
         Ok(self.pick_ray(&ray, a))
       }
+      "pick_all" => Ok(self.pick_all_call(a)),
+      "labels" => Ok(self.labels_call()),
       "node" => Ok(self.node_info(u(a, "id")).unwrap_or(Value::Null)),
       "set_node" => self.set_node(a).map(|_| Value::Null),
       "edit_begin" => {
@@ -287,6 +312,23 @@ impl Editor {
           .and_then(Value::as_str)
           .unwrap_or("undo.move");
         self.transform_nodes(&ids(a, "ids"), &worlds, label);
+        done
+      }
+
+      // ---- the inspector (inspector.rs, behaviors.rs, surfaces.rs)
+      "inspector" => Ok(self.inspector_info(u(a, "id"))),
+      "actor_behavior" => Ok(self.actor_behavior(u(a, "id")).unwrap_or(Value::Null)),
+      "set_actor_behavior" => self.set_actor_behavior(a).map(|_| Value::Null),
+      "set_actor_param" => self.set_actor_param(a).map(|_| Value::Null),
+      "decor_behavior" => Ok(self.decor_behavior(u(a, "id")).unwrap_or(Value::Null)),
+      "set_decor_behavior" => self.set_decor_behavior(a).map(|_| Value::Null),
+      "shape" => Ok(self.shape_info(u(a, "id")).unwrap_or(Value::Null)),
+      "set_shape" => self.set_shape(a).map(|_| Value::Null),
+      "materials" => Ok(self.materials_info(a).unwrap_or(Value::Null)),
+      "set_material" => self.set_material(a),
+      "material_image" => Ok(self.material_image(a)),
+      "import_match_lighting" => {
+        self.import_match_lighting(u(a, "id"));
         done
       }
 
@@ -323,7 +365,6 @@ impl Editor {
         self.escape();
         done
       }
-      "find_gaps" => Ok(self.find_gaps_call(a)),
       "game_mood" => {
         if let Some(dt) = f(a, "dt") {
           self.tick(dt);
@@ -381,36 +422,68 @@ impl Editor {
       }
       "extract_state" => Ok(self.extraction.snapshot()),
 
-      // ---- not yet: the calls of the areas that come next, which replace these lines
-      // placement and prefabs
-      "start_shape_placement" | "start_model_placement" | "turn_placement" => Err(NOT_YET.into()),
-      "stop_placement" => {
-        self.stop_placement();
-        done
+      // ---- the terrain brush, the topology tool, the animation preview (terrain_tool.rs,
+      // topology_tool.rs, preview.rs)
+      "start_terrain_brush" | "stop_terrain_brush" | "set_brush" | "brush_hover" | "brush_press"
+      | "brush_drag" | "brush_release" | "brush_cancel" | "brush_sculpt" | "terrain_generate"
+      | "terrain_apply_style" | "terrain_start_new" | "level_textures" => self.terrain_call(name, a),
+      "start_topology" | "stop_topology" | "topology_delete" | "topology_view" | "topology_pick"
+      | "topology_box" | "topology_select" | "topology_drag" | "topology_drag_end"
+      | "topology_extrude" | "topology_subdivide" | "topology_flip" => self.topology_call(name, a),
+      "preview_options" | "start_preview" | "stop_preview" | "preview_frame" => {
+        self.preview_call(name, a)
       }
-      // terrain, topology, preview tools
-      "start_topology" | "topology_delete" | "start_terrain_brush" | "set_brush" => {
-        Err(NOT_YET.into())
+      // ---- the export for the game, nav meshes, holes (export.rs)
+      "export_defaults" => Ok(self.export_defaults()),
+      "export_check" => {
+        let o = get(a, "options").ok_or("options: the export's")?;
+        Ok(json!(self.export_check(&o)))
       }
-      "stop_topology" => {
-        self.stop_topology();
-        done
+      "export_start_point" => Ok(json!(self.export_start_point())),
+      "check_continues" => Ok(self.check_continues(s(a, "level"))),
+      "export_for_game" => {
+        let o = get(a, "options").ok_or("options: the export's")?;
+        self.export_for_game(o, b(a, "wait").unwrap_or(false))?;
+        Ok(self.export_state())
       }
-      "stop_terrain_brush" => {
-        self.stop_terrain_brush();
-        done
+      "export_state" => Ok(self.export_state()),
+      "generate_navmesh" => {
+        self.generate_navmesh_call(a)?;
+        Ok(self.navmesh_state())
       }
-      // export for the game, nav meshes
-      "export_defaults" | "export_for_game" | "generate_navmesh" | "export_navmeshes" => {
-        Err(NOT_YET.into())
+      "set_navmesh" => {
+        self.set_navmesh(a);
+        Ok(self.navmesh_state())
       }
+      "navmesh_state" => Ok(self.navmesh_state()),
+      "navmesh_data" => Ok(self.navmesh_data(get(a, "ids"))),
+      "export_navmeshes" => {
+        let first = a.get("first_aid").and_then(Value::as_u64).map(|v| v as u32);
+        self.export_navmeshes_call(s(a, "path"), first)
+      }
+      "find_gaps" => Ok(self.find_gaps_call(a)),
+      "gaps_report" => Ok(self.gaps_report()),
+      // ---- the Place tool, prefabs, the catalog, the textures of the games (placement.rs,
+      // catalog.rs, thumbs.rs)
+      "start_shape_placement" | "start_model_placement" | "start_object_placement"
+      | "start_part_placement" | "start_prefab_placement" | "start_style_placement"
+      | "import_model" | "stop_placement" | "turn_placement" | "set_placement"
+      | "placement_preview" | "place_at" | "place_here" | "relight_selection" | "create_prefab"
+      | "prefab_dialog" | "delete_prefab" | "level_style" => self
+        .placement_call(name, a)
+        .unwrap_or_else(|| Err(format!("unknown call: {name}"))),
+      "catalog" | "prefabs" | "want_game_prefabs" | "game_prefabs" | "texture_list"
+      | "palette_texture" | "selection_meshes" => self
+        .catalog_call(name, a)
+        .unwrap_or_else(|| Err(format!("unknown call: {name}"))),
+      "thumb_store" => super::thumbs::store_thumb(s(a, "name"), s(a, "png")).map(|_| Value::Null),
       _ => Err(format!("unknown call: {name}")),
     }
   }
 
   // undo / redo: the levels of the document come and go with them (the C++ after-apply hooks of
   // the levels added and removed: story_document_changed)
-  fn undo_redo(&mut self, undo: bool) {
+  pub(crate) fn undo_redo(&mut self, undo: bool) {
     let names = |ed: &Editor| -> Vec<String> {
       ed.document_levels()
         .iter()
@@ -445,35 +518,6 @@ impl Editor {
     let size = [f(a, "width").unwrap_or(1.0), f(a, "height").unwrap_or(1.0)];
     let corner = |k: &str| get::<[f32; 2]>(a, k).unwrap_or_default();
     Ok(self.box_nodes(&vp, size, corner("a"), corner("b")))
-  }
-
-  /// The holes through which the player would see the void (building_tools.cpp run_find_gaps):
-  /// around `region` {lo, hi}, else the selection's, else the document's own level.
-  fn find_gaps_call(&mut self, a: &Value) -> Value {
-    let mut region: AABB = get(a, "region").unwrap_or_default();
-    if !region.valid() {
-      region = self.selection_bounds();
-    }
-    if !region.valid() {
-      region = self.own_level_bounds();
-    }
-    let mut o = GapOptions {
-      region,
-      ..Default::default()
-    };
-    if let Some(h) = self.ocean_height().filter(|_| self.view.ocean) {
-      o.ocean = h;
-    }
-    let r = find_gaps(&self.scene, &o);
-    log_info!(tr("log.gaps"), r.spots.len(), r.viewpoints);
-    let spots: Vec<Value> = r
-      .spots
-      .iter()
-      .map(|s| {
-        json!({"at": s.at, "seen_from": s.seen_from, "direction": s.direction, "rays": s.rays, "edge": s.edge})
-      })
-      .collect();
-    json!({"spots": spots, "viewpoints": r.viewpoints, "rays": r.rays, "escaped": r.escaped})
   }
 
   /// the level of the game the document replaces (Level > Replace), undoable

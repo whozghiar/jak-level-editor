@@ -9,7 +9,7 @@ use super::levels::{copy_nodes, paste_nodes};
 use crate::history::{HistoryEntry, NodeChange};
 use crate::i18n::tr;
 use crate::math::{AABB, Mat4, Quat, Ray, Transform, Vec3, Vec4, normalize};
-use crate::scene::pick::{PickFilter, pick};
+use crate::scene::pick::pick;
 use crate::scene::relight::{K_LIGHT_MAX_VERTICES, light_like_surroundings, lit_here_nodes};
 use crate::scene::{K_MARKER_RADIUS, Node, NodeKind, focus_box};
 use crate::{log_info, strf};
@@ -295,18 +295,7 @@ impl Editor {
   /// point, normal, distance, selectable}`, the node being the actor rather than its model,
   /// `selectable` what a click selects (0: the locked ground).
   pub fn pick_ray(&self, ray: &Ray, args: &Value) -> Value {
-    let flag = |k: &str, d: bool| args.get(k).and_then(Value::as_bool).unwrap_or(d);
-    let f = PickFilter {
-      render: flag("render", true),
-      actors: flag("actors", self.view.actors),
-      collision: flag("collision", false),
-      navmesh: flag("navmesh", self.view.navmesh),
-      include_locked: flag("include_locked", true),
-      exclude_list: args
-        .get("exclude")
-        .and_then(|e| serde_json::from_value(e.clone()).ok())
-        .unwrap_or_default(),
-    };
+    let f = self.pick_filter(args);
     let ray = Ray::new(ray.o, normalize(ray.d));
     let h = pick(&self.scene, &ray, &f);
     if !h.hit() {

@@ -90,7 +90,9 @@ The plugin serves the viewport's data on a URI scheme (`jle://localhost/<path>` 
 | `texture/<index>` | a texture of the document: `u32 width, u32 height`, RGBA bytes |
 | `materials` | JSON: the document's materials (texture, color, alpha, blend, cutoff, two sides) |
 | `tod/<node id>` | the node's game lighting: its palette (8 RGBA per color) and the color of each vertex |
-| `thumb/<key>` | a cached thumbnail (PNG) |
+| `thumb/<name>` | a thumbnail the interface drew before (PNG of <preferences>/thumbs), 404 until then |
+| `preview/<kind>?...` | what a thumbnail draws: a mesh with its own materials and textures (`JLEP`) |
+| `palette?game=&background=&name=` | the image of a texture of the games, as `texture/<index>` |
 | `asset?path=` | a file of the library (a model's .glb for a preview, a sprite) |
 
 `scene` (format `JLES` 1): `u32 magic "JLES"`, `u32 version`, `u32 full (1) or delta (0)`,
@@ -108,6 +110,28 @@ distance)` followed by its arrays `f32 pos[3n]`, `f32 nrm[3n]`, `f32 uv[2n]` (if
 `materials`: `{"materials": [...], "textures": [{"version": n}, ...]}`, each material `{name,
 texture, base_color, alpha: "opaque"|"mask"|"blend", blend: ""|"add"|"add_alpha"|"subtract"|"half",
 cutoff, double_sided, translucent, water}`.
+
+### The panels' pictures
+
+The catalog's and the prefabs' pictures are drawn by the interface (`ui/render/thumbnails.ts`, 128
+pixels, the C++ framing: a 3/4 view) in a WebGL2 context of its own, from `preview/<kind>`:
+`model?path=` (a model or a prefab of the library), `part?path=<a level's background>&node=<the node
+whose mesh it is>`, `level?path=<a level's background>` (all of it, from above, its textures
+shrunk), `icon?etype=&family=` (an object of the game without a model) or `shape?preset=`. The
+effects are drawn from the game's particles (`particle_thumb.ts`). A picture drawn is kept with
+`call("thumb_store", {name, png})` (base64), `name` being the FNV-1a 64 of its key in hexadecimal
+(`m:<path>@<stamp>`, `p:<path>#<node>@<stamp>`, `b:<path>@<stamp>` a level,
+`i1:<etype>#<family>`, `e2:<group>@0`, `s:<preset>`), and asked first as `thumb/<name>`.
+
+`preview/<kind>` (format `JLEP` 1): `u32 magic "JLEP"`, `u32 version`, `u32 json bytes`, the JSON
+(padded with spaces to 4 bytes: `{materials, textures: [{version}], bounds: {lo, hi}, draws:
+[{mesh, world}]}`, the materials as `materials` gives them, `bounds` what the picture frames,
+`draws` where each mesh is drawn), `u32 meshes`, then each `u32 bytes` and the mesh (`JLEM`, its
+materials indexing the package's), `u32 textures`, then each texture as `texture/<index>`: `u32
+width, u32 height`, RGBA bytes.
+
+`palette?...` waits while the engine reads the texture (a level's file once for all the textures
+asked of it); 404 when that level has no such texture.
 
 ### Game view
 

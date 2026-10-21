@@ -718,9 +718,11 @@ fn editor_calls() {
       && ed.gizmo.snap.translate == 0.5
       && !ed.view.grid
   );
-  assert!(
-    ed.call("start_terrain_brush", &json!({})).is_err() && ed.call("nope", &json!({})).is_err()
-  );
+  // the terrain brush on a document, off again; an unknown call refused
+  assert_eq!(ed.call("start_terrain_brush", &json!({})), Ok(json!(true)));
+  assert_eq!(ed.tool, ToolMode::Terrain);
+  ed.call("stop_terrain_brush", &json!({})).unwrap();
+  assert!(ed.tool == ToolMode::Select && ed.call("nope", &json!({})).is_err());
 }
 
 #[test]

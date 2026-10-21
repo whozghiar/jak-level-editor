@@ -35,7 +35,8 @@ export type Tool = "select" | "place" | "topology" | "terrain";
 export type GizmoMode = "translate" | "rotate" | "scale";
 
 const defaults = () => ({
-  document: { open: false, title: "", project_path: "", unsaved: false },
+  // level: the level opened (settings.level); replaces: the game's level it replaces (Level > Replace)
+  document: { open: false, title: "", project_path: "", unsaved: false, level: "", replaces: "" },
   projects_root: "",
   recent_projects: [] as string[],
   history: { can_undo: false, can_redo: false, undo_label: "", redo_label: "" },

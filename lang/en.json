@@ -662,6 +662,7 @@
   "export.install": "README.md, at the top of that folder, says how to bring it into the game: the folders to copy into jak-project, the lines to add to its code (game.gp, level-info.gc), how to build it and go there.",
   "export.open_folder": "Open the folder",
   "export.open_readme": "Open the README",
+  "export.dense_go": "The densest places of the floors (meters: triangles): click one, the camera goes there.",
   "export.note.collision_from_decor": "%zu elements collide by their shape (the builder makes it, with automatic walls): the ones placed, and the levels without the game's collision.",
   "export.note.collision_taken_out": "%zu triangles of the game's collision taken out where pieces of the decor are no longer (%s pieces deleted, moved or hidden): what was opened is open in the game too.",
   "export.note.collision_dense": "%zu places of the floors where Jak meets more collision triangles than the game gathers at once (461): he can fall through the floor there. Keep the game's collision, or fewer small pieces there. The densest (meters: triangles): %s",

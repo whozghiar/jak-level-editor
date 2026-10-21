@@ -14,9 +14,6 @@ use crate::io::nav_export::export_navmeshes;
 use crate::scene::{LevelSettings, NodeKind, Scene};
 use crate::{log_error, log_info, log_warn};
 
-/// the ids the exported nav meshes take (App::nav_first_aid)
-pub const K_NAV_FIRST_AID: u32 = 60000;
-
 impl Editor {
   /// An empty document (app.cpp new_document)
   pub fn new_document(&mut self) {
@@ -145,13 +142,13 @@ impl Editor {
   /// The project's .glb and its nav meshes for the game next to it (none: the file of an earlier
   /// save goes).
   pub fn save_project_files(&mut self, glb_path: &str) -> Result<(), String> {
-    // ponytail: an animation preview is stopped here when the preview tool comes
+    self.stop_preview(); // the model as it is, not as the preview draws it
     save_project(&self.scene, glb_path)?;
     let p = Path::new(glb_path);
     let stem = p.file_stem().unwrap_or_default().to_string_lossy();
     let nav = p.with_file_name(format!("{stem}-nav.json"));
     if self.scene.nodes.iter().any(|n| n.kind == NodeKind::NavMesh) {
-      if let Err(e) = export_navmeshes(&self.scene, &nav, K_NAV_FIRST_AID) {
+      if let Err(e) = export_navmeshes(&self.scene, &nav, self.nav.first_aid) {
         log_warn!(tr("log.navmesh_export_failed"), e);
       }
     } else if nav.exists() {
