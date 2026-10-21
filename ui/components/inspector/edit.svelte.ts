@@ -97,3 +97,25 @@ export function commit(
 export { button, check, heading, muted, small } from "../common/classes";
 export const field =
   "min-w-0 rounded border border-[#2a2a2a] bg-[#0b0b0b] px-1.5 py-0.5 text-sm text-neutral-200 outline-none focus:border-orange-600";
+
+/** use:escapeReverts on a field applied by its change event (Enter, leaving it): Escape gives it back
+ * the value it had when it was entered, nothing applied (ImGui's InputText). */
+export function escapeReverts(el: HTMLInputElement) {
+  let at = el.value;
+  const focus = () => (at = el.value);
+  const key = (e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    el.value = at; // as it was when focused: leaving it fires no change
+    el.blur();
+  };
+  el.addEventListener("focus", focus);
+  el.addEventListener("keydown", key);
+  return {
+    destroy() {
+      el.removeEventListener("focus", focus);
+      el.removeEventListener("keydown", key);
+    },
+  };
+}

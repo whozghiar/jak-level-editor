@@ -115,6 +115,8 @@ class SelectTool {
   private info_busy = false;
   private mouse: Vec2 = [-1, -1];
   private over = false; // the cursor over the view, nothing above it (m_mouse_over_vp)
+  // the topology tool: what the cursor points at, for the right button (no hover there)
+  private under = 0;
   private shift = false;
   private ctrl = false;
   private last_press = { time: -1, at: [0, 0] as Vec2, count: 0 };
@@ -162,6 +164,11 @@ class SelectTool {
     return engine.state.tool === "select";
   }
 
+  // the topology tool: the right button on the selection turns it too (start_free_rotation)
+  private topology(): boolean {
+    return engine.state.tool === "topology";
+  }
+
   /** On the viewport attached (Viewport.svelte); returns what detaches it. */
   attach(): () => void {
     const canvas = viewport.canvas!,
@@ -196,6 +203,10 @@ class SelectTool {
     });
     const key = (e: KeyboardEvent) => {
       this.mods(e);
+      // the mouse still: the drag's or the turn's Ctrl and Shift at once (the C++ reads them every
+      // frame)
+      if (this.moving) this.run(() => this.drag(this.mouse, [0, 0], e.shiftKey, e.ctrlKey));
+      if (this.free_rotating) this.freeMove(new MouseEvent("mousemove", { shiftKey: e.shiftKey, ctrlKey: e.ctrlKey }));
       if (this.lmb || this.hovered) viewport.requestRedraw();
     };
     on(window, "keydown", key, true);
@@ -265,6 +276,8 @@ class SelectTool {
     const active = this.active();
     if (c && (active || this.was_active))
       c.enabled = active && !this.moving && !this.free_rotating;
+    // the topology tool's, on its points: not while the element turns
+    else if (c && this.topology()) c.enabled = !this.free_rotating;
     this.was_active = active;
   }
 
@@ -324,7 +337,8 @@ class SelectTool {
           this.hover_want = null;
           this.hover_cam = camKey(viewport.camera);
           const hit = await this.pick(at);
-          if (this.canHover()) this.setHovered(hit?.selectable ?? 0);
+          this.under = hit?.selectable ?? 0;
+          if (this.canHover()) this.setHovered(this.under);
         }
       } finally {
         this.hover_busy = false;
@@ -420,6 +434,10 @@ class SelectTool {
       m[1] < h &&
       document.elementFromPoint(e.clientX, e.clientY) === viewport.canvas;
     this.mods(e);
+    if (this.topology()) {
+      if (this.over && !viewport.controls?.busy && !viewport.gizmo?.gizmo.active()) this.hover(m);
+      else this.under = 0;
+    }
     if (!this.active()) return;
     if (viewport.controls?.busy) return this.setHovered(0);
     // released while another button is held: no pointerup
@@ -611,12 +629,13 @@ class SelectTool {
 
   // the right button pressed on the selection (controls.hooks.rightPress): true when it turns it
   private startFreeRotation(): boolean {
+    const under = this.topology() ? this.under : this.hovered;
     if (
-      !this.active() ||
+      !(this.active() || this.topology()) ||
       viewport.gizmo?.gizmo.active() ||
       this.lmb ||
-      !this.hovered ||
-      !selected(this.hovered)
+      !under ||
+      !selected(under)
     )
       return false;
     const roots = store.selectionRoots();

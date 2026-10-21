@@ -72,8 +72,9 @@
   // the list again when what it shows changes (the index read, a level's decor read, the library)
   // (a value: the effect runs again when it changes, not at each state the engine sends)
   const catalogKey = $derived(JSON.stringify([s.catalog?.epoch, s.library_root]));
+  const empty = $derived(!!s.library_empty); // nothing asked (the levels chosen kept)
   $effect(() => {
-    if (tab === "materials") return;
+    if (tab === "materials" || empty) return;
     const args = {
       tab,
       jak2: game2,
@@ -84,7 +85,14 @@
     void catalogKey;
     const n = ++asked;
     call("catalog", args, true).then((r) => {
-      if (n === asked) got = r ? { ...r, tab: args.tab } : null;
+      if (n !== asked) return;
+      got = r ? { ...r, tab: args.tab } : null;
+      // a level no longer in the library (another library, the other game): every level (the C++
+      // clears m_decor_level, m_models_level)
+      if (typeof r?.level === "string" && r.level !== args.level) {
+        if (args.tab === "models") modelsLevel = r.level;
+        else if (args.tab === "decor") decorLevel = r.level;
+      }
     });
   });
 
@@ -146,14 +154,14 @@
 
   // the Materials tab: the pieces selected (not the actors' models)
   let pieces = $state<number[]>([]);
-  const piecesKey = $derived(JSON.stringify([s.selection.count, s.selection.primary, s.history.undo_label, s.history.can_undo]));
+  const piecesKey = $derived(JSON.stringify([s.selection.hash, s.history.revision]));
   $effect(() => {
     if (tab !== "materials") return;
     void piecesKey;
     call<number[]>("selection_meshes", {}, true).then((ids) => (pieces = ids ?? []));
   });
 
-  const indexing = $derived(engine.jobs["library_index"]);
+  const indexing = $derived(engine.jobs[game2 ? "library_index_jak2" : "library_index"]);
 </script>
 
 {#snippet cellBody(req: ThumbRequest | null, name: string, active: boolean)}
@@ -221,7 +229,7 @@
             <button
               class="block w-full"
               onclick={() => placeObject(o, false)}
-              onpointerdown={(e) => panelDrag(e, () => void placeObject(o, true))}
+              onpointerdown={(e) => panelDrag(e, o.name, () => void placeObject(o, true))}
             >
               {@render cellBody(objectThumb(o), o.name, placingObject(o))}
             </button>
@@ -250,7 +258,7 @@
             <button
               class="block w-full"
               onclick={() => placeModel(m, false)}
-              onpointerdown={(e) => panelDrag(e, () => void placeModel(m, true))}
+              onpointerdown={(e) => panelDrag(e, m.name, () => void placeModel(m, true))}
             >
               {@render cellBody({ kind: "model", path: m.path }, m.name, placingModel(m))}
             </button>
@@ -291,7 +299,7 @@
             <button
               class="block w-full"
               onclick={() => placePart(p, false)}
-              onpointerdown={(e) => panelDrag(e, () => void placePart(p, true))}
+              onpointerdown={(e) => panelDrag(e, p.part.name, () => void placePart(p, true))}
             >
               {@render cellBody({ kind: "part", path: p.background, node: p.part.mesh_node, stamp: p.stamp }, p.part.name, placingPart(p))}
             </button>

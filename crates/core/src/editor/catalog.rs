@@ -81,8 +81,8 @@ pub(crate) struct CatalogState {
   pub epoch: u64,
   /// the store's loads at the last poll
   pending: usize,
-  /// the index's progress last told
-  index_done: usize,
+  /// the indexes' progress last told (Jak 3's, Jak II's)
+  index_done: [usize; 2],
 }
 
 fn lower(s: &str) -> String {
@@ -127,7 +127,7 @@ impl Editor {
     c.store.clear();
     c.index.start(&self.library, &dir("jak3"), write);
     c.index_applied = false;
-    c.index_done = usize::MAX;
+    c.index_done = [usize::MAX; 2];
     c.palette.clear();
     c.palette_textures.clear();
     c.game_textures.clear();
@@ -415,32 +415,31 @@ impl Editor {
     self.after_change(&before);
   }
 
-  // the index's progress (the status bar, the Decor and Materials tabs)
+  // the indexes' progress (the status bar, the Decor and Materials tabs): Jak 3's, then Jak II's
+  // (job library_index_jak2)
   fn index_progress(&mut self) {
-    let c = &self.catalog;
-    let ready = c.index.ready();
-    let done = if ready {
-      c.index.total()
-    } else {
-      c.index.done()
-    };
-    if done == c.index_done {
-      return;
-    }
-    self.catalog.index_done = done;
-    let total = self.catalog.index.total();
-    let job = Job {
-      id: "library_index".into(),
-      label: strf!(tr("catalog.indexing"), done, total),
-      done,
-      total: total.max(1),
-      finished: ready,
-    };
-    self.emit("jle:progress", json!(job));
-    if ready {
-      self.jobs.remove(&job.id);
-    } else {
-      self.jobs.insert(job.id.clone(), job);
+    for jak2 in [false, true] {
+      let index = self.library_index(jak2);
+      let (ready, total) = (index.ready(), index.total());
+      let done = if ready { total } else { index.done() };
+      let told = &mut self.catalog.index_done[jak2 as usize];
+      if done == *told {
+        continue;
+      }
+      *told = done;
+      let job = Job {
+        id: ["library_index", "library_index_jak2"][jak2 as usize].into(),
+        label: strf!(tr("catalog.indexing"), done, total),
+        done,
+        total: total.max(1),
+        finished: ready,
+      };
+      self.emit("jle:progress", json!(job));
+      if ready {
+        self.jobs.remove(&job.id);
+      } else {
+        self.jobs.insert(job.id.clone(), job);
+      }
     }
   }
 
@@ -659,7 +658,9 @@ impl Editor {
           self.catalog.index_applied
         })
       {
-        return json!({"levels": levels, "indexing": {"done": index.done(), "total": index.total()}});
+        return json!({
+          "levels": levels, "level": "", "indexing": {"done": index.done(), "total": index.total()},
+        });
       }
       let shown: Vec<Value> = parts
         .iter()

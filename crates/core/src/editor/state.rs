@@ -88,10 +88,13 @@ impl Editor {
         "can_redo": self.history.can_redo(),
         "undo_label": self.history.undo_label(),
         "redo_label": self.history.redo_label(),
+        "revision": self.history.revision(),
       },
       "selection": {
         "count": self.selection.len(),
         "primary": primary,
+        // which nodes (the panels that follow the selection read again when it changes)
+        "hash": self.selection.iter().fold(super::fnv(0, primary as u64), |h, &id| super::fnv(h, id as u64)),
         "group": group,
         "level": self.level_of_node(primary),
         "topology_editable": self.topology_editable(primary),

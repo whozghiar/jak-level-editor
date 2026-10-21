@@ -71,7 +71,7 @@
   let answer = $state<any>(null);
   let asked = 0;
   // (a value: the effect runs again when it changes, not at each state the engine sends)
-  const listKey = $derived(JSON.stringify([s.catalog?.epoch, texLevel === "*" ? s.history.undo_label : 0]));
+  const listKey = $derived(JSON.stringify([s.catalog?.epoch, texLevel === "*" ? s.history.revision : 0]));
   $effect(() => {
     const args = { game: chosenGame, level: texLevel, filter: texFilter.toLowerCase() };
     // the document's textures change with it; the index once read
@@ -84,7 +84,7 @@
 
   // the texture of the material chosen, marked
   let current = $state("");
-  const historyKey = $derived(JSON.stringify([s.history.undo_label, s.history.can_undo]));
+  const historyKey = $derived(s.history.revision);
   $effect(() => {
     void historyKey;
     if (material < 0 || !ids.length) return void (current = "");
@@ -111,7 +111,7 @@
     call("set_material", { ids, slot: material, texture });
   }
 
-  const indexing = $derived(engine.jobs["library_index"]);
+  const indexing = $derived(engine.jobs[chosenGame === "jak2" ? "library_index_jak2" : "library_index"]);
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-2" style:height={height ? `${height}px` : undefined}>

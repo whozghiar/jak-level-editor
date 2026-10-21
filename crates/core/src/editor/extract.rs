@@ -144,6 +144,24 @@ pub fn extractor_path(resource_dir: Option<&Path>) -> String {
   )
 }
 
+/// Where ogle-extract is looked for (the Extract window's help when it is missing): the folders of
+/// `extractor_path`, then JLE_EXTRACTOR's path when it is set
+pub fn extractor_places(resource_dir: Option<&Path>) -> Vec<String> {
+  let env =
+    std::env::var_os("JLE_EXTRACTOR").map(|e| format!("JLE_EXTRACTOR={}", e.to_string_lossy()));
+  let mut places: Vec<String> = Vec::new();
+  for d in extractor_dirs(resource_dir) {
+    // as the user writes it (Windows' resources come as \\?\D:\...), once
+    let d = d.to_string_lossy();
+    let d = d.strip_prefix(r"\\?\").unwrap_or(&d).to_string();
+    if !places.contains(&d) {
+      places.push(d);
+    }
+  }
+  places.extend(env);
+  places
+}
+
 /// The game's tables of ogle-extract (ogle-extract-data/), looked for as `extractor_path`; "" when
 /// missing.
 pub fn extractor_data_path(resource_dir: Option<&Path>) -> String {
@@ -442,8 +460,8 @@ impl Extraction {
   /// The window's first values (open_extract_window, open_dialog): `source`, the disc chosen last
   /// (the preferences' `extract_source`); `output`, the library folder (`library_root`, else
   /// default_library_root()); `library` {root, levels} when one is loaded (`library_levels`);
-  /// `iso_dir` where the disc dialogs start; `extractor_found`, `extractor_dir` (where it should be).
-  /// The folders the dialogs start in are created, as the C++ editor did.
+  /// `iso_dir` where the disc dialogs start; `extractor_found`, `extractor_dirs` (where it is
+  /// looked for). The folders the dialogs start in are created, as the C++ editor did.
   pub fn defaults(&self, extract_source: &str, library_root: &str, library_levels: usize) -> Value {
     let output = if library_root.is_empty() {
       default_library_root()
@@ -468,7 +486,7 @@ impl Extraction {
       "library": (library_levels > 0).then(|| json!({ "root": library_root, "levels": library_levels })),
       "iso_dir": iso_dir,
       "extractor_found": !extractor_path(self.resource_dir.as_deref()).is_empty(),
-      "extractor_dir": exe_dir().unwrap_or_default().to_string_lossy(),
+      "extractor_dirs": extractor_places(self.resource_dir.as_deref()),
     })
   }
 }
@@ -525,6 +543,17 @@ fn read_output(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn extractor_places_as_written() {
+    let dir = r"C:\Program Files\host\jak-level-editor";
+    let twice = extractor_places(Some(Path::new(&format!(r"\\?\{dir}"))));
+    assert!(twice.iter().any(|p| p == dir), "{twice:?}");
+    assert!(twice.iter().all(|p| !p.starts_with(r"\\?\")));
+    let mut unique = twice.clone();
+    unique.dedup();
+    assert_eq!(unique.len(), twice.len());
+  }
 
   #[test]
   fn extract_lines() {

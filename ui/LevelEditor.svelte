@@ -38,7 +38,9 @@
   import { registry, windows } from "./lib/windows.svelte";
   import Viewport from "$level-editor/render/Viewport.svelte";
 
-  // embedded: the launcher mounts it (its window has its own frame); locale: the launcher's ("fr-FR")
+  // embedded: a host that frames the window and gives the editor a box of a fixed height (no title
+  // bar of its own; the launcher's window has no frame: it mounts it without); locale: the host's
+  // ("fr-FR"), for the session only (the standalone editor's language stays the one chosen)
   let { embedded = false, locale }: { embedded?: boolean; locale?: string } = $props();
 
   // the launcher's locale goes to the engine; else the engine's language wins (the session's --lang,
@@ -47,7 +49,7 @@
     const code = initLanguage(locale);
     untrack(() =>
       locale
-        ? call("set_language", { code }, true)
+        ? call("set_language", { code, keep: false }, true)
         : call<{ language?: string }>("get_state", {}, true).then((s) => s?.language && setLanguage(s.language)),
     );
   });
@@ -64,6 +66,8 @@
     const offs: (() => void)[] = [];
     // the remote control's search for holes shows in the Holes window (show_gaps_window = true)
     offs.push(onEngine("jle:changed", (p) => p?.show_gaps && !windows.isOpen("gaps") && windows.open("gaps")));
+    // an extraction finished: the Levels panel shows what was written (left_tab_request = 0)
+    offs.push(onEngine("jle:changed", (p) => p?.extracted && (ui.leftTab = "levels")));
     const keep = (p: Promise<() => void>) => p.then((off) => (alive ? offs.push(off) : off()));
     const win = getCurrentWindow();
     // closing the window (its cross, File > Quit, Alt+F4) asks first when there are unsaved changes
@@ -71,6 +75,8 @@
       win.onCloseRequested((e) => {
         e.preventDefault();
         confirmDiscard(async () => {
+          // "Don't save": the engine may outlive the window (the launcher): the changes go
+          if (engine.state.document.unsaved) await call("close_document");
           await Promise.all(offs.map((off) => off()));
           offs.length = 0;
           await win.close();
@@ -82,8 +88,7 @@
       getCurrentWebview().onDragDropEvent((e) => {
         if (e.payload.type !== "drop" || !e.payload.paths.length) return;
         const path = e.payload.paths[0];
-        if (/\.(glb|gltf)$/i.test(path)) openProjectFile(path);
-        else if (!/\.[^\\/.]+$/.test(path)) call("set_library", { path });
+        void call<string>("drop_path", { path }).then((r) => r === "file" && openProjectFile(path));
       }),
     );
     return () => {
@@ -250,7 +255,9 @@
         onclose={() => windows.close(w.id, true)}
         onfocus={() => windows.focus(w.id)}
       >
-        <def.component {...w.props} />
+        {#key w.opened}
+          <def.component {...w.props} />
+        {/key}
       </Window>
     {/each}
   </div>

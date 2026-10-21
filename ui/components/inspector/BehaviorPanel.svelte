@@ -10,6 +10,7 @@
   import {
     check,
     commit,
+    escapeReverts,
     field,
     heading,
     live,
@@ -156,6 +157,7 @@
         <div class="flex items-center gap-2">
           <span class={label}>{t("behavior.door.loads")}</span>
           <input
+            use:escapeReverts
             class="{field} flex-1"
             value={beh.loads ?? ""}
             placeholder={t("behavior.door.loads.none")}
@@ -311,6 +313,7 @@
                 />
               {:else if p.kind === "floats" || p.kind === "ints"}
                 <input
+                  use:escapeReverts
                   class="{field} w-full"
                   value={v.map(g).join(" ")}
                   onchange={(e) => list(p, e.currentTarget.value)}
@@ -353,6 +356,7 @@
                   </select>
                 {:else}
                   <input
+                    use:escapeReverts
                     type="number"
                     step="1"
                     class="{field} w-full text-right"
@@ -364,6 +368,7 @@
               {:else if p.kind === "symbol" || p.kind === "string"}
                 {@const s = typeof p.value === "string" ? p.value : ""}
                 <input
+                  use:escapeReverts
                   class="{field} w-full"
                   value={p.kind === "symbol" ? s.replace(/^'/, "") : s}
                   onchange={(e) =>
@@ -405,6 +410,7 @@
                     >{/each}
                 </select>
                 <input
+                  use:escapeReverts
                   type="number"
                   class="{field} w-[35%] text-right"
                   value={amount}

@@ -99,11 +99,7 @@ export function attachPlaceTool(): () => void {
     if (drag) {
       const k = e.shiftKey ? 0.25 : 1;
       drag.px = [drag.px[0] + e.movementX * k, drag.px[1] + e.movementY * k];
-      const at = col3(drag.anchor, 3);
-      const o = dragOffset(viewport.camera, viewport.size()[1], drag.px, at, ctrl, engine.state.gizmo.snap);
-      matrix = matMul(translate(o), drag.anchor);
-      viewport.requestRedraw();
-      return;
+      return dragged();
     }
     if (over) void ask();
     else if (matrix) {
@@ -111,6 +107,24 @@ export function attachPlaceTool(): () => void {
       viewport.requestRedraw();
     }
   });
+
+  function dragged() {
+    if (!drag) return;
+    const at = col3(drag.anchor, 3);
+    const o = dragOffset(viewport.camera, viewport.size()[1], drag.px, at, ctrl, engine.state.gizmo.snap);
+    matrix = matMul(translate(o), drag.anchor);
+    viewport.requestRedraw();
+  }
+
+  // Ctrl and Shift pressed or let go, the mouse still: at once (the C++ reads them every frame)
+  const key = (e: KeyboardEvent) => {
+    if (e.key !== "Control" && e.key !== "Shift") return;
+    ctrl = e.ctrlKey;
+    if (drag) dragged();
+    else if (turning) turn(0, 0, e.shiftKey, e.ctrlKey);
+  };
+  on(window, "keydown", key);
+  on(window, "keyup", key);
 
   // a click places (the left button held first: raised, moved); in the capture phase, before the
   // select tool
@@ -145,10 +159,11 @@ export function attachPlaceTool(): () => void {
       panel = true;
       return;
     }
-    if (what !== "end" || !panel) return;
+    if ((what !== "end" && what !== "cancel") || !panel) return;
     panel = false;
-    // where the pointer is let go (the preview's answer may not be there yet after a quick drag)
-    if (over) call("place_at", { ...viewport.rayFromMouse(mouse[0], mouse[1]) }).catch((err) => console.warn("[place]", err));
+    // where the pointer is let go (the preview's answer may not be there yet after a quick drag);
+    // let go outside the window: nothing
+    if (what === "end" && over) call("place_at", { ...viewport.rayFromMouse(mouse[0], mouse[1]) }).catch((err) => console.warn("[place]", err));
     else void call("stop_placement");
     matrix = null;
     viewport.requestRedraw();
@@ -167,15 +182,16 @@ export function attachPlaceTool(): () => void {
     lockPointer(canvas, () => !!turning);
     return true;
   };
-  on(window, "mousemove", (e) => {
+  on(window, "mousemove", (e) => turn(e.movementX, e.movementY, e.shiftKey, e.ctrlKey));
+  function turn(dx: number, dy: number, shift: boolean, ctrl: boolean) {
     if (!turning || !matrix) return;
-    const k = e.shiftKey ? 0.002 : 0.008; // radians per pixel
-    turning.yaw += e.movementX * k;
-    turning.pitch += e.movementY * k;
+    const k = shift ? 0.002 : 0.008; // radians per pixel
+    turning.yaw += dx * k;
+    turning.pitch += dy * k;
     let yaw = turning.yaw,
       pitch = turning.pitch;
     const snap = engine.state.gizmo.snap;
-    if (snap.enabled !== e.ctrlKey && snap.rotate_deg > 0) {
+    if (snap.enabled !== ctrl && snap.rotate_deg > 0) {
       const s = radians(snap.rotate_deg);
       yaw = round(yaw / s) * s;
       pitch = round(pitch / s) * s;
@@ -185,7 +201,7 @@ export function attachPlaceTool(): () => void {
     // the preview where it was, turned (the cursor does not move it while it turns)
     matrix = matMul(matMul(translate(col3(matrix, 3)), rotate(turning.tilt)), rotate(axisAngle(Y, p()?.yaw ?? 0)));
     viewport.requestRedraw();
-  });
+  }
   on(window, "mouseup", (e) => {
     if (e.button !== 2 || !turning) return;
     const tilt = turning.tilt;

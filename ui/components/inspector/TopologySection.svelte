@@ -88,6 +88,7 @@
       <Tip text={t("topology.extrude.tip")} placement="left" />
       <DragNumber
         class="w-24"
+        disabled={none}
         value={extrude}
         step={0.05}
         min={-100}

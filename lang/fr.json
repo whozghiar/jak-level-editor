@@ -510,7 +510,7 @@
   "extract.title": "Extraire les données du jeu",
   "extract.intro": "L'éditeur lit les niveaux de votre propre copie de Jak 3 : l'image (.iso) de votre disque, ou le dossier d'un disque déjà extrait (par exemple iso_data/jak3 d'OpenGOAL). Rien du jeu n'est fourni avec l'éditeur.",
   "extract.missing": "ogle-extract n'est pas à côté de l'éditeur.",
-  "extract.missing.help": "Il se compile depuis extractor/ (CMake) et s'installe à côté de l'éditeur, ou dans ses ressources : %s",
+  "extract.missing.help": "Il se compile depuis extractor/ (CMake), puis se place avec son dossier ogle-extract-data/ dans l'un de ces dossiers ; ou la variable d'environnement JLE_EXTRACTOR donne son chemin :",
   "extract.already": "Déjà extrait : %zu niveaux dans %s",
   "extract.disc": "1. Votre disque de Jak 3",
   "extract.disc.hint": "fichier .iso ou dossier du disque",

@@ -12,7 +12,6 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { Progressbar } from "flowbite-svelte";
   import { onMount } from "svelte";
-  import { ui } from "../../lib/actions.svelte";
   import { has, t } from "../../lib/i18n";
   import { call, onEngine } from "../../lib/rpc";
 
@@ -44,7 +43,7 @@
     library: { root: string; levels: number } | null;
     iso_dir: string;
     extractor_found: boolean;
-    extractor_dir: string;
+    extractor_dirs: string[]; // where it is looked for
   };
 
   let ex = $state<Extraction>();
@@ -74,11 +73,7 @@
   );
 
   function show(s: Extraction | undefined) {
-    if (!s) return;
-    // done: the Levels panel shows what was written (<library>/jak3)
-    if (ex?.running && !ex.detecting && !s.running && s.finished)
-      ui.leftTab = "levels";
-    ex = s;
+    if (s) ex = s;
   }
 
   const refresh = async () =>
@@ -150,9 +145,10 @@
 
 {#if defaults && !defaults.extractor_found}
   <p class={bad}>{t("extract.missing")}</p>
-  <p class="mt-1 text-sm text-neutral-400">
-    {t("extract.missing.help", defaults.extractor_dir)}
-  </p>
+  <p class="mt-1 text-sm text-neutral-400">{t("extract.missing.help")}</p>
+  <ul class="mt-1 list-disc pl-5 text-sm break-all text-neutral-400">
+    {#each defaults.extractor_dirs as dir}<li>{dir}</li>{/each}
+  </ul>
 {:else if defaults}
   <div class="flex flex-col gap-4 text-sm">
     <div>

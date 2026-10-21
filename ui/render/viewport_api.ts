@@ -129,6 +129,7 @@ class ViewportApi {
       store,
       project: this.project,
       size: () => this.size(),
+      cameraBusy: () => !!this.controls?.busy,
       requestRedraw: () => this.requestRedraw(),
       addOverlay2d: (fn) => this.addOverlay2d(fn),
     });

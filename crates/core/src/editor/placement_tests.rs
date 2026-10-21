@@ -243,6 +243,32 @@ fn placing_and_prefabs() {
 }
 
 #[test]
+fn delete_prefab_only_in_its_folder() {
+  let tmp = temp_dir("editor-delete-prefab");
+  let folder = tmp.join("prefabs");
+  std::fs::create_dir_all(&folder).unwrap();
+  let mine = folder.join("mine.glb");
+  let outside = tmp.join("other.glb");
+  for f in [&mine, &outside] {
+    std::fs::write(f, b"glTF").unwrap();
+  }
+  let mut ed = Editor::new();
+  ed.write_prefs = false;
+  ed.placing.prefab_dir_override = folder.to_string_lossy().into();
+  let delete = |ed: &mut Editor, p: &std::path::Path| {
+    ed.call("delete_prefab", &json!({"path": p.to_string_lossy()}))
+  };
+  // outside the folder, also through "..": refused, the file kept
+  assert!(delete(&mut ed, &outside).is_err() && outside.exists());
+  assert!(delete(&mut ed, &folder.join("..").join("other.glb")).is_err() && outside.exists());
+  assert!(delete(&mut ed, &folder).is_err() && folder.exists());
+  assert!(delete(&mut ed, &folder.join("missing.glb")).is_err());
+  delete(&mut ed, &mine).unwrap();
+  assert!(!mine.exists());
+  let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn catalog_of_the_real_library() {
   let Some(root) = real_library() else {
     eprintln!("skipped: no library/jak3/library.json");

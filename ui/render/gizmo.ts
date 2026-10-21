@@ -685,6 +685,7 @@ export interface GizmoHost {
   store: SceneStore;
   project: Project;
   size(): Vec2; // CSS pixels
+  cameraBusy(): boolean; // the camera moves: no gizmo (viewport_interaction returns before the tools)
   requestRedraw(): void;
   addOverlay2d(fn: (ctx: CanvasRenderingContext2D) => void): () => void;
 }
@@ -740,9 +741,24 @@ export class GizmoController {
       },
       false,
     );
+    // Ctrl and Shift pressed or let go during a drag, the mouse still: at once (the C++ reads them
+    // every frame)
+    const key = (e: KeyboardEvent) => {
+      const m = this.last_event;
+      if (!m || !this.gizmo.active() || (e.key !== "Control" && e.key !== "Shift")) return;
+      const { clientX, clientY, buttons, pointerId, pointerType } = m;
+      this.event(
+        new PointerEvent("pointermove", { clientX, clientY, buttons, pointerId, pointerType, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey }),
+        false,
+      );
+    };
+    for (const type of ["keydown", "keyup"] as const) {
+      window.addEventListener(type, key);
+      this.off.push(() => window.removeEventListener(type, key));
+    }
     this.off.push(
       host.addOverlay2d((ctx) => {
-        const t = this.enabled ? this.targets() : null;
+        const t = this.enabled && !this.host.cameraBusy() ? this.targets() : null;
         if (t)
           this.gizmo.draw(ctx, this.host.camera, this.host.project, t.frame);
       }),
@@ -766,12 +782,16 @@ export class GizmoController {
       : null;
   }
 
+  private last_event: PointerEvent | null = null;
+
   private event(e: PointerEvent, pressed: boolean) {
     if (
       !this.enabled ||
+      (this.host.cameraBusy() && !this.gizmo.active()) ||
       (e.pointerType === "mouse" && pressed && e.button !== 0)
     )
       return;
+    this.last_event = e;
     const t = this.targets();
     if (!t) return;
     const r = this.host.canvas.getBoundingClientRect();

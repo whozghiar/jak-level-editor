@@ -5,7 +5,7 @@
   // task or an actor never stayed open).
   import { t } from "../../lib/i18n";
   import Tip from "../common/Tip.svelte";
-  import { field } from "./edit.svelte";
+  import { escapeReverts, field } from "./edit.svelte";
 
   type Value = { when?: string; arg?: string };
   let {
@@ -50,6 +50,7 @@
   {#if kind === "task"}
     <!-- a task node of the story: closed once the player did that step -->
     <input
+      use:escapeReverts
       class="{field} w-full"
       {list}
       value={arg}

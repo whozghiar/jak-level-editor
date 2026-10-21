@@ -14,6 +14,7 @@
     format,
     oninput,
     onchange,
+    disabled = false,
     class: cls = "",
   }: {
     value: number;
@@ -25,6 +26,7 @@
     format?: (v: number) => string;
     oninput?: (v: number) => void;
     onchange?: (v: number) => void;
+    disabled?: boolean; // ImGui's BeginDisabled
     class?: string;
   } = $props();
 
@@ -101,7 +103,8 @@
 {:else}
   <button
     type="button"
-    class="w-full min-w-0 cursor-ew-resize truncate rounded border border-[#2a2a2a] bg-[#0b0b0b] px-1 py-0.5 text-right text-sm text-neutral-200 tabular-nums hover:border-[#3a3a3a] {cls}"
+    {disabled}
+    class="w-full min-w-0 cursor-ew-resize truncate rounded border border-[#2a2a2a] bg-[#0b0b0b] px-1 py-0.5 text-right text-sm text-neutral-200 tabular-nums hover:border-[#3a3a3a] disabled:pointer-events-none disabled:opacity-50 {cls}"
     onpointerdown={down}
     onpointermove={move}
     onpointerup={up}

@@ -1,8 +1,8 @@
 <script lang="ts">
-  // The document's levels (the inspector's with nothing selected in ui_inspector, panels.cpp; the
-  // Levels panel shows them too): the one opened, the ones added (shown or not, framed, selected
-  // whole to move them, removed), the level of the game it replaces (ui_replace_section), the
-  // levels around it in the game to add, the levels shown with it, the mission layers.
+  // The document's levels (the inspector's with nothing selected in ui_inspector, panels.cpp): the
+  // one opened, the ones added (shown or not, framed, selected whole to move them, removed), the
+  // level of the game it replaces (ui_replace_section), the levels around it in the game to add,
+  // the levels shown with it, the mission layers.
   // Level > Replace scrolls to its section (ui.scrollToReplace).
   import { onMount, tick } from "svelte";
   import { ui } from "../../lib/actions.svelte";
@@ -67,7 +67,8 @@
     viewport.frame(j);
   }
 
-  // Level > Replace: its section scrolled to the top (both copies of it, then the request is done)
+  // Level > Replace: its section scrolled to the top (once the inspector shows it), then the
+  // request is done
   let section = $state<HTMLElement>();
   $effect(() => {
     if (!ui.scrollToReplace || !section) return;

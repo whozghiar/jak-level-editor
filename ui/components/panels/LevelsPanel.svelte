@@ -7,8 +7,8 @@
 
 <script lang="ts">
   // The Levels tab (ui_levels_panel, panels.cpp): the levels of the library (Jak 3's, or Jak II's
-  // once extracted), one loaded or added to the document at its place in the game's world; under
-  // them the document's levels (DocumentLevels, the inspector's section in the C++ editor).
+  // once extracted), one loaded or added to the document at its place in the game's world (the
+  // document's levels are the inspector's, with nothing selected).
   import { confirmDiscard } from "../../lib/actions.svelte";
   import { engine } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
@@ -16,7 +16,6 @@
   import { windows } from "../../lib/windows.svelte";
   import { button, check, input, muted, primary, small } from "../common/classes";
   import Tip from "../common/Tip.svelte";
-  import DocumentLevels from "./DocumentLevels.svelte";
   import Thumb from "./Thumb.svelte";
 
   type Level = {
@@ -144,9 +143,5 @@
     </span>
     <Tip text={t(chosen?.in_document ? "levels.add.in_document" : "levels.add.tip")} />
     <button class="{small} self-start" onclick={() => windows.open("extract")}>{t("levels.extract_more")}</button>
-
-    {#if s.document.open}
-      <div class="mt-2"><DocumentLevels /></div>
-    {/if}
   {/if}
 </div>

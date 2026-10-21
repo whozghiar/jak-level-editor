@@ -861,3 +861,28 @@ fn real_level_through_the_editor() {
     assert!(ed.level_in_document(&n));
   }
 }
+
+#[test]
+fn a_dropped_folder_is_the_library() {
+  // a folder with a dot in its name is a folder all the same (process_event)
+  let tmp = temp_dir("editor-drop");
+  let folder = tmp.join("my.library");
+  std::fs::create_dir_all(&folder).unwrap();
+  let file = tmp.join("level.glb");
+  std::fs::write(&file, b"glTF").unwrap();
+  let mut ed = editor();
+  let drop = |ed: &mut Editor, p: &Path| {
+    ed.call("drop_path", &json!({"path": p.to_string_lossy()}))
+      .unwrap()
+  };
+  let before = ed.library_root.clone();
+  assert_eq!(drop(&mut ed, &file), "file");
+  assert_eq!(ed.library_root, before);
+  assert_eq!(drop(&mut ed, &folder), "library");
+  assert!(
+    Path::new(&ed.library_root).ends_with("my.library"),
+    "{}",
+    ed.library_root
+  );
+  let _ = std::fs::remove_dir_all(&tmp);
+}

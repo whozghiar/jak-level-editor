@@ -130,7 +130,7 @@ impl Editor {
       }
       "get_state" => Ok(self.get_state()),
       "languages" => Ok(json!(i18n_languages())),
-      "set_language" => match self.set_language(s(a, "code")) {
+      "set_language" => match self.set_language(s(a, "code"), b(a, "keep").unwrap_or(true)) {
         true => done,
         false => Err(format!("no language '{}'", s(a, "code"))),
       },
@@ -143,6 +143,22 @@ impl Editor {
       "set_library" => {
         self.set_library(s(a, "path"));
         done
+      }
+      // the window closed without saving where the engine outlives it (the launcher): nothing
+      // open, as at the start
+      "close_document" => {
+        self.new_document();
+        done
+      }
+      // a path dropped on the window (process_event): a folder is taken as the library ("library"),
+      // a file is a project the interface opens ("file")
+      "drop_path" => {
+        let path = s(a, "path");
+        if !std::path::Path::new(path).is_dir() {
+          return Ok(json!("file"));
+        }
+        self.set_library(path);
+        Ok(json!("library"))
       }
 
       // ---- documents, projects, levels

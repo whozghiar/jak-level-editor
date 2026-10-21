@@ -16,7 +16,7 @@
   let there = $state<number[]>([]);
   // (a value: read again when it changes, not at each state the engine sends)
   const historyKey = $derived(
-    JSON.stringify([engine.state.history.undo_label, engine.state.history.can_undo, engine.state.document.open]),
+    JSON.stringify([engine.state.history.revision, engine.state.document.open]),
   );
   $effect(() => {
     void historyKey;

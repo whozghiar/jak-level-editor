@@ -27,15 +27,16 @@ export interface WindowDef {
   modal?: boolean; // over a dimmed editor, Esc closes it (the C++ popups)
   anchor?: "center" | "top-right"; // where it opens
   onclose?: () => void; // closed by the user (its cross, Esc)
+  fresh?: boolean; // opened while open: its content made again (the C++ open_export_window)
 }
 
 export const registry: Record<string, WindowDef> = {
   extract: { title: "extract.title", component: ExtractWindow, width: 640 }, // File > Extract game assets (extract.cpp)
-  export: { title: "export.title", component: ExportWindow, width: 560 }, // Level > Export for the game
+  export: { title: "export.title", component: ExportWindow, width: 560, fresh: true }, // Level > Export for the game
   navmesh: { title: "navmesh.title", component: NavMeshWindow, width: 430 }, // Level > Nav meshes
   gaps: { title: "gaps.title", component: GapsWindow, width: 460 }, // Level > Find holes (building_tools.cpp)
   game: { title: "game.title", component: GameWindow, width: 440, anchor: "top-right" }, // View > Sky, hour and weather (game_window.cpp)
-  guide: { title: "guide.title", component: GuideWindow, width: 780, height: 560 }, // Help, F1 (guide_panel.cpp)
+  guide: { title: "guide.title", component: GuideWindow, width: 980, height: 700 }, // Help, F1 (guide_panel.cpp)
   // the terrain brush's: open while the tool is (terrain_tool.cpp); closed, the brush ends
   terrain: {
     title: "terrain.title",
@@ -52,7 +53,7 @@ export const registry: Record<string, WindowDef> = {
   log: { title: "log.title", component: LogWindow, width: 760, height: 360 }, // View > Log
 };
 
-export type OpenWindow = { id: string; props: Record<string, any>; z: number };
+export type OpenWindow = { id: string; props: Record<string, any>; z: number; opened: number };
 
 class Windows {
   list = $state<OpenWindow[]>([]);
@@ -65,8 +66,9 @@ class Windows {
     if (w) {
       w.props = props;
       w.z = ++this.#top;
+      if (registry[id].fresh) w.opened++;
     } else {
-      this.list.push({ id, props, z: ++this.#top });
+      this.list.push({ id, props, z: ++this.#top, opened: 0 });
     }
   }
 

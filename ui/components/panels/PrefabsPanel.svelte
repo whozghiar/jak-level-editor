@@ -178,7 +178,7 @@
             class="block w-full"
             use:want={p}
             onclick={() => place(p, false)}
-            onpointerdown={(e) => p.made && panelDrag(e, () => void place(p, true))}
+            onpointerdown={(e) => p.made && panelDrag(e, p.name, () => void place(p, true))}
           >
             {@render cellBody(p)}
           </button>
@@ -212,7 +212,7 @@
           <button
             class="block w-full"
             onclick={() => place(p, false)}
-            onpointerdown={(e) => panelDrag(e, () => void place(p, true))}
+            onpointerdown={(e) => panelDrag(e, p.name, () => void place(p, true))}
             oncontextmenu={(e) => (e.preventDefault(), (menu = { p, x: e.clientX, y: e.clientY }))}
           >
             {@render cellBody(p)}

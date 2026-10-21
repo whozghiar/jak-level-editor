@@ -661,12 +661,15 @@ impl Editor {
     self.save_prefs(|p| p.library_root = root);
   }
 
-  /// The interface's language (and the log's, the assistant's answers), kept in the preferences.
-  pub fn set_language(&mut self, code: &str) -> bool {
+  /// The interface's language (and the log's, the assistant's answers), kept in the preferences
+  /// unless `keep` is off (a host application's: for the session only).
+  pub fn set_language(&mut self, code: &str, keep: bool) -> bool {
     if !i18n_select(code) {
       return false;
     }
-    self.save_prefs(|p| p.language = code.to_string());
+    if keep {
+      self.save_prefs(|p| p.language = code.to_string());
+    }
     true
   }
 
@@ -761,7 +764,8 @@ fn extraction_event(me: &Weak<Mutex<Editor>>, e: &extract::ExtractionEvent) {
       let before = ed.watch();
       ed.set_library(output);
       ed.after_change(&before);
-      ed.emit("jle:changed", json!({"state": true}));
+      // the interface selects the Levels tab (left_tab_request = 0), its window open or not
+      ed.emit("jle:changed", json!({"state": true, "extracted": true}));
     }
   }
 }

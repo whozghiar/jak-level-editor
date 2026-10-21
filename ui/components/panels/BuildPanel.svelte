@@ -83,7 +83,7 @@
             ? 'border-orange-500 bg-orange-500/15'
             : 'border-[#2a2a2a] bg-[#0b0b0b] hover:border-[#3a3a3a] hover:bg-[#1a1a1a]'}"
           onclick={() => place(p.name, false)}
-          onpointerdown={(e) => panelDrag(e, () => place(p.name, true))}
+          onpointerdown={(e) => panelDrag(e, name, () => place(p.name, true))}
         >
           <ToolDemo shape={p.name} width={52} height={52} />
           <span class="w-full truncate text-center text-[11px] text-neutral-400">{name}</span>

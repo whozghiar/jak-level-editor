@@ -9,8 +9,8 @@
 //       save; unsaved: history.revision() != saved_revision
 //   projects_root: <library>/projects (where File > Open starts)
 //   recent_projects: string[] (File > Recent projects, Prefs::recent_projects)
-//   history: { can_undo, can_redo, undo_label, redo_label }
-//   selection: { count, primary, group, level, topology_editable }
+//   history: { can_undo, can_redo, undo_label, redo_label, revision }
+//   selection: { count, primary, hash, group, level, topology_editable }
 //       group: group_of(primary), 0 none; level: level_of_node(primary); topology_editable(primary)
 //   clipboard_empty: nothing copied yet
 //   tool: "select" | "place" | "topology" | "terrain"
@@ -39,8 +39,8 @@ const defaults = () => ({
   document: { open: false, title: "", project_path: "", unsaved: false, level: "", replaces: "" },
   projects_root: "",
   recent_projects: [] as string[],
-  history: { can_undo: false, can_redo: false, undo_label: "", redo_label: "" },
-  selection: { count: 0, primary: 0, group: 0, level: 0, topology_editable: false },
+  history: { can_undo: false, can_redo: false, undo_label: "", redo_label: "", revision: 0 },
+  selection: { count: 0, primary: 0, hash: 0, group: 0, level: 0, topology_editable: false },
   clipboard_empty: true,
   tool: "select" as Tool,
   gizmo: {

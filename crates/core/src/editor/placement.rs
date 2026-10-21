@@ -629,7 +629,15 @@ impl Editor {
   }
 
   /// A prefab of mine deleted (the Prefabs panel's menu)
-  pub fn delete_prefab(&mut self, path: &str) {
+  /// Deletes a prefab of the prefab folder (a path elsewhere, or that is not there, is refused)
+  pub fn delete_prefab(&mut self, path: &str) -> Result<(), String> {
+    let inside = std::fs::canonicalize(path)
+      .ok()
+      .zip(std::fs::canonicalize(self.prefab_folder()).ok())
+      .is_some_and(|(file, folder)| file != folder && file.starts_with(folder));
+    if !inside {
+      return Err(format!("not a prefab of the prefab folder: {path}"));
+    }
     if self.placing.placement.path == path {
       self.stop_placement();
     }
@@ -641,6 +649,7 @@ impl Editor {
       .map(|s| s.to_string_lossy().into_owned())
       .unwrap_or_default();
     log_info!(tr("log.prefab_deleted"), stem);
+    Ok(())
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -968,10 +977,7 @@ impl Editor {
           "folder": !self.prefab_folder().is_empty(),
         }))
       }
-      "delete_prefab" => {
-        self.delete_prefab(s("path"));
-        done
-      }
+      "delete_prefab" => self.delete_prefab(s("path")).map(|_| Value::Null),
       "level_style" => Ok(self.level_style_call(s("level"))),
       _ => return None,
     };

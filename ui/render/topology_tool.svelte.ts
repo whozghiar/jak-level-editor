@@ -76,11 +76,13 @@ export function attachTopologyTool(): () => void {
         points = new Float32Array(view.points);
         pointsKey = key;
       } else if (key !== pointsKey) {
-        points = null;
-        pointsKey = "";
-        // the points of the mesh as it is now
+        // the points of the mesh as it is now (those drawn kept until they come: no blink)
         if (view && view.count <= 40000)
           queue.send("topology_view", { points: true });
+        else {
+          points = null;
+          pointsKey = "";
+        }
       }
       viewport.requestRedraw();
     },
@@ -135,12 +137,13 @@ export function attachTopologyTool(): () => void {
           const a = col3(s, c);
           return dot(col3(w, c), a) / Math.max(dot(a, a), 1e-12);
         });
-        queue.send("topology_drag", { frame, scale: k });
+        queue.send("topology_drag", { frame, scale: k, points: true });
       } else {
         // the move or the turn: w = delta * start
         queue.send("topology_drag", {
           frame,
           delta: Array.from(matMul(w, inverse(s))),
+          points: true, // the points follow the drag
         });
       }
     },
