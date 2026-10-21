@@ -43,13 +43,15 @@
     {:else}
       <p class="text-green-400">{t("navmesh.ok")}</p>
     {/if}
-    <button
-      class="self-start rounded border border-[#2a2a2a] bg-[#0b0b0b] px-3 py-1 text-sm hover:border-[#3a3a3a] hover:bg-[#1a1a1a] disabled:pointer-events-none disabled:opacity-50"
-      disabled={busy}
-      onclick={() => call("generate_navmesh", { node: id })}
+    <span class="inline-flex self-start"
+      ><button
+        class="rounded border border-[#2a2a2a] bg-[#0b0b0b] px-3 py-1 text-sm hover:border-[#3a3a3a] hover:bg-[#1a1a1a] disabled:pointer-events-none disabled:opacity-50"
+        disabled={busy}
+        onclick={() => call("generate_navmesh", { node: id })}
+      >
+        {t("navmesh.regenerate")}
+      </button></span
     >
-      {t("navmesh.regenerate")}
-    </button>
     <Tip text={t("navmesh.regenerate.tip")} placement="left" />
   </section>
 {/if}

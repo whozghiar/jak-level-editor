@@ -16,6 +16,7 @@ import {
   sub,
   type Vec3,
 } from "./math";
+import { shortcuts } from "../lib/shortcuts";
 import type { SceneStore } from "./scene_store";
 
 export interface ControlsHooks {
@@ -34,6 +35,26 @@ const typing = (e: Event) => {
   );
 };
 
+/**
+ * Locks the pointer to the view while `wanted()` (the cursor stays where it is, the mouse turns
+ * as far as wanted: SDL's relative mode); raw moves unless `raw` is false. The lock comes later
+ * than the press: one that arrives once the button is let go is given back at once.
+ */
+export function lockPointer(
+  el: HTMLElement,
+  wanted: () => boolean,
+  raw = true,
+): void {
+  const lock = (o?: object) =>
+    Promise.resolve((el as any).requestPointerLock?.(o));
+  (raw ? lock({ unadjustedMovement: true }).catch(() => lock()) : lock())
+    .then(() => {
+      if (!wanted() && document.pointerLockElement === el)
+        document.exitPointerLock();
+    })
+    .catch(() => {});
+}
+
 export class CameraControls {
   looking = false;
   panning = false;
@@ -42,6 +63,8 @@ export class CameraControls {
   private keys = new Set<string>();
   private orbit_pivot: Vec3 = [0, 0, 0];
   private orbit_dist = 1;
+  // the pivot known (picked after the press): the moves before it are not an orbit around another
+  private orbit_ready = false;
   private off: (() => void)[] = [];
 
   constructor(
@@ -96,12 +119,7 @@ export class CameraControls {
       // on the selection (or what is placed) the right button turns it, elsewhere it looks around
       if (this.hooks.rightPress?.(x, y, e)) return;
       this.looking = true;
-      // the cursor stays where it is: the mouse turns the view as far as wanted (raw moves, as
-      // SDL's relative mode)
-      const el = this.el as any;
-      const lock = (opts?: object) =>
-        Promise.resolve(el.requestPointerLock?.(opts));
-      lock({ unadjustedMovement: true }).catch(() => lock().catch(() => {}));
+      lockPointer(this.el as HTMLElement, () => this.looking);
       this.changed();
     } else if (e.button === 1 && !this.busy) {
       // middle button: pan
@@ -111,6 +129,7 @@ export class CameraControls {
       // Alt + left button: orbit around the selection or the point under the cursor
       e.preventDefault();
       this.orbiting = true;
+      this.orbit_ready = false;
       void this.startOrbit(x, y);
     }
   }
@@ -124,6 +143,7 @@ export class CameraControls {
     if (!this.orbiting) return;
     this.orbit_pivot = pivot;
     this.orbit_dist = Math.max(length(sub(pivot, this.cam.pos)), 0.5);
+    this.orbit_ready = true;
     this.cam.lookAt(pivot);
     this.changed();
   }
@@ -155,6 +175,7 @@ export class CameraControls {
         mul(cam.up(), dy * k),
       );
     } else if (this.orbiting) {
+      if (!this.orbit_ready) return;
       cam.yaw -= dx * 0.005;
       cam.pitch = clamp(cam.pitch - dy * 0.005, -1.55, 1.55);
       cam.pos = sub(this.orbit_pivot, mul(cam.forward(), this.orbit_dist));
@@ -175,6 +196,8 @@ export class CameraControls {
       cam.speed = clamp(cam.speed * Math.pow(1.2, wheel), 0.5, 2000);
       return;
     }
+    // the right button turning the selection, what is placed, raising the ground: not the camera
+    if (shortcuts.paused) return;
     if (this.hooks.wheel?.(wheel, e)) return;
     // wheel: move forward
     cam.pos = add(

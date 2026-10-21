@@ -105,7 +105,7 @@
               min={f.min}
               max={f.max}
               step={f.step}
-              value={(snap as any)[f.k]}
+              value={Math.round((snap as any)[f.k] * 100) / 100}
               onchange={(e) => {
                 const n = +e.currentTarget.value;
                 if (n >= f.min && n <= f.max) setSnap(f.k, n);

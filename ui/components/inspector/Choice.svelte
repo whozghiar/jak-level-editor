@@ -20,9 +20,12 @@
   let box = $state<HTMLElement>();
 </script>
 
+<!-- Esc closes the list (before the editor's key: select nothing) -->
 <svelte:window
   onpointerdown={(e) =>
     open && !box?.contains(e.target as Node) && (open = false)}
+  onkeydowncapture={(e) =>
+    open && e.key === "Escape" && (e.preventDefault(), (open = false))}
 />
 
 <div bind:this={box}>

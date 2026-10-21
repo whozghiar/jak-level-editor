@@ -47,6 +47,7 @@
   let el: HTMLDivElement;
   let x = $state(0);
   let y = $state(0);
+  // not seen before it is placed (still focusable: its fields take the keys when it opens)
   let placed = $state(false);
 
   function clamp() {
@@ -61,7 +62,7 @@
     if (anchor === "top-right") {
       // over the viewport's top right, left of the inspector
       x = p.clientWidth - el.offsetWidth - 344;
-      y = 96;
+      y = 20;
     } else {
       x = (p.clientWidth - el.offsetWidth) / 2;
       y = Math.max(0, (p.clientHeight - el.offsetHeight) / 3);
@@ -100,7 +101,7 @@
   style:width="{width}px"
   style:height={height ? `${height}px` : undefined}
   style:z-index={z}
-  style:visibility={placed ? undefined : "hidden"}
+  style:opacity={placed ? undefined : 0}
   onpointerdown={onfocus}
 >
   <!-- svelte-ignore a11y_no_static_element_interactions (dragged with the mouse) -->

@@ -32,8 +32,8 @@
   import PrefabsPanel from "./components/panels/PrefabsPanel.svelte";
   import { confirmDiscard, openProjectFile, quit, ui, type LeftTab } from "./lib/actions.svelte";
   import { engine, startEngine } from "./lib/engine.svelte";
-  import { initLanguage, t } from "./lib/i18n";
-  import { call, toasts } from "./lib/rpc";
+  import { initLanguage, setLanguage, t } from "./lib/i18n";
+  import { call, onEngine, toasts } from "./lib/rpc";
   import { handleShortcut } from "./lib/shortcuts";
   import { registry, windows } from "./lib/windows.svelte";
   import Viewport from "$level-editor/render/Viewport.svelte";
@@ -41,9 +41,15 @@
   // embedded: the launcher mounts it (its window has its own frame); locale: the launcher's ("fr-FR")
   let { embedded = false, locale }: { embedded?: boolean; locale?: string } = $props();
 
+  // the launcher's locale goes to the engine; else the engine's language wins (the session's --lang,
+  // else the one chosen before, else the system's: apply_options), the one shown first only a guess
   $effect.pre(() => {
     const code = initLanguage(locale);
-    untrack(() => call("set_language", { code }, true));
+    untrack(() =>
+      locale
+        ? call("set_language", { code }, true)
+        : call<{ language?: string }>("get_state", {}, true).then((s) => s?.language && setLanguage(s.language)),
+    );
   });
 
   const tauri = "__TAURI_INTERNALS__" in window;
@@ -56,6 +62,8 @@
     if (!tauri) return stop;
     let alive = true;
     const offs: (() => void)[] = [];
+    // the remote control's search for holes shows in the Holes window (show_gaps_window = true)
+    offs.push(onEngine("jle:changed", (p) => p?.show_gaps && !windows.isOpen("gaps") && windows.open("gaps")));
     const keep = (p: Promise<() => void>) => p.then((off) => (alive ? offs.push(off) : off()));
     const win = getCurrentWindow();
     // closing the window (its cross, File > Quit, Alt+F4) asks first when there are unsaved changes
@@ -227,8 +235,9 @@
     </div>
   </footer>
 
-  <!-- the floating windows, kept inside the editor under its title bar -->
-  <div class="pointer-events-none absolute inset-x-0 bottom-0 z-30 {embedded ? 'top-0' : 'top-8'}">
+  <!-- the floating windows, kept inside the editor under its toolbar (the title bar h-8, the menus
+       h-8, the toolbar h-11) -->
+  <div class="pointer-events-none absolute inset-x-0 bottom-0 z-30 {embedded ? 'top-[76px]' : 'top-[108px]'}">
     {#each windows.list as w (w.id)}
       {@const def = registry[w.id]}
       <Window

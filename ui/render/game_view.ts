@@ -10,6 +10,7 @@
 // The game's depth is reversed (1 near, 0 far, GEQUAL) in OpenGL's usual -1..1 clip space: the
 // game's renderer uses no glClipControl, so its matrix gives WebGL2 the same depth it gives OpenGL.
 
+import { engine } from "../lib/engine.svelte";
 import type { Camera } from "./camera";
 import { call, engineReady, fetchBytes, onEngine } from "./engine";
 import {
@@ -18,6 +19,7 @@ import {
   dot,
   length2,
   normalize,
+  packRgba,
   radians,
   sub,
   type Mat4,
@@ -423,9 +425,16 @@ class GameView {
   private chunks = new Map<number, GpuChunk>(); // by id
   private palettes = new Map<number, WebGLTexture>(); // by key
   private cam: GameCamera | null = null;
-  private busy = false;
+  private busy: Promise<void> | null = null;
   private again = false;
   private stop_animation: (() => void) | null = null;
+  // a drag's pieces: left out of the chunks (the call game_view_filter), drawn by the editor's
+  // renderer where they go until the chunks come back with them (the C++ made the moved chunks
+  // again at once)
+  private dragged = new Set<number>();
+  private drag_key = "";
+  // a capture (viewport.capture): the game view at its hour, or none (on false)
+  private shot: { on: boolean; mood: GameMood | null } | null = null;
 
   // its passes in the viewport's frame and the engine's changes; returns what stops them
   attach(): () => void {
@@ -436,14 +445,25 @@ class GameView {
       viewport.addPass("translucent", (r) => this.drawTranslucent(r), {
         capture: true,
       }),
+      viewport.addPass("overlay", (r, rs) => this.drawRain(r, rs), {
+        capture: true,
+      }),
     ];
     viewport.waterLook = (look, rs) =>
-      rs.game_view && this.mood ? oceanLook(look, this.mood) : look;
+      rs.game_view && this.moodShown()
+        ? oceanLook(look, this.moodShown()!)
+        : look;
+    const hook = (hour: number | undefined, only: number[] | null) =>
+      hour === undefined ? Promise.resolve() : this.prepareCapture(hour, only);
+    viewport.captureHooks.push(hook);
+    offs.push(viewport.store.subscribe(() => this.followDrag()));
     let live = true;
     void engineReady.then(() => {
       if (!live) return;
       offs.push(
         onEngine("jle:changed", (p: any) => {
+          // another document: the old one's chunks not drawn meanwhile (their textures are gone)
+          if (p?.document) this.dropChunks();
           if (!this.on) return;
           if (!p || p.gameview || p.scene || p.document || p.materials)
             void this.refresh();
@@ -456,6 +476,7 @@ class GameView {
       live = false;
       offs.forEach((off) => off());
       viewport.waterLook = null;
+      viewport.captureHooks = viewport.captureHooks.filter((h) => h !== hook);
       this.setOn(false);
     };
   }
@@ -484,14 +505,80 @@ class GameView {
     }
   }
 
+  // A drag started or ended (the store's preview): its pieces left out of the chunks while it
+  // lasts; once it ended, drawn by the editor until the chunks have them where they went.
+  private followDrag() {
+    const p = viewport.store.preview;
+    const key = p.size ? `${p.size}:${p.keys().next().value}` : "";
+    if (key === this.drag_key) return;
+    this.drag_key = key;
+    if (!this.on && !this.dragged.size) return;
+    if (key) {
+      this.dragged = new Set(p.keys());
+      void call("game_view_filter", { hide: [...this.dragged] }).catch(
+        () => {},
+      );
+    } else {
+      const done = this.dragged;
+      void call("game_view_filter", {})
+        .then(() => this.refresh())
+        .catch(() => {})
+        .finally(() => {
+          if (this.dragged === done) this.dragged = new Set();
+          viewport.requestRedraw();
+        });
+    }
+  }
+
+  // The game view's part of a capture at that hour (-1: the editor's view) of some elements alone
+  // (only: null all): its mood and its chunks read first; returns what puts it back.
+  private async prepareCapture(
+    hour: number,
+    only: number[] | null,
+  ): Promise<() => void> {
+    if (hour < 0) {
+      this.shot = { on: false, mood: null };
+      return () => (this.shot = null);
+    }
+    const r = viewport.renderer;
+    const m = await call("game_mood", { hour }).catch(() => null);
+    const mood = (m?.times ? m : m?.mood) as GameMood | undefined;
+    if (!r || !mood?.times || !this.ready(r.gl)) {
+      this.shot = { on: false, mood: null };
+      return () => (this.shot = null);
+    }
+    if (only) await call("game_view_filter", { only }).catch(() => {});
+    await this.refresh();
+    this.shot = { on: true, mood };
+    return () => {
+      this.shot = null;
+      if (!only) return;
+      // what the drag left out, else everything again
+      const back = this.dragged.size ? { hide: [...this.dragged] } : {};
+      void call("game_view_filter", back)
+        .then(() => (this.on ? this.refresh() : undefined))
+        .catch(() => {});
+    };
+  }
+
+  // the mood drawn: a capture's while it is taken
+  private moodShown(): GameMood | null {
+    return viewport.capturing && this.shot ? this.shot.mood : this.mood;
+  }
+
   // The chunks again: those not had (by id and version) and their palettes read, those gone
-  // freed. One read at a time; what changes meanwhile is read right after.
-  async refresh() {
+  // freed. One read at a time; what changes meanwhile is read right after (the promise ends
+  // once it is).
+  refresh(): Promise<void> {
     if (this.busy) {
       this.again = true;
-      return;
+      return this.busy;
     }
-    this.busy = true;
+    this.busy = this.read().finally(() => (this.busy = null));
+    return this.busy;
+  }
+
+  private async read() {
     try {
       do {
         this.again = false;
@@ -523,8 +610,6 @@ class GameView {
       } while (this.again);
     } catch (e) {
       console.warn("[game view]", e);
-    } finally {
-      this.busy = false;
     }
   }
 
@@ -600,6 +685,16 @@ class GameView {
     this.palettes.set(key, tex);
   }
 
+  private dropChunks() {
+    const gl = this.gl;
+    if (!gl) return;
+    for (const c of this.chunks.values()) this.freeChunk(c);
+    for (const t of this.palettes.values()) gl.deleteTexture(t);
+    this.chunks.clear();
+    this.palettes.clear();
+    viewport.requestRedraw();
+  }
+
   private freeChunk(c: GpuChunk) {
     const gl = this.gl!;
     gl.deleteVertexArray(c.vao);
@@ -642,15 +737,17 @@ class GameView {
   }
 
   private active(r: Renderer): boolean {
-    return this.on && !!this.mood && this.ready(r.gl);
+    const on = viewport.capturing && this.shot ? this.shot.on : this.on;
+    return on && !!this.moodShown() && this.ready(r.gl);
   }
 
   // The decor's opaque and masked surfaces, after clearing the view to the sky and its depth the
   // game's way (0: far); what the editor draws next goes over it with the game's camera and depth.
   private drawOpaque(r: Renderer, rs: RenderSettings) {
+    r.editorDrawn = this.dragged;
     if (!this.active(r)) return;
     const gl = r.gl,
-      m = this.mood!;
+      m = this.moodShown()!;
     const vp = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const aspect = vp[2] / Math.max(vp[3], 1);
     this.cam = gameCamera(viewport.camera, aspect, m);
@@ -685,6 +782,43 @@ class GameView {
     this.render(r.gl, r, order, true);
   }
 
+  // The rain (draw_rain, game_window.cpp): streaks falling around the camera (the game's rain
+  // particles: launched around it, a few meters long, lit by the mood), as many as it is strong
+  private drawRain(r: Renderer, rs: RenderSettings) {
+    const m = this.moodShown();
+    const rain = engine.state.weather?.mood?.rain ?? 0;
+    if (!this.active(r) || !m || rain <= 0) return;
+    const a = m.light_ambient;
+    const light = clamp((a[0] + a[1] + a[2]) / 3, 0.2, 1);
+    const color = packRgba(
+      0.75 * light + m.flash,
+      0.8 * light + m.flash,
+      0.9 * light + m.flash,
+      0.35,
+    );
+    const count = Math.trunc(2500 * rain);
+    const box = 24,
+      height = 18,
+      speed = 16,
+      len = 0.7;
+    const c = viewport.camera.pos;
+    // the streaks stay put in the world as the camera moves (their cell follows it)
+    const cx = Math.floor(c[0] / (2 * box)) * 2 * box,
+      cz = Math.floor(c[2] / (2 * box)) * 2 * box;
+    for (let i = 0; i < count; i++) {
+      const x = (hash01(i * 3 + 1) - 0.5) * 2 * box,
+        z = (hash01(i * 3 + 2) - 0.5) * 2 * box;
+      const fall = (rs.time * speed + hash01(i * 3 + 3) * height) % height;
+      const q: Vec3 = [cx + x, c[1] + height * 0.5 - fall, cz + z];
+      if (q[0] - c[0] > box) q[0] -= 2 * box;
+      if (q[0] - c[0] < -box) q[0] += 2 * box;
+      if (q[2] - c[2] > box) q[2] -= 2 * box;
+      if (q[2] - c[2] < -box) q[2] += 2 * box;
+      r.line(q, [q[0] + 0.05, q[1] - len, q[2] + 0.02], color);
+    }
+    r.flush(true);
+  }
+
   private render(
     gl: WebGL2RenderingContext,
     r: Renderer,
@@ -694,7 +828,7 @@ class GameView {
     const p = this.prog!,
       u = p.u,
       c = this.cam!,
-      m = this.mood!;
+      m = this.moodShown()!;
     // first_tfrag_draw_setup
     gl.useProgram(p.p);
     gl.uniform1i(u.tex_T0, 0);
@@ -785,6 +919,17 @@ class GameView {
     gl.uniform1f(u.alpha_min, d.flags & DrawFlag.AlphaTest ? d.aref / 127 : 0);
     gl.uniform1f(u.alpha_max, 10);
   }
+}
+
+// a number of 0..1 for an integer (game_window.cpp hash01)
+function hash01(x: number): number {
+  x >>>= 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  x = Math.imul(x, 0x7feb352d) >>> 0;
+  x = (x ^ (x >>> 15)) >>> 0;
+  x = Math.imul(x, 0x846ca68b) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  return (x & 0xffffff) / 0x1000000;
 }
 
 export const gameView = new GameView();

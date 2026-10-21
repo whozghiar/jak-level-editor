@@ -1,8 +1,3 @@
-<script lang="ts" module>
-  // the level chosen for the style (C++ m_style_level; the engine keeps it too, for the terrain brush)
-  let styleLevel = $state("");
-</script>
-
 <script lang="ts">
   // The Build tab (ui_build_panel, ui_level_style in guide_panel.cpp): the shapes (a click places
   // one, again and again; dragged into the view, one), Snap, floors and walls in the style of a
@@ -29,11 +24,15 @@
   const placing = $derived(s.tool === "place" && s.placement?.kind === "shape" ? (s.placement?.name as string) : "");
 
   const place = (preset: string, once: boolean) => call("start_shape_placement", { preset, once });
+  // the level chosen for the style (C++ m_style_level): the engine's, shared with the terrain brush
+  const styleLevel = $derived((s.catalog?.style_level as string) ?? "");
 
   // ---- in the style of a level: its textures, their size, its light, its ground's bumps
+  // (a value: the effect runs again when it changes, not at each state the engine sends)
+  const libraryRoot = $derived(s.library_root as string);
   let library = $state<string[]>([]);
   $effect(() => {
-    void s.library_root;
+    void libraryRoot;
     call<{ levels: { name: string; listed: boolean }[] }>("list_levels", { jak2: false }, true).then((r) => {
       if (r) library = r.levels.filter((l) => l.listed).map((l) => l.name);
     });
@@ -106,7 +105,7 @@
       value={styleLevel}
       label={styleLevel || t("build.style.choose")}
       filter={t("build.style.filter")}
-      onselect={(l) => (styleLevel = l)}
+      onselect={(l) => call("level_style", { level: l })}
     />
     {#if style}
       <div class="mt-2 flex flex-col items-start gap-1.5">

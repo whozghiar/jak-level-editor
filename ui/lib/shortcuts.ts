@@ -25,7 +25,10 @@ export function handleShortcut(e: KeyboardEvent): void {
   const s = engine.state;
   const ctrl = e.ctrlKey || e.metaKey;
   const shift = e.shiftKey;
-  const k = e.key.toLowerCase();
+  // a letter of another alphabet (Cyrillic...): the key's Latin letter, as SDL's keycodes give it
+  const k = e.key.length === 1 && e.key.charCodeAt(0) > 127 && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : e.key.toLowerCase();
+  // [ and ]: the keys right of P too (ImGui reads them by their place: ^ and $ on AZERTY)
+  const bracket = k === "[" || e.code === "BracketLeft" ? "[" : k === "]" || e.code === "BracketRight" ? "]" : "";
   const sel = s.selection.count > 0;
   const tool = s.tool;
   if (ctrl && k === "z") call(shift ? "redo" : "undo");
@@ -43,8 +46,8 @@ export function handleShortcut(e: KeyboardEvent): void {
   else if (k === "escape") call("escape");
   else if (!ctrl && k === "b") call(tool === "terrain" ? "stop_terrain_brush" : "start_terrain_brush");
   else if (tool === "terrain" && !ctrl && k === "m") call("set_brush", { magnet: !s.brush.magnet });
-  else if (tool === "terrain" && (k === "[" || k === "]"))
-    call("set_brush", { size: Math.min(64, Math.max(0.5, s.brush.size * (k === "]" ? 1.25 : 0.8))) });
+  else if (tool === "terrain" && bracket)
+    call("set_brush", { size: Math.min(64, Math.max(0.5, s.brush.size * (bracket === "]" ? 1.25 : 0.8))) });
   else if (!ctrl && k === "t") call(tool === "topology" ? "stop_topology" : "start_topology");
   else if (tool === "place" && !ctrl && k === "r") call("turn_placement", { degrees: shift ? -45 : 45 });
   else if (k === "delete") call(tool === "topology" ? "topology_delete" : "delete_selection");

@@ -14,15 +14,20 @@
   let name = $state("");
   let texture = $state("");
   let there = $state<number[]>([]);
+  // (a value: read again when it changes, not at each state the engine sends)
+  const historyKey = $derived(
+    JSON.stringify([engine.state.history.undo_label, engine.state.history.can_undo, engine.state.document.open]),
+  );
   $effect(() => {
-    void [engine.state.history.undo_label, engine.state.history.can_undo, engine.state.document.open];
+    void historyKey;
     // the pieces it was opened for, while they are there
     Promise.all(ids.map((id) => call<{ name: string } | null>("node", { id }, true))).then((nodes) => {
       there = ids.filter((_, i) => nodes[i]);
       if (!there.length) return windows.close("textures");
       name = nodes.find(Boolean)!.name;
+      // the material of the first piece still there
+      call("materials", { ids: there }, true).then((m) => (texture = m?.slots?.[slot]?.texture?.name ?? ""));
     });
-    call("materials", { ids }, true).then((m) => (texture = m?.slots?.[slot]?.texture?.name ?? ""));
   });
 </script>
 

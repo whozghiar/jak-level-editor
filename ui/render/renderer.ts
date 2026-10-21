@@ -135,12 +135,19 @@ export class Renderer {
   outlineSelection: number[] = [];
   outlineHover: number[] = [];
   outlineGroup: number[] = [];
+  // the decor the editor draws in the game view (a drag's pieces, left out of its chunks)
+  editorDrawn: ReadonlySet<number> = new Set();
+  // a capture of some elements alone (capture_view's `only`): the others are not drawn
+  only: ReadonlySet<number> | null = null;
 
   private mesh_prog!: Program;
   private flat_prog!: Program;
   private solid_prog!: Program;
   private water_prog!: Program;
   private white!: WebGLTexture;
+  // a texture not read yet: see-through, the alpha-tested and blended surfaces (leaves, lamps,
+  // fences) left out meanwhile instead of drawn as white squares (the C++ had them all at once)
+  private unread!: WebGLTexture;
   private inst_tex!: WebGLTexture;
   private inst_rows = 0;
   private inst = new Float32Array(INSTANCE_TEXELS_PER_ROW * 4 * 4);
@@ -183,21 +190,26 @@ export class Renderer {
     // what a primitive without uvs or colors reads (the attributes left off): uv 0, white
     gl.vertexAttrib2f(2, 0, 0);
     gl.vertexAttrib4f(3, 1, 1, 1, 1);
-    this.white = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, this.white);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA8,
-      1,
-      1,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      new Uint8Array([255, 255, 255, 255]),
-    );
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    const pixel = (rgba: number[]) => {
+      const t = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA8,
+        1,
+        1,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        new Uint8Array(rgba),
+      );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      return t;
+    };
+    this.white = pixel([255, 255, 255, 255]);
+    this.unread = pixel([255, 255, 255, 0]);
   }
 
   private link(vs: string, fs: string): Program {
@@ -357,7 +369,10 @@ export class Renderer {
   // GL texture of a texture of the document (read and uploaded on first use or after a change)
   glTexture(store: SceneStore, index: number): WebGLTexture {
     const t = store.texture(index);
-    if (!t?.data) return this.white;
+    if (!t?.data) {
+      const e = store.textures[index];
+      return e && e.loaded !== e.version ? this.unread : this.white;
+    }
     if (t.gpu) return (t.gpu as GpuTexture).tex;
     const gl = this.gl;
     const tex = gl.createTexture()!;
@@ -863,14 +878,21 @@ export class Renderer {
       if (
         n.kind !== NodeKind.Render ||
         !n.mesh ||
-        !(n.flags & NodeFlag.Visible)
+        !(n.flags & NodeFlag.Visible) ||
+        (this.only && !this.only.has(n.id))
       )
         continue;
       const actor_model = (n.flags & NodeFlag.UnderActor) !== 0;
       const reference = (n.flags & NodeFlag.Reference) !== 0;
       if (!rs.show_actors && actor_model) continue;
       // the decor is the game view's (the actors' models and the levels shown for reference are not)
-      if (rs.game_view && !actor_model && !reference) continue;
+      if (
+        rs.game_view &&
+        !actor_model &&
+        !reference &&
+        !this.editorDrawn.has(n.id)
+      )
+        continue;
       const entry = store.meshes.get(n.mesh);
       if (!entry?.data) continue;
       if (rs.frustum_culling && !this.visible(store.bounds(n))) {
@@ -1018,7 +1040,8 @@ export class Renderer {
         !n ||
         n.kind !== NodeKind.Render ||
         !n.mesh ||
-        !(n.flags & NodeFlag.Visible)
+        !(n.flags & NodeFlag.Visible) ||
+        (this.only && !this.only.has(id))
       )
         return;
       const gm = this.gpuMesh(store.meshes.get(n.mesh)!);
@@ -1059,7 +1082,8 @@ export class Renderer {
       if (
         n.kind !== NodeKind.Actor ||
         !(n.flags & NodeFlag.Visible) ||
-        store.hasModel(n.id)
+        store.hasModel(n.id) ||
+        (this.only && !this.only.has(n.id))
       )
         continue;
       const sel = (n.flags & NodeFlag.Selected) !== 0;

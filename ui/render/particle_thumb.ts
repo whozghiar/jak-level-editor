@@ -5,7 +5,12 @@
 
 import { Camera } from "./camera";
 import { aabbRadius, aabbValid, identity, matMul } from "./math";
-import { loadParticleData, ParticleSystem, SpriteRenderer } from "./particles";
+import {
+  loadParticleData,
+  ParticleSystem,
+  SpriteRenderer,
+  type ParticleData,
+} from "./particles";
 
 let gl: WebGL2RenderingContext | null = null;
 let sprites: SpriteRenderer | null = null;
@@ -27,6 +32,40 @@ async function draw(target: HTMLCanvasElement, name: string, seconds: number): P
   ps.beginFrame();
   ps.emit(1, group, identity());
   for (let i = 0; i < Math.round(seconds * 6); i++) ps.update(data, 1 / 6, [0, 0, 0], -1);
+  return render(target, ps, data);
+}
+
+/** The effect `group` playing in `target` (the catalog's tooltip: Thumbnails::live_effect), until
+ *  the returned function stops it. */
+export function playEffect(target: HTMLCanvasElement, group: string): () => void {
+  let stop = false;
+  void loadParticleData().then(async (data) => {
+    const g = data?.group(group);
+    if (!data || !g) return;
+    const ps = new ParticleSystem();
+    let last = performance.now();
+    while (!stop) {
+      const now = performance.now();
+      ps.beginFrame();
+      ps.emit(1, g, identity());
+      ps.update(data, Math.min((now - last) / 1000, 0.1), [0, 0, 0], -1);
+      last = now;
+      const job = queue.then(() => render(target, ps, data));
+      queue = job.catch(() => {});
+      await job.catch(() => {});
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+  });
+  return () => (stop = true);
+}
+
+/** A svelte action: the effect plays on the canvas while it is there. */
+export function playing(canvas: HTMLCanvasElement, group: string) {
+  return { destroy: playEffect(canvas, group) };
+}
+
+// the particles framed from 3/4 (draw_particles), into `target`
+async function render(target: HTMLCanvasElement, ps: ParticleSystem, data: ParticleData): Promise<boolean> {
   const list = ps.sprites();
   let b = ps.bounds();
   if (!aabbValid(b)) b = { lo: [-1, -1, -1], hi: [1, 1, 1] };

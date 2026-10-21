@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { engine } from "../lib/engine.svelte";
   import { gameView } from "./game_view";
+  import { attachGapsOverlay } from "./gaps_overlay.svelte";
   import { attachNavmeshOverlay } from "./navmesh_overlay";
   import { effects } from "./particles";
   import { attachPlaceTool } from "./place_tool.svelte";
@@ -26,7 +27,7 @@
     const offNavmesh = attachNavmeshOverlay();
     const offSelect = selectTool.attach();
     const offPlace = attachPlaceTool();
-    const offTools = [attachTerrainTool(), attachTopologyTool(), attachPreview()];
+    const offTools = [attachTerrainTool(), attachTopologyTool(), attachPreview(), attachGapsOverlay()];
     const fit = () => {
       const r = box.getBoundingClientRect();
       viewport.resize(r.width, r.height, window.devicePixelRatio || 1);

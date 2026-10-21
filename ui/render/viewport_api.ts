@@ -70,6 +70,14 @@ class ViewportApi {
   outlineGroup: number[] = [];
   // the ocean's look as drawn: the game view gives it the hour's (game_view.ts oceanLook)
   waterLook: ((look: WaterLook, rs: RenderSettings) => WaterLook) | null = null;
+  // a capture is being drawn (its passes may draw it otherwise: the game view at its hour)
+  capturing = false;
+  // what a capture waits for (the game view at its hour, the holes read...): each made ready
+  // before, put back by what it returns
+  captureHooks: ((
+    hour: number | undefined,
+    only: number[] | null,
+  ) => Promise<(() => void) | void>)[] = [];
 
   private overlay: HTMLCanvasElement | null = null;
   private passes: { stage: PassStage; fn: Pass; capture: boolean }[] = [];
@@ -86,6 +94,7 @@ class ViewportApi {
   private outline_key = -1;
   private outlineSelection: number[] = [];
   private sent_camera = "";
+  private camera_requests = 0;
   private camera_timer = 0;
   private off: (() => void)[] = [];
 
@@ -109,7 +118,10 @@ class ViewportApi {
       canvas,
       store,
       () => this.cameraChanged(),
-      async (x, y) => (await this.pick(x, y))?.point ?? null,
+      // the orbit's pivot: a surface (pick_surface: no actor, no nav mesh)
+      async (x, y) =>
+        (await this.pick(x, y, { actors: false, navmesh: false }))?.point ??
+        null,
     );
     this.gizmo = new GizmoController({
       camera: this.camera,
@@ -139,6 +151,8 @@ class ViewportApi {
     window.addEventListener("jle:frame", frame);
     this.off.push(() => window.removeEventListener("jle:frame", frame));
     this.requestRedraw();
+    // the engine's requests (a capture, a camera) can be answered now
+    call("frontend_ready").catch(() => {});
   }
 
   detach() {
@@ -332,10 +346,39 @@ class ViewportApi {
     r.setGameDepth(null);
   }
 
-  // A picture of the view at that size (the MCP server's capture_view): PNG, base64
-  async capture(w: number, h: number): Promise<string> {
+  // A picture of the view at that size (the MCP server's capture_view): PNG, base64. hour: the
+  // game view at that hour (-1 the editor's view, undefined as shown); only: these elements alone
+  // (their subtrees given). The scene, its meshes and textures read first.
+  async capture(
+    w: number,
+    h: number,
+    opts: { hour?: number; only?: number[] | null } = {},
+  ): Promise<string> {
     const r = this.renderer;
     if (!r) throw new Error("no viewport");
+    await store.refresh();
+    await store.meshesLoaded();
+    const done: (() => void)[] = [];
+    for (const hook of this.captureHooks) {
+      const d = await hook(opts.hour, opts.only ?? null);
+      if (d) done.push(d);
+    }
+    r.only = opts.only ? new Set(opts.only) : null;
+    try {
+      // a first draw asks for the textures it uses: drawn again once they are read
+      this.drawCapture(w, h);
+      for (let t = 0; t < 15000 && store.texturesLoading(); t += 50)
+        await new Promise((ok) => setTimeout(ok, 50));
+      return this.drawCapture(w, h);
+    } finally {
+      r.only = null;
+      done.forEach((d) => d());
+      this.requestRedraw();
+    }
+  }
+
+  private drawCapture(w: number, h: number): string {
+    const r = this.renderer!;
     const gl = r.gl;
     const fbo = gl.createFramebuffer()!;
     const color = gl.createRenderbuffer()!,
@@ -359,9 +402,11 @@ class ViewportApi {
     );
     const pixels = new Uint8Array(w * h * 4);
     try {
+      this.capturing = true;
       this.draw(w, h, w, h, true);
       gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     } finally {
+      this.capturing = false;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.deleteFramebuffer(fbo);
       gl.deleteRenderbuffer(color);
@@ -374,7 +419,6 @@ class ViewportApi {
         this.css[0],
         this.css[1],
       );
-      this.requestRedraw();
     }
     // bottom-up rows to a PNG (the browser's encoder)
     const c = document.createElement("canvas");
@@ -395,7 +439,8 @@ class ViewportApi {
   // the camera
 
   // another document (app.cpp new_document, then poll_level_opening / open_project_file): the
-  // camera as it starts, then everything framed once the meshes are read
+  // camera as it starts, then everything framed once the meshes are read. The engine has framed it
+  // already (its camera is what the MCP tools answer): the start is not sent back to it.
   private async documentChanged() {
     Object.assign(this.camera, {
       pos: [0, 10, 30],
@@ -403,10 +448,13 @@ class ViewportApi {
       pitch: -0.3,
       speed: 12,
     });
-    this.cameraChanged();
+    this.requestRedraw();
+    const asked = this.camera_requests;
     await store.refresh();
     await store.meshesLoaded();
-    if (store.nodes.size) this.frameAll();
+    // framed, unless the engine placed the camera meanwhile (the remote control's set_camera
+    // right after open_level: the C++ framed the level as it opened, before the next tool)
+    if (store.nodes.size && this.camera_requests === asked) this.frameAll();
   }
 
   getCamera(): CameraState {
@@ -457,6 +505,7 @@ class ViewportApi {
     let answer: Record<string, unknown> | null = null;
     try {
       if (p.kind === "camera") {
+        this.camera_requests++;
         if (p.frame === "all") this.frameAll();
         else if (p.frame === "selection") this.frameSelection();
         else if (p.frame?.lo && p.frame?.hi)
@@ -471,12 +520,17 @@ class ViewportApi {
           fov: p.fov,
           look_at: p.look_at,
         });
+        // where the engine put it, known there: not sent back (it could land after a newer one)
+        this.sent_camera = JSON.stringify(this.getCamera());
         answer = { camera: this.getCamera() };
       } else if (p.kind === "capture") {
         const w = Math.min(Math.max(p.width ?? 960, 64), 2048),
           h = Math.min(Math.max(p.height ?? 600, 64), 2048);
         answer = {
-          png: await this.capture(w, h),
+          png: await this.capture(w, h, {
+            hour: typeof p.game_hour === "number" ? p.game_hour : undefined,
+            only: Array.isArray(p.only) ? p.only : null,
+          }),
           width: w,
           height: h,
           camera: this.getCamera(),

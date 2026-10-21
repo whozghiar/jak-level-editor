@@ -11,6 +11,7 @@
 import { engine } from "../lib/engine.svelte";
 import { shortcuts } from "../lib/shortcuts";
 import { callQueue } from "./call_queue";
+import { lockPointer } from "./controls";
 import { textBox, rgba } from "./labels";
 import { add, col32, point, sub, type Mat4, type Vec3 } from "./math";
 import type { Renderer } from "./renderer";
@@ -92,7 +93,8 @@ export function attachTerrainTool(): () => void {
     if (!held) hover();
   });
   on(canvas, "pointerleave", () => {
-    if (held || !active()) return;
+    // (not while raising or digging: the brush stays where it was)
+    if (held || rmb || sculptPx !== null || !active()) return;
     mouse = null;
     send("brush_hover", { shift });
   });
@@ -145,20 +147,27 @@ export function attachTerrainTool(): () => void {
     const ax = Math.abs(rmb.dx),
       ay = Math.abs(rmb.dy);
     if (!flying && ax + ay <= 6) return;
-    const lock = () =>
-      Promise.resolve((canvas as any).requestPointerLock?.()).catch(() => {});
     if (!flying && ay > 2 * ax) {
       sculptPx = -rmb.dy;
       rmb = null;
       shortcuts.paused = true;
-      void lock();
+      lockPointer(canvas, () => sculptPx !== null);
       sculpt(false);
       return;
     }
     rmb = null;
     controls.looking = true;
-    void lock();
+    lockPointer(canvas, () => controls.looking);
     viewport.requestRedraw();
+  });
+  // Esc while raising or digging (the browser takes it to end the lock): the ground as it was, the
+  // brush kept (handle_shortcuts: terrain_cancel_stroke)
+  on(document, "pointerlockchange", () => {
+    if (sculptPx === null || document.pointerLockElement === canvas) return;
+    sculptPx = null;
+    shortcuts.paused = false;
+    send("escape");
+    hover();
   });
   on(window, "mouseup", (e: MouseEvent) => {
     if (e.button !== 2) return;
@@ -227,8 +236,11 @@ export function attachTerrainTool(): () => void {
           rmb = null;
           stopAnimating?.();
           stopAnimating = null;
-          if (sculptPx !== null && document.pointerLockElement === canvas)
-            document.exitPointerLock();
+          if (sculptPx !== null) {
+            if (document.pointerLockElement === canvas)
+              document.exitPointerLock();
+            shortcuts.paused = false;
+          }
           sculptPx = null;
         } else {
           hover(); // its settings changed: the square and its preview again

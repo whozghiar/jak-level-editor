@@ -17,6 +17,7 @@
     commit,
     field,
     heading,
+    inspector,
     live,
     muted,
     query,
@@ -67,6 +68,11 @@
     s[i] = v;
     setShape(key, s, drag);
   };
+  // a slider let go: one undo step (no `change` when let go at the value it had: committed on the
+  // release then, else the inspector would stay "dragging")
+  const release = (k: string, e: Event) =>
+    inspector.dragging &&
+    setShape(k, +(e.currentTarget as HTMLInputElement).value);
   const stretched = $derived(!!shape && shape.scale.some((s) => s !== 1));
 
   // a structure of Jak II brought into this Jak 3 level: what was checked and converted
@@ -176,7 +182,8 @@
           max={f.max}
           value={p[f.k]}
           oninput={(e) => setShape(f.k, +e.currentTarget.value, true)}
-          onchange={(e) => setShape(f.k, +e.currentTarget.value)}
+          onchange={(e) => release(f.k, e)}
+          onpointerup={(e) => release(f.k, e)}
         />
         <span class="w-8 text-right tabular-nums">{p[f.k]}</span>
       </div>
@@ -270,7 +277,8 @@
           step={1}
           value={p.bend ?? 0}
           oninput={(e) => setShape("bend", +e.currentTarget.value, true)}
-          onchange={(e) => setShape("bend", +e.currentTarget.value)}
+          onchange={(e) => release("bend", e)}
+          onpointerup={(e) => release("bend", e)}
         />
         <span class="w-14 text-right tabular-nums"
           >{(p.bend ?? 0).toFixed(0)} deg</span

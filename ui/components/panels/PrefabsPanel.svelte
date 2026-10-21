@@ -40,8 +40,10 @@
   const s = $derived(engine.state);
   let list = $state<{ folder: string; mine: Prefab[]; game: Prefab[]; busy: boolean; library: boolean; jak2: boolean } | null>(null);
   let asked = 0;
+  // (a value: the effect runs again when it changes, not at each state the engine sends)
+  const listKey = $derived(JSON.stringify([s.catalog?.epoch, s.catalog?.prefabs_busy, s.library_root]));
   $effect(() => {
-    void [s.catalog?.epoch, s.catalog?.prefabs_busy, s.library_root];
+    void listKey;
     const n = ++asked;
     call("prefabs", {}, true).then((r) => {
       if (n === asked) list = r ?? null;
@@ -69,12 +71,17 @@
   const wanted = new Set<string>();
   let pending: [string, string][] = [];
   function want(node: HTMLElement, p: Prefab) {
-    const key = `${p.game}/${p.level}`;
-    if (!p.made && !wanted.has(key)) {
-      wanted.add(key);
-      if (!pending.length) queueMicrotask(() => void call("want_game_prefabs", { levels: pending.splice(0) }, true));
-      pending.push([p.game, p.level]);
-    }
+    const ask = (p: Prefab) => {
+      const key = `${p.game}/${p.level}`;
+      if (!p.made && !wanted.has(key)) {
+        wanted.add(key);
+        if (!pending.length) queueMicrotask(() => void call("want_game_prefabs", { levels: pending.splice(0) }, true));
+        pending.push([p.game, p.level]);
+      }
+    };
+    ask(p);
+    // a cell shown again for another prefab (the grid reuses its cells)
+    return { update: ask };
   }
 
   const pl = $derived(s.tool === "place" ? s.placement : null);
@@ -89,7 +96,11 @@
   }
 </script>
 
-<svelte:window onpointerdown={(e) => menu && !(e.target as HTMLElement).closest?.(".prefab-menu") && (menu = null)} />
+<!-- Esc closes the menu (before the editor's key: select nothing) -->
+<svelte:window
+  onpointerdown={(e) => menu && !(e.target as HTMLElement).closest?.(".prefab-menu") && (menu = null)}
+  onkeydowncapture={(e) => menu && e.key === "Escape" && (e.preventDefault(), (menu = null))}
+/>
 
 {#snippet cellBody(p: Prefab)}
   <div

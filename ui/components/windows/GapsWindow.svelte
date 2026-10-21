@@ -1,87 +1,48 @@
-<script lang="ts" module>
-  // the spot looked at, kept while the window is closed (m_gap_selected)
-  let selected = $state(-1);
-</script>
-
 <script lang="ts">
   // Level > Find holes in the decor (ui_gaps_window and draw_gaps_overlay, building_tools.cpp):
   // where a player walking the level would see the void. The engine looks (find_gaps, around the
   // selection, else the document's own level) and keeps what it found (gaps_report: the remote
-  // control's search shows here too); the spots are drawn in the view while the window is open.
+  // control's search shows here too); the spots are drawn in the view while the window is open
+  // (render/gaps_overlay.svelte.ts).
   import { onMount } from "svelte";
   import { engine } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
-  import { call, onEngine } from "../../lib/rpc";
-  import { packRgba, type Vec3 } from "../../render/math";
+  import { call } from "../../lib/rpc";
+  import { gaps, refreshGaps, type GapReport } from "../../render/gaps_overlay.svelte";
   import { viewport } from "../../render/viewport_api";
   import Tip from "../common/Tip.svelte";
 
-  type Spot = {
-    at: Vec3;
-    seen_from: Vec3;
-    direction: Vec3;
-    rays: number;
-    edge: boolean;
-  };
-  type Report = {
-    spots: Spot[];
-    gaps: number;
-    edges: number;
-    viewpoints: number;
-    rays: number;
-  };
-
-  let report = $state<Report | null>(null);
+  const report = $derived(gaps.report);
   let running = $state(false);
-
-  const refresh = async () =>
-    (report = (await call<Report | null>("gaps_report", {}, true)) ?? null);
 
   async function run() {
     running = true;
-    const r = await call<Report>("find_gaps");
+    const r = await call<GapReport>("find_gaps");
     running = false;
     if (r) {
-      report = r;
-      selected = -1;
+      gaps.report = r;
+      gaps.selected = -1;
     }
   }
 
   // looked at from where the player would see it
   function look(i: number) {
-    selected = i;
+    gaps.selected = i;
     const s = report!.spots[i];
     viewport.setCamera({ pos: s.seen_from, look_at: s.at });
   }
 
   onMount(() => {
-    void refresh();
-    const offs = [
-      onEngine("jle:changed", (p) => p?.gaps && refresh()),
-      // red: a gap between pieces, orange: an open edge; the bigger, the more rays went through
-      viewport.addOverlay(
-        (r) => {
-          const spots = report?.spots ?? [];
-          for (let i = 0; i < spots.length && i < 200; i++) {
-            const s = spots[i];
-            const col = s.edge
-              ? packRgba(1, 0.75, 0.2, 0.9)
-              : packRgba(1, 0.25, 0.2, 0.95);
-            const radius = 0.4 + Math.min(2, s.rays * 0.1);
-            r.circle(s.at, [1, 0, 0], [0, 0, 1], radius, col, 20);
-            r.circle(s.at, [1, 0, 0], [0, 1, 0], radius, col, 20);
-            if (i === selected) r.line(s.seen_from, s.at, col);
-          }
-          r.flush(false);
-        },
-        { capture: true },
-      ),
-    ];
-    return () => offs.forEach((off) => off());
+    gaps.shown = true;
+    void refreshGaps();
+    return () => {
+      gaps.shown = false;
+      viewport.requestRedraw();
+    };
   });
 
   $effect(() => {
-    void [report, selected];
+    void [gaps.report, gaps.selected];
     viewport.requestRedraw();
   });
 </script>
@@ -111,7 +72,7 @@
       {#each report.spots as s, i (i)}
         <button
           class="block w-full px-2 py-0.5 text-left hover:bg-white/5 {i ===
-          selected
+          gaps.selected
             ? 'bg-orange-600/25 text-orange-200'
             : s.edge
               ? 'text-orange-300'

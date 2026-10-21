@@ -70,10 +70,12 @@
 
   let answer = $state<any>(null);
   let asked = 0;
+  // (a value: the effect runs again when it changes, not at each state the engine sends)
+  const listKey = $derived(JSON.stringify([s.catalog?.epoch, texLevel === "*" ? s.history.undo_label : 0]));
   $effect(() => {
     const args = { game: chosenGame, level: texLevel, filter: texFilter.toLowerCase() };
     // the document's textures change with it; the index once read
-    void [s.catalog?.epoch, texLevel === "*" ? s.history.undo_label : 0];
+    void listKey;
     const n = ++asked;
     call("texture_list", args, true).then((r) => {
       if (n === asked) answer = r ?? null;
@@ -82,8 +84,9 @@
 
   // the texture of the material chosen, marked
   let current = $state("");
+  const historyKey = $derived(JSON.stringify([s.history.undo_label, s.history.can_undo]));
   $effect(() => {
-    void [s.history.undo_label, s.history.can_undo];
+    void historyKey;
     if (material < 0 || !ids.length) return void (current = "");
     call("materials", { ids }, true).then((m) => (current = m?.slots?.[material]?.texture?.name ?? ""));
   });

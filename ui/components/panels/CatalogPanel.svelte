@@ -70,6 +70,8 @@
   const answer = $derived(got?.tab === tab ? got : null);
   let asked = 0;
   // the list again when what it shows changes (the index read, a level's decor read, the library)
+  // (a value: the effect runs again when it changes, not at each state the engine sends)
+  const catalogKey = $derived(JSON.stringify([s.catalog?.epoch, s.library_root]));
   $effect(() => {
     if (tab === "materials") return;
     const args = {
@@ -79,7 +81,7 @@
       family: tab === "effects" ? effectKind : family,
       level: tab === "models" ? modelsLevel : decorLevel,
     };
-    void [s.catalog?.epoch, s.library_root];
+    void catalogKey;
     const n = ++asked;
     call("catalog", args, true).then((r) => {
       if (n === asked) got = r ? { ...r, tab: args.tab } : null;
@@ -144,9 +146,10 @@
 
   // the Materials tab: the pieces selected (not the actors' models)
   let pieces = $state<number[]>([]);
+  const piecesKey = $derived(JSON.stringify([s.selection.count, s.selection.primary, s.history.undo_label, s.history.can_undo]));
   $effect(() => {
     if (tab !== "materials") return;
-    void [s.selection.count, s.selection.primary, s.history.undo_label, s.history.can_undo];
+    void piecesKey;
     call<number[]>("selection_meshes", {}, true).then((ids) => (pieces = ids ?? []));
   });
 
@@ -222,7 +225,7 @@
             >
               {@render cellBody(objectThumb(o), o.name, placingObject(o))}
             </button>
-            <Tip text={objectTip(o)} placement="right" />
+            <Tip text={objectTip(o)} effect={o.family === "effect" && o.art ? o.art : undefined} placement="right" />
           {/snippet}
         </ThumbGrid>
       {/if}

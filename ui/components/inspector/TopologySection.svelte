@@ -76,13 +76,15 @@
       >
     </div>
     <div class="flex items-center gap-2">
-      <button
-        class={button}
-        disabled={none}
-        onclick={() => call("topology_extrude", { distance: extrude })}
+      <span class="inline-flex"
+        ><button
+          class={button}
+          disabled={none}
+          onclick={() => call("topology_extrude", { distance: extrude })}
+        >
+          {t("topology.extrude")}
+        </button></span
       >
-        {t("topology.extrude")}
-      </button>
       <Tip text={t("topology.extrude.tip")} placement="left" />
       <DragNumber
         class="w-24"
@@ -99,23 +101,29 @@
       />
     </div>
     <div class="flex flex-wrap gap-2">
-      <button
-        class={button}
-        disabled={none}
-        onclick={() => call("topology_subdivide")}
-        >{t("topology.subdivide")}</button
+      <span class="inline-flex"
+        ><button
+          class={button}
+          disabled={none}
+          onclick={() => call("topology_subdivide")}
+          >{t("topology.subdivide")}</button
+        ></span
       >
       <Tip text={t("topology.subdivide.tip")} placement="left" />
-      <button
-        class={button}
-        disabled={none}
-        onclick={() => call("topology_flip")}>{t("topology.flip")}</button
+      <span class="inline-flex"
+        ><button
+          class={button}
+          disabled={none}
+          onclick={() => call("topology_flip")}>{t("topology.flip")}</button
+        ></span
       >
       <Tip text={t("topology.flip.tip")} placement="left" />
-      <button
-        class={button}
-        disabled={none}
-        onclick={() => call("topology_delete")}>{t("topology.delete")}</button
+      <span class="inline-flex"
+        ><button
+          class={button}
+          disabled={none}
+          onclick={() => call("topology_delete")}>{t("topology.delete")}</button
+        ></span
       >
       <Tip text={t("topology.delete.tip")} placement="left" />
     </div>

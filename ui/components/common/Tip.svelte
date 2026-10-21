@@ -1,14 +1,21 @@
 <script lang="ts">
   // A tooltip on the element just before it (wrap a disabled button in a <span>: it gets no mouse
   // events). `guide`: a tip of the guide (guide_tip in guide_panel.cpp): the keys
-  // guide.<id>.title / .keys / .text / .example, and its animation; else `text`.
+  // guide.<id>.title / .keys / .text / .example, and its animation; else `text`, with `effect` (a
+  // particle group) playing under it.
   import { Tooltip } from "flowbite-svelte";
   import { has, t } from "../../lib/i18n";
   import { guideDemos } from "../guide/guide";
   import ToolDemo from "../guide/ToolDemo.svelte";
+  import { playing } from "../../render/particle_thumb";
 
   type Placement = "top" | "bottom" | "left" | "right" | "right-start" | "bottom-start";
-  let { guide, text, placement = "bottom" }: { guide?: string; text?: string; placement?: Placement } = $props();
+  let {
+    guide,
+    text,
+    effect,
+    placement = "bottom",
+  }: { guide?: string; text?: string; effect?: string; placement?: Placement } = $props();
   const k = $derived(`guide.${guide}`);
 </script>
 
@@ -30,6 +37,8 @@
       {#if guideDemos[guide]}<ToolDemo name={guideDemos[guide]} width={352} height={198} class="mt-2 rounded" />{/if}
     {:else}
       <p class="whitespace-pre-line">{text}</p>
+      <!-- its particles, live (it starts over each time the tooltip opens) -->
+      {#if effect}<canvas width="160" height="160" class="mt-2 rounded" use:playing={effect}></canvas>{/if}
     {/if}
   </Tooltip>
 {/if}

@@ -72,11 +72,17 @@
   // the window's modes (raising and digging: the right button)
   const modes = ["paint", "wall", "erase", "smooth", "flatten"];
 
+  // what the lists are read again for (primitives: not every state the engine sends, which
+  // re-read them at each step of a stroke and closed the texture chooser)
+  const libraryRoot = $derived(engine.state.library_root as string);
+  const styleLevel = $derived((b.style_level as string) ?? "");
+  const texturesReady = $derived(!!b.textures_ready);
+
   // the level styles: the listed levels of the library
   let levels = $state<string[]>([]);
   let filter = $state("");
   $effect(() => {
-    void engine.state.library_root;
+    void libraryRoot;
     call<{ levels: { name: string; listed: boolean }[] }>(
       "list_levels",
       {},
@@ -93,8 +99,8 @@
   // the textures of the style's level (the most used first), once the library's index is ready
   let textures = $state<Texture[]>([]);
   $effect(() => {
-    const level = b.style_level as string;
-    void b.textures_ready;
+    const level = styleLevel;
+    void texturesReady;
     if (!level) return void (textures = []);
     call<{ textures: Texture[] }>("level_textures", { level }, true).then(
       (r) => (textures = r?.textures ?? []),

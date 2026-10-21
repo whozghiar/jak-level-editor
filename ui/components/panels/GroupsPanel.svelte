@@ -70,7 +70,11 @@
   const item = "block w-full px-3 py-1 text-left whitespace-nowrap hover:bg-white/10";
 </script>
 
-<svelte:window onpointerdown={(e) => menu && !menuEl?.contains(e.target as Node) && (menu = null)} />
+<!-- Esc closes the menu (before the editor's key: select nothing) -->
+<svelte:window
+  onpointerdown={(e) => menu && !menuEl?.contains(e.target as Node) && (menu = null)}
+  onkeydowncapture={(e) => menu && e.key === "Escape" && (e.preventDefault(), (menu = null))}
+/>
 
 <div class="flex h-full flex-col gap-2 p-3 text-sm">
   {#if !s.document.open}

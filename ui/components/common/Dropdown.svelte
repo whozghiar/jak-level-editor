@@ -57,6 +57,7 @@
 <svelte:window
   onpointerdown={(e) => open && !menu?.contains(e.target as Node) && !btn.contains(e.target as Node) && (open = false)}
   onblur={() => (open = false)}
+  onkeydowncapture={(e) => open && e.key === "Escape" && (e.preventDefault(), (open = false))}
 />
 
 <button
@@ -83,7 +84,6 @@
     style:top={at.up ? undefined : `${at.top}px`}
     style:bottom={at.up ? `${at.bottom}px` : undefined}
     style:max-height="{at.max}px"
-    onkeydown={(e) => e.key === "Escape" && (e.stopPropagation(), (open = false))}
   >
     {#if filter}
       <input bind:this={field} class="{input} rounded-none border-0 border-b border-white/10" placeholder={filter} bind:value={text} />

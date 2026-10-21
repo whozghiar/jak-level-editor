@@ -9,7 +9,6 @@
   // The Levels tab (ui_levels_panel, panels.cpp): the levels of the library (Jak 3's, or Jak II's
   // once extracted), one loaded or added to the document at its place in the game's world; under
   // them the document's levels (DocumentLevels, the inspector's section in the C++ editor).
-  import IconMap from "~icons/mdi/map-outline";
   import { confirmDiscard } from "../../lib/actions.svelte";
   import { engine } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
@@ -18,8 +17,16 @@
   import { button, check, input, muted, primary, small } from "../common/classes";
   import Tip from "../common/Tip.svelte";
   import DocumentLevels from "./DocumentLevels.svelte";
+  import Thumb from "./Thumb.svelte";
 
-  type Level = { name: string; dgo: string; listed: boolean; in_document: "open" | "added" | "companion" | "" };
+  type Level = {
+    name: string;
+    dgo: string;
+    listed: boolean;
+    background: string;
+    mtime: number;
+    in_document: "open" | "added" | "companion" | "";
+  };
 
   const s = $derived(engine.state);
   // the game: Jak 3's levels, or Jak II's (its decor brought into Jak 3) once it is extracted
@@ -31,9 +38,11 @@
   let levels = $state<Level[]>([]);
   let asked = 0;
   // read again when the game, the library or the document's levels change (the marks)
+  // (a value: the effect runs again when it changes, not at each state the engine sends)
+  const listKey = $derived(JSON.stringify([s.library_root, s.library_empty, s.levels?.document]));
   $effect(() => {
     const args = { jak2: game2 };
-    void [s.library_root, s.library_empty, JSON.stringify(s.levels?.document)];
+    void listKey;
     const n = ++asked;
     call<{ levels: Level[] }>("list_levels", args, true).then((r) => {
       if (r && n === asked) levels = r.levels.filter((l) => l.listed);
@@ -102,9 +111,8 @@
     <!-- the chosen level: a picture and the button that loads it -->
     {#if chosen}
       <div class="flex items-start gap-3">
-        <!-- ponytail: no picture of the level yet (the C++ thumbnail seen from above); a renderer's thumbnail when the catalog has them -->
-        <div class="flex size-24 shrink-0 items-center justify-center rounded border border-white/5 bg-[#0b0b0b] text-3xl text-neutral-700">
-          <IconMap />
+        <div class="shrink-0 rounded border border-white/5 bg-[#0b0b0b]">
+          <Thumb req={{ kind: "level", path: chosen.background, stamp: chosen.mtime }} size={96} />
         </div>
         <div class="min-w-0">
           <p class="truncate font-semibold">{chosen.name}</p>

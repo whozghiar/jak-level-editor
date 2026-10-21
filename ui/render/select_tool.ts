@@ -13,6 +13,7 @@ import { shortcuts } from "../lib/shortcuts";
 import type { Camera } from "./camera";
 import { call, engineReady, onEngine } from "./engine";
 import { GizmoOp, GizmoSpace, type GizmoSnap } from "./gizmo";
+import { lockPointer } from "./controls";
 import { attachLabels, rgba, textBox } from "./labels";
 import {
   add,
@@ -630,9 +631,7 @@ class SelectTool {
     this.setHovered(0);
     this.syncGizmo();
     // the cursor stays where it is: the mouse turns it as far as wanted
-    const el = viewport.canvas as any;
-    const lock = (o?: object) => Promise.resolve(el.requestPointerLock?.(o));
-    lock({ unadjustedMovement: true }).catch(() => lock().catch(() => {}));
+    lockPointer(viewport.canvas!, () => this.free_rotating);
     return true;
   }
 

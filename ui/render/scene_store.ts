@@ -77,8 +77,8 @@ export class SceneStore {
   private _with_model = new Set<number>(); // actors that have a model under them (no marker)
   private _water = false;
   private node_bounds = new Map<number, AABB>();
-  // a drag's preview: the worlds of the nodes moved (their subtrees included)
-  private preview = new Map<number, Mat4>();
+  // a drag's preview: the worlds of the nodes moved (their subtrees included); setPreview changes it
+  readonly preview = new Map<number, Mat4>();
   private listeners = new Set<() => void>();
   private queue: MeshEntry[] = [];
   private fetching = 0;
@@ -271,6 +271,11 @@ export class SceneStore {
     return !this.fetching && !this.queue.length
       ? Promise.resolve()
       : new Promise((r) => this.idle_waiters.push(r));
+  }
+
+  // textures being read (a capture waits for them)
+  texturesLoading(): boolean {
+    return this.textures.some((t) => t.loading);
   }
 
   // materials (and the textures' versions): textures_changed with no versions given reads every
@@ -483,7 +488,8 @@ export class SceneStore {
     let p: Vec3 = [0, 0, 0];
     for (const id of roots) {
       const origin = col3(this.world(this.nodes.get(id)!), 3);
-      if (this.subtree(id, [], 65).length > 64) {
+      // more than 64 under it (subtree_size: the node itself not counted)
+      if (this.subtree(id, [], 66).length > 65) {
         p = add(p, this.groupCenter(id));
         continue;
       }

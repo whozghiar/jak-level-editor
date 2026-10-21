@@ -130,6 +130,7 @@
             step={0.1}
             min={0}
             max={200}
+            digits={1}
             format={(d) => (d > 0 ? `${d.toFixed(1)} m` : "-")}
             oninput={(d) => {
               beh.distance = d;

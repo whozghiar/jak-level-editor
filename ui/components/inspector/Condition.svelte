@@ -70,6 +70,8 @@
       onchange={(e) => onchange(json(kind, e.currentTarget.value))}
     >
       {#if !arg}<option value="" hidden>{t("behavior.choose_actor")}</option
+        >{:else if !actors.some((a) => a.name === arg)}<option value={arg} hidden
+          >{arg}</option
         >{/if}
       {#each actors as a}<option value={a.name}>{a.name}</option>{/each}
     </select>

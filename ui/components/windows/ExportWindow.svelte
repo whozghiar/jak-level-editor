@@ -1,6 +1,6 @@
 <script lang="ts" module>
-  // the options being edited, kept while the window is closed, for the level they are of
-  // (export_options and m_export_level of the C++)
+  // the options being edited, kept while the window is closed, for the level they are of and the
+  // one it replaces (export_options and m_export_level of the C++, cleared by Replace)
   let kept: { level: string; options: any } | null = null;
 </script>
 
@@ -102,7 +102,10 @@
 
   onMount(() => {
     (async () => {
-      level = engine.state.document.level ?? "";
+      level = `${engine.state.document.level ?? ""}|${engine.state.document.replaces ?? ""}`;
+      // an export going on (started before the window opened)
+      const s = await call<ExportState>("export_state", {}, true);
+      busy = !!s?.busy;
       const d = await call<{ options: Options; replaceable: string[] }>(
         "export_defaults",
       );

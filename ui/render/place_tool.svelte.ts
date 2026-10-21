@@ -26,6 +26,7 @@ import {
   type Vec2,
   type Vec3,
 } from "./math";
+import { lockPointer } from "./controls";
 import { col32 } from "./renderer";
 import type { MeshEntry } from "./scene_store";
 import { dragOffset } from "./select_tool";
@@ -146,7 +147,8 @@ export function attachPlaceTool(): () => void {
     }
     if (what !== "end" || !panel) return;
     panel = false;
-    if (over && matrix) call("place_at", { matrix: Array.from(matrix) }).catch((err) => console.warn("[place]", err));
+    // where the pointer is let go (the preview's answer may not be there yet after a quick drag)
+    if (over) call("place_at", { ...viewport.rayFromMouse(mouse[0], mouse[1]) }).catch((err) => console.warn("[place]", err));
     else void call("stop_placement");
     matrix = null;
     viewport.requestRedraw();
@@ -162,7 +164,7 @@ export function attachPlaceTool(): () => void {
     turning = { right: viewport.camera.right(), yaw: 0, pitch: 0, tilt0, tilt: tilt0 };
     shortcuts.paused = true;
     // the cursor stays where it is: the mouse turns it as far as wanted
-    Promise.resolve((canvas as any).requestPointerLock?.()).catch(() => {});
+    lockPointer(canvas, () => !!turning);
     return true;
   };
   on(window, "mousemove", (e) => {
