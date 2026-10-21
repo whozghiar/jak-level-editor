@@ -11,6 +11,10 @@ use std::time::Duration;
 use jle_core::editor::protocol::{ProtocolState, content_type, encode_mesh, materials_json};
 use jle_core::editor::remote::{K_REMOTE_PORT, start_remote};
 use jle_core::editor::{Editor, Notify, SharedEditor};
+pub use jle_core::host::{
+  ExtractorProvider, GameRuntime, Host, HostEvent, HostEvents, LevelManifest, LevelPackage,
+  PlayOutcome, RuntimeInfo,
+};
 use jle_core::i18n::{i18n_init, i18n_select, i18n_system_language, lang_dir, set_lang_dir, tr};
 use jle_core::io::asset_library::{default_library_root, game_folder};
 use jle_core::io::game_data::set_data_dir;
@@ -52,10 +56,12 @@ pub struct Options {
   pub hidden: bool,
 }
 
-/// The plugin with the application's options: `Builder::new().args(std::env::args()).build()`.
+/// The plugin with the application's options: `Builder::new().args(std::env::args()).build()`,
+/// and what the application gives the editor (`host`: jle_core::host).
 #[derive(Default)]
 pub struct Builder {
   options: Options,
+  host: Host,
 }
 
 impl Builder {
@@ -89,8 +95,16 @@ impl Builder {
     self
   }
 
+  /// What the application gives the editor: the default library, a disc already extracted, the
+  /// extractor, the game runtime (jle_core::host::Host).
+  pub fn host(mut self, host: Host) -> Self {
+    self.host = host;
+    self
+  }
+
   pub fn build<R: Runtime>(self) -> TauriPlugin<R> {
     let options = self.options;
+    let host = self.host;
     let hidden = options.hidden;
     tauri::plugin::Builder::new("jak-level-editor")
       .invoke_handler(tauri::generate_handler![call])
@@ -108,7 +122,7 @@ impl Builder {
         }
       })
       .setup(move |app, _api| {
-        setup(app, options);
+        setup(app, options, host);
         Ok(())
       })
       .build()
@@ -121,7 +135,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new().build()
 }
 
-fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options) {
+fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options, host: Host) {
   if options.hidden {
     READ_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
   }
@@ -160,6 +174,7 @@ fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options) {
   });
   let mut editor = Editor::new();
   editor.extraction.resource_dir = resources;
+  editor.host = host;
   let shared = editor.shared(Some(notify));
   {
     let mut ed = jle_core::editor::lock(&shared);

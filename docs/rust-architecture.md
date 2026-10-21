@@ -204,7 +204,33 @@ assistant does shows at once and can be undone; a tool that waits (a level loadi
 picture of the view) is asked again every few milliseconds, the lock let go in between. A timer of
 the plugin calls `Editor::tick` every 50 ms (the game view's hour passing, a storm's lightning).
 
-## 6. In the launcher
+## 6. What the host gives the editor
+
+The application that hosts the editor (its own app, the OpenGOAL Launcher) gives it a `Host`
+(`crates/core/src/host.rs`, `tauri_plugin_jak_level_editor::Builder::host`). The editor never asks
+which application hosts it: it uses what it is given and hides what it is not.
+
+| Field | Standalone app | OpenGOAL Launcher |
+|---|---|---|
+| `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
+| `extract_source` | none (the user's disc) | `<install>/active/jak3/data/iso_data/jak3`: the disc it already extracted |
+| `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version |
+| `runtime` | a jak-project checkout with the builder's fixes, or a compatible OpenGOAL installation | the launcher's isolated game `<install>/features/jak3/level_edited/` |
+
+**The game runtime** (`GameRuntime`): `install_level` (copies a level exported for the game into the
+game's sources, registers it in `game.gp` and `level-info.gc`, builds the game), `remove_level`,
+`launch` (starts the game on the level's continue point), and `play` (both; a host may hand it to
+its own interface: the launcher runs it as one of its jobs, with its progress bar). The export
+writes `jle-level.json` (`LevelManifest`) next to its README: what the README tells a person to do,
+for a runtime to do it. Without a runtime the editor has no Play button: it exports and points to
+the README.
+
+**The level builder**: OpenGOAL's builder needs fixes for the editor's exports (a level without
+regions, nav meshes, flat collision fragments, translucent surfaces, collision on both sides per
+mesh, the list of everything visible). A runtime declares the builder it has; the manifest says
+`"builder": "jle-1"` when the level needs those fixes.
+
+## 7. In the launcher
 
 The launcher keeps the editor as a git submodule in `level-editor/`, and:
 
@@ -245,7 +271,7 @@ in the resources or in the repository's `build/bin/`: to ship it with the app, a
 "ogle-extract-data/"` to `bundle.resources` once it is built (a missing path there fails
 `tauri build`).
 
-## 7. Conventions
+## 8. Conventions
 
 - The Rust code follows the C++ editor's file for file (`src/scene/terrain.cpp` ->
   `crates/core/src/scene/terrain.rs`), with the same names in snake_case, the same comments (they

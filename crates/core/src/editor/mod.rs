@@ -50,9 +50,9 @@ mod selection;
 mod state;
 mod surfaces;
 pub mod terrain_tool;
-pub mod thumbs;
 #[cfg(test)]
 mod tests;
+pub mod thumbs;
 mod tools;
 mod topology_tool;
 
@@ -342,6 +342,9 @@ pub struct Editor {
   pub remote_clients: usize,
   /// the interface's viewport listens (call `frontend_ready`): it can make the pictures of the view
   pub interface_ready: bool,
+  /// what the application hosting the editor gives it (crate::host): the default library, a disc
+  /// already extracted, the extractor, the game runtime
+  pub host: crate::host::Host,
 }
 
 impl Default for Editor {
@@ -391,6 +394,7 @@ impl Editor {
       next_request: 1,
       replies: BTreeMap::new(),
       extraction: extract::Extraction::default(),
+      host: Default::default(),
       placing: Default::default(),
       catalog: Default::default(),
       terrain: Default::default(),

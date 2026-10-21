@@ -7,6 +7,7 @@
 pub mod editor;
 pub mod game;
 pub mod history;
+pub mod host;
 pub mod i18n;
 pub mod io;
 pub mod log;
