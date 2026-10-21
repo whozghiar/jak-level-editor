@@ -33,14 +33,28 @@
   let btn: HTMLButtonElement;
   let menu = $state<HTMLDivElement>();
   let field = $state<HTMLInputElement>();
-  let at = $state({ left: 0, width: 0, top: 0, bottom: 0, up: false, max: 320 });
+  let at = $state({
+    left: 0,
+    width: 0,
+    top: 0,
+    bottom: 0,
+    up: false,
+    max: 320,
+  });
 
   function toggle() {
     if (open) return void (open = false);
     const r = btn.getBoundingClientRect();
     const below = innerHeight - r.bottom;
     const up = below < 240 && r.top > below;
-    at = { left: r.left, width: r.width, top: r.bottom + 2, bottom: innerHeight - r.top + 2, up, max: Math.min(360, (up ? r.top : below) - 10) };
+    at = {
+      left: r.left,
+      width: r.width,
+      top: r.bottom + 2,
+      bottom: innerHeight - r.top + 2,
+      up,
+      max: Math.min(360, (up ? r.top : below) - 10),
+    };
     text = "";
     open = true;
     tick().then(() => field?.focus());
@@ -51,13 +65,22 @@
     onselect(v);
   }
 
-  const shown = $derived(text ? items.filter((i) => i.label.toLowerCase().includes(text.toLowerCase())) : items);
+  const shown = $derived(
+    text
+      ? items.filter((i) => i.label.toLowerCase().includes(text.toLowerCase()))
+      : items,
+  );
 </script>
 
 <svelte:window
-  onpointerdown={(e) => open && !menu?.contains(e.target as Node) && !btn.contains(e.target as Node) && (open = false)}
+  onpointerdown={(e) =>
+    open &&
+    !menu?.contains(e.target as Node) &&
+    !btn.contains(e.target as Node) &&
+    (open = false)}
   onblur={() => (open = false)}
-  onkeydowncapture={(e) => open && e.key === "Escape" && (e.preventDefault(), (open = false))}
+  onkeydowncapture={(e) =>
+    open && e.key === "Escape" && (e.preventDefault(), (open = false))}
 />
 
 <button
@@ -86,14 +109,22 @@
     style:max-height="{at.max}px"
   >
     {#if filter}
-      <input bind:this={field} class="{input} rounded-none border-0 border-b border-white/10" placeholder={filter} bind:value={text} />
+      <input
+        bind:this={field}
+        class="{input} rounded-none border-0 border-b border-white/10"
+        placeholder={filter}
+        bind:value={text}
+      />
     {/if}
     <div class="min-h-0 overflow-y-auto py-1">
       {#each shown as item}
         <button
           role="option"
           aria-selected={item.value === value}
-          class="block w-full px-3 py-1 text-left whitespace-nowrap hover:bg-white/10 {item.value === value ? 'text-orange-300' : 'text-neutral-200'}"
+          class="block w-full px-3 py-1 text-left whitespace-nowrap hover:bg-white/10 {item.value ===
+          value
+            ? 'text-orange-300'
+            : 'text-neutral-200'}"
           onclick={() => choose(item.value)}
         >
           {item.label}

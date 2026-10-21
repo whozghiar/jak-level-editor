@@ -16,7 +16,8 @@
   let left = $state("");
   let fetching = $state(false);
 
-  const refresh = async () => (setup = await call<LibrarySetup>("library_setup", {}, true));
+  const refresh = async () =>
+    (setup = await call<LibrarySetup>("library_setup", {}, true));
 
   onMount(() => {
     refresh();
@@ -30,7 +31,10 @@
 
   async function changeLibrary() {
     if (!setup) return;
-    const path = await open({ directory: true, defaultPath: setup.root || setup.default || undefined });
+    const path = await open({
+      directory: true,
+      defaultPath: setup.root || setup.default || undefined,
+    });
     if (typeof path !== "string") return;
     const before = setup.root;
     const r = await call<LibrarySetup>("choose_library", { path });
@@ -48,35 +52,60 @@
 <div class="flex flex-col text-sm">
   <h3 class={heading}>{t("settings.library")}</h3>
   <p class="mb-2 {muted}">{t("settings.library.help")}</p>
-  <div class="flex items-center gap-2 rounded border border-[#2a2a2a] bg-[#0b0b0b] px-2 py-1.5">
+  <div
+    class="flex items-center gap-2 rounded border border-[#2a2a2a] bg-[#0b0b0b] px-2 py-1.5"
+  >
     <IconFolder class="shrink-0 text-neutral-400" />
-    <span class="min-w-0 flex-1 font-mono text-xs break-all text-neutral-200 select-text">{setup?.root}</span>
+    <span
+      class="min-w-0 flex-1 font-mono text-xs break-all text-neutral-200 select-text"
+      >{setup?.root}</span
+    >
   </div>
   {#if setup}
-    <p class="mt-1.5 text-xs {setup.root_game ? 'text-green-400' : 'text-amber-300'}">
-      {t(setup.root_game ? "settings.library.game" : "settings.library.no_game")}
+    <p
+      class="mt-1.5 text-xs {setup.root_game
+        ? 'text-green-400'
+        : 'text-amber-300'}"
+    >
+      {t(
+        setup.root_game ? "settings.library.game" : "settings.library.no_game",
+      )}
     </p>
   {/if}
   {#if left}
-    <p class="mt-1.5 text-xs text-neutral-300">{t("settings.library.empty", left)}</p>
+    <p class="mt-1.5 text-xs text-neutral-300">
+      {t("settings.library.empty", left)}
+    </p>
   {/if}
-  <button class="{button} mt-2 self-start" onclick={changeLibrary}>{t("settings.library.change")}</button>
+  <button class="{button} mt-2 self-start" onclick={changeLibrary}
+    >{t("settings.library.change")}</button
+  >
 
   <h3 class={heading}>{t("settings.language")}</h3>
-  <select class="{input} max-w-48" value={language()} onchange={(e) => changeLanguage(e.currentTarget.value)}>
+  <select
+    class="{input} max-w-48"
+    value={language()}
+    onchange={(e) => changeLanguage(e.currentTarget.value)}
+  >
     {#each languages as l}<option value={l.code}>{l.name}</option>{/each}
   </select>
 
   <h3 class={heading}>{t("settings.extractor")}</h3>
   {#if setup?.extractor}
-    <p class="text-xs break-all text-neutral-300 select-text">{t("settings.extractor.found", setup.extractor)}</p>
+    <p class="text-xs break-all text-neutral-300 select-text">
+      {t("settings.extractor.found", setup.extractor)}
+    </p>
   {:else if setup}
     <p class="text-xs text-red-400">{t("settings.extractor.missing")}</p>
     <ul class="mt-1 list-disc pl-5 text-xs break-all text-neutral-400">
       {#each setup.extractor_dirs as dir}<li>{dir}</li>{/each}
     </ul>
     {#if setup.can_fetch}
-      <button class="{primary} mt-2 self-start" disabled={fetching} onclick={fetchExtractor}>
+      <button
+        class="{primary} mt-2 self-start"
+        disabled={fetching}
+        onclick={fetchExtractor}
+      >
         {fetching ? t("extract.fetching") : t("extract.fetch")}
       </button>
     {/if}

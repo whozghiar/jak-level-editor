@@ -85,5 +85,4 @@ jobs:
       - name: Build the editor (no installer)
         run: |
           yarn install --frozen-lockfile
-          # see release.yaml for --ignore-version-mismatches
-          yarn tauri build --no-bundle --ignore-version-mismatches
+          yarn tauri build --no-bundle

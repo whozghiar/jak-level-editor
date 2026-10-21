@@ -205,8 +205,15 @@ class SelectTool {
       this.mods(e);
       // the mouse still: the drag's or the turn's Ctrl and Shift at once (the C++ reads them every
       // frame)
-      if (this.moving) this.run(() => this.drag(this.mouse, [0, 0], e.shiftKey, e.ctrlKey));
-      if (this.free_rotating) this.freeMove(new MouseEvent("mousemove", { shiftKey: e.shiftKey, ctrlKey: e.ctrlKey }));
+      if (this.moving)
+        this.run(() => this.drag(this.mouse, [0, 0], e.shiftKey, e.ctrlKey));
+      if (this.free_rotating)
+        this.freeMove(
+          new MouseEvent("mousemove", {
+            shiftKey: e.shiftKey,
+            ctrlKey: e.ctrlKey,
+          }),
+        );
       if (this.lmb || this.hovered) viewport.requestRedraw();
     };
     on(window, "keydown", key, true);
@@ -287,9 +294,7 @@ class SelectTool {
   }
 
   private run(fn: () => unknown) {
-    this.chain = this.chain
-      .then(fn)
-      .catch((e) => console.warn("[select]", e));
+    this.chain = this.chain.then(fn).catch((e) => console.warn("[select]", e));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -435,7 +440,12 @@ class SelectTool {
       document.elementFromPoint(e.clientX, e.clientY) === viewport.canvas;
     this.mods(e);
     if (this.topology()) {
-      if (this.over && !viewport.controls?.busy && !viewport.gizmo?.gizmo.active()) this.hover(m);
+      if (
+        this.over &&
+        !viewport.controls?.busy &&
+        !viewport.gizmo?.gizmo.active()
+      )
+        this.hover(m);
       else this.under = 0;
     }
     if (!this.active()) return;
@@ -461,11 +471,7 @@ class SelectTool {
       viewport.gizmo?.gizmo.active()
     )
       return;
-    if (
-      !this.box_selecting &&
-      !this.moving &&
-      dist(m, this.box_start) > 6
-    ) {
+    if (!this.box_selecting && !this.moving && dist(m, this.box_start) > 6) {
       if (this.press_on_selection) {
         // the selection dragged: left and right, up and down (Ctrl: forward and back)
         this.moving = true;
@@ -674,10 +680,7 @@ class SelectTool {
       axisAngle(this.free_right, pitch),
     );
     const p = this.free_pivot;
-    const turn = matMul(
-      matMul(translate(p), rotate(r)),
-      translate(mul(p, -1)),
-    );
+    const turn = matMul(matMul(translate(p), rotate(r)), translate(mul(p, -1)));
     this.preview = new Map(
       [...this.drag_start].map(([id, s]) => [id, matMul(turn, s)]),
     );
@@ -852,7 +855,11 @@ class SelectTool {
     let d: Vec3 | null;
     if (this.box_selecting) {
       text = t(
-        this.ctrl ? "cursor.box_remove" : this.shift ? "cursor.box_add" : "cursor.box",
+        this.ctrl
+          ? "cursor.box_remove"
+          : this.shift
+            ? "cursor.box_add"
+            : "cursor.box",
         this.box_preview.length,
       );
     } else if (this.ring > 0) {
@@ -878,12 +885,26 @@ class SelectTool {
       text = info.name;
       const g = info.group;
       if (g) {
-        text += "\n" + t(g.prefab ? "cursor.prefab" : "cursor.group", g.name, g.roots.length);
+        text +=
+          "\n" +
+          t(
+            g.prefab ? "cursor.prefab" : "cursor.group",
+            g.name,
+            g.roots.length,
+          );
         if (!g.roots.every(selected)) text += "\n" + t("cursor.select_group");
       }
     }
     if (!text) return;
-    textBox(ctx, text, [x + 18, y + 14], [5, 3], 4, rgba(20, 22, 26, 210), rgba(235, 235, 225));
+    textBox(
+      ctx,
+      text,
+      [x + 18, y + 14],
+      [5, 3],
+      4,
+      rgba(20, 22, 26, 210),
+      rgba(235, 235, 225),
+    );
   }
 
   // the hovered element's name and group (node), asked once per element

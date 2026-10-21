@@ -138,7 +138,8 @@
   }
 
   const row = "flex items-center gap-1.5";
-  const label = "w-24 shrink-0 text-xs leading-tight break-words text-neutral-400";
+  const label =
+    "w-24 shrink-0 text-xs leading-tight break-words text-neutral-400";
 </script>
 
 {#if p}

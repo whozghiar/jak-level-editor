@@ -30,8 +30,12 @@ export function confirmDiscard(action: () => void): void {
  * Saves the project (save in actions.cpp): the engine writes it, or answers {ask_name} the first time
  * and with Save as, and the Save window names it. Undefined when it failed.
  */
-export async function save(saveAs: boolean): Promise<{ saved?: boolean; ask_name?: string } | undefined> {
-  const r = await call<{ saved?: boolean; ask_name?: string }>("save", { save_as: saveAs });
+export async function save(
+  saveAs: boolean,
+): Promise<{ saved?: boolean; ask_name?: string } | undefined> {
+  const r = await call<{ saved?: boolean; ask_name?: string }>("save", {
+    save_as: saveAs,
+  });
   if (r?.ask_name !== undefined) windows.open("save_as", { name: r.ask_name });
   return r;
 }

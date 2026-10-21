@@ -21,9 +21,11 @@
 
   $effect(() => {
     const asked = name;
-    call<typeof target>("project_save_path", { name: asked }, true).then((r) => {
-      if (r && asked === name) target = r;
-    });
+    call<typeof target>("project_save_path", { name: asked }, true).then(
+      (r) => {
+        if (r && asked === name) target = r;
+      },
+    );
   });
 
   async function saveAs() {
@@ -37,13 +39,24 @@
 <p class="mb-3 text-neutral-300">{t("save.text")}</p>
 <label class="flex items-center gap-2">
   <span class="shrink-0 text-neutral-400">{t("save.name")}</span>
-  <input bind:this={field} class={input} bind:value={name} onkeydown={(e) => e.key === "Enter" && saveAs()} />
+  <input
+    bind:this={field}
+    class={input}
+    bind:value={name}
+    onkeydown={(e) => e.key === "Enter" && saveAs()}
+  />
 </label>
 {#if target.folder}
   <p class="mt-2 break-all {muted}">{target.path}</p>
-  {#if target.exists}<p class="mt-1 text-xs text-amber-300">{t("save.exists")}</p>{/if}
+  {#if target.exists}<p class="mt-1 text-xs text-amber-300">
+      {t("save.exists")}
+    </p>{/if}
 {/if}
 <div class="mt-4 flex justify-end gap-2">
-  <button class={primary} disabled={!target.folder} onclick={saveAs}>{t("save.button")}</button>
-  <button class={button} onclick={() => windows.close("save_as")}>{t("popup.cancel")}</button>
+  <button class={primary} disabled={!target.folder} onclick={saveAs}
+    >{t("save.button")}</button
+  >
+  <button class={button} onclick={() => windows.close("save_as")}
+    >{t("popup.cancel")}</button
+  >
 </div>

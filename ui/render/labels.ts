@@ -84,7 +84,8 @@ function labels(ctx: CanvasRenderingContext2D) {
   for (const n of store.list) {
     if (drawn > 300) break;
     const sel = few_selected && (n.flags & NodeFlag.Selected) !== 0;
-    if (!sel && (n.kind !== NodeKind.Actor || !viewport.settings.show_actors)) continue;
+    if (!sel && (n.kind !== NodeKind.Actor || !viewport.settings.show_actors))
+      continue;
     if (!(n.flags & NodeFlag.Visible)) continue;
     const text = names.get(n.id);
     if (text === undefined) continue;

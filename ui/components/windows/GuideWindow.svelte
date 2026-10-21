@@ -6,7 +6,12 @@
   import { call } from "../../lib/rpc";
   import { windows } from "../../lib/windows.svelte";
   import Tip from "../common/Tip.svelte";
-  import { guideDemos, guideSections, tutorials, type TourAction } from "../guide/guide";
+  import {
+    guideDemos,
+    guideSections,
+    tutorials,
+    type TourAction,
+  } from "../guide/guide";
   import ToolDemo from "../guide/ToolDemo.svelte";
 
   // the tutorial shown (0: Getting started) and its step, kept while the window is closed
@@ -51,7 +56,11 @@
   // animations and a button that shows where it is; every tool with its animation, what it does, a
   // concrete example; the keys. Props: tab (0 the tutorials, 1 every tool, 2 the keys), tutorial and
   // step (select_tutorial).
-  let { tab = 0, tutorial, step = 0 }: { tab?: number; tutorial?: string; step?: number } = $props();
+  let {
+    tab = 0,
+    tutorial,
+    step = 0,
+  }: { tab?: number; tutorial?: string; step?: number } = $props();
 
   let current = $state(0);
   // each opening chooses its tab (guide_tab_request): windows.open gives new props each time
@@ -72,14 +81,21 @@
     ["help.editing", [1, 2, 10, 3, 4, 5, 11, 12, 6, 7, 8, 9]],
   ];
 
-  const ti = $derived(Math.min(Math.max(guide.tutorial, 0), tutorials.length - 1));
+  const ti = $derived(
+    Math.min(Math.max(guide.tutorial, 0), tutorials.length - 1),
+  );
   const tut = $derived(tutorials[ti]);
   const si = $derived(Math.min(Math.max(guide.step, 0), tut.steps.length - 1));
   const s = $derived(tut.steps[si]);
   const k = $derived(tut.prefix + s[0]);
   const demos = $derived(s[1]);
   const action = $derived(s[2]);
-  const needsDocument = $derived(action === "replace" || action === "export" || action === "save" || action === "navmeshes");
+  const needsDocument = $derived(
+    action === "replace" ||
+      action === "export" ||
+      action === "save" ||
+      action === "navmeshes",
+  );
   const blocked = $derived(needsDocument && !engine.state.document.open);
 
   function go(i: number, j: number) {
@@ -97,7 +113,8 @@
       call("select_only", { id: 0 });
       ui.scrollToReplace = true;
     } else if (a === "export") windows.open("export");
-    else if (a === "game_view") call("set_view", { game_view: !!engine.state.view.game_view_ready });
+    else if (a === "game_view")
+      call("set_view", { game_view: !!engine.state.view.game_view_ready });
     else if (a === "save") save(false);
     else if (a === "navmeshes") windows.open("navmesh");
   }
@@ -127,7 +144,9 @@
 </script>
 
 {#snippet heading(text: string)}
-  <div class="mt-3 mb-2 flex items-center gap-2 text-xs font-semibold text-neutral-400 first:mt-0">
+  <div
+    class="mt-3 mb-2 flex items-center gap-2 text-xs font-semibold text-neutral-400 first:mt-0"
+  >
     <span class="shrink-0">{text}</span>
     <span class="h-px flex-1 bg-white/10"></span>
   </div>
@@ -136,7 +155,9 @@
 {#snippet title(key: string)}
   <p class="font-semibold text-orange-400">
     {t(`${key}.title`)}
-    {#if has(`${key}.keys`)}<span class="ml-1 font-normal text-neutral-500">{t(`${key}.keys`)}</span>{/if}
+    {#if has(`${key}.keys`)}<span class="ml-1 font-normal text-neutral-500"
+        >{t(`${key}.keys`)}</span
+      >{/if}
   </p>
 {/snippet}
 
@@ -157,10 +178,15 @@
   {#if current === 0}
     <div class="flex min-h-0 flex-1 gap-3">
       <!-- the tutorials, by name, the steps of the one chosen -->
-      <div class="w-[250px] shrink-0 overflow-y-auto rounded border border-white/5 bg-[#0b0b0b] p-1 text-xs">
+      <div
+        class="w-[250px] shrink-0 overflow-y-auto rounded border border-white/5 bg-[#0b0b0b] p-1 text-xs"
+      >
         {#each tutorials as x, i}
           <button
-            class="block w-full rounded px-2 py-1 text-left hover:bg-white/5 {i === ti ? 'bg-white/5 text-orange-400' : 'text-neutral-200'}"
+            class="block w-full rounded px-2 py-1 text-left hover:bg-white/5 {i ===
+            ti
+              ? 'bg-white/5 text-orange-400'
+              : 'text-neutral-200'}"
             onclick={() => i !== ti && go(i, 0)}
           >
             {i + 1}. {t(`tuto.${x.id}.title`)}
@@ -168,7 +194,8 @@
           {#if i === ti}
             {#each x.steps as st, j}
               <button
-                class="block w-full rounded py-0.5 pr-2 pl-5 text-left hover:bg-white/5 {j === si
+                class="block w-full rounded py-0.5 pr-2 pl-5 text-left hover:bg-white/5 {j ===
+                si
                   ? 'bg-orange-500/20 text-white'
                   : 'text-neutral-400'}"
                 onclick={() => go(i, j)}
@@ -183,36 +210,79 @@
 
       <!-- a step at a time: its text, its animations, then the button that shows it, previous, next -->
       <div class="flex min-w-0 flex-1 flex-col">
-        <p class="text-xs text-neutral-500">{t(`tuto.${tut.id}.title`)} - {t("tuto.step", si + 1, tut.steps.length)}</p>
+        <p class="text-xs text-neutral-500">
+          {t(`tuto.${tut.id}.title`)} - {t(
+            "tuto.step",
+            si + 1,
+            tut.steps.length,
+          )}
+        </p>
         <p class="mt-2 font-semibold text-orange-400">{t(`${k}.title`)}</p>
-        <p class="mt-1 whitespace-pre-line text-neutral-200">{t(`${k}.text`)}</p>
-        <div class="relative mt-3 min-h-0 flex-1" bind:clientWidth={room} bind:clientHeight={roomH}>
+        <p class="mt-1 whitespace-pre-line text-neutral-200">
+          {t(`${k}.text`)}
+        </p>
+        <div
+          class="relative mt-3 min-h-0 flex-1"
+          bind:clientWidth={room}
+          bind:clientHeight={roomH}
+        >
           {#if size.w > 0}
             {#key `${ti}.${si}`}
-              <div class="absolute inset-0 flex flex-wrap content-start" style:gap="{gap}px">
+              <div
+                class="absolute inset-0 flex flex-wrap content-start"
+                style:gap="{gap}px"
+              >
                 {#each demos as d}
-                  <ToolDemo name={d} width={size.w} height={size.h} class="rounded" />
+                  <ToolDemo
+                    name={d}
+                    width={size.w}
+                    height={size.h}
+                    class="rounded"
+                  />
                 {/each}
               </div>
             {/key}
           {/if}
         </div>
-        <div class="mt-2 flex shrink-0 items-center gap-2 border-t border-white/10 pt-2">
+        <div
+          class="mt-2 flex shrink-0 items-center gap-2 border-t border-white/10 pt-2"
+        >
           {#if action}
             <span>
-              <button class={button} disabled={blocked} onclick={() => run(action)}>{t(`${k}.action`)}</button>
+              <button
+                class={button}
+                disabled={blocked}
+                onclick={() => run(action)}>{t(`${k}.action`)}</button
+              >
             </span>
-            {#if blocked}<Tip text={t("tour.needs_level")} placement="top" />{/if}
+            {#if blocked}<Tip
+                text={t("tour.needs_level")}
+                placement="top"
+              />{/if}
           {/if}
-          <button class="{button} ml-auto w-32" disabled={si === 0} onclick={() => go(ti, si - 1)}>{t("tour.previous")}</button>
+          <button
+            class="{button} ml-auto w-32"
+            disabled={si === 0}
+            onclick={() => go(ti, si - 1)}>{t("tour.previous")}</button
+          >
           {#if si + 1 < tut.steps.length}
-            <button class="{primary} w-32" onclick={() => go(ti, si + 1)}>{t("tour.next")}</button>
+            <button class="{primary} w-32" onclick={() => go(ti, si + 1)}
+              >{t("tour.next")}</button
+            >
           {:else if ti + 1 < tutorials.length}
             <!-- the next tutorial -->
-            <button class="{primary} w-32" onclick={() => go(ti + 1, 0)}>{t("tuto.next")}</button>
-            <Tip text={t(`tuto.${tutorials[ti + 1].id}.title`)} placement="top" />
+            <button class="{primary} w-32" onclick={() => go(ti + 1, 0)}
+              >{t("tuto.next")}</button
+            >
+            <Tip
+              text={t(`tuto.${tutorials[ti + 1].id}.title`)}
+              placement="top"
+            />
           {:else}
-            <button class="{primary} w-32" onclick={() => windows.close("guide")}>{t("tour.finish")}</button>
+            <button
+              class="{primary} w-32"
+              onclick={() => windows.close("guide")}>{t("tour.finish")}</button
+            >
           {/if}
         </div>
       </div>
@@ -232,8 +302,14 @@
             {/if}
             <div class="min-w-0 flex-1">
               {@render title(key)}
-              <p class="mt-0.5 whitespace-pre-line text-neutral-200">{t(`${key}.text`)}</p>
-              {#if has(`${key}.example`)}<p class="mt-1 whitespace-pre-line text-neutral-400 italic">{t(`${key}.example`)}</p>{/if}
+              <p class="mt-0.5 whitespace-pre-line text-neutral-200">
+                {t(`${key}.text`)}
+              </p>
+              {#if has(`${key}.example`)}<p
+                  class="mt-1 whitespace-pre-line text-neutral-400 italic"
+                >
+                  {t(`${key}.example`)}
+                </p>{/if}
             </div>
           </div>
         {/each}

@@ -339,7 +339,9 @@
       {/if}
       <p class="mt-1 text-neutral-300">{t("export.install")}</p>
       <!-- with the host's game runtime the editor does it (Play); without, by hand -->
-      {#if !engine.state.runtime?.available}<p class={muted}>{t("export.no_runtime")}</p>{/if}
+      {#if !engine.state.runtime?.available}<p class={muted}>
+          {t("export.no_runtime")}
+        </p>{/if}
       <div class="flex gap-2">
         <button class={button} onclick={() => openIt(report!.dir)}
           >{t("export.open_folder")}</button

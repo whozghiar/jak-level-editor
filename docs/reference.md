@@ -79,7 +79,7 @@ to the resources, as the releases do:
 cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
       -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 cmake --build build-release
-npx yarn tauri build --config src-tauri/tauri.release.conf.json --ignore-version-mismatches
+npx yarn tauri build --config src-tauri/tauri.release.conf.json
 ```
 
 (`MultiThreaded`: the C runtime inside the program, which then runs on a Windows without the VC++

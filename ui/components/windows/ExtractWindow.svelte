@@ -117,7 +117,12 @@
     download = { done: 0, total: 1 };
     if (!(await call("extract_fetch"))) download = undefined;
   }
-  async function fetched(p: { id: string; done: number; total: number; finished: boolean }) {
+  async function fetched(p: {
+    id: string;
+    done: number;
+    total: number;
+    finished: boolean;
+  }) {
     if (p?.id !== "extract_fetch") return;
     download = p.finished ? undefined : p;
     if (!p.finished) return;

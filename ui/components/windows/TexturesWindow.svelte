@@ -21,19 +21,27 @@
   $effect(() => {
     void historyKey;
     // the pieces it was opened for, while they are there
-    Promise.all(ids.map((id) => call<{ name: string } | null>("node", { id }, true))).then((nodes) => {
+    Promise.all(
+      ids.map((id) => call<{ name: string } | null>("node", { id }, true)),
+    ).then((nodes) => {
       there = ids.filter((_, i) => nodes[i]);
       if (!there.length) return windows.close("textures");
       name = nodes.find(Boolean)!.name;
       // the material of the first piece still there
-      call("materials", { ids: there }, true).then((m) => (texture = m?.slots?.[slot]?.texture?.name ?? ""));
+      call("materials", { ids: there }, true).then(
+        (m) => (texture = m?.slots?.[slot]?.texture?.name ?? ""),
+      );
     });
   });
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-2">
-  <p>{t("textures.for", name, texture || t("inspector.material.no_texture"))}</p>
-  {#if there.length > 1}<p class={muted}>{t("textures.for_more", there.length - 1)}</p>{/if}
+  <p>
+    {t("textures.for", name, texture || t("inspector.material.no_texture"))}
+  </p>
+  {#if there.length > 1}<p class={muted}>
+      {t("textures.for_more", there.length - 1)}
+    </p>{/if}
   <div class="flex min-h-0 flex-1 flex-col border-t border-white/10 pt-2">
     <TextureBrowser ids={there} {slot} />
   </div>

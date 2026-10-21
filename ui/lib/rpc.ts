@@ -9,7 +9,10 @@ import { t } from "./i18n";
 export type ToastLevel = "info" | "warn" | "error";
 
 /** The toasts shown (bottom right), by id: each goes after 5 seconds. */
-export const toasts = new SvelteMap<number, { msg: string; level: ToastLevel }>();
+export const toasts = new SvelteMap<
+  number,
+  { msg: string; level: ToastLevel }
+>();
 let lastToast = 0;
 
 export function toast(msg: string, level: ToastLevel = "info"): void {
@@ -46,10 +49,14 @@ export async function call<T = any>(
   }
 }
 
-export type EngineEvent = "jle:changed" | "jle:log" | "jle:progress" | "jle:request";
+export type EngineEvent =
+  "jle:changed" | "jle:log" | "jle:progress" | "jle:request";
 
 /** Listens to an event of the engine; returns what stops listening. */
-export function onEngine<T = any>(event: EngineEvent, cb: (payload: T) => void): () => void {
+export function onEngine<T = any>(
+  event: EngineEvent,
+  cb: (payload: T) => void,
+): () => void {
   const off = listen<T>(event, (e) => cb(e.payload));
   return () => void off.then((f) => f());
 }
@@ -60,5 +67,7 @@ const windows = /Windows/.test(navigator.userAgent);
 export function jleUrl(path: string): string {
   path = path.replace(/^\//, "");
   // WebView2 serves custom protocols as http(s)://<scheme>.localhost, https with useHttpsScheme
-  return windows ? `${location.protocol === "https:" ? "https" : "http"}://jle.localhost/${path}` : `jle://localhost/${path}`;
+  return windows
+    ? `${location.protocol === "https:" ? "https" : "http"}://jle.localhost/${path}`
+    : `jle://localhost/${path}`;
 }

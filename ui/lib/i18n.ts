@@ -5,9 +5,13 @@
 
 import { SvelteMap } from "svelte/reactivity";
 
-const files = import.meta.glob<{ default: Record<string, string> }>("../../lang/*.json", { eager: true });
+const files = import.meta.glob<{ default: Record<string, string> }>(
+  "../../lang/*.json",
+  { eager: true },
+);
 const texts: Record<string, Record<string, string>> = {};
-for (const [path, m] of Object.entries(files)) texts[path.replace(/^.*\/|\.json$/g, "")] = m.default;
+for (const [path, m] of Object.entries(files))
+  texts[path.replace(/^.*\/|\.json$/g, "")] = m.default;
 
 /** The languages of lang/, English first: their code and their own name (`_language`). */
 export const languages = Object.keys(texts)
@@ -60,54 +64,67 @@ export function t(key: string, ...args: unknown[]): string {
   return args.length ? printf(s, args) : s;
 }
 
-const SPEC = /%([-+ 0#]*)(\d*)(?:\.(\d+))?(?:hh|h|ll|l|z|j|t)?([diufFgGeExXsc%])/g;
+const SPEC =
+  /%([-+ 0#]*)(\d*)(?:\.(\d+))?(?:hh|h|ll|l|z|j|t)?([diufFgGeExXsc%])/g;
 
 /** C's printf for the conversions the texts use: %s %d %i %u %zu %f %.Nf %g %e %x %c %%, flags - + 0. */
 export function printf(fmt: string, args: unknown[]): string {
   let i = 0;
-  return fmt.replace(SPEC, (_m, flags: string, width: string, prec: string | undefined, conv: string) => {
-    if (conv === "%") return "%";
-    const a = args[i++];
-    const n = Number(a);
-    let s: string;
-    switch (conv) {
-      case "d":
-      case "i":
-      case "u":
-        s = String(Math.trunc(n));
-        break;
-      case "f":
-      case "F":
-        s = n.toFixed(prec === undefined ? 6 : +prec);
-        break;
-      case "g":
-      case "G":
-        // significant digits (6 by default), without the trailing zeros
-        s = String(Number(n.toPrecision(prec === undefined ? 6 : Math.max(1, +prec))));
-        break;
-      case "e":
-      case "E":
-        s = n.toExponential(prec === undefined ? 6 : +prec);
-        break;
-      case "x":
-      case "X":
-        s = Math.trunc(n).toString(16);
-        break;
-      case "c":
-        s = typeof a === "number" ? String.fromCharCode(a) : String(a ?? "");
-        break;
-      default:
-        s = String(a ?? "");
-    }
-    if (conv === "X" || conv === "E" || conv === "G") s = s.toUpperCase();
-    if (flags.includes("+") && "diufFgGeE".includes(conv) && n >= 0) s = "+" + s;
-    const w = +width;
-    if (s.length < w)
-      s = flags.includes("-")
-        ? s.padEnd(w)
-        : flags.includes("0") && conv !== "s"
-          ? s.replace(/^([+-]?)/, (sign) => sign + "0".repeat(w - s.length))
-          : s.padStart(w);
-    return s;
-  });
+  return fmt.replace(
+    SPEC,
+    (
+      _m,
+      flags: string,
+      width: string,
+      prec: string | undefined,
+      conv: string,
+    ) => {
+      if (conv === "%") return "%";
+      const a = args[i++];
+      const n = Number(a);
+      let s: string;
+      switch (conv) {
+        case "d":
+        case "i":
+        case "u":
+          s = String(Math.trunc(n));
+          break;
+        case "f":
+        case "F":
+          s = n.toFixed(prec === undefined ? 6 : +prec);
+          break;
+        case "g":
+        case "G":
+          // significant digits (6 by default), without the trailing zeros
+          s = String(
+            Number(n.toPrecision(prec === undefined ? 6 : Math.max(1, +prec))),
+          );
+          break;
+        case "e":
+        case "E":
+          s = n.toExponential(prec === undefined ? 6 : +prec);
+          break;
+        case "x":
+        case "X":
+          s = Math.trunc(n).toString(16);
+          break;
+        case "c":
+          s = typeof a === "number" ? String.fromCharCode(a) : String(a ?? "");
+          break;
+        default:
+          s = String(a ?? "");
+      }
+      if (conv === "X" || conv === "E" || conv === "G") s = s.toUpperCase();
+      if (flags.includes("+") && "diufFgGeE".includes(conv) && n >= 0)
+        s = "+" + s;
+      const w = +width;
+      if (s.length < w)
+        s = flags.includes("-")
+          ? s.padEnd(w)
+          : flags.includes("0") && conv !== "s"
+            ? s.replace(/^([+-]?)/, (sign) => sign + "0".repeat(w - s.length))
+            : s.padStart(w);
+      return s;
+    },
+  );
 }

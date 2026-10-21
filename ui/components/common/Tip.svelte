@@ -9,13 +9,19 @@
   import ToolDemo from "../guide/ToolDemo.svelte";
   import { playing } from "../../render/particle_thumb";
 
-  type Placement = "top" | "bottom" | "left" | "right" | "right-start" | "bottom-start";
+  type Placement =
+    "top" | "bottom" | "left" | "right" | "right-start" | "bottom-start";
   let {
     guide,
     text,
     effect,
     placement = "bottom",
-  }: { guide?: string; text?: string; effect?: string; placement?: Placement } = $props();
+  }: {
+    guide?: string;
+    text?: string;
+    effect?: string;
+    placement?: Placement;
+  } = $props();
   const k = $derived(`guide.${guide}`);
 </script>
 
@@ -29,16 +35,30 @@
     {#if guide}
       <p class="mb-1 font-semibold text-orange-400">
         {t(`${k}.title`)}
-        {#if has(`${k}.keys`)}<span class="ml-1 font-normal text-neutral-500">{t(`${k}.keys`)}</span>{/if}
+        {#if has(`${k}.keys`)}<span class="ml-1 font-normal text-neutral-500"
+            >{t(`${k}.keys`)}</span
+          >{/if}
       </p>
       <p class="whitespace-pre-line">{t(`${k}.text`)}</p>
-      {#if has(`${k}.example`)}<p class="mt-1 text-neutral-400 italic">{t(`${k}.example`)}</p>{/if}
+      {#if has(`${k}.example`)}<p class="mt-1 text-neutral-400 italic">
+          {t(`${k}.example`)}
+        </p>{/if}
       <!-- it starts over each time the tooltip opens -->
-      {#if guideDemos[guide]}<ToolDemo name={guideDemos[guide]} width={352} height={198} class="mt-2 rounded" />{/if}
+      {#if guideDemos[guide]}<ToolDemo
+          name={guideDemos[guide]}
+          width={352}
+          height={198}
+          class="mt-2 rounded"
+        />{/if}
     {:else}
       <p class="whitespace-pre-line">{text}</p>
       <!-- its particles, live (it starts over each time the tooltip opens) -->
-      {#if effect}<canvas width="160" height="160" class="mt-2 rounded" use:playing={effect}></canvas>{/if}
+      {#if effect}<canvas
+          width="160"
+          height="160"
+          class="mt-2 rounded"
+          use:playing={effect}
+        ></canvas>{/if}
     {/if}
   </Tooltip>
 {/if}

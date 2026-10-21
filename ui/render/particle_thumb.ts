@@ -18,26 +18,38 @@ let queue: Promise<unknown> = Promise.resolve();
 
 /** Draws the effect `group` (an art-name, quoted or not) into `target` at its size, after
  *  `seconds` of the game; false when there is no such effect (or no WebGL2). */
-export function drawEffectThumb(target: HTMLCanvasElement, group: string, seconds = 1.5): Promise<boolean> {
+export function drawEffectThumb(
+  target: HTMLCanvasElement,
+  group: string,
+  seconds = 1.5,
+): Promise<boolean> {
   const job = queue.then(() => draw(target, group, seconds));
   queue = job.catch(() => {});
   return job;
 }
 
-async function draw(target: HTMLCanvasElement, name: string, seconds: number): Promise<boolean> {
+async function draw(
+  target: HTMLCanvasElement,
+  name: string,
+  seconds: number,
+): Promise<boolean> {
   const data = await loadParticleData();
   const group = data?.group(name);
   if (!data || !group) return false;
   const ps = new ParticleSystem();
   ps.beginFrame();
   ps.emit(1, group, identity());
-  for (let i = 0; i < Math.round(seconds * 6); i++) ps.update(data, 1 / 6, [0, 0, 0], -1);
+  for (let i = 0; i < Math.round(seconds * 6); i++)
+    ps.update(data, 1 / 6, [0, 0, 0], -1);
   return render(target, ps, data);
 }
 
 /** The effect `group` playing in `target` (the catalog's tooltip: Thumbnails::live_effect), until
  *  the returned function stops it. */
-export function playEffect(target: HTMLCanvasElement, group: string): () => void {
+export function playEffect(
+  target: HTMLCanvasElement,
+  group: string,
+): () => void {
   let stop = false;
   void loadParticleData().then(async (data) => {
     const g = data?.group(group);
@@ -65,7 +77,11 @@ export function playing(canvas: HTMLCanvasElement, group: string) {
 }
 
 // the particles framed from 3/4 (draw_particles), into `target`
-async function render(target: HTMLCanvasElement, ps: ParticleSystem, data: ParticleData): Promise<boolean> {
+async function render(
+  target: HTMLCanvasElement,
+  ps: ParticleSystem,
+  data: ParticleData,
+): Promise<boolean> {
   const list = ps.sprites();
   let b = ps.bounds();
   if (!aabbValid(b)) b = { lo: [-1, -1, -1], hi: [1, 1, 1] };
@@ -76,7 +92,9 @@ async function render(target: HTMLCanvasElement, ps: ParticleSystem, data: Parti
   cam.frame(b);
   cam.znear = Math.max(0.01, aabbRadius(b) * 0.01);
   if (!gl) {
-    gl = document.createElement("canvas").getContext("webgl2", { alpha: false, preserveDrawingBuffer: true });
+    gl = document
+      .createElement("canvas")
+      .getContext("webgl2", { alpha: false, preserveDrawingBuffer: true });
     if (!gl) return false;
     sprites = new SpriteRenderer(gl);
   }
@@ -84,14 +102,21 @@ async function render(target: HTMLCanvasElement, ps: ParticleSystem, data: Parti
   const canvas = gl.canvas as HTMLCanvasElement;
   const w = Math.max(target.width, 1),
     h = Math.max(target.height, 1);
-  if (canvas.width !== w || canvas.height !== h) Object.assign(canvas, { width: w, height: h });
+  if (canvas.width !== w || canvas.height !== h)
+    Object.assign(canvas, { width: w, height: h });
   gl.viewport(0, 0, w, h);
   gl.clearColor(0.07, 0.08, 0.1, 1);
   gl.clearDepth(1);
   gl.depthMask(true);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   const view = cam.view();
-  sprites!.draw(list, data.textures, matMul(cam.proj(w / h), view), view, gl.LEQUAL);
+  sprites!.draw(
+    list,
+    data.textures,
+    matMul(cam.proj(w / h), view),
+    view,
+    gl.LEQUAL,
+  );
   const ctx = target.getContext("2d");
   ctx?.drawImage(canvas, 0, 0);
   return !!ctx;

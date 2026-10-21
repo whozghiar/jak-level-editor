@@ -10,19 +10,29 @@
     cell,
     height,
     reset,
-  }: { items: T[]; size?: number; cell: Snippet<[T, number]>; height?: number; reset?: unknown } = $props();
+  }: {
+    items: T[];
+    size?: number;
+    cell: Snippet<[T, number]>;
+    height?: number;
+    reset?: unknown;
+  } = $props();
 
   const gap = 6;
   let width = $state(0);
   let shownHeight = $state(0);
   let top = $state(0);
   let box: HTMLDivElement;
-  const perRow = $derived(Math.max(1, Math.floor((width + gap) / (size + 6 + gap))));
+  const perRow = $derived(
+    Math.max(1, Math.floor((width + gap) / (size + 6 + gap))),
+  );
   // a cell: its picture (size + its frame) and its name
   const rowH = $derived(size + 6 + 18 + gap);
   const rows = $derived(Math.ceil(items.length / perRow));
   const first = $derived(Math.max(0, Math.floor(top / rowH) - 1));
-  const last = $derived(Math.min(rows, Math.ceil((top + shownHeight) / rowH) + 1));
+  const last = $derived(
+    Math.min(rows, Math.ceil((top + shownHeight) / rowH) + 1),
+  );
   const shown = $derived(items.slice(first * perRow, last * perRow));
 
   $effect(() => {

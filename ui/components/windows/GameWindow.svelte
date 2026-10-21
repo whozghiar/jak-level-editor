@@ -16,12 +16,22 @@
   type Preset = { id: string; cloud: number; fog: number; rain: number };
 
   const s = $derived(engine.state);
-  const w = $derived(s.weather ?? { mood: {}, time_passes: false, time_speed: 20, lightning: false, preset: null });
+  const w = $derived(
+    s.weather ?? {
+      mood: {},
+      time_passes: false,
+      time_speed: 20,
+      lightning: false,
+      preset: null,
+    },
+  );
   const m = $derived(w.mood ?? {});
   const hour = $derived<number>(m.hour ?? 12);
 
-  const setWeather = (args: Record<string, unknown>) => call("set_weather", args);
-  const setMood = (k: string, v: number | boolean) => setWeather({ mood: { [k]: v } });
+  const setWeather = (args: Record<string, unknown>) =>
+    call("set_weather", args);
+  const setMood = (k: string, v: number | boolean) =>
+    setWeather({ mood: { [k]: v } });
 
   let presets = $state<Preset[]>([]);
   let mood = $state<GameMood>();
@@ -42,15 +52,21 @@
   let yaw = $state(0);
   const height = $derived(Math.round(width * 0.36));
   onMount(() => {
-    call<Preset[]>("weather_presets", {}, true).then((p) => (presets = p ?? []));
+    call<Preset[]>("weather_presets", {}, true).then(
+      (p) => (presets = p ?? []),
+    );
     readMood();
-    const off = onEngine<any>("jle:changed", (p) => (!p || p.gameview || p.state || p.document) && readMood());
+    const off = onEngine<any>(
+      "jle:changed",
+      (p) => (!p || p.gameview || p.state || p.document) && readMood(),
+    );
     let frame = requestAnimationFrame(function draw(now) {
       yaw = viewport.camera.yaw;
       if (canvas && mood && height > 0) {
         const dpr = window.devicePixelRatio || 1;
         const [cw, ch] = [Math.round(width * dpr), Math.round(height * dpr)];
-        if (canvas.width !== cw || canvas.height !== ch) [canvas.width, canvas.height] = [cw, ch];
+        if (canvas.width !== cw || canvas.height !== ch)
+          [canvas.width, canvas.height] = [cw, ch];
         skyPreview(canvas, mood, yaw, now / 1000);
       }
       frame = requestAnimationFrame(draw);
@@ -80,7 +96,12 @@
     { key: "game.dusk", hour: 18.5 },
     { key: "game.night", hour: 22 },
   ];
-  const clock = $derived(printf("%02d:%02d", [Math.floor(hour) % 24, Math.floor((hour - Math.floor(hour)) * 60)]));
+  const clock = $derived(
+    printf("%02d:%02d", [
+      Math.floor(hour) % 24,
+      Math.floor((hour - Math.floor(hour)) * 60),
+    ]),
+  );
   // the speed's slider, logarithmic from 1 to 240 minutes per second
   const toSpeed = (x: number) => Math.exp(x * Math.log(240));
   const fromSpeed = (v: number) => Math.log(Math.max(v, 1)) / Math.log(240);
@@ -94,46 +115,92 @@
 </script>
 
 {#if !s.view.game_view_ready}
-  <p class="text-neutral-300">{t("menu.view.game_view.unavailable", s.view.game_view_error)}</p>
+  <p class="text-neutral-300">
+    {t("menu.view.game_view.unavailable", s.view.game_view_error)}
+  </p>
 {:else}
-  {#snippet checkbox(label: string, on: boolean, run: (on: boolean) => void, tip: string)}
+  {#snippet checkbox(
+    label: string,
+    on: boolean,
+    run: (on: boolean) => void,
+    tip: string,
+  )}
     <label class="flex cursor-pointer items-center gap-2 self-start">
-      <input type="checkbox" class={check} checked={on} onchange={(e) => run(e.currentTarget.checked)} />
+      <input
+        type="checkbox"
+        class={check}
+        checked={on}
+        onchange={(e) => run(e.currentTarget.checked)}
+      />
       {label}
     </label>
     <Tip text={tip} />
   {/snippet}
 
   <div class="flex flex-col gap-2">
-    {@render checkbox(t("game.on"), !!s.view.game_view, (game_view) => call("set_view", { game_view }), t("menu.view.game_view.tip"))}
+    {@render checkbox(
+      t("game.on"),
+      !!s.view.game_view,
+      (game_view) => call("set_view", { game_view }),
+      t("menu.view.game_view.tip"),
+    )}
 
     <!-- the sky, the horizon, the four directions -->
-    <div class="relative overflow-hidden rounded bg-black" bind:clientWidth={width} style:height="{height}px">
+    <div
+      class="relative overflow-hidden rounded bg-black"
+      bind:clientWidth={width}
+      style:height="{height}px"
+    >
       <canvas bind:this={canvas} class="absolute inset-0 size-full"></canvas>
-      <div class="absolute inset-x-0 h-px bg-white/30" style:top="{horizon * 100}%"></div>
+      <div
+        class="absolute inset-x-0 h-px bg-white/30"
+        style:top="{horizon * 100}%"
+      ></div>
       {#each directions as d (d.name)}
-        <span class="absolute text-xs text-white/80" style:left="calc({(0.5 - d.a / Math.PI) * 100}% - 4px)" style:top="calc({horizon * 100}% + 2px)">
+        <span
+          class="absolute text-xs text-white/80"
+          style:left="calc({(0.5 - d.a / Math.PI) * 100}% - 4px)"
+          style:top="calc({horizon * 100}% + 2px)"
+        >
           {d.name}
         </span>
       {/each}
-      <span class="absolute top-0.5 left-1/2 -translate-x-1/2 text-xs text-white/60">v</span>
+      <span
+        class="absolute top-0.5 left-1/2 -translate-x-1/2 text-xs text-white/60"
+        >v</span
+      >
     </div>
     <p class={muted}>{t("game.sky_tip")}</p>
 
     <!-- the hour -->
     <h3 class={heading}>{t("game.hour")}</h3>
     <div class="flex items-center gap-2">
-      <input type="range" class={range} min="0" max="24" step="0.01" value={hour} oninput={(e) => setMood("hour", +e.currentTarget.value)} />
+      <input
+        type="range"
+        class={range}
+        min="0"
+        max="24"
+        step="0.01"
+        value={hour}
+        oninput={(e) => setMood("hour", +e.currentTarget.value)}
+      />
       <span class="w-11 shrink-0 text-right tabular-nums">{clock}</span>
     </div>
     <Tip text={t("game.hour_tip")} />
     <div class="flex gap-1">
       {#each hours as h}
-        <button class={button} onclick={() => setMood("hour", h.hour)}>{t(h.key)}</button>
+        <button class={button} onclick={() => setMood("hour", h.hour)}
+          >{t(h.key)}</button
+        >
       {/each}
     </div>
     <div class="flex items-center gap-3">
-      {@render checkbox(t("game.time_passes"), !!w.time_passes, (time_passes) => setWeather({ time_passes }), t("game.time_passes_tip"))}
+      {@render checkbox(
+        t("game.time_passes"),
+        !!w.time_passes,
+        (time_passes) => setWeather({ time_passes }),
+        t("game.time_passes_tip"),
+      )}
       {#if w.time_passes}
         <input
           type="range"
@@ -142,32 +209,66 @@
           max="1"
           step="0.001"
           value={fromSpeed(w.time_speed)}
-          oninput={(e) => setWeather({ time_speed: toSpeed(+e.currentTarget.value) })}
+          oninput={(e) =>
+            setWeather({ time_speed: toSpeed(+e.currentTarget.value) })}
         />
-        <span class="shrink-0 text-xs text-neutral-400">{t("game.speed", w.time_speed)}</span>
+        <span class="shrink-0 text-xs text-neutral-400"
+          >{t("game.speed", w.time_speed)}</span
+        >
       {/if}
     </div>
 
     <!-- the weather -->
     <h3 class={heading}>{t("game.weather")}</h3>
     <Dropdown
-      items={presets.map((p) => ({ label: t(`weather.${p.id}`), value: p.id, tip: t(`weather.${p.id}.tip`) }))}
+      items={presets.map((p) => ({
+        label: t(`weather.${p.id}`),
+        value: p.id,
+        tip: t(`weather.${p.id}.tip`),
+      }))}
       value={w.preset ?? ""}
-      label={current >= 0 ? t(`weather.${presets[current].id}`) : t("weather.custom")}
+      label={current >= 0
+        ? t(`weather.${presets[current].id}`)
+        : t("weather.custom")}
       onselect={(preset) => setWeather({ preset })}
       tip={t("game.weather_tip")}
     />
     {#each sliders as sl}
       <div class="flex items-center gap-2">
-        <input type="range" class={range} min="0" max="1" step="0.01" value={m[sl.k] ?? 0} oninput={(e) => setMood(sl.k, +e.currentTarget.value)} />
-        <span class="w-10 shrink-0 text-right tabular-nums">{(m[sl.k] ?? 0).toFixed(2)}</span>
+        <input
+          type="range"
+          class={range}
+          min="0"
+          max="1"
+          step="0.01"
+          value={m[sl.k] ?? 0}
+          oninput={(e) => setMood(sl.k, +e.currentTarget.value)}
+        />
+        <span class="w-10 shrink-0 text-right tabular-nums"
+          >{(m[sl.k] ?? 0).toFixed(2)}</span
+        >
         <span class="w-28 shrink-0 text-neutral-400">{t(sl.key)}</span>
       </div>
       <Tip text={t(sl.tip)} />
     {/each}
-    {@render checkbox(t("game.lightning"), !!w.lightning, (lightning) => setWeather({ lightning }), t("game.lightning_tip"))}
-    {@render checkbox(t("menu.view.game_lights"), !!m.level_lights, (on) => setMood("level_lights", on), t("menu.view.game_lights.tip"))}
-    {@render checkbox(t("menu.view.effects"), !!s.view.effects, (effects) => call("set_view", { effects }), t("game.effects_tip"))}
+    {@render checkbox(
+      t("game.lightning"),
+      !!w.lightning,
+      (lightning) => setWeather({ lightning }),
+      t("game.lightning_tip"),
+    )}
+    {@render checkbox(
+      t("menu.view.game_lights"),
+      !!m.level_lights,
+      (on) => setMood("level_lights", on),
+      t("menu.view.game_lights.tip"),
+    )}
+    {@render checkbox(
+      t("menu.view.effects"),
+      !!s.view.effects,
+      (effects) => call("set_view", { effects }),
+      t("game.effects_tip"),
+    )}
 
     <!-- what the game does with it, in words -->
     {#if mood}
@@ -178,7 +279,11 @@
           t(mood.sun_dir[1] > 0 ? "game.sun_up" : "game.sun_down"),
           Math.max(...mood.light_color[0], 0),
           mood.fog_end / 4096,
-          t(m.level_lights && mood.times[5][3] > 0 ? "game.lamps_on" : "game.lamps_off"),
+          t(
+            m.level_lights && mood.times[5][3] > 0
+              ? "game.lamps_on"
+              : "game.lamps_off",
+          ),
         )}
       </p>
     {/if}

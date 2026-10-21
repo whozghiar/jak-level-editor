@@ -34,7 +34,20 @@
   type Menu = { label: string; enabled?: boolean; items: (Item | null)[] }; // null: a separator
 
   // the shapes of the Build menu (shape_presets in scene/shapes.cpp)
-  const shapes = ["box", "floor", "wall", "doorway", "window", "pillar", "ramp", "stairs", "roof", "roof-hip", "cylinder", "ground"];
+  const shapes = [
+    "box",
+    "floor",
+    "wall",
+    "doorway",
+    "window",
+    "pillar",
+    "ramp",
+    "stairs",
+    "roof",
+    "roof-hip",
+    "cylinder",
+    "ground",
+  ];
 
   const s = $derived(engine.state);
   const sel = $derived(s.selection.count > 0);
@@ -59,10 +72,23 @@
         {
           label: t("menu.file.recent"),
           enabled: s.recent_projects.length > 0,
-          items: s.recent_projects.map((p) => ({ label: p, run: () => openProjectFile(p) })),
+          items: s.recent_projects.map((p) => ({
+            label: p,
+            run: () => openProjectFile(p),
+          })),
         },
-        { label: t("menu.file.save"), keys: "Ctrl+S", enabled: doc, run: () => save(false) },
-        { label: t("menu.file.save_as"), keys: "Ctrl+Shift+S", enabled: doc, run: () => save(true) },
+        {
+          label: t("menu.file.save"),
+          keys: "Ctrl+S",
+          enabled: doc,
+          run: () => save(false),
+        },
+        {
+          label: t("menu.file.save_as"),
+          keys: "Ctrl+Shift+S",
+          enabled: doc,
+          run: () => save(true),
+        },
         null,
         { label: t("menu.file.import_model"), enabled: doc, run: importModel },
         null,
@@ -74,16 +100,57 @@
     {
       label: t("menu.edit"),
       items: [
-        { label: t("menu.edit.undo"), keys: "Ctrl+Z", enabled: s.history.can_undo, tip: s.history.undo_label, run: () => call("undo") },
-        { label: t("menu.edit.redo"), keys: "Ctrl+Y", enabled: s.history.can_redo, tip: s.history.redo_label, run: () => call("redo") },
+        {
+          label: t("menu.edit.undo"),
+          keys: "Ctrl+Z",
+          enabled: s.history.can_undo,
+          tip: s.history.undo_label,
+          run: () => call("undo"),
+        },
+        {
+          label: t("menu.edit.redo"),
+          keys: "Ctrl+Y",
+          enabled: s.history.can_redo,
+          tip: s.history.redo_label,
+          run: () => call("redo"),
+        },
         null,
-        { label: t("menu.edit.copy"), keys: "Ctrl+C", enabled: sel, run: () => call("copy_selection") },
-        { label: t("menu.edit.paste"), keys: "Ctrl+V", enabled: !s.clipboard_empty, run: () => call("paste") },
-        { label: t("menu.edit.duplicate"), keys: "Ctrl+D", enabled: sel, run: () => call("duplicate_selection") },
-        { label: t("menu.edit.delete"), keys: t("key.delete"), enabled: sel, run: () => call("delete_selection") },
+        {
+          label: t("menu.edit.copy"),
+          keys: "Ctrl+C",
+          enabled: sel,
+          run: () => call("copy_selection"),
+        },
+        {
+          label: t("menu.edit.paste"),
+          keys: "Ctrl+V",
+          enabled: !s.clipboard_empty,
+          run: () => call("paste"),
+        },
+        {
+          label: t("menu.edit.duplicate"),
+          keys: "Ctrl+D",
+          enabled: sel,
+          run: () => call("duplicate_selection"),
+        },
+        {
+          label: t("menu.edit.delete"),
+          keys: t("key.delete"),
+          enabled: sel,
+          run: () => call("delete_selection"),
+        },
         null,
-        { label: t("menu.edit.create_prefab"), enabled: sel, run: () => windows.open("new_prefab") },
-        { label: t("menu.edit.select_none"), keys: t("key.escape"), enabled: sel, run: () => call("select_only", { id: 0 }) },
+        {
+          label: t("menu.edit.create_prefab"),
+          enabled: sel,
+          run: () => windows.open("new_prefab"),
+        },
+        {
+          label: t("menu.edit.select_none"),
+          keys: t("key.escape"),
+          enabled: sel,
+          run: () => call("select_only", { id: 0 }),
+        },
         {
           label: t("menu.edit.select_level"),
           keys: "Ctrl+L",
@@ -112,14 +179,27 @@
           tip: t("group.make.tip"),
           run: () => windows.open("new_group"),
         },
-        { label: t("group.ungroup"), enabled: sel && !!group, run: () => call("ungroup", { id: group }) },
+        {
+          label: t("group.ungroup"),
+          enabled: sel && !!group,
+          run: () => call("ungroup", { id: group }),
+        },
       ],
     },
     {
       label: t("menu.view"),
       items: [
-        { label: t("menu.view.frame_selection"), keys: "F", enabled: sel, run: () => frameView("selection") },
-        { label: t("menu.view.frame_all"), keys: t("key.home"), run: () => frameView("all") },
+        {
+          label: t("menu.view.frame_selection"),
+          keys: "F",
+          enabled: sel,
+          run: () => frameView("selection"),
+        },
+        {
+          label: t("menu.view.frame_all"),
+          keys: t("key.home"),
+          run: () => frameView("all"),
+        },
         null,
         // the level drawn by the game's own renderer, lit at an hour of the day
         {
@@ -127,7 +207,9 @@
           keys: "G",
           enabled: v.game_view_ready,
           checked: v.game_view,
-          tip: v.game_view_ready ? t("menu.view.game_view.tip") : t("menu.view.game_view.unavailable", v.game_view_error),
+          tip: v.game_view_ready
+            ? t("menu.view.game_view.tip")
+            : t("menu.view.game_view.unavailable", v.game_view_error),
           run: () => toggleView("game_view"),
         },
         // its sky, hour and weather: in a window of their own
@@ -147,12 +229,24 @@
         view("labels", "menu.view.labels"),
         view("grid", "menu.view.grid"),
         view("textures", "menu.view.textures"),
-        view("select_terrain", "menu.view.select_terrain", "menu.view.select_terrain.tip"),
-        { label: t("menu.view.log"), checked: windows.isOpen("log"), run: () => windows.toggle("log") },
+        view(
+          "select_terrain",
+          "menu.view.select_terrain",
+          "menu.view.select_terrain.tip",
+        ),
+        {
+          label: t("menu.view.log"),
+          checked: windows.isOpen("log"),
+          run: () => windows.toggle("log"),
+        },
         null,
         {
           label: t("menu.view.language"),
-          items: languages.map((l) => ({ label: l.name, checked: l.code === language(), run: () => changeLanguage(l.code) })),
+          items: languages.map((l) => ({
+            label: l.name,
+            checked: l.code === language(),
+            run: () => changeLanguage(l.code),
+          })),
         },
       ],
     },
@@ -166,7 +260,10 @@
           run: () => call("start_shape_placement", { preset: p, once: false }),
         })),
         null,
-        { label: t("menu.create.materials"), run: () => (ui.leftTab = "build") },
+        {
+          label: t("menu.create.materials"),
+          run: () => (ui.leftTab = "build"),
+        },
         { label: t("menu.file.import_model"), run: importModel },
       ],
     },
@@ -176,7 +273,11 @@
       enabled: doc,
       items: [
         { label: t("menu.level.add"), run: () => (ui.leftTab = "levels") },
-        { label: t("menu.level.select"), keys: "Ctrl+L", run: () => call("select_level", { group: 0 }) },
+        {
+          label: t("menu.level.select"),
+          keys: "Ctrl+L",
+          run: () => call("select_level", { group: 0 }),
+        },
         {
           label: t("menu.level.replace"),
           guide: "replace",
@@ -190,7 +291,11 @@
           tip: t("menu.level.restore_effects.tip"),
           run: () => call("restore_level_effects"),
         },
-        { label: t("menu.level.navmesh"), checked: windows.isOpen("navmesh"), run: () => windows.toggle("navmesh") },
+        {
+          label: t("menu.level.navmesh"),
+          checked: windows.isOpen("navmesh"),
+          run: () => windows.toggle("navmesh"),
+        },
         {
           label: t("menu.level.gaps"),
           checked: windows.isOpen("gaps"),
@@ -198,18 +303,32 @@
           run: () => windows.toggle("gaps"),
         },
         null,
-        { label: t("menu.file.export_game"), guide: "export", run: () => windows.open("export") },
+        {
+          label: t("menu.file.export_game"),
+          guide: "export",
+          run: () => windows.open("export"),
+        },
         // only with a game runtime the host gives (no runtime: the export and its README)
-        ...(s.runtime?.available ? [{ label: t("menu.level.play"), tip: t("menu.level.play.tip"), run: playLevel }] : []),
+        ...(s.runtime?.available
+          ? [
+              {
+                label: t("menu.level.play"),
+                tip: t("menu.level.play.tip"),
+                run: playLevel,
+              },
+            ]
+          : []),
       ],
     },
     {
       label: t("menu.help"),
-      items: ["menu.help.tour", "menu.help.tools", "menu.help.keys"].map((key, tab) => ({
-        label: t(key),
-        keys: tab === 0 ? "F1" : undefined,
-        run: () => windows.open("guide", { tab }),
-      })),
+      items: ["menu.help.tour", "menu.help.tools", "menu.help.keys"].map(
+        (key, tab) => ({
+          label: t(key),
+          keys: tab === 0 ? "F1" : undefined,
+          run: () => windows.open("guide", { tab }),
+        }),
+      ),
     },
   ]);
 
@@ -226,12 +345,16 @@
 </script>
 
 <svelte:window
-  onpointerdown={(e) => opened >= 0 && !bar.contains(e.target as Node) && (opened = -1)}
-  onkeydown={(e) => opened >= 0 && e.key === "Escape" && (e.preventDefault(), (opened = -1))}
+  onpointerdown={(e) =>
+    opened >= 0 && !bar.contains(e.target as Node) && (opened = -1)}
+  onkeydown={(e) =>
+    opened >= 0 && e.key === "Escape" && (e.preventDefault(), (opened = -1))}
 />
 
 {#snippet list(items: (Item | null)[])}
-  <div class="min-w-60 rounded-md border border-white/10 bg-[#101010] py-1 text-neutral-200 shadow-xl shadow-black/60">
+  <div
+    class="min-w-60 rounded-md border border-white/10 bg-[#101010] py-1 text-neutral-200 shadow-xl shadow-black/60"
+  >
     {#each items as it}
       {#if !it}
         <div class="my-1 border-t border-white/5"></div>
@@ -243,17 +366,27 @@
             <IconChevronRight class="text-neutral-500" />
           </button>
           {#if it.enabled !== false}
-            <div class="absolute top-0 left-full hidden max-h-[70vh] overflow-y-auto group-hover/sub:block">
+            <div
+              class="absolute top-0 left-full hidden max-h-[70vh] overflow-y-auto group-hover/sub:block"
+            >
               {@render list(it.items)}
             </div>
           {/if}
         </div>
       {:else}
         <span class="block">
-          <button class={row} disabled={it.enabled === false} onclick={() => run(it)}>
-            <span class="w-4 text-orange-400">{#if it.checked}<IconCheck />{/if}</span>
+          <button
+            class={row}
+            disabled={it.enabled === false}
+            onclick={() => run(it)}
+          >
+            <span class="w-4 text-orange-400"
+              >{#if it.checked}<IconCheck />{/if}</span
+            >
             <span class="flex-1">{it.label}</span>
-            {#if it.keys}<span class="pl-6 text-xs text-neutral-500">{it.keys}</span>{/if}
+            {#if it.keys}<span class="pl-6 text-xs text-neutral-500"
+                >{it.keys}</span
+              >{/if}
           </button>
         </span>
         <Tip guide={it.guide} text={it.tip} placement="right" />
@@ -262,11 +395,17 @@
   </div>
 {/snippet}
 
-<nav bind:this={bar} class="relative z-40 flex h-8 shrink-0 items-center border-b border-white/5 bg-[#0b0b0b] px-1 text-sm">
+<nav
+  bind:this={bar}
+  class="relative z-40 flex h-8 shrink-0 items-center border-b border-white/5 bg-[#0b0b0b] px-1 text-sm"
+>
   {#each menus as m, i}
     <div class="relative">
       <button
-        class="rounded px-3 py-1 enabled:hover:bg-white/10 disabled:text-neutral-600 {opened === i ? 'bg-white/10 text-orange-400' : 'text-neutral-200'}"
+        class="rounded px-3 py-1 enabled:hover:bg-white/10 disabled:text-neutral-600 {opened ===
+        i
+          ? 'bg-white/10 text-orange-400'
+          : 'text-neutral-200'}"
         disabled={m.enabled === false}
         onclick={() => (opened = opened === i ? -1 : i)}
         onpointerenter={() => opened >= 0 && (opened = i)}

@@ -44,7 +44,12 @@ export function attachPlaceTool(): () => void {
   const canvas = viewport.canvas!;
   const controls = viewport.controls!;
   const off: (() => void)[] = [];
-  const on = <K extends keyof WindowEventMap>(t: EventTarget, type: K, fn: (e: WindowEventMap[K]) => void, capture = false) => {
+  const on = <K extends keyof WindowEventMap>(
+    t: EventTarget,
+    type: K,
+    fn: (e: WindowEventMap[K]) => void,
+    capture = false,
+  ) => {
     t.addEventListener(type, fn as EventListener, capture);
     off.push(() => t.removeEventListener(type, fn as EventListener, capture));
   };
@@ -57,14 +62,26 @@ export function attachPlaceTool(): () => void {
   // the left button held where it is placed (m_place_drag)
   let drag: { anchor: Mat4; px: Vec2 } | null = null;
   // the right button held: free rotation (m_free_rotating_placement)
-  let turning: { right: Vec3; yaw: number; pitch: number; tilt0: Quat; tilt: Quat } | null = null;
+  let turning: {
+    right: Vec3;
+    yaw: number;
+    pitch: number;
+    tilt0: Quat;
+    tilt: Quat;
+  } | null = null;
   // a drag from a panel going on (m_drag_from_panel)
   let panel = false;
   let preview: MeshEntry | null = null;
   let previewUid = 0;
 
   const placing = () => engine.state.tool === "place";
-  const p = () => engine.state.placement as { yaw: number; tilt: Quat; mesh: number; version: number } | null;
+  const p = () =>
+    engine.state.placement as {
+      yaw: number;
+      tilt: Quat;
+      mesh: number;
+      version: number;
+    } | null;
 
   // the engine's placement_matrix for the cursor (one question at a time, the last position asked
   // again when it moved meanwhile)
@@ -76,7 +93,9 @@ export function attachPlaceTool(): () => void {
     do {
       again = false;
       const { origin, dir } = viewport.rayFromMouse(mouse[0], mouse[1]);
-      const r = await call("placement_preview", { origin, dir }).catch(() => null);
+      const r = await call("placement_preview", { origin, dir }).catch(
+        () => null,
+      );
       if (!drag && !turning) matrix = r && over ? (r.matrix as Mat4) : null;
     } while (again);
     asking = false;
@@ -111,7 +130,14 @@ export function attachPlaceTool(): () => void {
   function dragged() {
     if (!drag) return;
     const at = col3(drag.anchor, 3);
-    const o = dragOffset(viewport.camera, viewport.size()[1], drag.px, at, ctrl, engine.state.gizmo.snap);
+    const o = dragOffset(
+      viewport.camera,
+      viewport.size()[1],
+      drag.px,
+      at,
+      ctrl,
+      engine.state.gizmo.snap,
+    );
     matrix = matMul(translate(o), drag.anchor);
     viewport.requestRedraw();
   }
@@ -163,7 +189,10 @@ export function attachPlaceTool(): () => void {
     panel = false;
     // where the pointer is let go (the preview's answer may not be there yet after a quick drag);
     // let go outside the window: nothing
-    if (what === "end" && over) call("place_at", { ...viewport.rayFromMouse(mouse[0], mouse[1]) }).catch((err) => console.warn("[place]", err));
+    if (what === "end" && over)
+      call("place_at", { ...viewport.rayFromMouse(mouse[0], mouse[1]) }).catch(
+        (err) => console.warn("[place]", err),
+      );
     else void call("stop_placement");
     matrix = null;
     viewport.requestRedraw();
@@ -176,13 +205,21 @@ export function attachPlaceTool(): () => void {
     const pl = p();
     if (!matrix || !pl) return false;
     const tilt0: Quat = pl.tilt ?? [0, 0, 0, 1];
-    turning = { right: viewport.camera.right(), yaw: 0, pitch: 0, tilt0, tilt: tilt0 };
+    turning = {
+      right: viewport.camera.right(),
+      yaw: 0,
+      pitch: 0,
+      tilt0,
+      tilt: tilt0,
+    };
     shortcuts.paused = true;
     // the cursor stays where it is: the mouse turns it as far as wanted
     lockPointer(canvas, () => !!turning);
     return true;
   };
-  on(window, "mousemove", (e) => turn(e.movementX, e.movementY, e.shiftKey, e.ctrlKey));
+  on(window, "mousemove", (e) =>
+    turn(e.movementX, e.movementY, e.shiftKey, e.ctrlKey),
+  );
   function turn(dx: number, dy: number, shift: boolean, ctrl: boolean) {
     if (!turning || !matrix) return;
     const k = shift ? 0.002 : 0.008; // radians per pixel
@@ -196,10 +233,15 @@ export function attachPlaceTool(): () => void {
       yaw = round(yaw / s) * s;
       pitch = round(pitch / s) * s;
     }
-    const r = qnorm(quatMul(axisAngle(Y, yaw), axisAngle(turning.right, pitch)));
+    const r = qnorm(
+      quatMul(axisAngle(Y, yaw), axisAngle(turning.right, pitch)),
+    );
     turning.tilt = qnorm(quatMul(r, turning.tilt0));
     // the preview where it was, turned (the cursor does not move it while it turns)
-    matrix = matMul(matMul(translate(col3(matrix, 3)), rotate(turning.tilt)), rotate(axisAngle(Y, p()?.yaw ?? 0)));
+    matrix = matMul(
+      matMul(translate(col3(matrix, 3)), rotate(turning.tilt)),
+      rotate(axisAngle(Y, p()?.yaw ?? 0)),
+    );
     viewport.requestRedraw();
   }
   on(window, "mouseup", (e) => {
@@ -225,18 +267,40 @@ export function attachPlaceTool(): () => void {
       if (!placing() || !matrix) return;
       const c = col3(matrix, 3);
       if (preview?.data) {
-        r.drawMesh(preview, matrix, viewport.store.materials, viewport.store, rs, [0.35, 0.75, 1, 0.25], 0.7);
+        r.drawMesh(
+          preview,
+          matrix,
+          viewport.store.materials,
+          viewport.store,
+          rs,
+          [0.35, 0.75, 1, 0.25],
+          0.7,
+        );
       } else {
         const grey = col32(0x80, 0x80, 0x80);
         r.line(sub(c, [1, 0, 0]), add(c, [1, 0, 0]), grey);
         r.line(sub(c, [0, 0, 1]), add(c, [0, 0, 1]), grey);
         r.line(c, add(c, [0, 1.5, 0]), grey);
       }
-      r.circle(add(c, [0, 0.03, 0]), [1, 0, 0], [0, 0, 1], 0.5, col32(0xff, 0xd0, 0x40), 24);
+      r.circle(
+        add(c, [0, 0.03, 0]),
+        [1, 0, 0],
+        [0, 0, 1],
+        0.5,
+        col32(0xff, 0xd0, 0x40),
+        24,
+      );
       if (drag) {
         // where it was clicked, and the way to where it goes
         const a = col3(drag.anchor, 3);
-        r.circle(add(a, [0, 0.03, 0]), [1, 0, 0], [0, 0, 1], 0.3, col32(0x80, 0x80, 0x80), 16);
+        r.circle(
+          add(a, [0, 0.03, 0]),
+          [1, 0, 0],
+          [0, 0, 1],
+          0.3,
+          col32(0x80, 0x80, 0x80),
+          16,
+        );
         r.line(a, [c[0], a[1], c[2]], col32(0xff, 0x40, 0x40));
         r.line([c[0], a[1], c[2]], c, col32(0x40, 0xff, 0x40));
       }

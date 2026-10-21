@@ -17,10 +17,17 @@ const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const mul = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k];
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const cross = (a: V3, b: V3): V3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
 const normalize = (a: V3): V3 => mul(a, 1 / (Math.hypot(...a) || 1));
 const mix = (a: V3, b: V3, k: number) => add(a, mul(sub(b, a), k));
-const mix2 = (a: V2, b: V2, k: number): V2 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+const mix2 = (a: V2, b: V2, k: number): V2 => [
+  a[0] + (b[0] - a[0]) * k,
+  a[1] + (b[1] - a[1]) * k,
+];
 const radians = (deg: number) => (deg * Math.PI) / 180;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 // 0 before a, 1 after b, eased between
@@ -53,7 +60,14 @@ const NO_TURN: Q = [0, 0, 0, 1];
 const IDENTITY: M = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
 const translate = (v: V3): M => [1, 0, 0, 0, 1, 0, 0, 0, 1, ...v];
 const scale = (v: V3): M => [v[0], 0, 0, 0, v[1], 0, 0, 0, v[2], 0, 0, 0];
-const rotate = (q: Q): M => [...qrotate(q, [1, 0, 0]), ...qrotate(q, [0, 1, 0]), ...qrotate(q, [0, 0, 1]), 0, 0, 0];
+const rotate = (q: Q): M => [
+  ...qrotate(q, [1, 0, 0]),
+  ...qrotate(q, [0, 1, 0]),
+  ...qrotate(q, [0, 0, 1]),
+  0,
+  0,
+  0,
+];
 const point = (m: M, p: V3): V3 => [
   m[0] * p[0] + m[3] * p[1] + m[6] * p[2] + m[9],
   m[1] * p[0] + m[4] * p[1] + m[7] * p[2] + m[10],
@@ -62,8 +76,14 @@ const point = (m: M, p: V3): V3 => [
 // a * b * c...: the last applied first
 const chain = (...ms: M[]): M =>
   ms.reduce((a, b) => {
-    const axis = (i: number) => sub(point(a, [b[i], b[i + 1], b[i + 2]]), [a[9], a[10], a[11]]);
-    return [...axis(0), ...axis(3), ...axis(6), ...point(a, [b[9], b[10], b[11]])];
+    const axis = (i: number) =>
+      sub(point(a, [b[i], b[i + 1], b[i + 2]]), [a[9], a[10], a[11]]);
+    return [
+      ...axis(0),
+      ...axis(3),
+      ...axis(6),
+      ...point(a, [b[9], b[10], b[11]]),
+    ];
   });
 
 // ---- the shapes (make_shape in scene/shapes.cpp) ----
@@ -88,7 +108,10 @@ export const shapePresets: { name: string; params: ShapeParams }[] = [
   { name: "floor", params: { kind: "box", size: [8, 0.5, 8] } },
   { name: "wall", params: { kind: "box", size: [8, 4, 0.5] } },
   { name: "doorway", params: { kind: "doorway", size: [4, 4, 0.5] } },
-  { name: "window", params: { kind: "window", size: [4, 4, 0.5], opening: [1.6, 1.4] } },
+  {
+    name: "window",
+    params: { kind: "window", size: [4, 4, 0.5], opening: [1.6, 1.4] },
+  },
   { name: "pillar", params: { kind: "box", size: [1, 6, 1] } },
   { name: "ramp", params: { kind: "ramp", size: [4, 2, 8] } },
   { name: "stairs", params: { kind: "stairs", size: [4, 3, 6] } },
@@ -115,7 +138,11 @@ interface Mesh {
 // A smooth noise over the plane, -0.5..0.5, one bump per unit, the same for the same seed
 function smoothNoise(x: number, z: number, seed: number): number {
   const hash = (x: number, z: number) => {
-    let k = (Math.imul(x, 73856093) ^ Math.imul(z, 19349663) ^ Math.imul(seed, 83492791)) >>> 0;
+    let k =
+      (Math.imul(x, 73856093) ^
+        Math.imul(z, 19349663) ^
+        Math.imul(seed, 83492791)) >>>
+      0;
     k = Math.imul(k ^ (k >>> 13), 1274126177) >>> 0;
     return ((k ^ (k >>> 16)) & 0xffff) / 65535 - 0.5;
   };
@@ -253,7 +280,11 @@ class Camera {
   fov = 45;
   forward(): V3 {
     const c = Math.cos(this.pitch);
-    return [-Math.sin(this.yaw) * c, Math.sin(this.pitch), -Math.cos(this.yaw) * c];
+    return [
+      -Math.sin(this.yaw) * c,
+      Math.sin(this.pitch),
+      -Math.cos(this.yaw) * c,
+    ];
   }
   lookAt(target: V3) {
     const d = normalize(sub(target, this.pos));
@@ -340,7 +371,9 @@ class Picture {
    */
   mesh(m: Mesh, world: M, color: V3, tint = NONE, alpha = 1, under = false) {
     const shade = (k: number) => {
-      const c = color.map((v, i) => Math.min(v * k, 1) * (1 - tint[3]) + tint[i] * tint[3]);
+      const c = color.map(
+        (v, i) => Math.min(v * k, 1) * (1 - tint[3]) + tint[i] * tint[3],
+      );
       return `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
     };
     for (const f of m.faces) {
@@ -358,9 +391,13 @@ class Picture {
       if (!facing && alpha >= 1) continue;
       const projected = pts.map((p) => this.project(p));
       if (projected.some((p) => p[2] < 0.1)) continue; // ponytail: dropped, not clipped at the near plane: no demo comes that close
-      const l = 0.45 + 0.55 * Math.max(dot(normalize(facing ? n : mul(n, -1)), LIGHT), 0);
+      const l =
+        0.45 +
+        0.55 * Math.max(dot(normalize(facing ? n : mul(n, -1)), LIGHT), 0);
       this.faces.push({
-        depth: under ? Infinity : projected.reduce((s, p) => s + p[2], 0) / projected.length,
+        depth: under
+          ? Infinity
+          : projected.reduce((s, p) => s + p[2], 0) / projected.length,
         pts: projected.map(([x, y]) => [x, y]),
         fill: shade(CELL * l),
         line: shade(CELL_LINE * l),
@@ -374,21 +411,33 @@ class Picture {
   // the lines of the grid texture on a face: one cell per `tile` meters, horizontal along its width
   // and upright along its slope (add_face's uvs); the ground's top laid from above
   #grid(f: Face, world: M, tile: number): number[] {
-    const right: V3 = f.top || Math.abs(f.n[1]) > 0.99 ? [1, 0, 0] : normalize(cross([0, 1, 0], f.n));
+    const right: V3 =
+      f.top || Math.abs(f.n[1]) > 0.99
+        ? [1, 0, 0]
+        : normalize(cross([0, 1, 0], f.n));
     const across: V3 = f.top ? [0, 0, 1] : cross(f.n, right);
     const out: number[] = [];
     for (const axis of [right, across]) {
       const g = f.pts.map((p) => dot(p, axis) / tile);
       // a line on an edge too: the texture's cells are outlined
-      for (let k = Math.ceil(Math.min(...g) - 1e-5); k <= Math.max(...g) + 1e-5; k++) {
+      for (
+        let k = Math.ceil(Math.min(...g) - 1e-5);
+        k <= Math.max(...g) + 1e-5;
+        k++
+      ) {
         const ends: V3[] = [];
         f.pts.forEach((a, i) => {
           const da = g[i] - k;
           const db = g[(i + 1) % g.length] - k;
           if (Math.abs(da) < 1e-5) ends.push(a);
-          else if (Math.abs(db) >= 1e-5 && da * db < 0) ends.push(mix(a, f.pts[(i + 1) % g.length], da / (da - db)));
+          else if (Math.abs(db) >= 1e-5 && da * db < 0)
+            ends.push(mix(a, f.pts[(i + 1) % g.length], da / (da - db)));
         });
-        if (ends.length >= 2) out.push(...this.screen(point(world, ends[0])), ...this.screen(point(world, ends[1])));
+        if (ends.length >= 2)
+          out.push(
+            ...this.screen(point(world, ends[0])),
+            ...this.screen(point(world, ends[1])),
+          );
       }
     }
     return out;
@@ -396,7 +445,12 @@ class Picture {
 
   // the selection's outline: the mesh's box, the edges of its faces turned to the camera
   #outline(m: Mesh, world: M) {
-    const corner = (i: number) => point(world, [i & 1 ? m.hi[0] : m.lo[0], i & 2 ? m.hi[1] : m.lo[1], i & 4 ? m.hi[2] : m.lo[2]]);
+    const corner = (i: number) =>
+      point(world, [
+        i & 1 ? m.hi[0] : m.lo[0],
+        i & 2 ? m.hi[1] : m.lo[1],
+        i & 4 ? m.hi[2] : m.lo[2],
+      ]);
     const c = Array.from({ length: 8 }, (_, i) => corner(i));
     const middle = mix(c[0], c[7], 0.5);
     // face (axis, side): toward the camera?
@@ -412,7 +466,8 @@ class Picture {
       for (let axis = 0; axis < 3; axis++) {
         if (i & (1 << axis)) continue;
         const others = [0, 1, 2].filter((a) => a !== axis);
-        if (others.some((a) => seen(a, (i >> a) & 1))) this.line(c[i], c[i | (1 << axis)], ORANGE);
+        if (others.some((a) => seen(a, (i >> a) & 1)))
+          this.line(c[i], c[i | (1 << axis)], ORANGE);
       }
   }
 
@@ -421,7 +476,11 @@ class Picture {
   }
 
   gizmoAxes(at: V3, size: number, hot: number, turn = NO_TURN) {
-    const axes = [qrotate(turn, [1, 0, 0]), qrotate(turn, [0, 1, 0]), qrotate(turn, [0, 0, 1])];
+    const axes = [
+      qrotate(turn, [1, 0, 0]),
+      qrotate(turn, [0, 1, 0]),
+      qrotate(turn, [0, 0, 1]),
+    ];
     const colors = [RED, GREEN, BLUE];
     for (let i = 0; i < 3; i++) {
       const c = hot === i ? HOT : colors[i];
@@ -436,7 +495,17 @@ class Picture {
 
   gizmoRings(at: V3, size: number, hot: number) {
     const circle = (u: V3, v: V3, color: string) => {
-      const p = (i: number) => add(at, mul(add(mul(u, Math.cos((i / 48) * 2 * Math.PI)), mul(v, Math.sin((i / 48) * 2 * Math.PI))), size));
+      const p = (i: number) =>
+        add(
+          at,
+          mul(
+            add(
+              mul(u, Math.cos((i / 48) * 2 * Math.PI)),
+              mul(v, Math.sin((i / 48) * 2 * Math.PI)),
+            ),
+            size,
+          ),
+        );
       for (let i = 0; i < 48; i++) this.line(p(i), p(i + 1), color);
     };
     circle([0, 1, 0], [0, 0, 1], hot === 0 ? HOT : RED);
@@ -491,7 +560,13 @@ class Picture {
   #drawOverlay(ctx: CanvasRenderingContext2D, o: Overlay) {
     const round = (a: V2, b: V2, r: number) => {
       ctx.beginPath();
-      ctx.roundRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), r);
+      ctx.roundRect(
+        Math.min(a[0], b[0]),
+        Math.min(a[1], b[1]),
+        Math.abs(b[0] - a[0]),
+        Math.abs(b[1] - a[1]),
+        r,
+      );
     };
     const [x, y] = o.at;
     if (o.kind === "rect") {
@@ -545,11 +620,15 @@ class Picture {
       const lines: string[] = [];
       for (const word of text.split(/\s+/)) {
         const last = lines.length ? `${lines[lines.length - 1]} ${word}` : word;
-        if (lines.length && ctx.measureText(last).width <= wrap) lines[lines.length - 1] = last;
+        if (lines.length && ctx.measureText(last).width <= wrap)
+          lines[lines.length - 1] = last;
         else lines.push(word);
       }
       const lh = 15;
-      const width = Math.min(wrap, Math.max(...lines.map((l) => ctx.measureText(l).width)));
+      const width = Math.min(
+        wrap,
+        Math.max(...lines.map((l) => ctx.measureText(l).width)),
+      );
       const height = lines.length * lh;
       const ty = y + height + 4 > this.h ? this.h - height - 6 : y;
       round([x - 4, ty - 2], [x + width + 4, ty + height + 2], 4);
@@ -567,7 +646,10 @@ interface Shape {
   mesh: Mesh;
   color: V3 | null;
 }
-const shape = (kind: string, size: V3, color: V3 | null): Shape => ({ mesh: makeShape({ kind, size, tile: 1 }), color });
+const shape = (kind: string, size: V3, color: V3 | null): Shape => ({
+  mesh: makeShape({ kind, size, tile: 1 }),
+  color,
+});
 const CRATE: V3 = [1, 0.62, 0.3];
 const RED_PAD: V3 = [1, 0.38, 0.32];
 const GROUND = shape("box", [14, 0.2, 14], [0.8, 0.82, 0.85]);
@@ -606,14 +688,24 @@ export const demoNames = [
  * Draws demo `name` at `time` seconds (it loops) on `ctx`, w x h pixels (its transform already set
  * for the device's pixels). False for a demo that does not exist (nothing drawn).
  */
-export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: number, w: number, h: number): boolean {
+export function drawDemo(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  time: number,
+  w: number,
+  h: number,
+): boolean {
   if (!demoNames.includes(name)) return false;
   const cursor = (at: V2) => pic.overlay.push({ kind: "cursor", at });
-  const click = (at: V2, k: number) => k > 0 && k < 1 && pic.overlay.push({ kind: "click", at, k });
-  const label = (at: V2, text: string) => pic.overlay.push({ kind: "label", at, text });
-  const rect = (at: V2, to: V2, style: "" | "bar" | "knob") => pic.overlay.push({ kind: "rect", at, to, style });
+  const click = (at: V2, k: number) =>
+    k > 0 && k < 1 && pic.overlay.push({ kind: "click", at, k });
+  const label = (at: V2, text: string) =>
+    pic.overlay.push({ kind: "label", at, text });
+  const rect = (at: V2, to: V2, style: "" | "bar" | "knob") =>
+    pic.overlay.push({ kind: "rect", at, to, style });
   // what the gizmo shows while it is dragged, next to the cursor
-  const readout = (at: V2, format: string, value: number) => label([at[0] + 14, at[1] + 10], printf(format, [value]));
+  const readout = (at: V2, format: string, value: number) =>
+    label([at[0] + 14, at[1] + 10], printf(format, [value]));
   const corner: V2 = [8, h - 26];
   const start: V2 = [w * 0.78, h * 0.92]; // where the cursor comes from
 
@@ -639,7 +731,8 @@ export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: numb
     cam.lookAt([0, 0.8, 0]);
   }
   const pic = new Picture(cam, w, h);
-  const mesh = (s: Shape, world: M, tint = NONE, alpha = 1) => pic.mesh(s.mesh, world, s.color ?? pic.wall, tint, alpha);
+  const mesh = (s: Shape, world: M, tint = NONE, alpha = 1) =>
+    pic.mesh(s.mesh, world, s.color ?? pic.wall, tint, alpha);
   const screen = (p: V3) => pic.screen(p);
   pic.mesh(GROUND.mesh, translate([0, -0.2, 0]), GROUND.color!, NONE, 1, true);
 
@@ -651,17 +744,23 @@ export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: numb
     mesh(PILLAR, translate(b), t >= 3 ? SELECTED : NONE);
     const pa = screen(add(a, [0, 0.8, 0]));
     const pb = screen(add(b, [0, 1.5, 0]));
-    cursor(t < 2.4 ? mix2(start, pa, ease(t, 0.2, 1)) : mix2(pa, pb, ease(t, 2.4, 2.95)));
+    cursor(
+      t < 2.4
+        ? mix2(start, pa, ease(t, 0.2, 1))
+        : mix2(pa, pb, ease(t, 2.4, 2.95)),
+    );
     click(pa, (t - 1.1) / 0.4);
     click(pb, (t - 3) / 0.4);
     label(corner, "guide.demo.select");
   } else if (name === "box_select") {
     period(4);
     const selected = t > 2.2;
-    for (const x of [-2.5, 0, 2.5]) mesh(BOX, translate([x, 0, -x / 5]), selected ? SELECTED : NONE); // (-2.5, 0, 0.5), (0, 0, 0), (2.5, 0, -0.5)
+    for (const x of [-2.5, 0, 2.5])
+      mesh(BOX, translate([x, 0, -x / 5]), selected ? SELECTED : NONE); // (-2.5, 0, 0.5), (0, 0, 0), (2.5, 0, -0.5)
     const a = screen([-3.8, 2.4, 1.6]);
     const b = screen([3.8, -0.2, -1.6]);
-    const p = t < 0.8 ? mix2(start, a, ease(t, 0, 0.8)) : mix2(a, b, ease(t, 0.8, 2.2));
+    const p =
+      t < 0.8 ? mix2(start, a, ease(t, 0, 0.8)) : mix2(a, b, ease(t, 0.8, 2.2));
     if (t > 0.8 && t < 2.2) rect(a, p, "");
     cursor(p);
     label(corner, "guide.demo.box_select");
@@ -709,7 +808,12 @@ export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: numb
     const at = add([-1.2, 0, 0.6], mul(dir, d));
     const pivot = add(at, [0, 0.8, 0]);
     mesh(WALL, chain(translate(at), rotate(turn)), SELECTED);
-    pic.gizmoAxes(pivot, 1.8, s > 0.8 && s < 3 ? 0 : -1, local ? turn : NO_TURN);
+    pic.gizmoAxes(
+      pivot,
+      1.8,
+      s > 0.8 && s < 3 ? 0 : -1,
+      local ? turn : NO_TURN,
+    );
     const grip = screen(add(pivot, mul(dir, 1.4)));
     cursor(s < 0.9 ? mix2(start, grip, ease(s, 0, 0.9)) : grip);
     label(corner, local ? "guide.demo.local" : "guide.demo.world");
@@ -720,11 +824,24 @@ export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: numb
     const yaw = Math.sin(k * 2 * Math.PI) * 1.1;
     const pitch = Math.sin(k * 4 * Math.PI) * 0.5;
     const pivot: V3 = [0, 0.8, 0];
-    const r = qnormalized(qmul(axisAngle([0, 1, 0], yaw), axisAngle([1, 0, -1], pitch)));
-    mesh(BOX, chain(translate(pivot), rotate(r), translate(mul(pivot, -1))), SELECTED);
+    const r = qnormalized(
+      qmul(axisAngle([0, 1, 0], yaw), axisAngle([1, 0, -1], pitch)),
+    );
+    mesh(
+      BOX,
+      chain(translate(pivot), rotate(r), translate(mul(pivot, -1))),
+      SELECTED,
+    );
     const on = screen(add(pivot, [0.2, 0.3, 0.3]));
-    const swirl: V2 = [Math.sin(k * 2 * Math.PI) * 40, Math.sin(k * 4 * Math.PI) * 18];
-    cursor(t < 0.9 ? mix2(start, on, ease(t, 0, 0.9)) : [on[0] + swirl[0], on[1] + swirl[1]]);
+    const swirl: V2 = [
+      Math.sin(k * 2 * Math.PI) * 40,
+      Math.sin(k * 4 * Math.PI) * 18,
+    ];
+    cursor(
+      t < 0.9
+        ? mix2(start, on, ease(t, 0, 0.9))
+        : [on[0] + swirl[0], on[1] + swirl[1]],
+    );
     label(corner, "guide.demo.free_rotate");
   } else if (name === "place") {
     // the piece follows the cursor on the ground; each click leaves a copy
@@ -810,7 +927,11 @@ export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: numb
     mesh(WALL, IDENTITY, [0.3, 0.55, 1, 0.6], 0.45);
     const k = ease(t, 0.5, 2.8);
     const turn = rotate(axisAngle([0, 1, 0], radians(90 * (1 - k))));
-    mesh(WALL, chain(translate(mix([0, 0, 6], [0, 0, 0], k)), turn), t < 3.2 ? SELECTED : NONE);
+    mesh(
+      WALL,
+      chain(translate(mix([0, 0, 6], [0, 0, 0], k)), turn),
+      t < 3.2 ? SELECTED : NONE,
+    );
     label(corner, "guide.demo.replace");
   } else if (name === "story") {
     // the story's slider: the roof is there at the start of the game, gone later
@@ -824,7 +945,10 @@ export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: numb
     const x = a[0] + (b[0] - a[0]) * (0.25 + 0.55 * ease(t, 2.1, 2.5));
     rect([x - 5, a[1] - 5], [x + 5, b[1] + 5], "knob");
     cursor([x, b[1] + 2]);
-    label(corner, before ? "guide.demo.story_before" : "guide.demo.story_after");
+    label(
+      corner,
+      before ? "guide.demo.story_before" : "guide.demo.story_after",
+    );
   }
   pic.draw(ctx);
   return true;
@@ -834,8 +958,16 @@ export function drawDemo(ctx: CanvasRenderingContext2D, name: string, time: numb
  * Draws a shape seen from above at three quarters, w x h pixels (the Build panel's buttons,
  * ToolDemo::icon): a preset's name (shapePresets) or its params. False for a preset that does not exist.
  */
-export function drawIcon(ctx: CanvasRenderingContext2D, shape: string | ShapeParams, w: number, h: number): boolean {
-  const params = typeof shape === "string" ? shapePresets.find((p) => p.name === shape)?.params : shape;
+export function drawIcon(
+  ctx: CanvasRenderingContext2D,
+  shape: string | ShapeParams,
+  w: number,
+  h: number,
+): boolean {
+  const params =
+    typeof shape === "string"
+      ? shapePresets.find((p) => p.name === shape)?.params
+      : shape;
   if (!params) return false;
   const m = makeShape(params);
   const cam = new Camera();

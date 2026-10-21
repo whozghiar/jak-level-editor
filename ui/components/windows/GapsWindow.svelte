@@ -8,7 +8,11 @@
   import { engine } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
-  import { gaps, refreshGaps, type GapReport } from "../../render/gaps_overlay.svelte";
+  import {
+    gaps,
+    refreshGaps,
+    type GapReport,
+  } from "../../render/gaps_overlay.svelte";
   import { viewport } from "../../render/viewport_api";
   import Tip from "../common/Tip.svelte";
 

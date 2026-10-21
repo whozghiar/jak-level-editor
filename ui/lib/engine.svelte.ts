@@ -30,17 +30,43 @@
 import { call, onEngine } from "./rpc";
 
 export type LogLine = { level: "info" | "warn" | "error"; text: string };
-export type Job = { id: string; label: string; done: number; total: number; finished?: boolean };
+export type Job = {
+  id: string;
+  label: string;
+  done: number;
+  total: number;
+  finished?: boolean;
+};
 export type Tool = "select" | "place" | "topology" | "terrain";
 export type GizmoMode = "translate" | "rotate" | "scale";
 
 const defaults = () => ({
   // level: the level opened (settings.level); replaces: the game's level it replaces (Level > Replace)
-  document: { open: false, title: "", project_path: "", unsaved: false, level: "", replaces: "" },
+  document: {
+    open: false,
+    title: "",
+    project_path: "",
+    unsaved: false,
+    level: "",
+    replaces: "",
+  },
   projects_root: "",
   recent_projects: [] as string[],
-  history: { can_undo: false, can_redo: false, undo_label: "", redo_label: "", revision: 0 },
-  selection: { count: 0, primary: 0, hash: 0, group: 0, level: 0, topology_editable: false },
+  history: {
+    can_undo: false,
+    can_redo: false,
+    undo_label: "",
+    redo_label: "",
+    revision: 0,
+  },
+  selection: {
+    count: 0,
+    primary: 0,
+    hash: 0,
+    group: 0,
+    level: 0,
+    topology_editable: false,
+  },
   clipboard_empty: true,
   tool: "select" as Tool,
   gizmo: {
@@ -48,7 +74,11 @@ const defaults = () => ({
     local: false,
     snap: { enabled: false, translate: 0.5, rotate_deg: 15, scale: 0.1 },
   },
-  brush: { magnet: false, size: 4 } as { magnet: boolean; size: number; [k: string]: any },
+  brush: { magnet: false, size: 4 } as {
+    magnet: boolean;
+    size: number;
+    [k: string]: any;
+  },
   view: {
     game_view: false,
     game_view_ready: false,
@@ -76,7 +106,14 @@ export type EngineState = ReturnType<typeof defaults> & Record<string, any>;
 
 // the engine's answer over the defaults, object by object (a field it does not give keeps its default)
 function merge(base: any, over: any): any {
-  if (!over || typeof over !== "object" || Array.isArray(over) || !base || typeof base !== "object" || Array.isArray(base))
+  if (
+    !over ||
+    typeof over !== "object" ||
+    Array.isArray(over) ||
+    !base ||
+    typeof base !== "object" ||
+    Array.isArray(base)
+  )
     return over ?? base;
   const out = { ...base, ...over };
   for (const k in base) out[k] = merge(base[k], over[k]);
@@ -105,7 +142,10 @@ export function startEngine(): () => void {
     if (!s) return;
     engine.state = merge(defaults(), s);
     if (!engine.ready && s.log) engine.log = s.log;
-    if (s.jobs) engine.jobs = Object.fromEntries(s.jobs.filter((j) => !jobOver(j)).map((j) => [j.id, j]));
+    if (s.jobs)
+      engine.jobs = Object.fromEntries(
+        s.jobs.filter((j) => !jobOver(j)).map((j) => [j.id, j]),
+      );
     engine.ready = true;
   };
   const schedule = () => {
@@ -115,12 +155,16 @@ export function startEngine(): () => void {
   };
   schedule();
   const offs = [
-    onEngine<{ state?: boolean; selection?: boolean } | null>("jle:changed", (p) => {
-      if (!p || p.state || p.selection) schedule();
-    }),
+    onEngine<{ state?: boolean; selection?: boolean } | null>(
+      "jle:changed",
+      (p) => {
+        if (!p || p.state || p.selection) schedule();
+      },
+    ),
     onEngine<LogLine>("jle:log", (l) => {
       engine.log.push(l);
-      if (engine.log.length > 2000) engine.log.splice(0, engine.log.length - 2000);
+      if (engine.log.length > 2000)
+        engine.log.splice(0, engine.log.length - 2000);
     }),
     onEngine<Job>("jle:progress", (j) => {
       if (jobOver(j)) delete engine.jobs[j.id];

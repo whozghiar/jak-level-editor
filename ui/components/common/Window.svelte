@@ -1,6 +1,9 @@
 <script lang="ts" module>
   /** Follows a drag from a pointerdown: `move` gets how far the pointer went since the last move. */
-  export function dragPointer(e: PointerEvent, move: (dx: number, dy: number) => void): void {
+  export function dragPointer(
+    e: PointerEvent,
+    move: (dx: number, dy: number) => void,
+  ): void {
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
     let x = e.clientX;
@@ -11,7 +14,11 @@
       y = m.clientY;
     };
     el.addEventListener("pointermove", onmove);
-    el.addEventListener("lostpointercapture", () => el.removeEventListener("pointermove", onmove), { once: true });
+    el.addEventListener(
+      "lostpointercapture",
+      () => el.removeEventListener("pointermove", onmove),
+      { once: true },
+    );
   }
 </script>
 
@@ -85,10 +92,16 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => modal && e.key === "Escape" && (e.preventDefault(), onclose?.())} />
+<svelte:window
+  onkeydown={(e) =>
+    modal && e.key === "Escape" && (e.preventDefault(), onclose?.())}
+/>
 
 {#if modal}
-  <div class="pointer-events-auto absolute inset-0 bg-black/50" style:z-index={z}></div>
+  <div
+    class="pointer-events-auto absolute inset-0 bg-black/50"
+    style:z-index={z}
+  ></div>
 {/if}
 <div
   bind:this={el}

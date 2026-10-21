@@ -745,10 +745,23 @@ export class GizmoController {
     // every frame)
     const key = (e: KeyboardEvent) => {
       const m = this.last_event;
-      if (!m || !this.gizmo.active() || (e.key !== "Control" && e.key !== "Shift")) return;
+      if (
+        !m ||
+        !this.gizmo.active() ||
+        (e.key !== "Control" && e.key !== "Shift")
+      )
+        return;
       const { clientX, clientY, buttons, pointerId, pointerType } = m;
       this.event(
-        new PointerEvent("pointermove", { clientX, clientY, buttons, pointerId, pointerType, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey }),
+        new PointerEvent("pointermove", {
+          clientX,
+          clientY,
+          buttons,
+          pointerId,
+          pointerType,
+          shiftKey: e.shiftKey,
+          ctrlKey: e.ctrlKey,
+        }),
         false,
       );
     };
@@ -758,7 +771,8 @@ export class GizmoController {
     }
     this.off.push(
       host.addOverlay2d((ctx) => {
-        const t = this.enabled && !this.host.cameraBusy() ? this.targets() : null;
+        const t =
+          this.enabled && !this.host.cameraBusy() ? this.targets() : null;
         if (t)
           this.gizmo.draw(ctx, this.host.camera, this.host.project, t.frame);
       }),

@@ -20,5 +20,10 @@
     "checkJs": true,
     "types": ["node", "unplugin-icons/types/svelte"]
   },
-  "include": ["./src/**/*.ts", "./src/**/*.svelte", "./ui/**/*.ts", "./ui/**/*.svelte"]
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.svelte",
+    "./ui/**/*.ts",
+    "./ui/**/*.svelte"
+  ]
 }

@@ -45,8 +45,23 @@ export const guideDemos: Record<string, string | null> = {
 
 // the sections of Every tool
 export const guideSections: { key: string; ids: string[] }[] = [
-  { key: "guide.section.view", ids: ["camera", "select", "box_select", "assembly", "game_view"] },
-  { key: "guide.section.transform", ids: ["move", "rotate", "free_rotate", "scale", "snap", "local", "place_drag", "topology"] },
+  {
+    key: "guide.section.view",
+    ids: ["camera", "select", "box_select", "assembly", "game_view"],
+  },
+  {
+    key: "guide.section.transform",
+    ids: [
+      "move",
+      "rotate",
+      "free_rotate",
+      "scale",
+      "snap",
+      "local",
+      "place_drag",
+      "topology",
+    ],
+  },
   {
     key: "guide.section.build",
     ids: [
@@ -65,13 +80,36 @@ export const guideSections: { key: string; ids: string[] }[] = [
       "relight",
     ],
   },
-  { key: "guide.section.behaviors", ids: ["ingame", "collision", "surface", "event", "bounce", "launch", "preview"] },
-  { key: "guide.section.level", ids: ["levels", "jak2_level", "story", "replace", "export"] },
+  {
+    key: "guide.section.behaviors",
+    ids: [
+      "ingame",
+      "collision",
+      "surface",
+      "event",
+      "bounce",
+      "launch",
+      "preview",
+    ],
+  },
+  {
+    key: "guide.section.level",
+    ids: ["levels", "jak2_level", "story", "replace", "export"],
+  },
 ];
 
 // What a step's button shows: a window, a tab of the left panel, a section of the inspector...
 export type TourAction =
-  "extract" | "levels_tab" | "build_tab" | "catalog_tab" | "prefabs_tab" | "replace" | "export" | "game_view" | "save" | "navmeshes";
+  | "extract"
+  | "levels_tab"
+  | "build_tab"
+  | "catalog_tab"
+  | "prefabs_tab"
+  | "replace"
+  | "export"
+  | "game_view"
+  | "save"
+  | "navmeshes";
 
 // A step: its id, its animations, its button (the key <prefix><id>.action)
 export type TourStep = [id: string, demos: string[], action?: TourAction];

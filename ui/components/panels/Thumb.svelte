@@ -4,7 +4,8 @@
   import { untrack } from "svelte";
   import { thumbKey, thumbs, type ThumbRequest } from "../../render/thumbnails";
 
-  let { req, size = 80 }: { req: ThumbRequest | null; size?: number } = $props();
+  let { req, size = 80 }: { req: ThumbRequest | null; size?: number } =
+    $props();
   let url = $state<string | null | undefined>(undefined);
   const key = $derived(req ? thumbKey(req) : "");
 
@@ -23,9 +24,20 @@
 </script>
 
 {#if url}
-  <img src={url} alt="" draggable="false" class="block rounded-sm" style:width="{size}px" style:height="{size}px" />
+  <img
+    src={url}
+    alt=""
+    draggable="false"
+    class="block rounded-sm"
+    style:width="{size}px"
+    style:height="{size}px"
+  />
 {:else}
-  <div class="flex items-center justify-center text-neutral-500" style:width="{size}px" style:height="{size}px">
+  <div
+    class="flex items-center justify-center text-neutral-500"
+    style:width="{size}px"
+    style:height="{size}px"
+  >
     {url === null || !req ? "?" : "..."}
   </div>
 {/if}

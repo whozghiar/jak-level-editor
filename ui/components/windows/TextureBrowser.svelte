@@ -60,9 +60,28 @@
   import Tip from "../common/Tip.svelte";
   import ThumbGrid from "../panels/ThumbGrid.svelte";
 
-  type Tex = { name: string; game?: string; background?: string; levels?: number; uses?: number; index?: number; width?: number; height?: number };
+  type Tex = {
+    name: string;
+    game?: string;
+    background?: string;
+    levels?: number;
+    uses?: number;
+    index?: number;
+    width?: number;
+    height?: number;
+  };
 
-  let { ids, slot: material = -1, height, game }: { ids: number[]; slot?: number; height?: number; game?: string } = $props();
+  let {
+    ids,
+    slot: material = -1,
+    height,
+    game,
+  }: {
+    ids: number[];
+    slot?: number;
+    height?: number;
+    game?: string;
+  } = $props();
 
   const s = $derived(engine.state);
   // the game chosen here, or by the caller
@@ -71,9 +90,18 @@
   let answer = $state<any>(null);
   let asked = 0;
   // (a value: the effect runs again when it changes, not at each state the engine sends)
-  const listKey = $derived(JSON.stringify([s.catalog?.epoch, texLevel === "*" ? s.history.revision : 0]));
+  const listKey = $derived(
+    JSON.stringify([
+      s.catalog?.epoch,
+      texLevel === "*" ? s.history.revision : 0,
+    ]),
+  );
   $effect(() => {
-    const args = { game: chosenGame, level: texLevel, filter: texFilter.toLowerCase() };
+    const args = {
+      game: chosenGame,
+      level: texLevel,
+      filter: texFilter.toLowerCase(),
+    };
     // the document's textures change with it; the index once read
     void listKey;
     const n = ++asked;
@@ -88,16 +116,31 @@
   $effect(() => {
     void historyKey;
     if (material < 0 || !ids.length) return void (current = "");
-    call("materials", { ids }, true).then((m) => (current = m?.slots?.[material]?.texture?.name ?? ""));
+    call("materials", { ids }, true).then(
+      (m) => (current = m?.slots?.[material]?.texture?.name ?? ""),
+    );
   });
 
-  const levelLabel = $derived(texLevel === "" ? t("textures.all_levels") : texLevel === "*" ? t("textures.document") : texLevel);
-  const nameOf = (x: Tex) => (x.index !== undefined || !x.game ? x.name : `${x.game}-${x.name}`);
+  const levelLabel = $derived(
+    texLevel === ""
+      ? t("textures.all_levels")
+      : texLevel === "*"
+        ? t("textures.document")
+        : texLevel,
+  );
+  const nameOf = (x: Tex) =>
+    x.index !== undefined || !x.game ? x.name : `${x.game}-${x.name}`;
   const q = encodeURIComponent;
   const picture = (x: Tex) =>
     x.index !== undefined
-      ? image(`texture/${x.index}`, `doc:${x.index}:${x.name}:${x.width}x${x.height}`)
-      : image(`palette?game=${q(x.game ?? "")}&background=${q(x.background ?? "")}&name=${q(x.name)}`, `${x.game}:${x.name}`);
+      ? image(
+          `texture/${x.index}`,
+          `doc:${x.index}:${x.name}:${x.width}x${x.height}`,
+        )
+      : image(
+          `palette?game=${q(x.game ?? "")}&background=${q(x.background ?? "")}&name=${q(x.name)}`,
+          `${x.game}:${x.name}`,
+        );
 
   function tip(x: Tex): string {
     if (x.index !== undefined) return `${x.name}\n${x.width}x${x.height}`;
@@ -106,15 +149,28 @@
 
   // the texture into the document (read now if its image is not yet), then on the pieces
   async function give(x: Tex) {
-    const texture = x.index ?? (await call<{ texture: number }>("palette_texture", { name: x.name, game: x.game, background: x.background }))?.texture;
+    const texture =
+      x.index ??
+      (
+        await call<{ texture: number }>("palette_texture", {
+          name: x.name,
+          game: x.game,
+          background: x.background,
+        })
+      )?.texture;
     if (texture === undefined || texture < 0 || !ids.length) return;
     call("set_material", { ids, slot: material, texture });
   }
 
-  const indexing = $derived(engine.jobs[chosenGame === "jak2" ? "library_index_jak2" : "library_index"]);
+  const indexing = $derived(
+    engine.jobs[chosenGame === "jak2" ? "library_index_jak2" : "library_index"],
+  );
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-2" style:height={height ? `${height}px` : undefined}>
+<div
+  class="flex min-h-0 flex-1 flex-col gap-2"
+  style:height={height ? `${height}px` : undefined}
+>
   {#if game === undefined && s.jak2_available}
     <div class="flex items-center gap-3">
       <span class="text-neutral-400">{t("textures.game")}</span>
@@ -140,7 +196,9 @@
         items={[
           { label: t("textures.all_levels"), value: "" },
           { label: t("textures.document"), value: "*" },
-          ...((answer?.levels ?? []) as { level: string; count: number }[]).map((l) => ({ label: `${l.level} (${l.count})`, value: l.level })),
+          ...((answer?.levels ?? []) as { level: string; count: number }[]).map(
+            (l) => ({ label: `${l.level} (${l.count})`, value: l.level }),
+          ),
         ]}
         value={texLevel}
         label={levelLabel}
@@ -149,33 +207,63 @@
       />
       <Tip text={t("textures.level.tip")} />
     </div>
-    <input class={input} placeholder={t("textures.filter")} bind:value={texFilter} />
+    <input
+      class={input}
+      placeholder={t("textures.filter")}
+      bind:value={texFilter}
+    />
   </div>
   {#if answer?.indexing}
-    <p class={muted}>{t("catalog.indexing", indexing?.done ?? answer.indexing.done, indexing?.total ?? answer.indexing.total)}</p>
+    <p class={muted}>
+      {t(
+        "catalog.indexing",
+        indexing?.done ?? answer.indexing.done,
+        indexing?.total ?? answer.indexing.total,
+      )}
+    </p>
   {:else if answer?.items}
     <p class={muted}>{t("textures.count", answer.count, answer.total)}</p>
     {#if !answer.count}<p class={muted}>{t("textures.none")}</p>{/if}
-    <ThumbGrid items={answer.items as Tex[]} size={60} reset={[chosenGame, texLevel, texFilter]}>
+    <ThumbGrid
+      items={answer.items as Tex[]}
+      size={60}
+      reset={[chosenGame, texLevel, texFilter]}
+    >
       {#snippet cell(x: Tex)}
         <button
-          class="block w-full rounded border p-[2px] {current && current === nameOf(x)
+          class="block w-full rounded border p-[2px] {current &&
+          current === nameOf(x)
             ? 'border-teal-400 bg-teal-500/30'
             : 'border-white/5 bg-[#0b0b0b] hover:border-white/25'}"
           onclick={() => give(x)}
         >
           {#await picture(x)}
-            <div class="flex size-[60px] items-center justify-center text-neutral-500">...</div>
+            <div
+              class="flex size-[60px] items-center justify-center text-neutral-500"
+            >
+              ...
+            </div>
           {:then url}
             {#if url}
-              <img src={url} alt="" draggable="false" class="size-[60px] object-cover" />
+              <img
+                src={url}
+                alt=""
+                draggable="false"
+                class="size-[60px] object-cover"
+              />
             {:else}
-              <div class="flex size-[60px] items-center justify-center text-neutral-500">?</div>
+              <div
+                class="flex size-[60px] items-center justify-center text-neutral-500"
+              >
+                ?
+              </div>
             {/if}
           {/await}
         </button>
         <Tip text={tip(x)} placement="right" />
-        <p class="truncate text-center text-[11px] leading-4 text-neutral-400">{nameOf(x)}</p>
+        <p class="truncate text-center text-[11px] leading-4 text-neutral-400">
+          {nameOf(x)}
+        </p>
       {/snippet}
     </ThumbGrid>
   {/if}

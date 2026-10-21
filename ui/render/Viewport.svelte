@@ -27,7 +27,12 @@
     const offNavmesh = attachNavmeshOverlay();
     const offSelect = selectTool.attach();
     const offPlace = attachPlaceTool();
-    const offTools = [attachTerrainTool(), attachTopologyTool(), attachPreview(), attachGapsOverlay()];
+    const offTools = [
+      attachTerrainTool(),
+      attachTopologyTool(),
+      attachPreview(),
+      attachGapsOverlay(),
+    ];
     const fit = () => {
       const r = box.getBoundingClientRect();
       viewport.resize(r.width, r.height, window.devicePixelRatio || 1);

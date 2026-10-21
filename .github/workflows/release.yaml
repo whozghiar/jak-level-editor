@@ -112,9 +112,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           releaseId: ${{ needs.draft.outputs.release_id }}
-          # --ignore-version-mismatches: @tauri-apps/* (yarn.lock) are a minor version ahead of the
-          # tauri crates (Cargo.lock); drop it once they are aligned
-          args: --config src-tauri/tauri.release.conf.json --ignore-version-mismatches
+          args: --config src-tauri/tauri.release.conf.json
 
       - name: Build the MCP server
         run: cargo build --release -p jak-level-editor-mcp

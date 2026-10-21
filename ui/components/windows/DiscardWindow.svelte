@@ -24,13 +24,22 @@
 
 <p class="mb-4">{t("discard.text")}</p>
 <div class="flex justify-end gap-2">
-  <button class="{button} border-orange-600 bg-orange-600 text-white hover:bg-orange-500" onclick={saveFirst}>
+  <button
+    class="{button} border-orange-600 bg-orange-600 text-white hover:bg-orange-500"
+    onclick={saveFirst}
+  >
     {t("discard.save")}
   </button>
-  <button class="{button} border-[#2a2a2a] bg-[#0b0b0b] hover:border-[#3a3a3a] hover:bg-[#1a1a1a]" onclick={() => close()?.()}>
+  <button
+    class="{button} border-[#2a2a2a] bg-[#0b0b0b] hover:border-[#3a3a3a] hover:bg-[#1a1a1a]"
+    onclick={() => close()?.()}
+  >
     {t("discard.discard")}
   </button>
-  <button class="{button} border-[#2a2a2a] bg-[#0b0b0b] hover:border-[#3a3a3a] hover:bg-[#1a1a1a]" onclick={close}>
+  <button
+    class="{button} border-[#2a2a2a] bg-[#0b0b0b] hover:border-[#3a3a3a] hover:bg-[#1a1a1a]"
+    onclick={close}
+  >
     {t("popup.cancel")}
   </button>
 </div>

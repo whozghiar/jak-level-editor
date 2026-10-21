@@ -8,12 +8,18 @@
  * pointerup lost: the pointer back with no button, the window left), {detail: "cancel"}: nothing
  * placed. The click on the element let go of after a drag is not a click.
  */
-export function panelDrag(e: PointerEvent, name: string, start: () => void): void {
+export function panelDrag(
+  e: PointerEvent,
+  name: string,
+  start: () => void,
+): void {
   if (e.button !== 0) return;
   const x = e.clientX;
   const y = e.clientY;
   let label: HTMLElement | null = null;
-  const follow = (m: PointerEvent) => label && (label.style.transform = `translate(${m.clientX + 14}px, ${m.clientY + 12}px)`);
+  const follow = (m: PointerEvent) =>
+    label &&
+    (label.style.transform = `translate(${m.clientX + 14}px, ${m.clientY + 12}px)`);
   const move = (m: PointerEvent) => {
     if (!(m.buttons & 1)) return end("cancel");
     if (label) return void follow(m);
@@ -24,7 +30,9 @@ export function panelDrag(e: PointerEvent, name: string, start: () => void): voi
       "pointer-events-none fixed top-0 left-0 z-[100] rounded-md border border-white/10 bg-[#0b0b0b] px-2 py-1 text-xs text-neutral-200 shadow-xl shadow-black/60";
     label.textContent = name;
     follow(m);
-    window.dispatchEvent(new CustomEvent("jle:panel-drag", { detail: "start" }));
+    window.dispatchEvent(
+      new CustomEvent("jle:panel-drag", { detail: "start" }),
+    );
   };
   const up = () => end("end");
   const cancel = () => end("cancel");

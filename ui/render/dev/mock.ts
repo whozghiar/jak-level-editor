@@ -902,7 +902,8 @@ export function install(t: typeof Transport) {
 
   t.fetch = async (path: string) => {
     await new Promise((r) => setTimeout(r, 5));
-    if (path.startsWith("asset?path=")) return asset(decodeURIComponent(path.slice(11)));
+    if (path.startsWith("asset?path="))
+      return asset(decodeURIComponent(path.slice(11)));
     if (path.startsWith("scene")) {
       const full = path.includes("full=1");
       const out = full ? nodes : nodes.filter((n) => dirty.has(n.id));
@@ -955,12 +956,22 @@ export function install(t: typeof Transport) {
         n.mesh === 6
       )
         continue;
-      const hit = slab(aabbTransformed(bounds.get(n.mesh)!, n.world), origin, dir);
+      const hit = slab(
+        aabbTransformed(bounds.get(n.mesh)!, n.world),
+        origin,
+        dir,
+      );
       if (!hit) continue;
       const p: Vec3 = [0, 1, 2].map((a) => origin[a] + dir[a] * hit.t) as Vec3;
       // an actor's model: the actor
       const node = n.flags & NodeFlag.UnderActor ? n.parent : n.id;
-      out.push({ node, selectable: node, point: p, normal: hit.normal, distance: hit.t });
+      out.push({
+        node,
+        selectable: node,
+        point: p,
+        normal: hit.normal,
+        distance: hit.t,
+      });
     }
     return out.sort((a, b) => a.distance - b.distance);
   };
@@ -995,8 +1006,15 @@ export function install(t: typeof Transport) {
           : point(n.world, [0, 0, 0]);
         const w = m[3] * c[0] + m[7] * c[1] + m[11] * c[2] + m[15];
         if (w <= 1e-5) return false;
-        const x = ((m[0] * c[0] + m[4] * c[1] + m[8] * c[2] + m[12]) / w * 0.5 + 0.5) * a.width;
-        const y = (1 - ((m[1] * c[0] + m[5] * c[1] + m[9] * c[2] + m[13]) / w * 0.5 + 0.5)) * a.height;
+        const x =
+          (((m[0] * c[0] + m[4] * c[1] + m[8] * c[2] + m[12]) / w) * 0.5 +
+            0.5) *
+          a.width;
+        const y =
+          (1 -
+            (((m[1] * c[0] + m[5] * c[1] + m[9] * c[2] + m[13]) / w) * 0.5 +
+              0.5)) *
+          a.height;
         return x >= x0 && x <= x1 && y >= y0 && y <= y1;
       })
       .map((n) => n.id);
@@ -1066,12 +1084,17 @@ export function install(t: typeof Transport) {
         return { ids: boxNodes(args) };
       case "select_box": {
         const ids = boxNodes(args);
-        await t.call("select", { ids, mode: args.mode === "replace" ? undefined : args.mode });
+        await t.call("select", {
+          ids,
+          mode: args.mode === "replace" ? undefined : args.mode,
+        });
         return { ids };
       }
       case "labels":
         return nodes
-          .filter((n) => n.kind === NodeKind.Actor || n.flags & NodeFlag.Selected)
+          .filter(
+            (n) => n.kind === NodeKind.Actor || n.flags & NodeFlag.Selected,
+          )
           .map((n) =>
             n.kind === NodeKind.Actor
               ? { id: n.id, name: `actor-${n.id}`, etype: "crate" }
@@ -1101,7 +1124,15 @@ export function install(t: typeof Transport) {
   if (game_param) setTimeout(() => gameView.setOn(true), 0);
   // once the level is framed
   if (new URLSearchParams(location.search).has("fx"))
-    setTimeout(() => emit("jle:request", { kind: "camera", pos: [2, 3, 13], look_at: [0, 2.5, 4] }), 1500);
+    setTimeout(
+      () =>
+        emit("jle:request", {
+          kind: "camera",
+          pos: [2, 3, 13],
+          look_at: [0, 2.5, 4],
+        }),
+      1500,
+    );
   console.info("[viewport] dev mock engine");
 }
 
@@ -1111,8 +1142,16 @@ export function install(t: typeof Transport) {
 // ctyindb's fast steam (its vent's z turned up) and a light of the city, beside the selected box
 const up = rotate(axisAngle([1, 0, 0], -Math.PI / 2));
 const EFFECTS = [
-  { id: 900, group: "group-ctyindb-fast-steam", world: [...matMul(translate([2, 0, 4]), up)] },
-  { id: 901, group: "group-citylights-newslums", world: [...translate([-2, 4, 4])] },
+  {
+    id: 900,
+    group: "group-ctyindb-fast-steam",
+    world: [...matMul(translate([2, 0, 4]), up)],
+  },
+  {
+    id: 901,
+    group: "group-citylights-newslums",
+    world: [...translate([-2, 4, 4])],
+  },
 ];
 
 // a file of asset?path=: the game's tables from the dev server (it serves the repository), the
@@ -1123,7 +1162,8 @@ async function asset(file: string): Promise<ArrayBuffer> {
     if (!r.ok) throw new Error(`404 ${file}`);
     return r.arrayBuffer();
   }
-  if (file.endsWith("index.json")) return new TextEncoder().encode("{}").buffer as ArrayBuffer;
+  if (file.endsWith("index.json"))
+    return new TextEncoder().encode("{}").buffer as ArrayBuffer;
   if (!file.endsWith(".png")) throw new Error(`404 ${file}`);
   const c = new OffscreenCanvas(32, 32),
     ctx = c.getContext("2d")!;

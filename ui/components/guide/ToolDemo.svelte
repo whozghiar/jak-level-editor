@@ -18,7 +18,14 @@
     height = 126,
     since,
     class: cls = "",
-  }: { name?: string; shape?: string | ShapeParams; width?: number; height?: number; since?: number; class?: string } = $props();
+  }: {
+    name?: string;
+    shape?: string | ShapeParams;
+    width?: number;
+    height?: number;
+    since?: number;
+    class?: string;
+  } = $props();
 
   let canvas: HTMLCanvasElement;
 
@@ -60,4 +67,9 @@
   });
 </script>
 
-<canvas bind:this={canvas} class="block shrink-0 {cls}" style:width="{width}px" style:height="{height}px"></canvas>
+<canvas
+  bind:this={canvas}
+  class="block shrink-0 {cls}"
+  style:width="{width}px"
+  style:height="{height}px"
+></canvas>

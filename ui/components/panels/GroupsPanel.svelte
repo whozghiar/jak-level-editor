@@ -33,14 +33,29 @@
   let rev = $state(0);
   onMount(() => {
     schedule();
-    const offs = [onEngine<any>("jle:changed", (p) => (!p || p.scene || p.document) && schedule()), viewport.store.subscribe(() => rev++)];
+    const offs = [
+      onEngine<any>(
+        "jle:changed",
+        (p) => (!p || p.scene || p.document) && schedule(),
+      ),
+      viewport.store.subscribe(() => rev++),
+    ];
     return () => offs.forEach((off) => off());
   });
   const whole = (g: Group) => {
     void rev;
-    return g.roots.length > 0 && g.roots.every((r) => (viewport.store.nodes.get(r)?.flags ?? 0) & NodeFlag.Selected);
+    return (
+      g.roots.length > 0 &&
+      g.roots.every(
+        (r) => (viewport.store.nodes.get(r)?.flags ?? 0) & NodeFlag.Selected,
+      )
+    );
   };
-  const shown = $derived(groups.filter((g) => !filter || g.name.toLowerCase().includes(filter.toLowerCase())));
+  const shown = $derived(
+    groups.filter(
+      (g) => !filter || g.name.toLowerCase().includes(filter.toLowerCase()),
+    ),
+  );
 
   // framed from its elements' boxes (the selection reaches the view a moment later)
   async function frame(g: Group) {
@@ -67,13 +82,16 @@
 
   let menu = $state<{ g: Group; x: number; y: number } | null>(null);
   let menuEl = $state<HTMLDivElement>();
-  const item = "block w-full px-3 py-1 text-left whitespace-nowrap hover:bg-white/10";
+  const item =
+    "block w-full px-3 py-1 text-left whitespace-nowrap hover:bg-white/10";
 </script>
 
 <!-- Esc closes the menu (before the editor's key: select nothing) -->
 <svelte:window
-  onpointerdown={(e) => menu && !menuEl?.contains(e.target as Node) && (menu = null)}
-  onkeydowncapture={(e) => menu && e.key === "Escape" && (e.preventDefault(), (menu = null))}
+  onpointerdown={(e) =>
+    menu && !menuEl?.contains(e.target as Node) && (menu = null)}
+  onkeydowncapture={(e) =>
+    menu && e.key === "Escape" && (e.preventDefault(), (menu = null))}
 />
 
 <div class="flex h-full flex-col gap-2 p-3 text-sm">
@@ -82,7 +100,11 @@
   {:else}
     <p class={muted}>{t("groups.help")}</p>
     <span class="flex">
-      <button class="{button} flex-1" disabled={s.selection.count < 1} onclick={() => windows.open("new_group")}>{t("group.make")}</button>
+      <button
+        class="{button} flex-1"
+        disabled={s.selection.count < 1}
+        onclick={() => windows.open("new_group")}>{t("group.make")}</button
+      >
     </span>
     <Tip text={t("group.make.tip")} />
     <input class={input} placeholder={t("groups.filter")} bind:value={filter} />
@@ -105,7 +127,11 @@
             />
           {:else}
             <button
-              class="block w-full truncate rounded px-2 py-0.5 text-left {whole(g) ? 'bg-orange-500/20 text-white' : 'text-neutral-200 hover:bg-white/5'}"
+              class="block w-full truncate rounded px-2 py-0.5 text-left {whole(
+                g,
+              )
+                ? 'bg-orange-500/20 text-white'
+                : 'text-neutral-200 hover:bg-white/5'}"
               onclick={() => call("select_group", { id: g.id })}
               ondblclick={() => frame(g)}
               oncontextmenu={(e) => {
@@ -117,7 +143,10 @@
               {g.name}
               <span class="text-neutral-500">({g.roots.length})</span>
             </button>
-            <Tip text={t(g.prefab ? "groups.prefab.tip" : "groups.group.tip")} placement="right" />
+            <Tip
+              text={t(g.prefab ? "groups.prefab.tip" : "groups.group.tip")}
+              placement="right"
+            />
           {/if}
         {/each}
       </div>
@@ -136,8 +165,19 @@
     style:top="{menu.y}px"
     onkeydown={(e) => e.key === "Escape" && (menu = null)}
   >
-    <button role="menuitem" class={item} onclick={() => rename(g)}>{t("groups.rename")}</button>
-    <button role="menuitem" class={item} onclick={() => ((menu = null), frame(g))}>{t("groups.frame")}</button>
-    <button role="menuitem" class={item} onclick={() => ((menu = null), call("ungroup", { id: g.id }))}>{t("group.ungroup")}</button>
+    <button role="menuitem" class={item} onclick={() => rename(g)}
+      >{t("groups.rename")}</button
+    >
+    <button
+      role="menuitem"
+      class={item}
+      onclick={() => ((menu = null), frame(g))}>{t("groups.frame")}</button
+    >
+    <button
+      role="menuitem"
+      class={item}
+      onclick={() => ((menu = null), call("ungroup", { id: g.id }))}
+      >{t("group.ungroup")}</button
+    >
   </div>
 {/if}

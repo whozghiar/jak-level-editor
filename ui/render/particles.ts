@@ -36,7 +36,8 @@ import { viewport } from "./viewport_api";
 // the files the engine serves (asset?path=, docs/rust-architecture.md §4)
 const PARTICLES_PATH = "data/jak3/particles.json";
 const SPRITES_PATH = "library/jak3/common/sprites"; // <page>/<texture>.png, index.json
-const asset = (path: string) => fetchBytes(`asset?path=${encodeURIComponent(path)}`);
+const asset = (path: string) =>
+  fetchBytes(`asset?path=${encodeURIComponent(path)}`);
 
 // sp-field-id (the ones the editor runs)
 const SP = {
@@ -75,7 +76,15 @@ const SP = {
   Count: 72,
 } as const;
 
-const Kind = { Float: 0, FloatIntRand: 1, Int: 2, Copy: 3, Next: 4, Flags: 5, Texture: 6 } as const;
+const Kind = {
+  Float: 0,
+  FloatIntRand: 1,
+  Int: 2,
+  Copy: 3,
+  Next: 4,
+  Flags: 5,
+  Texture: 6,
+} as const;
 
 // an init spec of a launcher: how a field starts
 export interface SpSpec {
@@ -128,7 +137,8 @@ const bit = (n: number) => (n >= 0 && n < 32 ? (1 << n) >>> 0 : 0);
 // sp-cpuinfo-flag
 function cpuinfoFlag(name: string): number {
   if (name in CPUINFO_BITS) return bit(CPUINFO_BITS[name]);
-  if (name.startsWith("sp-cpuinfo-flag-")) return bit(parseInt(name.slice(16)) || 0);
+  if (name.startsWith("sp-cpuinfo-flag-"))
+    return bit(parseInt(name.slice(16)) || 0);
   return 0;
 }
 // sp1, sp7, is-3d...: their bit
@@ -138,7 +148,8 @@ function spBits(names: unknown): number {
   for (const s of names) {
     if (typeof s !== "string") continue;
     if (s === "is-3d") out |= 1;
-    else if (s.length > 2 && s.startsWith("sp")) out |= bit(parseInt(s.slice(2)) || 0) & 0xffff;
+    else if (s.length > 2 && s.startsWith("sp"))
+      out |= bit(parseInt(s.slice(2)) || 0) & 0xffff;
   }
   return out;
 }
@@ -159,23 +170,46 @@ export class ParticleData {
       const list: SpSpec[] = [];
       out.launchers.set(parseInt(id) || 0, list);
       for (const s of Array.isArray(specs) ? specs : []) {
-        if (!Array.isArray(s) || s.length !== 5 || typeof s[0] !== "number" || typeof s[1] !== "string")
+        if (
+          !Array.isArray(s) ||
+          s.length !== 5 ||
+          typeof s[0] !== "number" ||
+          typeof s[1] !== "string"
+        )
           continue;
         const field = Math.trunc(s[0]);
         if (field < 0 || field >= SP.Count) continue;
-        const spec: SpSpec = { kind: -1, field, a: 0, b: 0, c: 0, ref: 0, flags: 0 };
+        const spec: SpSpec = {
+          kind: -1,
+          field,
+          a: 0,
+          b: 0,
+          c: 0,
+          ref: 0,
+          flags: 0,
+        };
         const kind = s[1];
         if (kind === "f" || kind === "fi" || kind === "i") {
-          spec.kind = kind === "f" ? Kind.Float : kind === "fi" ? Kind.FloatIntRand : Kind.Int;
+          spec.kind =
+            kind === "f"
+              ? Kind.Float
+              : kind === "fi"
+                ? Kind.FloatIntRand
+                : Kind.Int;
           spec.a = num(s[2]);
           spec.b = num(s[3]);
           spec.c = num(s[4]);
-        } else if ((kind === "copy" || kind === "next") && typeof s[3] === "number") {
+        } else if (
+          (kind === "copy" || kind === "next") &&
+          typeof s[3] === "number"
+        ) {
           spec.kind = kind === "copy" ? Kind.Copy : Kind.Next;
           spec.ref = Math.trunc(s[3]);
         } else if (kind === "flags" && Array.isArray(s[3])) {
           spec.kind = Kind.Flags;
-          for (const n of s[3]) if (typeof n === "string") spec.flags = (spec.flags | cpuinfoFlag(n)) >>> 0;
+          for (const n of s[3])
+            if (typeof n === "string")
+              spec.flags = (spec.flags | cpuinfoFlag(n)) >>> 0;
         } else if (kind === "tex" && typeof s[3] === "string") {
           spec.kind = Kind.Texture;
           let t = textureIndex.get(s[3]);
@@ -192,10 +226,17 @@ export class ParticleData {
       }
     }
     for (const [name, g] of Object.entries<any>(j.groups)) {
-      const group: SpGroup = { name, flags: spBits(g?.flags), radius: 0, items: [] };
-      if (Array.isArray(g?.bounds) && g.bounds.length === 4) group.radius = num(g.bounds[3]);
+      const group: SpGroup = {
+        name,
+        flags: spBits(g?.flags),
+        radius: 0,
+        items: [],
+      };
+      if (Array.isArray(g?.bounds) && g.bounds.length === 4)
+        group.radius = num(g.bounds[3]);
       for (const p of Array.isArray(g?.parts) ? g.parts : []) {
-        if (!Array.isArray(p) || p.length !== 9 || typeof p[0] !== "number") continue;
+        if (!Array.isArray(p) || p.length !== 9 || typeof p[0] !== "number")
+          continue;
         group.items.push({
           launcher: Math.trunc(p[0]),
           flags: spBits(p[1]),
@@ -356,10 +397,12 @@ export class ParticleSystem {
           f[s.field] = s.b !== 0 ? s.a + s.c * this.random() * s.b : s.a;
           break;
         case Kind.FloatIntRand:
-          f[s.field] = s.b !== 0 ? s.a + s.c * Math.floor(this.random() * (s.b + 1)) : s.a;
+          f[s.field] =
+            s.b !== 0 ? s.a + s.c * Math.floor(this.random() * (s.b + 1)) : s.a;
           break;
         case Kind.Int:
-          f[s.field] = s.b !== 0 ? s.a + s.c * Math.floor(this.random() * s.b) : s.a;
+          f[s.field] =
+            s.b !== 0 ? s.a + s.c * Math.floor(this.random() * s.b) : s.a;
           break;
         case Kind.Copy:
           if (s.ref >= 0 && s.ref < SP.Count) f[s.field] = f[s.ref];
@@ -381,7 +424,12 @@ export class ParticleSystem {
     // how many: num a launch (a fraction carried to the next)
     let count = 1;
     for (const s of specs)
-      if (s.field === SP.Num && (s.kind === Kind.Float || s.kind === Kind.Int || s.kind === Kind.FloatIntRand))
+      if (
+        s.field === SP.Num &&
+        (s.kind === Kind.Float ||
+          s.kind === Kind.Int ||
+          s.kind === Kind.FloatIntRand)
+      )
         count = s.b !== 0 ? s.a + s.c * this.random() * s.b : s.a;
     e.accum[i] += count * rate;
     let n = Math.floor(e.accum[i]);
@@ -430,11 +478,16 @@ export class ParticleSystem {
 
   private step(data: ParticleData, camera: Vec3, hour: number) {
     // the effects launch (sparticle-launch-control spawn)
-    const hour_bit = hour < 0 ? 0 : bit(Math.min(Math.max(Math.trunc(hour), 0), 23));
+    const hour_bit =
+      hour < 0 ? 0 : bit(Math.min(Math.max(Math.trunc(hour), 0), 23));
     for (const e of this.emitters.values()) {
       if (!e.seen) continue;
       const o = point(e.world, [0, 0, 0]);
-      const dist = length([o[0] - camera[0], o[1] - camera[1], o[2] - camera[2]]);
+      const dist = length([
+        o[0] - camera[0],
+        o[1] - camera[1],
+        o[2] - camera[2],
+      ]);
       if (dist > this.maxDistance) continue;
       e.group.items.forEach((item, i) => {
         const specs = data.launcher(item.launcher);
@@ -449,9 +502,15 @@ export class ParticleSystem {
           }
           return;
         }
-        if (item.hour_mask & hour_bit || (item.fade_after > 0 && dist > item.fade_after)) return;
+        if (
+          item.hour_mask & hour_bit ||
+          (item.fade_after > 0 && dist > item.fade_after)
+        )
+          return;
         if (item.period > 0) {
-          const t = (((e.clock - item.offset) % item.period) + item.period) % item.period;
+          const t =
+            (((e.clock - item.offset) % item.period) + item.period) %
+            item.period;
           if (t >= item.length) return;
         }
         this.launch(e, specs, rate, i);
@@ -481,12 +540,21 @@ export class ParticleSystem {
           this.init(p, next, true);
           if (f[SP.Friction] === 0) f[SP.Friction] = friction;
           for (const s of next) {
-            if (s.field === SP.VelX || s.field === SP.VelY || s.field === SP.VelZ)
+            if (
+              s.field === SP.VelX ||
+              s.field === SP.VelY ||
+              s.field === SP.VelZ
+            )
               p.vel = [f[SP.VelX], f[SP.VelY], f[SP.VelZ]];
-            if (s.field === SP.AccelX || s.field === SP.AccelY || s.field === SP.AccelZ)
+            if (
+              s.field === SP.AccelX ||
+              s.field === SP.AccelY ||
+              s.field === SP.AccelZ
+            )
               p.acc = [f[SP.AccelX], f[SP.AccelY], f[SP.AccelZ]];
           }
-          if (f[SP.NextLauncher] !== 0) p.next_time = p.age + Math.trunc(f[SP.NextTime]);
+          if (f[SP.NextLauncher] !== 0)
+            p.next_time = p.age + Math.trunc(f[SP.NextTime]);
         }
       }
       const fr = f[SP.Friction];
@@ -497,7 +565,8 @@ export class ParticleSystem {
       f[SP.ScaleX] += f[SP.ScaleVelX] * kTicks;
       f[SP.ScaleY] += f[SP.ScaleVelY] * kTicks;
       f[SP.RotZ] += f[SP.RotVelZ] * kTicks;
-      for (let c = 0; c < 4; c++) f[SP.R + c] = Math.max(0, f[SP.R + c] + f[SP.FadeR + c] * kTicks);
+      for (let c = 0; c < 4; c++)
+        f[SP.R + c] = Math.max(0, f[SP.R + c] + f[SP.FadeR + c] * kTicks);
       if (f[SP.A] <= 0 && f[SP.FadeA] <= 0 && p.age > kTicks) continue; // faded out
       list[alive++] = p;
     }
@@ -513,7 +582,12 @@ export class ParticleSystem {
         sx: f[SP.ScaleX] / 4096,
         sy: f[SP.ScaleY] / 4096,
         rot: angle(f[SP.RotZ]),
-        color: [f[SP.R] / 128, f[SP.R + 1] / 128, f[SP.R + 2] / 128, Math.min(f[SP.A], 128) / 128],
+        color: [
+          f[SP.R] / 128,
+          f[SP.R + 1] / 128,
+          f[SP.R + 2] / 128,
+          Math.min(f[SP.A], 128) / 128,
+        ],
         texture: p.texture,
         additive: (p.flags & kSpGlow) !== 0,
         from_left: (Math.trunc(f[SP.RotX]) & 15) === 4,
@@ -553,7 +627,10 @@ function spriteImage(name: string): Promise<ImageBitmap | null> {
     img = sprite_index
       .then((index) => asset(`${SPRITES_PATH}/${index[name] ?? name}.png`))
       .then((b) =>
-        createImageBitmap(new Blob([b]), { premultiplyAlpha: "none", colorSpaceConversion: "none" }),
+        createImageBitmap(new Blob([b]), {
+          premultiplyAlpha: "none",
+          colorSpaceConversion: "none",
+        }),
       )
       .catch(() => null);
     images.set(name, img);
@@ -616,7 +693,8 @@ export class SpriteRenderer {
       const s = gl.createShader(type)!;
       gl.shaderSource(s, src);
       gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? "shader");
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+        throw new Error(gl.getShaderInfoLog(s) ?? "shader");
       return s;
     };
     this.prog = gl.createProgram()!;
@@ -640,7 +718,17 @@ export class SpriteRenderer {
     gl.bindVertexArray(null);
     this.white = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, this.white);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA8,
+      1,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array([255, 255, 255, 255]),
+    );
   }
 
   // a texture of ParticleData.textures: null while its picture is read, white when there is none
@@ -656,7 +744,11 @@ export class SpriteRenderer {
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
       gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MIN_FILTER,
+        gl.LINEAR_MIPMAP_LINEAR,
+      );
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -668,14 +760,22 @@ export class SpriteRenderer {
 
   // every texture of these sprites read (a picture drawn once)
   async ready(sprites: ParticleSprite[], textures: string[]) {
-    const names = new Set(sprites.map((s) => textures[s.texture]).filter((n) => n !== undefined));
+    const names = new Set(
+      sprites.map((s) => textures[s.texture]).filter((n) => n !== undefined),
+    );
     for (const n of names) this.texture(n);
     await Promise.all([...names].map(spriteImage)); // uploaded first (texture()'s then)
   }
 
   // after the scene, without writing the depth: `viewproj` the draws' matrix, `view` the camera's
   // (its right and up face the sprites to it), `depthFunc` the test (reversed over the game view)
-  draw(sprites: ParticleSprite[], textures: string[], viewproj: Mat4, view: Mat4, depthFunc: number) {
+  draw(
+    sprites: ParticleSprite[],
+    textures: string[],
+    viewproj: Mat4,
+    view: Mat4,
+    depthFunc: number,
+  ) {
     if (!sprites.length) return 0;
     const gl = this.gl;
     // the camera's right and up (rows of the view's rotation): the sprites face it
@@ -693,7 +793,12 @@ export class SpriteRenderer {
     if (this.verts.length < sprites.length * 6 * FLOATS)
       this.verts = new Float32Array(sprites.length * 6 * FLOATS * 2);
     const v = this.verts;
-    const runs: { first: number; count: number; texture: number; additive: boolean }[] = [];
+    const runs: {
+      first: number;
+      count: number;
+      texture: number;
+      additive: boolean;
+    }[] = [];
     const ax = [0, 0, 0],
       ay = [0, 0, 0],
       xs = [0, 0, 0, 0],
@@ -711,9 +816,15 @@ export class SpriteRenderer {
       xs[1] = xs[2] = xs[0] + 1;
       const last = runs[runs.length - 1];
       if (!last || last.texture !== s.texture || last.additive !== s.additive)
-        runs.push({ first: o / FLOATS, count: 0, texture: s.texture, additive: s.additive });
+        runs.push({
+          first: o / FLOATS,
+          count: 0,
+          texture: s.texture,
+          additive: s.additive,
+        });
       for (const k of CORNERS) {
-        for (let a = 0; a < 3; a++) v[o + a] = s.pos[a] + ax[a] * xs[k] + ay[a] * ys[k];
+        for (let a = 0; a < 3; a++)
+          v[o + a] = s.pos[a] + ax[a] * xs[k] + ay[a] * ys[k];
         v[o + 3] = UV[k][0];
         v[o + 4] = UV[k][1];
         v.set(s.color, o + 5);
@@ -753,17 +864,27 @@ export class SpriteRenderer {
 
 // the effects lost in the game's fog of the hour and the weather, far away (App::fog_effects):
 // rs as the game view set it (its fog's color and how much of it at most, where it starts and ends)
-function fogEffects(sprites: ParticleSprite[], rs: RenderSettings, camera: Vec3) {
+function fogEffects(
+  sprites: ParticleSprite[],
+  rs: RenderSettings,
+  camera: Vec3,
+) {
   if (!rs.game_view) return;
   const start = rs.game_fog_start,
     end = Math.max(rs.game_fog_end, start + 1);
   const most = rs.game_fog[3];
   for (const s of sprites) {
-    const d = length([s.pos[0] - camera[0], s.pos[1] - camera[1], s.pos[2] - camera[2]]);
+    const d = length([
+      s.pos[0] - camera[0],
+      s.pos[1] - camera[1],
+      s.pos[2] - camera[2],
+    ]);
     const f = Math.min(Math.max((d - start) / (end - start), 0), 1) * most;
     if (f <= 0) continue;
     for (let k = 0; k < 3; k++)
-      s.color[k] = s.additive ? s.color[k] * (1 - f) : s.color[k] + (rs.game_fog[k] - s.color[k]) * f;
+      s.color[k] = s.additive
+        ? s.color[k] * (1 - f)
+        : s.color[k] + (rs.game_fog[k] - s.color[k]) * f;
   }
 }
 
@@ -791,7 +912,11 @@ class Effects {
 
   // its pass in the viewport's frame and the engine's changes; returns what stops them
   attach(): () => void {
-    const offs = [viewport.addPass("overlay", (r, rs) => this.draw(r, rs), { capture: true })];
+    const offs = [
+      viewport.addPass("overlay", (r, rs) => this.draw(r, rs), {
+        capture: true,
+      }),
+    ];
     let live = true;
     void engineReady.then(() => {
       if (!live) return;
@@ -837,7 +962,12 @@ class Effects {
         this.emitters = [];
         for (const e of list) {
           const group = data.group(e.group);
-          if (group) this.emitters.push({ id: e.id, group, world: new Float32Array(e.world) });
+          if (group)
+            this.emitters.push({
+              id: e.id,
+              group,
+              world: new Float32Array(e.world),
+            });
         }
       } while (this.again);
     } catch (e) {

@@ -46,7 +46,8 @@ export function thumbKey(r: ThumbRequest): string {
 // the cache file's name: FNV-1a 64 of the key
 function fileName(key: string): string {
   let h = 0xcbf29ce484222325n;
-  for (const b of new TextEncoder().encode(key)) h = ((h ^ BigInt(b)) * 0x100000001b3n) & 0xffffffffffffffffn;
+  for (const b of new TextEncoder().encode(key))
+    h = ((h ^ BigInt(b)) * 0x100000001b3n) & 0xffffffffffffffffn;
   return h.toString(16).padStart(16, "0");
 }
 
@@ -72,7 +73,11 @@ function context() {
   if (!ctx) {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = THUMB_SIZE;
-    const gl = canvas.getContext("webgl2", { antialias: true, alpha: false, preserveDrawingBuffer: true });
+    const gl = canvas.getContext("webgl2", {
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true,
+    });
     if (!gl) throw new Error("WebGL2 is not available");
     ctx = { canvas, renderer: new Renderer(gl) };
   }
@@ -86,7 +91,9 @@ function parsePackage(buf: ArrayBuffer) {
   if (dv.getUint32(0, true) !== 0x50454c4a) throw new Error("not JLEP");
   let o = 12;
   const jlen = dv.getUint32(8, true);
-  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, o, jlen)));
+  const json = JSON.parse(
+    new TextDecoder().decode(new Uint8Array(buf, o, jlen)),
+  );
   o += jlen;
   const n = dv.getUint32(o, true);
   o += 4;
@@ -106,8 +113,17 @@ function parsePackage(buf: ArrayBuffer) {
     textures.push(parseTexture(buf.slice(o, o + bytes)));
     o += bytes;
   }
-  const draws = (json.draws ?? [{ mesh: 0, world: identity() }]) as { mesh: number; world: Mat4 }[];
-  return { meshes, draws, materials: parseMaterials(json).materials, textures, bounds: json.bounds as AABB };
+  const draws = (json.draws ?? [{ mesh: 0, world: identity() }]) as {
+    mesh: number;
+    world: Mat4;
+  }[];
+  return {
+    meshes,
+    draws,
+    materials: parseMaterials(json).materials,
+    textures,
+    bounds: json.bounds as AABB,
+  };
 }
 
 // the picture drawn now, as a PNG data URL (null: nothing to draw)
@@ -133,13 +149,28 @@ async function draw(r: ThumbRequest): Promise<string | null> {
   cam.pitch = r.kind === "level" ? -0.95 : -0.38;
   cam.frame(bounds);
   cam.znear = Math.max(0.01, aabbRadius(bounds) * 0.01);
-  const rs = { ...defaultRenderSettings(), show_grid: false, frustum_culling: false, clear_color: [0.19, 0.21, 0.24] as [number, number, number] };
+  const rs = {
+    ...defaultRenderSettings(),
+    show_grid: false,
+    frustum_culling: false,
+    clear_color: [0.19, 0.21, 0.24] as [number, number, number],
+  };
   // its own textures, as the store's entries
-  const textures: TextureEntry[] = p.textures.map((data) => ({ version: 0, loaded: 0, data, loading: false, gpu: null }));
-  const store = { texture: (i: number) => textures[i] ?? null } as unknown as SceneStore;
+  const textures: TextureEntry[] = p.textures.map((data) => ({
+    version: 0,
+    loaded: 0,
+    data,
+    loading: false,
+    gpu: null,
+  }));
+  const store = {
+    texture: (i: number) => textures[i] ?? null,
+  } as unknown as SceneStore;
   const srcs = p.meshes.map((data) => ({ data, gpu: null as unknown }));
   renderer.begin(cam, THUMB_SIZE, THUMB_SIZE, rs);
-  for (const d of p.draws) if (srcs[d.mesh]) renderer.drawMesh(srcs[d.mesh], d.world, p.materials, store, rs);
+  for (const d of p.draws)
+    if (srcs[d.mesh])
+      renderer.drawMesh(srcs[d.mesh], d.world, p.materials, store, rs);
   const out = document.createElement("canvas");
   out.width = out.height = THUMB_SIZE;
   out.getContext("2d")!.drawImage(canvas, 0, 0);
@@ -221,7 +252,11 @@ class Thumbnails {
           console.warn("[thumbnails]", e);
         }
         it.resolve(url);
-        if (url) call("thumb_store", { name: it.name, png: url.slice(url.indexOf(",") + 1) }).catch(() => {});
+        if (url)
+          call("thumb_store", {
+            name: it.name,
+            png: url.slice(url.indexOf(",") + 1),
+          }).catch(() => {});
         this.running--;
         this.pump();
       });

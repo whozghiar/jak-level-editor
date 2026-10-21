@@ -28,8 +28,19 @@
 </script>
 
 <p class="mb-3">{t("group.new_text", roots)}</p>
-<input bind:this={field} class={input} bind:value={name} onkeydown={(e) => e.key === "Enter" && create()} />
+<input
+  bind:this={field}
+  class={input}
+  bind:value={name}
+  onkeydown={(e) => e.key === "Enter" && create()}
+/>
 <div class="mt-4 flex justify-end gap-2">
-  <button class={primary} disabled={!name || !engine.state.selection.count} onclick={create}>{t("group.create")}</button>
-  <button class={button} onclick={() => windows.close("new_group")}>{t("popup.cancel")}</button>
+  <button
+    class={primary}
+    disabled={!name || !engine.state.selection.count}
+    onclick={create}>{t("group.create")}</button
+  >
+  <button class={button} onclick={() => windows.close("new_group")}
+    >{t("popup.cancel")}</button
+  >
 </div>
