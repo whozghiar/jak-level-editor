@@ -49,6 +49,27 @@
     effects.hour = engine.state.weather?.mood?.hour ?? 12;
     effects.setOn(!!engine.state.view.effects);
   });
+
+  // the View menu's toggles, the level's ocean (once per change of it), the hovered element's group
+  let oceanKey = "";
+  $effect(() => {
+    if (!engine.ready) return;
+    const v = engine.state.view;
+    viewport.setSettings({
+      show_grid: !!v.grid,
+      show_actors: !!v.actors,
+      show_ocean: !!v.ocean,
+      textures: !!v.textures,
+      fog: !!v.fog,
+    });
+    const ocean = engine.state.ocean ?? null;
+    const key = JSON.stringify(ocean);
+    if (key !== oceanKey) {
+      oceanKey = key;
+      viewport.setOcean(ocean);
+    }
+    viewport.outlineGroup = engine.state.hovered_group?.roots ?? [];
+  });
 </script>
 
 <div class="viewport" bind:this={box}>

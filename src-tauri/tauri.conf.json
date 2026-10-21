@@ -42,6 +42,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../lang/": "lang/",
+      "../data/": "data/"
+    },
     "category": "Game",
     "shortDescription": "A level editor for Jak 3 (OpenGOAL)"
   }

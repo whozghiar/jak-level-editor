@@ -171,6 +171,17 @@ tauri-plugin-jak-level-editor = { path = "../level-editor/crates/tauri-plugin" }
 with the capability `jak-level-editor:default` and the alias `$level-editor` to
 `level-editor/ui`. Its sidebar's *Level Editor* button opens the editor in a window of its own.
 
+The standalone app gives the plugin its command line instead:
+`tauri_plugin_jak_level_editor::Builder::new().args(std::env::args()).build()`, which reads
+`[project.glb] --library <folder> --lang <code> --remote-port <port> --hidden --open-level <name>`
+(`--hidden`: no window, the preferences left unchanged; `--open-level`: a level of the library
+opened at the start). The plugin takes the translations and the game's tables from the app's
+resources (`lang/`, `data/`: `bundle.resources` of src-tauri/tauri.conf.json), else next to the
+executable, else the repository's. ogle-extract is found next to the executable, in the resources
+or in the repository's `build/bin/`: to ship it with the app, add `"../build/bin/ogle-extract.exe":
+"ogle-extract.exe"` and `"../build/bin/ogle-extract-data/": "ogle-extract-data/"` to
+`bundle.resources` once it is built (a missing path there fails `tauri build`).
+
 ## 7. Porting conventions
 
 - The Rust code follows the C++ one file for file (`src/scene/terrain.cpp` -> `crates/core/src/scene/terrain.rs`),
