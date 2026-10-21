@@ -97,11 +97,17 @@ The plugin serves the viewport's data on a URI scheme (`jle://localhost/<path>` 
 `u32 count`, then per node `u32 id, u32 parent, u8 kind, u8 flags, u16 reserved, u32 mesh uid
 (low 32 bits, 0 none), u32 mesh version, f32 world[16]` (column-major), then `u32 removed`, then
 the ids removed. Flags: 1 visible (with its parents, and the story), 2 locked, 4 reference level,
-8 under an actor (its model), 16 has game lighting, 32 selected, 64 water.
+8 under an actor (its model), 16 has game lighting, 32 selected, 64 water. For an actor, the u16
+is the low 16 bits of the FNV-1a hash of its etype (the color of its marker).
 
 `mesh/<uid>` (format `JLEM` 1): `u32 magic "JLEM"`, `u32 version`, `u32 prims`, then per primitive
-`u32 vertices, u32 indices, i32 material, u32 flags (1 uv, 2 colors)`, then `f32 pos[3n]`,
-`f32 nrm[3n]`, `f32 uv[2n]` (if any), `u8 col[4n]` (if any), `u32 idx[m]`.
+`u32 vertices, u32 indices, i32 material, u32 flags (1 uv, 2 colors, 4 backdrop: fogged by
+distance)` followed by its arrays `f32 pos[3n]`, `f32 nrm[3n]`, `f32 uv[2n]` (if any),
+`u8 col[4n]` (if any), `u32 idx[m]`.
+
+`materials`: `{"materials": [...], "textures": [{"version": n}, ...]}`, each material `{name,
+texture, base_color, alpha: "opaque"|"mask"|"blend", blend: ""|"add"|"add_alpha"|"subtract"|"half",
+cutoff, double_sided, translucent, water}`.
 
 ## 5. Threads
 
