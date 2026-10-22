@@ -143,7 +143,8 @@ The server tells your client its rules when it starts (its `instructions`): they
 
 # Part 2, for the assistant
 
-This part is written for an AI agent that builds or changes levels of Jak 3 with the editor's tools:
+This part is written for an AI agent that builds or changes levels of Jak 3 (the game the editor
+edits today; Jak and Daxter and Jak II are planned) with the editor's tools:
 the ideas behind them, the rules that make a level look right in the game, recipes, and every tool.
 You do not need to know level editors to follow it: the notions a level needs are explained when
 they first appear; the user guide of the editor is [user-guide.md](user-guide.md).

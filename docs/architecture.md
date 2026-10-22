@@ -387,6 +387,24 @@ Jak, the game keeps the collision of at most 461 triangles; the decor you see is
 game's own collision is kept where the level's decor is untouched, and a piece you placed gets a
 simpler collision made from its shape ([24](#24-the-export-for-the-game)).
 
+### One game today, others planned
+
+The editor edits Jak 3, and is made so that Jak and Daxter and Jak II can follow. What depends on
+the game, and where it lives:
+
+| What | Where | Today |
+|---|---|---|
+| Reading the disc | ogle-extract (`extractor/main.cpp`) | it recognizes the three games; it extracts Jak 3, and Jak II for its decor |
+| The extracted levels | `library/<game>/` | `jak3/`, `jak2/` |
+| What the editor knows of a game | `data/<game>/` | `data/jak3/` (objects, particles, story, prefabs), `data/jak2/` (creatures, prefabs) |
+| The game rendering | `crates/core/src/game/`, `ui/render/game_view.ts` | Jak 3's background shader and its hours and weathers |
+| The export | `crates/core/src/io/game_export/` | Jak 3's files: `goal_src/jak3/`, `custom_assets/jak3/` |
+| The interface | `ui/lib/games.ts` | Jak 3 `ready`; the others in the Game menu, marked *Work in progress* |
+
+Making a game editable fills each line for it: its extraction, its data, its rendering (Jak and
+Daxter's background renderer is not Jak 3's), its export (what its level builder reads), then
+`ready: true` in `ui/lib/games.ts`, which lets the Game menu choose it.
+
 ## 10. Build it yourself, and test it
 
 To build it yourself (to work on it, or a version not released yet), you need:
@@ -782,6 +800,11 @@ in the resources or in the repository's `build/bin/`: to ship it with the app, a
   `call()` takes; the test `the_interfaces_calls_are_the_engines` fails when it is not `api.rs`'s
   (`JLE_WRITE_API=1 cargo test -p jak-level-editor-core the_interfaces_calls` writes it again).
 - Formatting: `rustfmt.toml` (2 spaces), prettier for the interface (`npx yarn format`).
+- The games: `ui/lib/games.ts` lists the series' games and which are `ready`. What is planned shows
+  the class `wip` of `ui/components/common/classes.ts` with the text `wip` (*Work in progress*,
+  *Travaux en cours*): the Game menu (the games not ready), the Extract window (a Jak and Daxter
+  disc), the Levels panel (Jak II's levels). A game's files go in `data/<game>/` and
+  `library/<game>/`.
 
 ## 19. Command line
 

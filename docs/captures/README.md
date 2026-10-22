@@ -5,7 +5,7 @@ The pictures of the [user guide](../user-guide.md), of the [MCP tutorial](../mcp
 
 | Folder | What it shows |
 |---|---|
-| `getting-started/` | the editor's window, the guide (F1), the first-run assistant, the settings, the extraction of a disc |
+| `getting-started/` | the editor's window, the Game menu, the guide (F1), the first-run assistant, the settings, the extraction of a disc |
 | `levels/` | the Levels panel, the story, several levels side by side, a level selected whole, the ocean |
 | `selecting/` | a selection and its gizmo, what the cursor tells, a box being drawn, the button held on a prefab, a prefab dragged, the scale tool |
 | `groups/` | the Groups panel, a group being named |

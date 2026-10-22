@@ -30,9 +30,15 @@ idea is explained the first time it appears, with an example, and each tool is s
 
 ## 1. The ideas in five minutes
 
+**The game** you edit is **Jak 3**: the editor reads its levels and exports them for it. Jak II's
+levels can be opened too, to bring their buildings into Jak 3's ([Jak II's
+buildings](#jak-iis-buildings)). The editor is made to edit Jak and Daxter and Jak II one day: its
+**Game** menu lists them, marked **Work in progress** (*Travaux en cours* in French), and they
+cannot be chosen yet. The examples of this guide are Jak 3's.
+
 **A level** is a part of the game's world that the game loads as one piece: a district of Haven
 City (`ctyinda`, the industrial zone), the slums (`ctysluma`), Spargus (`wascitya`), a part of the
-desert... The disc holds 272 level files, among them the 105 places you can open (the others are
+desert... Jak 3's disc holds 272 level files, among them the 105 places you can open (the others are
 cutscenes and additions that missions bring to a place). They all live in **one world**: each level
 is at its place, so two levels side by side in the game also meet in the editor. The name next to
 each level in the list (`CIA.DGO`) is the file of the disc it comes from: you can ignore it.
@@ -88,6 +94,8 @@ after a fall.
   Put it in `iso_data/` of this folder if you like (git ignores it), or anywhere.
 - About 4 GB of disk for the extracted levels, 5 GB of free memory while they are extracted.
 - Optional: your copy of **Jak II**, for its buildings (Haven City as it was, the palace).
+- A disc of **Jak and Daxter** is recognized, but not extracted yet: its levels are *Work in
+  progress*.
 
 ### Download it
 
@@ -153,7 +161,7 @@ game: keep them on your computer, do not share them.
 ```text
 +------------------------------------------------------------------------------+
 | Jak Level Editor | the level *                                       _ [] X |
-| File  Edit  View  Build  Level  Help                                         |
+| File  Edit  View  Build  Level  Help                             Game: Jak 3 |
 | [Move] [Rotate] [Scale] [Topology] [Terrain] [Local] [Snap] [Copy] ... [Redo]|
 +----+---------------+---------------------------------------+-----------------+
 | Lv |               |                                       | Inspector       |
@@ -167,6 +175,12 @@ game: keep them on your computer, do not share them.
 ```
 
 - The **title bar** names the level open (an orange dot: unsaved changes).
+- The **Game** menu, at the right of the menu bar, names the game whose levels you edit and export:
+  Jak 3. Jak and Daxter and Jak II are listed, marked **Work in progress**: planned, not available
+  yet.
+
+  ![The Game menu: Jak 3 chosen, Jak and Daxter and Jak II marked Work in progress](captures/getting-started/games.png)
+
 - The **bar of icons** on the left opens the panels, the steps of the work: **Levels** (the map) to
   open one, **Build** (the hammer) to make shapes, **Catalog** and **Prefabs** to place things,
   **Groups** to find the groups you made. Hover an icon for its name; drag a panel's edge to widen

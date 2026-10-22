@@ -1,8 +1,10 @@
 # Jak Level Editor
 
-A level editor for **Jak 3**, for [OpenGOAL](https://github.com/open-goal/jak-project): the project
-that rebuilds the PlayStation 2 game so that it runs natively on PC, from your own disc. The editor
-reads the levels from **your own copy of the game**, shows them as the game draws them, and lets you
+A level editor for the games of the Jak and Daxter series, for
+[OpenGOAL](https://github.com/open-goal/jak-project): the project that rebuilds the PlayStation 2
+games so that they run natively on PC, from your own discs. It edits **Jak 3** today, and is made to
+take Jak and Daxter and Jak II later (see [Games](#games)). The editor reads the levels from **your
+own copy of the game**, shows them as the game draws them, and lets you
 change them or build new ones: move a wall, add a bridge, put houses of Haven City in the desert,
 make a door open only once a crate is broken, then export the result for the game.
 
@@ -29,6 +31,19 @@ make a door open only once a crate is broken, then export the result for the gam
 - **Lets an AI assistant build for you** (Claude Code, or any program that speaks MCP): you describe
   the level in your own words, it builds it in your window.
 - Speaks **English and French**.
+
+## Games
+
+| Game | Today |
+|---|---|
+| **Jak 3** | edited and exported: everything on this page |
+| **Jak II** | its levels and buildings are brought into Jak 3's levels as decor; editing Jak II's own levels: *Work in progress* |
+| **Jak and Daxter** | its disc is recognized; extracting and editing its levels: *Work in progress* |
+
+The editor shows it as it is: its **Game** menu (at the right of the menu bar) names the game you
+edit, and lists the others marked *Work in progress*.
+
+![The Game menu: Jak 3 chosen, Jak and Daxter and Jak II marked Work in progress](docs/captures/getting-started/games.png)
 
 ## How it works, in short
 
