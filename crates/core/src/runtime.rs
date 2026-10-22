@@ -511,7 +511,7 @@ impl OpenGoal {
     };
     RuntimeInfo {
       kind: self.kind.clone(),
-      label: self.folder.to_string_lossy().into_owned(),
+      label: crate::io::asset_library::from_path(&self.folder),
       available: problem.is_none(),
       reason: problem.unwrap_or_default().into(),
       games: vec![game.into()],
@@ -909,7 +909,7 @@ impl GameRuntime for StandaloneRuntime {
       let info = Self::describe(o);
       json!({
         "kind": o.game.kind,
-        "folder": o.game.folder,
+        "folder": crate::io::asset_library::from_path(&o.game.folder),
         "available": info.available,
         "reason": info.reason,
       })
@@ -924,7 +924,7 @@ impl GameRuntime for StandaloneRuntime {
     let own = own.as_ref().map_or_else(
       |reason| {
         json!({"kind": "opengoal", "available": false, "reason": reason,
-          "folder": Self::home().map(|h| h.join("jak3"))})
+          "folder": Self::home().map(|h| crate::io::asset_library::from_path(&h.join("jak3")))})
       },
       describe,
     );
@@ -1066,6 +1066,17 @@ mod tests {
     assert_eq!(
       launcher_level_edited(&install, "", "jak3").problem("jak3"),
       Some("runtime.launcher_version")
+    );
+    // a newer release of the fork out: the launcher's game says so (its header installs it)
+    crate::tooling::seed(vec![crate::tooling::Release {
+      tag: "v99.0.0-whozghiar.1".into(),
+      ..Default::default()
+    }]);
+    version("v0.0.1-whozghiar.1");
+    let old = launcher_level_edited(&install, "v0.0.1-whozghiar.1", "jak3").info("jak3");
+    assert!(
+      old.available && old.notice == "runtime.launcher_update" && old.notice_args.len() == 1,
+      "{old:?}"
     );
 
     // made from the version's data, to decompile

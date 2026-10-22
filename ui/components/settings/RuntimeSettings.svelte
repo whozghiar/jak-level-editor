@@ -67,7 +67,6 @@
 </script>
 
 <h3 class={heading}>{t("settings.runtime")}</h3>
-<p class="mb-2 {muted}">{t("settings.runtime.help")}</p>
 {#if r === null}
   <p class="text-xs text-neutral-300">{t("settings.runtime.none")}</p>
 {:else if r && !r.settings}
@@ -81,6 +80,7 @@
     </p>{/if}
 {:else if r?.settings}
   {@const s = r.settings}
+  <p class="mb-2 {muted}">{t("settings.runtime.help")}</p>
   <div class="flex flex-col gap-1.5">
     <p class="text-xs font-semibold text-neutral-300">
       {t("settings.runtime.own")}

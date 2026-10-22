@@ -196,6 +196,14 @@ pub fn known(again: bool) -> Known {
   k.0.clone()
 }
 
+/// The releases known set by a test (GitHub not asked for an hour)
+#[cfg(test)]
+pub(crate) fn seed(releases: Vec<Release>) {
+  let mut k = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+  k.0.releases = releases;
+  k.1 = Some(Instant::now());
+}
+
 /// The newest release known when it is newer than `version` (the launcher's game says so)
 pub fn newer_than(version: &str) -> Option<String> {
   known(false)
