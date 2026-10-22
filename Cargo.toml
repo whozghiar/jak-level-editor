@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/core", "crates/tauri-plugin", "crates/mcp", "src-tauri"]
 
 [workspace.package]
-version = "2.0.0"
+version = "1.0.0"
 edition = "2024"
 license = "ISC"
 repository = "https://github.com/whozghiar/open-goal-level-builder"
