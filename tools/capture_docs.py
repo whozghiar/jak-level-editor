@@ -433,6 +433,10 @@ def getting_started(args, e):
     camera(e, -150, 140, 1800, -40, -18)
     e.web.tab('Levels')
     e.shot(out('getting-started', 'window.png'), settle=3)
+    # the Game menu: Jak 3, the other games of the series marked Work in progress
+    e.web.click('Game: Jak 3')
+    e.shot(out('getting-started', 'games.png'), settle=1)
+    e.web.click('Game: Jak 3')
     # the guide at Getting started's fifth step: the move, rotate, scale and snap animations
     e.web.key('F1')
     e.web.click('Tutorials', within='Guide')

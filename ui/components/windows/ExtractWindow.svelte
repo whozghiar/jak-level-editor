@@ -14,6 +14,7 @@
   import { onMount } from "svelte";
   import { has, t } from "../../lib/i18n";
   import { call, onEngine } from "../../lib/rpc";
+  import { wip } from "../common/classes";
 
   // a text of the engine: its translation (then ": detail"), else as ogle-extract said it
   type Text = { key: string; args: number[]; detail: string; text: string };
@@ -75,6 +76,8 @@
   const matches = $derived(
     recognized && (ex?.detected.game === "jak3" || jak2),
   );
+  // Jak and Daxter: recognized, planned (its levels are neither extracted nor edited yet)
+  const jak1 = $derived(recognized && ex?.detected.game === "jak1");
 
   function show(s: Extraction | undefined) {
     if (s) ex = s;
@@ -238,16 +241,30 @@
           <p class={muted}>{t("extract.detecting")}</p>
         {:else if recognized && ex}
           <p>
-            <span class="font-semibold {matches ? good : bad}"
-              >{ex.detected.name}</span
+            <span
+              class="font-semibold {matches
+                ? good
+                : jak1
+                  ? 'text-amber-300'
+                  : bad}">{ex.detected.name}</span
             >
             <span class={muted}
               >{ex.detected.version} &nbsp;-&nbsp; {ex.detected.serial}</span
             >
           </p>
-          {#if !matches}<p class={bad}>{t("extract.wrong_game")}</p>{/if}
+          {#if jak1}
+            <p class="mt-1 flex items-center gap-2 text-neutral-300">
+              <span class={wip}>{t("wip")}</span>{t("extract.jak1")}
+            </p>
+          {:else if !matches}<p class={bad}>{t("extract.wrong_game")}</p>{/if}
           {#if jak2}<p class="mt-1 text-neutral-300">
               {t("extract.jak2")}
+            </p>
+            <p class="mt-1 flex items-center gap-2 {muted}">
+              <span class={wip}>{t("wip")}</span>{t(
+                "menu.game.wip_tip",
+                "Jak II",
+              )}
             </p>{/if}
         {:else if ex?.detected.error && ex.detected.source === source}
           <p class={bad}>{text(ex.detected.error)}</p>

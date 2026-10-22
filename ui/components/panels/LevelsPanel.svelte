@@ -21,6 +21,7 @@
     muted,
     primary,
     small,
+    wip,
   } from "../common/classes";
   import Tip from "../common/Tip.svelte";
   import Thumb from "./Thumb.svelte";
@@ -84,7 +85,7 @@
   {:else}
     {#if s.jak2_available}
       <div class="flex items-center gap-3">
-        <span class="text-neutral-400">{t("catalog.game")}</span>
+        <span class="text-neutral-400">{t("levels.of")}</span>
         {#each [false, true] as two}
           <label class="flex cursor-pointer items-center gap-1.5">
             <input
@@ -156,6 +157,9 @@
     {/if}
     {#if game2}
       <p class={muted}>{t("levels.jak2.note")}</p>
+      <p class="flex items-center gap-2 {muted}">
+        <span class={wip}>{t("wip")}</span>{t("menu.game.wip_tip", "Jak II")}
+      </p>
     {:else}
       <label class="flex cursor-pointer items-center gap-2 self-start">
         <input

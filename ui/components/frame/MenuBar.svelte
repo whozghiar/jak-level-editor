@@ -15,9 +15,11 @@
     ui,
   } from "../../lib/actions.svelte";
   import { engine } from "../../lib/engine.svelte";
+  import { editedGame, games } from "../../lib/games";
   import { language, languages, t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
   import { windows } from "../../lib/windows.svelte";
+  import { wip } from "../common/classes";
   import Tip from "../common/Tip.svelte";
 
   type Item = {
@@ -27,10 +29,17 @@
     checked?: boolean;
     tip?: string;
     guide?: string;
+    badge?: string;
     run?: () => void;
     items?: (Item | null)[];
   };
-  type Menu = { label: string; enabled?: boolean; items: (Item | null)[] }; // null: a separator
+  // null: a separator; right: at the bar's right end
+  type Menu = {
+    label: string;
+    enabled?: boolean;
+    right?: boolean;
+    items: (Item | null)[];
+  };
 
   // the shapes of the Build menu (shape_presets in scene/shapes.cpp)
   const shapes = [
@@ -319,6 +328,18 @@
         }),
       ),
     },
+    // the game whose levels are edited: Jak 3; the other games are planned
+    {
+      label: t("menu.game", editedGame.name),
+      right: true,
+      items: games.map((g) => ({
+        label: g.name,
+        checked: g.id === editedGame.id,
+        enabled: g.ready,
+        badge: g.ready ? undefined : t("wip"),
+        tip: g.ready ? t("menu.game.tip") : t("menu.game.wip_tip", g.name),
+      })),
+    },
   ]);
 
   let opened = $state(-1);
@@ -373,6 +394,7 @@
               >{#if it.checked}<IconCheck />{/if}</span
             >
             <span class="flex-1">{it.label}</span>
+            {#if it.badge}<span class={wip}>{it.badge}</span>{/if}
             {#if it.keys}<span class="pl-6 text-xs text-neutral-500"
                 >{it.keys}</span
               >{/if}
@@ -389,7 +411,7 @@
   class="relative z-40 flex h-8 shrink-0 items-center border-b border-white/5 bg-[#0b0b0b] px-1 text-sm"
 >
   {#each menus as m, i}
-    <div class="relative">
+    <div class="relative {m.right ? 'ml-auto' : ''}">
       <button
         class="rounded px-3 py-1 enabled:hover:bg-white/10 disabled:text-neutral-600 {opened ===
         i
@@ -402,7 +424,9 @@
         {m.label}
       </button>
       {#if opened === i}
-        <div class="absolute top-full left-0 mt-1">{@render list(m.items)}</div>
+        <div class="absolute top-full {m.right ? 'right-0' : 'left-0'} mt-1">
+          {@render list(m.items)}
+        </div>
       {/if}
     </div>
   {/each}
