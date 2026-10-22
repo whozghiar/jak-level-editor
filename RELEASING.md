@@ -1,40 +1,40 @@
 # Making a release
 
-A release is a **draft** GitHub release that `.github/workflows/release.yaml` makes from a tag
-`vX.Y.Z`, with the editor built for Windows and Linux. You check it, then publish it by hand.
+A release is a **draft** GitHub release that `.github/workflows/release.yaml` makes, with the
+editor built for Windows and Linux. You start it, check the draft, then publish it by hand.
 
-## 1. Bump the version
+## 1. Choose what the release changes
 
-The same version in three files:
+The versions are `vX.Y.Z`, and the workflow counts them itself from the last release's tag: the
+first release is **v1.0.0**, then
 
-| File | Where |
-|---|---|
-| `package.json` | `"version"` |
-| `Cargo.toml` | `version` of `[workspace.package]` (every crate takes it) |
-| `src-tauri/tauri.conf.json` | `"version"` (the installers' version) |
+| Choice | When | After v1.2.3 |
+|---|---|---|
+| `patch` | fixes only | v1.2.4 |
+| `minor` | new features; what worked still works | v1.3.0 |
+| `major` | something that worked no longer does: a project or a prefab of before no longer opens, a tool of the MCP server changes its arguments | v2.0.0 |
 
-Then run `cargo check -p jak-level-editor-core` (it writes the new version into `Cargo.lock`) and
-commit the four files.
+## 2. Run the workflow
 
-## 2. Tag and push
+**Actions > Release > Run workflow**, on the branch to release (`master-dev`), with that choice.
+The workflow:
 
-```bash
-git tag v2.1.0
-git push                  # the commit
-git push origin v2.1.0    # the tag
-```
+1. takes the last tag `vX.Y.Z` of the repository and counts the next version;
+2. writes it into `package.json`, `Cargo.toml` (every crate takes it), `Cargo.lock` and
+   `src-tauri/tauri.conf.json` (the installers' version), commits them to the branch (*chore:
+   release vX.Y.Z*, by github-actions[bot]), tags that commit and pushes both;
+3. builds the release from that tag.
 
-The tag starts the workflow (the **Actions** tab, **Release**). Its first step fails when the tag
-and the three versions differ: delete the tag (`git push origin :v2.1.0`, nothing was released
-yet), fix the files, then tag again.
+Then `git pull` your branch: it lacks that commit. Never tag by hand: a tag pushed by hand starts
+nothing, and the next release counts from it.
 
 A tag whose release was published is never moved: the OpenGOAL Launcher's submodule is pinned to
 it, and its users download ogle-extract from that release. A wrong release is fixed by the next
-version.
+version. If the build of a release not published yet must be made again from another commit,
+delete the draft and its tag (`git push origin :vX.Y.Z`): the next run takes the same number.
 
-To try a build first: **Actions > Release > Run workflow** on a branch, without a tag. The draft
-is then named after the version of `package.json`; delete it when done (its tag is only created
-when it is published).
+To try a build without releasing: the **Build** workflow builds the editor at every push
+([workflows.md](docs/workflows.md)); only a release makes the installers.
 
 ## 3. Check the draft
 
@@ -70,7 +70,7 @@ The launcher holds the editor as its submodule `level-editor/`, pinned to a rele
 
 ```bash
 git -C level-editor fetch --tags
-git -C level-editor checkout v2.1.0
+git -C level-editor checkout v1.0.0
 git add level-editor
 git commit
 ```

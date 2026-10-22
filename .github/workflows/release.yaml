@@ -1,16 +1,26 @@
 name: Release
 
-# A tag vX.Y.Z (or a manual run: the version of package.json) makes a draft release with, per
-# platform, the installers, a portable zip, ogle-extract alone (the OpenGOAL Launcher downloads
-# ogle-extract-<platform>.zip) and the MCP server. RELEASING.md tells how to make one.
+# Run by hand (Actions > Release > Run workflow), with what the release changes: patch, minor or
+# major. The version follows the last tag vX.Y.Z (v1.0.0 for the first release): the run writes it
+# into package.json, Cargo.toml, Cargo.lock and src-tauri/tauri.conf.json, commits that to the
+# branch, tags the commit, then makes a draft release with, per platform, the installers, a
+# portable zip, ogle-extract alone (the OpenGOAL Launcher downloads ogle-extract-<platform>.zip)
+# and the MCP server. RELEASING.md tells how to make one.
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "What the release changes: patch (fixes), minor (new features), major (breaking changes)"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: write
+
+# one release at a time: two runs would take the same number
+concurrency: release
 
 env:
   GH_TOKEN: ${{ github.token }}
@@ -18,7 +28,7 @@ env:
 
 jobs:
   draft:
-    name: Draft release
+    name: Version and draft release
     runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -26,21 +36,46 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check the versions
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Next version, committed and tagged
         id: version
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
+          last=$(git ls-remote --tags --refs origin 'v*' | sed 's#.*refs/tags/##' |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$last" ]; then
+            next=1.0.0
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            case "$BUMP" in
+              major) next="$((major + 1)).0.0" ;;
+              minor) next="$major.$((minor + 1)).0" ;;
+              *) next="$major.$minor.$((patch + 1))" ;;
+            esac
+          fi
+          tag="v$next"
+          echo "last release ${last:-none}, $BUMP: $tag"
+
+          sed -i -E "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$next\"/" package.json src-tauri/tauri.conf.json
+          sed -i -E "0,/^version = \"[^\"]*\"$/s//version = \"$next\"/" Cargo.toml
+          cargo update --workspace
           package=$(node -p "require('./package.json').version")
           tauri=$(node -p "require('./src-tauri/tauri.conf.json').version")
           cargo=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
-          tag="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
-          tag="${tag:-v$package}"
-          echo "tag $tag, package.json $package, Cargo.toml $cargo, src-tauri/tauri.conf.json $tauri"
           for version in "$package" "$cargo" "$tauri"; do
-            if [ "v$version" != "$tag" ]; then
-              echo "::error::The versions differ: tag $tag, package.json $package, Cargo.toml $cargo, src-tauri/tauri.conf.json $tauri (see RELEASING.md)"
+            if [ "$version" != "$next" ]; then
+              echo "::error::The versions were not all written: package.json $package, Cargo.toml $cargo, src-tauri/tauri.conf.json $tauri"
               exit 1
             fi
           done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release $tag" || echo "the versions were already $next"
+          git tag "$tag"
+          git push --atomic origin "HEAD:refs/heads/$GITHUB_REF_NAME" "refs/tags/$tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Create the draft release
@@ -48,8 +83,7 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release view "$TAG" > /dev/null 2>&1 ||
-            gh release create "$TAG" --draft --generate-notes --target "$GITHUB_SHA" --title "Jak Level Editor $TAG"
+          gh release create "$TAG" --draft --verify-tag --generate-notes --title "Jak Level Editor $TAG"
           id=$(gh api "repos/$GH_REPO/releases" --paginate --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n 1)
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
@@ -70,7 +104,10 @@ jobs:
       # Windows: the C runtime inside the programs, which then run without the VC++ redistributable
       RUSTFLAGS: ${{ matrix.os == 'windows-latest' && '-C target-feature=+crt-static' || '' }}
     steps:
+      # the commit the version was written in
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.draft.outputs.tag }}
 
       - uses: actions/setup-node@v7
         with:

@@ -12,7 +12,7 @@ passed; a red cross means one failed: click it, then the job, to read its log.
 |---|---|---|---|
 | **Lint** | [`lint.yaml`](../.github/workflows/lint.yaml) | at every push on any branch, on every pull request, by hand | is the code written in the expected form? |
 | **Build** | [`build.yaml`](../.github/workflows/build.yaml) | the same | does it build and pass its tests on Windows and Linux? |
-| **Release** | [`release.yaml`](../.github/workflows/release.yaml) | when a tag `v*` is pushed, by hand | the installers and zips of a version, in a draft release |
+| **Release** | [`release.yaml`](../.github/workflows/release.yaml) | by hand, with `patch`, `minor` or `major` | the next version `vX.Y.Z`, tagged, and its installers and zips in a draft release |
 
 Lint and Build run side by side and independently: a formatting mistake does not hide whether the
 code builds, and the other way round.
@@ -70,14 +70,18 @@ commit, and its own Build workflow compiles it with that commit.
 
 ## Release
 
-Runs when a tag `vX.Y.Z` is pushed, or by hand (**Actions > Release > Run workflow**, on a branch:
-a trial, named after the version of `package.json`). It never publishes anything: it makes a
-**draft** release, which you check, then publish by hand. [RELEASING.md](../RELEASING.md) gives the
-steps.
+Runs by hand only (**Actions > Release > Run workflow**, on the branch to release), with what the
+release changes: `patch`, `minor` or `major`. The workflow counts the version itself: **v1.0.0**
+for the first release, then from the last tag `vX.Y.Z` (after v1.2.3: `patch` v1.2.4, `minor`
+v1.3.0, `major` v2.0.0). It never publishes anything: it makes a **draft** release, which you
+check, then publish by hand. [RELEASING.md](../RELEASING.md) gives the steps.
 
-1. **Draft release** (Linux) checks that the tag and the three versions (`package.json`,
-   `Cargo.toml`, `src-tauri/tauri.conf.json`) are the same, and fails otherwise; then creates the
-   draft release, its notes written by GitHub from the commits, unless it exists already.
+1. **Version and draft release** (Linux) counts the next version from the repository's tags,
+   writes it into `package.json`, `Cargo.toml`, `Cargo.lock` and `src-tauri/tauri.conf.json`,
+   checks the three versions, commits them to the branch (*chore: release vX.Y.Z*), tags that
+   commit and pushes both at once; then creates the draft release on that tag, its notes written
+   by GitHub from the commits. One release runs at a time (`concurrency: release`): two would take
+   the same number.
 2. **Build** (`windows-x64` and `linux-x64`):
    - ogle-extract in `build-release/`;
    - the editor and its installers with [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action)
@@ -99,8 +103,9 @@ The draft then holds, per platform:
 | `ogle-extract-<platform>.zip` | at its root: `ogle-extract(.exe)` and `ogle-extract-data/`; the OpenGOAL Launcher downloads `https://github.com/whozghiar/open-goal-level-builder/releases/download/v<version>/ogle-extract-<platform>.zip` |
 | `jak-level-editor-mcp-<platform>.zip` | `jak-level-editor-mcp(.exe)`, the MCP server ([mcp.md](mcp.md)): it starts the editor found next to it |
 
-The workflow has the permission `contents: write` (to create the release and upload to it), with
-the run's own token: no secret to set up.
+The workflow has the permission `contents: write` (to push the version's commit and its tag, create
+the release and upload to it), with the run's own token: no secret to set up. Its commit and tag
+start no other workflow (GitHub does not run workflows for what a run's own token pushes).
 
 ## The same checks on your computer
 

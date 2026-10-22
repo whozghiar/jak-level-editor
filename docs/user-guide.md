@@ -110,9 +110,10 @@ Each [release](https://github.com/whozghiar/open-goal-level-builder/releases) ha
 - `jak-level-editor-mcp-<platform>.zip`, the MCP server for an AI assistant (optional, see
   [16](#16-building-with-an-ai-assistant)): put it next to the editor's program.
 
-The installers and the portable zip hold ogle-extract. A release is made from a tag `vX.Y.Z`:
-GitHub builds the editor on Windows and Linux and makes a draft release with these files, published
-by hand ([RELEASING.md](../RELEASING.md)). There is no macOS version.
+The installers and the portable zip hold ogle-extract. The releases are numbered
+`vX.Y.Z` (v1.0.0, then v1.0.1 for fixes, v1.1.0 for new features, v2.0.0 for a change that breaks
+something): GitHub builds the editor on Windows and Linux and makes a draft release with these
+files, published by hand ([RELEASING.md](../RELEASING.md)). There is no macOS version.
 
 To build the editor yourself instead (to work on it, or a version not released yet), see
 [Build it yourself](architecture.md#10-build-it-yourself-and-test-it) in the architecture.
