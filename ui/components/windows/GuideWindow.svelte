@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import { untrack } from "svelte";
-  import { playLevel, save, ui } from "../../lib/actions.svelte";
+  import { save, ui } from "../../lib/actions.svelte";
   import { engine } from "../../lib/engine.svelte";
   import { has, t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
@@ -90,16 +90,12 @@
   const s = $derived(tut.steps[si]);
   const k = $derived(tut.prefix + s[0]);
   const demos = $derived(s[1]);
-  // Play where the host gives no game to play in (the standalone app): the tutorial on adding the
-  // level to the game by hand
-  const byHand = $derived(s[2] === "play" && !engine.state.runtime);
-  const action = $derived<TourAction | undefined>(byHand ? "manual" : s[2]);
+  const action = $derived(s[2]);
   const needsDocument = $derived(
     action === "replace" ||
       action === "export" ||
       action === "save" ||
-      action === "navmeshes" ||
-      action === "play",
+      action === "navmeshes",
   );
   // why its button cannot be used: no level open
   const blocked = $derived(
@@ -127,7 +123,6 @@
     else if (a === "navmeshes") windows.open("navmesh");
     else if (a === "settings") windows.open("settings");
     else if (a === "game_window") windows.open("game");
-    else if (a === "play") playLevel();
     else if (a === "manual") selectTutorial("manual");
   }
 
@@ -264,8 +259,7 @@
               <button
                 class={button}
                 disabled={!!blocked}
-                onclick={() => run(action)}
-                >{t(byHand ? "tuto.manual.open" : `${k}.action`)}</button
+                onclick={() => run(action)}>{t(`${k}.action`)}</button
               >
             </span>
             {#if blocked}<Tip text={t(blocked)} placement="top" />{/if}

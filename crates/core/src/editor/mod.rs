@@ -19,7 +19,6 @@
 //!   extract.rs    the extraction of the game's assets (extract.cpp)
 //!   library.rs    where the library lives (the host's default, the first-run assistant, the
 //!                 settings), the extraction's help from the host
-//!   runtime.rs    the game runtime the host gives: the document played in the game (Play)
 //!   api.rs        `call`: every call by name
 //!   placement.rs  the Place tool, prefabs, Light like here, a level's style (actions.cpp)
 //!   catalog.rs    the catalog, the library's index, the palette, the game's prefabs: the panels'
@@ -50,7 +49,6 @@ mod project;
 pub mod protocol;
 pub mod remote;
 mod remote_tools;
-pub mod runtime;
 mod selection;
 mod state;
 mod surfaces;
@@ -352,10 +350,8 @@ pub struct Editor {
   /// the interface's viewport listens (call `frontend_ready`): it can make the pictures of the view
   pub interface_ready: bool,
   /// what the application hosting the editor gives it (crate::host): the default library, a disc
-  /// already extracted, the extractor, the game runtime
+  /// already extracted, the extractor
   pub host: crate::host::Host,
-  /// the Play window's: the game runtime's operation going on or the last one (runtime.rs)
-  pub play: Arc<Mutex<runtime::PlayState>>,
 }
 
 impl Default for Editor {
@@ -406,7 +402,6 @@ impl Editor {
       replies: BTreeMap::new(),
       extraction: extract::Extraction::default(),
       host: Default::default(),
-      play: Default::default(),
       placing: Default::default(),
       catalog: Default::default(),
       terrain: Default::default(),

@@ -284,7 +284,7 @@ fn a_small_level() {
   let dir = out.join("custom_assets/jak3/levels/my-test");
   let code = out.join("goal_src/jak3/levels/my-test/my-test-obs.gc");
   assert!(
-    r.files.len() == 7
+    r.files.len() == 6
       && r.behaviors == 2
       && out.join("README.md").is_file()
       && code.is_file()
@@ -301,28 +301,6 @@ fn a_small_level() {
   ] {
     assert!(dir.join(f).is_file(), "{f}");
   }
-  // the manifest: what the README says, for a runtime
-  let m = LevelPackage::read(&out).expect("jle-level.json").manifest;
-  assert!(
-    m.name == "my-test"
-      && m.dgo == "MTE.DGO"
-      && m.replaces.is_empty()
-      && m.continue_point == "my-test-start"
-      && m.start == [1.0, 2.0, 3.0]
-      && m.level_info == "custom_assets/jak3/levels/my-test/level-info.gc"
-      && m.files.len() == 5
-      && m
-        .files
-        .iter()
-        .all(|f| out.join(f).is_file() && !f.ends_with(".md"))
-      && m
-        .files
-        .contains(&"goal_src/jak3/levels/my-test/my-test-obs.gc".to_string())
-      && m.game_gp.len() == 3
-      && m.game_gp[1].starts_with("(goal-src \"levels/my-test/my-test-obs.gc\" \"entity-debug\"")
-      && m.game_gp[2] == "(custom-level-cgo \"MTE.DGO\" \"my-test/my-test.gd\")",
-    "export: the manifest ({m:?})"
-  );
   let level = read_jsonc(&dir.join("my-test.jsonc"));
   let by_name: HashMap<String, &Value> = level["actors"]
     .as_array()
@@ -550,16 +528,6 @@ fn a_small_level() {
     read_text(&tmp.join("export-replace/README.md")),
   );
   let rextras = glb_extras(&read_glb_json(&rdir.join("my-ctyb.glb")));
-  let rm = LevelPackage::read(&tmp.join("export-replace"))
-    .expect("jle-level.json")
-    .manifest;
-  assert!(
-    rm.replaces == "ctyindb"
-      && rm.level_info.is_empty()
-      && rm.continue_point == data.level("ctyindb").unwrap().continues[0].name
-      && rm.dgo == "MCY.DGO",
-    "export: the manifest of a replacement ({rm:?})"
-  );
   let counts: HashMap<&str, usize> = rr.notes.iter().map(|n| (n.key.as_str(), n.count)).collect();
   let (at_part, at_obs) = (
     rgd.find("\"ctyindb-part.o\"").unwrap_or(usize::MAX),
@@ -936,11 +904,7 @@ fn the_projects_exported_like_the_cpp_editor() {
     }
     scene.begin_frame();
     export_level(&scene, Some(&data), &o).expect("exported");
-    let (theirs, mut ours) = (export_texts(&export), export_texts(&tmp.join(project)));
-    // the manifest (jle-level.json): new since
-    if !theirs.contains_key(LevelPackage::MANIFEST) {
-      ours.remove(LevelPackage::MANIFEST);
-    }
+    let (theirs, ours) = (export_texts(&export), export_texts(&tmp.join(project)));
     assert_eq!(
       theirs.keys().collect::<Vec<_>>(),
       ours.keys().collect::<Vec<_>>(),

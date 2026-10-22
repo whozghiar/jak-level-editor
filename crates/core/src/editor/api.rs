@@ -39,8 +39,6 @@ const QUERIES: &[&str] = &[
   "shape",
   "materials",
   "export_state",
-  "play_state",
-  "runtime_levels",
   "export_check",
   "navmesh_state",
   "navmesh_data",
@@ -500,12 +498,6 @@ impl Editor {
         Ok(self.export_state())
       }
       "export_state" => Ok(self.export_state()),
-      // ---- the game runtime of the host: Play (runtime.rs)
-      "play_level" => self.play_level(get(a, "options"), b(a, "wait").unwrap_or(false)),
-      "play_state" => Ok(self.play_state()),
-      "runtime_levels" => self.runtime_levels(),
-      "runtime_remove" => self.runtime_remove(s(a, "name"), b(a, "wait").unwrap_or(false)),
-      "runtime_launch" => self.runtime_launch(s(a, "name"), b(a, "wait").unwrap_or(false)),
       "generate_navmesh" => {
         self.generate_navmesh_call(a)?;
         Ok(self.navmesh_state())
@@ -617,7 +609,7 @@ mod tests {
   /// the names of the calls: the patterns of `dispatch`'s arms (one level of indentation in its
   /// `match`)
   fn call_names() -> Vec<String> {
-    let src = include_str!("api.rs");
+    let src = include_str!("api.rs").replace("\r\n", "\n");
     let body = &src[src.find("  fn dispatch(").unwrap()..];
     let body = &body[..body.find("\n  }\n").unwrap()];
     let mut names = Vec::new();

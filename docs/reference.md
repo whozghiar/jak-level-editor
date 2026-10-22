@@ -281,7 +281,6 @@ their actor; links between actors by id become links by name.
 replacement), build with `(mi)`, then start the game there with
 `gk -g jak3 -- -boot -fakeiso -debug -level <name>-start` (a gk of whozghiar/jak-project newer than
 `v0.3.9-whozghiar.1`), or in the REPL `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
-In the OpenGOAL Launcher, the editor's Play does all of it.
 
 ## 7. The remote control and the MCP server
 

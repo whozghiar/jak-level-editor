@@ -43,7 +43,6 @@ export const guideDemos: Record<string, string | null> = {
   assembly: null,
   groups: null,
   effects: null,
-  play: null,
 };
 
 // the sections of Every tool
@@ -98,7 +97,7 @@ export const guideSections: { key: string; ids: string[] }[] = [
   },
   {
     key: "guide.section.level",
-    ids: ["levels", "jak2_level", "story", "replace", "export", "play"],
+    ids: ["levels", "jak2_level", "story", "replace", "export"],
   },
 ];
 
@@ -116,7 +115,6 @@ export type TourAction =
   | "navmeshes"
   | "settings"
   | "game_window"
-  | "play"
   | "manual";
 
 // A step: its id, its animations, its button (the key <prefix><id>.action)
@@ -140,7 +138,7 @@ export const tutorials: { id: string; prefix: string; steps: TourStep[] }[] = [
       ["behaviors", ["bounce", "launch"]],
       ["replace", ["replace"], "replace"],
       ["export", [], "export"],
-      ["play", [], "play"],
+      ["play", [], "manual"],
     ],
   },
   {
@@ -165,11 +163,6 @@ export const tutorials: { id: string; prefix: string; steps: TourStep[] }[] = [
   { id: "levels", prefix: "tuto.levels.", steps: [["open", ["story"], "levels_tab"], ["add", []], ["story", ["story"]]] },
   { id: "replace", prefix: "tuto.replace.", steps: [["choose", ["replace"], "replace"], ["align", ["replace"]], ["export", [], "export"]] },
   { id: "save", prefix: "tuto.save.", steps: [["save", [], "save"], ["export", [], "export"], ["navmesh", [], "navmeshes"]] },
-  {
-    id: "play",
-    prefix: "tuto.play.",
-    steps: [["export", [], "export"], ["play", [], "play"], ["installed", []], ["launcher", []]],
-  },
   {
     id: "manual",
     prefix: "tuto.manual.",

@@ -16,7 +16,7 @@ one folder per feature:
 | `game-rendering/` | the Sky, hour and weather window: noon, dusk, storm, night, haze; the effects |
 | `behaviors/` | an airlock that opens once a crate is broken |
 | `nav-meshes/` | the nav meshes of a level |
-| `export/` | the export window and its report, a level made the replacement of one of the game's, the Play window the first time, the OpenGOAL settings |
+| `export/` | the export window and its report, its end (the tutorial on adding the level by hand), a level made the replacement of one of the game's |
 | `mcp/` | what an assistant built and saw; a facade from the street and from behind |
 
 ## Making them again
@@ -54,8 +54,8 @@ python tools/capture_docs.py --out <folder>                  # somewhere else, t
   as `C:/Users/you/Documents/Jak Level Editor`, the folder the editor proposes (the first start
   creates it when it is not there: the script deletes it again when it stays empty), the disc as
   `iso_data/jak3` of the editor's folder.
-- The standalone app has no Play: `export/by-hand.png` is the export's report with the guide's
-  tutorial on adding the level to the game by hand, opened from it.
+- `export/by-hand.png` is the end of the export's report: the guide's tutorial on adding the level
+  to the game by hand, offered there.
 - Some pictures use prefabs of your own (`main-town-building-a` to `-d`, `small-fountain`,
   `haven-tree`, `ind-facade-60` in `library/prefabricated/`): use yours instead.
 

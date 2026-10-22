@@ -1069,38 +1069,6 @@ pub fn export_level(
   let md_path = top.join("README.md");
   write_text(&md_path, &readme)?;
 
-  // the same for a program (a game runtime: the editor's Play, the OpenGOAL Launcher)
-  let (continue_point, start) = match replaced.and_then(|r| r.continues.first()) {
-    Some(c) => (c.name.clone(), c.position),
-    None if replacing => (format!("{}-start", o.replaces), o.start),
-    None => (format!("{}-start", o.name), o.start),
-  };
-  let manifest = LevelManifest {
-    format: 1,
-    game: "jak3".into(),
-    name: o.name.clone(),
-    nickname: o.nickname.clone(),
-    replaces: o.replaces.clone(),
-    dgo: format!("{nick_upper}.DGO"),
-    continue_point,
-    start: [start.x, start.y, start.z],
-    game_gp,
-    level_info: if replacing {
-      String::new()
-    } else {
-      format!("{install_dir}level-info.gc")
-    },
-    files: rep
-      .files
-      .iter()
-      .filter_map(|f| Path::new(f).strip_prefix(&top).ok().map(from_path))
-      .collect(),
-    editor_version: env!("CARGO_PKG_VERSION").into(),
-  };
-  let manifest_path = top.join(LevelPackage::MANIFEST);
-  let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
-  write_text(&manifest_path, &(text + "\n"))?;
   rep.files.push(from_path(&md_path));
-  rep.files.push(from_path(&manifest_path));
   Ok(rep)
 }

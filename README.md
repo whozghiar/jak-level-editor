@@ -13,11 +13,10 @@ appears, with an example, and shows each tool in a picture.
 ![The editor: the bar of icons and the Levels panel on the left, the level in the middle as the game draws it, the inspector on the right](docs/captures/getting-started/window.png)
 
 - **Nothing of the game is in this repository.** Everything comes from your disc: you extract it once.
-- **It needs nothing else**: not OpenGOAL, not the game, to build or to run. To *play* what you
-  exported, the editor installs OpenGOAL itself, in one click (a download of about 40 MB, once):
-  the releases of [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (OpenGOAL with
-  the level builder's fixes); **Play** then installs your level and starts the game in it (see
-  [15](#15-playing-it-in-the-game-export)). In the OpenGOAL Launcher, the launcher's OpenGOAL is used.
+- **It needs nothing else**: not OpenGOAL, not the game, to build or to run. It exports your level
+  as the files to copy into a jak-project (OpenGOAL's sources), with a README giving the exact lines
+  for it; the guide's tutorial *Add your level to the game by hand* goes through it (see
+  [15](#15-playing-it-in-the-game-export)).
 - **On its own or in the OpenGOAL Launcher**: it is made like the
   [OpenGOAL Launcher](https://github.com/open-goal/launcher) (an engine in Rust, an interface in
   Svelte, in a Tauri window), so the same editor runs as its own program or opens from the
@@ -224,9 +223,9 @@ game: keep them on your computer, do not share them.
 
 ```text
 +------------------------------------------------------------------------------+
-| Jak Level Editor | the level * | OpenGOAL v0.3.9-whozghiar.1          _ [] X |
+| Jak Level Editor | the level *                                       _ [] X |
 | File  Edit  View  Build  Level  Help                                         |
-| [Move] [Rotate] [Scale] [Topology] [Terrain] [Local] [Snap] [Copy] ... [Play]|
+| [Move] [Rotate] [Scale] [Topology] [Terrain] [Local] [Snap] [Copy] ... [Redo]|
 +----+---------------+---------------------------------------+-----------------+
 | Lv |               |                                       | Inspector       |
 | Bd |  the panel    |              the 3D view              | (what is        |
@@ -246,15 +245,15 @@ game: keep them on your computer, do not share them.
 - The **inspector** (right) shows what is selected and lets you change it precisely; with nothing
   selected, it shows the level.
 - The **status bar** says what the mouse does where it is, the last thing that happened (click it:
-  the log) and the work going on (reading the levels, an export, Play).
+  the log) and the work going on (reading the levels, an export).
 - The **windows** (the export, the sky and the hour, the terrain brush, the guide...) float over the
   editor: drag their title to move them, their cross closes them.
 
 ### The guide
 
 **F1** (Help > Tutorials) opens the guide: named tutorials, from *Getting started* (from your disc to
-the game, step by step), *First start* (the library and the extraction) and *Play your level in the
-game* to one per tool, each with a short animation and a button that shows where it is; *Every
+the game, step by step), *First start* (the library and the extraction) and *Add your level to the
+game by hand* to one per tool, each with a short animation and a button that shows where it is; *Every
 tool* and *Keys* (with where things are) in its other tabs. It opens by itself the first time.
 Hovering any tool also shows what it does, its keys and an example.
 
@@ -680,26 +679,12 @@ blue ghost to compare), **Place it where the original is**, check where the game
 
 ![A level made the replacement of ctyindb: the inspector's section](docs/captures/export/replace.png)
 
-**Play it in the game.** The editor runs no game of its own.
+**Play it in the game.** The editor runs no game: it gives the files to copy into the game's
+sources.
 
-**In the OpenGOAL Launcher** (its *Level Editor* button), **Play** (the toolbar's button, **Level >
-Play in the game**) does the rest for you, in the launcher's game for the editor
-(`<install>/features/jak3/level_edited/`), apart from your Jak 3, its saves and your mods. It runs
-with the launcher's active OpenGOAL, a release of
-[whozghiar/jak-project](https://github.com/whozghiar/jak-project) (OpenGOAL with the level
-builder's fixes the editor's levels need; from the release after `v0.3.9-whozghiar.1` on, its `gk`
-starts the game at a level by itself): the launcher's header and its Settings > Versions install
-and choose it. Play exports
-the level into `exports/<project>/`, installs it in that game (its files in the level's own folders,
-its lines in `game.gp` and `level-info.gc` between `;; jak-level-editor: begin <name>` and `end`
-lines), builds the game and starts it at your level. The first Play with a version also decompiles
-the game (about ten minutes). The launcher shows each step in its own window; its **Edited Levels**
-page (Jak 3's **Advanced** menu) plays a level again or removes it. The export's `jle-level.json` is
-what Play reads: the same as its README, for a program.
-
-**In the standalone app**, export the level and add it to the game by hand: **Help > Guide**, the
-tutorial **Add your level to the game by hand** (the export window's **Add it by hand...** opens it),
-walks through it, and the export's `README.md` gives the exact lines for your level:
+Export the level and add it to the game by hand: **Help > Guide**, the tutorial **Add your level to
+the game by hand** (the export window's **Add it by hand...** opens it), walks through it, and the
+export's `README.md` gives the exact lines for your level:
 
 1. Get **jak-project** (OpenGOAL's source code) from
    [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (its level builder has the
@@ -715,7 +700,7 @@ walks through it, and the export's `README.md` gives the exact lines for your le
    newer than `v0.3.9-whozghiar.1`). With another `gk`: start it, then in `goalc` type `(lt)` and
    `(start 'play (get-continue-by-name *game-info* "my-ctyslum-start"))`. Jak appears in your level.
 
-![The export's report in the standalone app: open its folder, its README, or add it to the game by hand](docs/captures/export/by-hand.png)
+![The export's report: open its folder, its README, or add it to the game by hand](docs/captures/export/by-hand.png)
 
 ## 16. Building with an AI assistant
 

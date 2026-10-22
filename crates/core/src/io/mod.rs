@@ -10,7 +10,6 @@ pub mod game_data;
 pub mod game_export;
 pub mod gltf;
 pub mod jak2_import;
-pub mod level_package;
 pub mod library_index;
 #[cfg(test)]
 mod library_tests;

@@ -12,7 +12,6 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { openPath } from "@tauri-apps/plugin-opener";
   import { onMount } from "svelte";
-  import { playLevel } from "../../lib/actions.svelte";
   import { engine } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
   import { call, onEngine, toast } from "../../lib/rpc";
@@ -339,10 +338,8 @@
         <Tip text={t("export.dense_go")} placement="left" />
       {/if}
       <p class="mt-1 text-neutral-300">{t("export.install")}</p>
-      <!-- with the host's game runtime the editor does it (Play); without, by hand (the guide) -->
-      {#if !engine.state.runtime?.available}<p class={muted}>
-          {t(engine.state.runtime?.reason || "export.no_runtime")}
-        </p>{/if}
+      <!-- by hand, as the README says: the guide's tutorial goes through it -->
+      <p class={muted}>{t("export.no_runtime")}</p>
       <div class="flex gap-2">
         <button class={button} onclick={() => openIt(report!.dir)}
           >{t("export.open_folder")}</button
@@ -352,18 +349,11 @@
           onclick={() => openIt(`${report!.dir}/README.md`)}
           >{t("export.open_readme")}</button
         >
-        {#if engine.state.runtime}
-          <button class={button} disabled={busy} onclick={playLevel}
-            >{t("menu.level.play")}</button
-          >
-        {:else}
-          <button
-            class={button}
-            onclick={() =>
-              windows.open("guide", { tab: 0, tutorial: "manual" })}
-            >{t("tuto.manual.open")}</button
-          >
-        {/if}
+        <button
+          class={button}
+          onclick={() => windows.open("guide", { tab: 0, tutorial: "manual" })}
+          >{t("tuto.manual.open")}</button
+        >
       </div>
     {/if}
   </div>

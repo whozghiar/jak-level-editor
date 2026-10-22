@@ -92,11 +92,3 @@ export function toggleView(key: string): void {
 export function changeLanguage(code: string): void {
   call("set_language", { code: setLanguage(code) });
 }
-
-/** Level > Play in the game (the toolbar's Play): the Play window, and the game runtime started on
- * the level unless it works already or cannot play (the window says why, or offers to install
- * OpenGOAL). */
-export function playLevel(): void {
-  windows.open("play");
-  if (!engine.jobs.play && engine.state.runtime?.available) call("play_level");
-}

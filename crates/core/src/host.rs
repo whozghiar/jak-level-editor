@@ -1,14 +1,12 @@
 //! What the application hosting the editor gives it (the standalone app, the OpenGOAL Launcher):
 //! where the library goes by default, a disc already extracted to read the levels from, the
-//! extractor, and a game runtime that installs a level, removes it and starts the game on it.
-//! The editor never asks which application hosts it: it uses what it is given, and hides what it
-//! is not given (no runtime, as in the standalone app: no Play button, the export, its README and
-//! the guide's tutorial on adding it to the game by hand instead). The editor runs no game itself.
+//! extractor. The editor never asks which application hosts it: it uses what it is given. It runs
+//! no game: a level is exported, its README and the guide's tutorial tell how to add it to the game.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// A step of a long operation, for the interface: a translation key with its arguments, its
 /// progress when known, a line of a tool's output.
@@ -21,103 +19,6 @@ pub enum HostEvent {
 }
 
 pub type HostEvents = Arc<dyn Fn(HostEvent) + Send + Sync>;
-
-/// The manifest of a level exported for the game (`jle-level.json` at the root of the export):
-/// what the README tells a person to do, for a runtime to do it.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct LevelManifest {
-  pub format: u32,
-  /// "jak3"
-  pub game: String,
-  /// the level's name ("demo-oasis"), its folder in custom_assets/<game>/levels/
-  pub name: String,
-  /// its three-letter nickname
-  pub nickname: String,
-  /// a level of the game it takes the place of ("ctyindb"), "" for a level of its own
-  pub replaces: String,
-  /// its DGO ("DMO.DGO")
-  pub dgo: String,
-  /// the continue point the game can start it at ("demo-oasis-start"), and where it is (meters)
-  pub continue_point: String,
-  pub start: [f32; 3],
-  /// the lines to add to goal_src/<game>/game.gp
-  pub game_gp: Vec<String>,
-  /// a level of its own: the file (relative to the export) holding its `define` for
-  /// goal_src/<game>/engine/level/level-info.gc, whose `:index` the installer makes unique
-  pub level_info: String,
-  /// the files of the export (relative paths, '/'), copied into the game's data folder as they are
-  pub files: Vec<String>,
-  /// the editor that wrote it
-  pub editor_version: String,
-}
-
-/// A level exported for the game, ready to install: the folder of an export and its manifest.
-#[derive(Clone, Debug)]
-pub struct LevelPackage {
-  pub dir: PathBuf,
-  pub manifest: LevelManifest,
-}
-
-impl LevelPackage {
-  pub const MANIFEST: &'static str = "jle-level.json";
-
-  pub fn read(dir: &Path) -> Result<LevelPackage, String> {
-    let path = dir.join(Self::MANIFEST);
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let manifest = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(LevelPackage {
-      dir: dir.to_path_buf(),
-      manifest,
-    })
-  }
-}
-
-/// What a runtime is, for the interface (the Play button and window).
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct RuntimeInfo {
-  /// "launcher" (the OpenGOAL Launcher's isolated game)
-  pub kind: String,
-  /// what the interface shows ("OpenGOAL Launcher", the folder of a checkout...)
-  pub label: String,
-  /// it can install and play now; else `reason`, a translation key, says why not
-  pub available: bool,
-  pub reason: String,
-  /// the games it plays ("jak3")
-  pub games: Vec<String>,
-  /// the levels installed in it (their names)
-  pub installed: Vec<String>,
-}
-
-/// What `play` did: the game is starting, or the host took the operation over in its own
-/// interface (the launcher's jobs: their progress is shown there).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PlayOutcome {
-  Started,
-  HandedOver,
-}
-
-/// The game runtime a host gives the editor: installing a level exported for the game, removing
-/// it, starting the game on it. The calls block (the editor runs them on a worker thread) and
-/// report their steps through `events`.
-pub trait GameRuntime: Send + Sync {
-  fn info(&self) -> RuntimeInfo;
-  /// copies the level into the game's sources, registers it (game.gp, level-info.gc) and builds
-  /// the game, the level included
-  fn install_level(&self, package: &LevelPackage, events: HostEvents) -> Result<(), String>;
-  /// takes the level out of the game's sources and builds the game again
-  fn remove_level(&self, game: &str, name: &str, events: HostEvents) -> Result<(), String>;
-  /// starts the game on an installed level (its continue point)
-  fn launch(&self, game: &str, name: &str, events: HostEvents) -> Result<(), String>;
-  /// installs then launches; a host may hand the whole of it to its own interface
-  fn play(&self, package: &LevelPackage, events: HostEvents) -> Result<PlayOutcome, String> {
-    self.install_level(package, events.clone())?;
-    let m = &package.manifest;
-    self.launch(&m.game, &m.name, events)?;
-    Ok(PlayOutcome::Started)
-  }
-}
 
 /// A host that can fetch ogle-extract when it is missing (the launcher downloads the one of the
 /// editor's version from its release).
@@ -139,7 +40,6 @@ pub struct Host {
   /// ogle-extract when the host has it at hand
   pub extractor: Option<PathBuf>,
   pub extractor_provider: Option<Arc<dyn ExtractorProvider>>,
-  pub runtime: Option<Arc<dyn GameRuntime>>,
 }
 
 impl std::fmt::Debug for Host {
@@ -150,7 +50,6 @@ impl std::fmt::Debug for Host {
       .field("extract_source", &self.extract_source)
       .field("extractor", &self.extractor)
       .field("extractor_provider", &self.extractor_provider.is_some())
-      .field("runtime", &self.runtime.is_some())
       .finish()
   }
 }

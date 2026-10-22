@@ -202,7 +202,7 @@ impl Editor {
     Ok(())
   }
 
-  /// The export of the document with `o`, to run on a worker (export_for_game, play_level), then
+  /// The export of the document with `o`, to run on a worker (export_for_game), then
   /// given to export_done
   pub(super) fn export_work(
     &mut self,

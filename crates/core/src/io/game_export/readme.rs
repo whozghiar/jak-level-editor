@@ -55,9 +55,6 @@ It is laid out like the jak-project checkout (OpenGOAL's source folder, the one 
 fixes these levels need (its releases are the OpenGOAL the OpenGOAL Launcher installs).
 
 - `{install_dir}`: the level for OpenGOAL's level builder: `{name}.glb` (its decor and collision), `{name}.jsonc` (its names and actors), `{name}.gd` (its DGO, {nick_upper}.DGO), `level-info.gc` (its definition in the game's code){}.
-- `jle-level.json`: what this README says to do, for a program: the Level Editor of the OpenGOAL
-  Launcher (its Play button) installs the level with it (the files, the lines of `game.gp` and
-  `level-info.gc`) and starts the game on it.
 ",
     if rep.navmeshes > 0 {
       format!(", `{name}-nav.json` (its nav meshes)")
