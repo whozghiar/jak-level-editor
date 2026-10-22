@@ -217,7 +217,7 @@ which application hosts it: it uses what it is given and hides what it is not.
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
 | `extract_source` | none (the user's disc) | `<install>/active/jak3/data/iso_data/jak3`: the disc it already extracted |
 | `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version |
-| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (with the builder's fixes), else the OpenGOAL Launcher's game for the editor when it is installed | the launcher's isolated game `<install>/features/jak3/level_edited/` |
+| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (with the builder's fixes), else the OpenGOAL Launcher's game for the editor when the launcher's active version has the builder | the launcher's isolated game `<install>/features/jak3/level_edited/`, run with the programs of the launcher's active tooling version (`<install>/versions/official/<version>/`, from the release of `whozghiar/jak-project`; nothing else is downloaded) |
 
 **The library** (`crates/core/src/editor/library.rs`): until the user chose one (the preference
 `library_chosen`; preferences of before it whose library holds an extracted game count as chosen),
@@ -256,7 +256,19 @@ a given level. The manifest is checked first (names, files only under the level'
 `GameRuntime`: `OpenGoal::checkout(root, bin, game)` (a jak-project checkout and its build's
 programs, its settings in `out/jle-settings`, the game's files from its `iso_data/jak3`, else the
 ones the launcher extracted) or `OpenGoal::distribution(kind, folder, iso_data)` (`extractor`, `gk`,
-`goalc` and `data/`, as the launcher installs them, its settings in `<folder>/_settings`). Both
+`goalc` and `data/`, as the launcher installs them, its settings in `<folder>/_settings`), which
+`with_tooling(Tooling {version, dir})` runs with the programs of another distribution.
+`launcher_level_edited(install, version, game)` is the launcher's isolated game: its own `data/`,
+`_settings/` (its saves) and `packages/` in `<install>/features/<game>/level_edited/`, the programs
+of the launcher's tooling version `<install>/versions/official/<version>/`, the disc the launcher
+extracted. `prepare()` makes its `data/` again from that version's `data/` whenever it was made from
+another version (`jle-runtime.json`: `{version, decompiled}`; `_settings/` is kept), then installs
+again the levels whose copies `apply_level` keeps in `packages/<name>/` (`remove_level_files`
+deletes the copy), and leaves it to decompile again (`decompile_command`: `extractor <iso_data>
+--folder --decompile --game jak3 --proj-path <data>`). It plays only when the version's `data/`
+has the builder (`runtime.launcher_version` otherwise) and the launcher extracted the game
+(`runtime.no_game_files`). Its `install_level`, `remove_level` and `launch` prepare, decompile and
+build it first when needed: the standalone app and the launcher use the same code. Both
 build with `extractor <iso_data> --folder --compile --game jak3 --proj-path <data>`
 (`compile_command`: goalc's `(mi)`, what the launcher runs for mods; `goalc --cmd` ignores
 `--iso-path`). Every program gets `--proj-path`: without it they take the project from the last
@@ -273,9 +285,9 @@ and the make system's `[ 42%]` as `HostEvent`s. The launcher can use the same pi
 jak-project branch), or, for a checkout of before it, the fixes' code. `StandaloneRuntime`, the
 standalone app's, reads the preferences at each call: the jak-project checkout chosen in File >
 Settings (`runtime_folder`, its programs in `runtime_bin` or its build's `out/build/Release/bin`),
-else the OpenGOAL Launcher's game for the editor (`installationDir` of
-`%APPDATA%/OpenGOAL-Launcher/settings.json`, then `features/jak3/level_edited/`, when its data has
-the builder). `GameRuntime::settings` (a default method answering null) is what the Settings window
+else the OpenGOAL Launcher's game for the editor (`installationDir` and `activeVersion` of
+`%APPDATA%/OpenGOAL-Launcher/settings.json`, then `features/jak3/level_edited/` with that version's
+programs, when its data has the builder). `GameRuntime::settings` (a default method answering null) is what the Settings window
 shows besides `info`. `info` is asked at each `get_state`: a runtime keeps it cheap.
 
 **Play** (`crates/core/src/editor/runtime.rs`): `get_state.runtime` is the runtime's `RuntimeInfo`

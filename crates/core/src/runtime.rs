@@ -4,10 +4,13 @@
 //!
 //! `OpenGoal` is an OpenGOAL the editor can drive: a jak-project checkout (its goal_src and
 //! custom_assets, its build's goalc and gk) or an OpenGOAL distribution (`extractor`, `gk` and
-//! `data/`, as the OpenGOAL Launcher installs them). The OpenGOAL Launcher uses the same pieces
-//! (`OpenGoal::distribution`, `compile_command`, `launch_command`, `run_logged`) for its own
-//! runtime. The level builder must have the fixes of the editor's exports
-//! (`custom_assets/<game>/jle-builder.json`: `{"builder": "jle-1"}`).
+//! `data/`, as the OpenGOAL Launcher installs them), possibly run with the programs of another
+//! one: the launcher's isolated game for the editor runs those of the launcher's active tooling
+//! version, its data/ made from that version's (`launcher_level_edited`, `prepare`). The OpenGOAL
+//! Launcher uses the same pieces (`launcher_level_edited`, `prepare`, `decompile_command`,
+//! `compile_command`, `apply_level`, `launch`) for its own runtime. The level builder must have
+//! the fixes of the editor's exports (`custom_assets/<game>/jle-builder.json`:
+//! `{"builder": "jle-1"}`).
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -15,6 +18,7 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::host::{GameRuntime, HostEvent, HostEvents, LevelPackage, RuntimeInfo};
@@ -123,6 +127,67 @@ pub struct OpenGoal {
   pub iso_data: PathBuf,
   /// gk's settings and saves, apart from the user's game
   pub config_dir: PathBuf,
+  /// the launcher's isolated game: the tooling version whose programs it runs and whose data/ its
+  /// own is made from (`prepare`)
+  pub tooling: Option<Tooling>,
+}
+
+/// A tooling version of the OpenGOAL Launcher (`<install>/versions/official/<version>/`: its
+/// programs and its data/)
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Tooling {
+  pub version: String,
+  pub dir: PathBuf,
+}
+
+/// What the launcher's isolated game was made from (`jle-runtime.json` in its folder): the tooling
+/// version its data/ was copied from, and whether the disc was decompiled into it since
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RuntimeState {
+  pub version: String,
+  pub decompiled: bool,
+}
+
+impl RuntimeState {
+  pub const FILE: &'static str = "jle-runtime.json";
+
+  pub fn read(folder: &Path) -> RuntimeState {
+    std::fs::read(folder.join(Self::FILE))
+      .ok()
+      .and_then(|b| serde_json::from_slice(&b).ok())
+      .unwrap_or_default()
+  }
+
+  pub fn write(&self, folder: &Path) -> Result<(), String> {
+    let path = folder.join(Self::FILE);
+    let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))
+  }
+}
+
+fn copy_file(from: &Path, to: &Path) -> Result<(), String> {
+  if let Some(dir) = to.parent() {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+  }
+  std::fs::copy(from, to)
+    .map(|_| ())
+    .map_err(|e| format!("{}: {e}", from.display()))
+}
+
+fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
+  let entries = std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?;
+  std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+  for entry in entries {
+    let entry = entry.map_err(|e| e.to_string())?;
+    let (src, dst) = (entry.path(), to.join(entry.file_name()));
+    if src.is_dir() {
+      copy_dir(&src, &dst)?;
+    } else {
+      copy_file(&src, &dst)?;
+    }
+  }
+  Ok(())
 }
 
 /// a folder holding the game's files (a checkout's iso_data/jak3 is there, empty, until the game
@@ -162,6 +227,7 @@ impl OpenGoal {
       extractor: exe(&bin, "extractor"),
       iso_data,
       config_dir: root.join("out/jle-settings"),
+      tooling: None,
     }
   }
 
@@ -178,16 +244,32 @@ impl OpenGoal {
       extractor: exe(folder, "extractor"),
       iso_data: iso_data.to_path_buf(),
       config_dir: folder.join("_settings"),
+      tooling: None,
     }
   }
 
-  /// The builder it has: its jle-builder.json, else (a checkout of before it) the fixes' code
+  /// Run with the programs of the tooling version `tooling`, its data/ made from that version's
+  /// (`prepare`)
+  pub fn with_tooling(mut self, tooling: Tooling) -> OpenGoal {
+    self.gk = exe(&tooling.dir, "gk");
+    self.goalc = exe(&tooling.dir, "goalc");
+    self.extractor = exe(&tooling.dir, "extractor");
+    self.tooling = Some(tooling);
+    self
+  }
+
+  /// The builder it has: its jle-builder.json (its tooling version's), else (a checkout of before
+  /// it) the fixes' code
   pub fn builder(&self, game: &str) -> String {
-    let b = level_package::builder_of(&self.data_dir, game);
+    let data = self
+      .tooling
+      .as_ref()
+      .map_or_else(|| self.data_dir.clone(), |t| t.dir.join("data"));
+    let b = level_package::builder_of(&data, game);
     if !b.is_empty() {
       return b;
     }
-    let gltf = self.data_dir.join("common/util/gltf_util.cpp");
+    let gltf = data.join("common/util/gltf_util.cpp");
     match std::fs::read_to_string(gltf) {
       Ok(code) if code.contains("og_blend") => BUILDER.into(),
       _ => String::new(),
@@ -196,6 +278,20 @@ impl OpenGoal {
 
   /// Why it cannot play a level of `game` now (a translation key), None when it can
   pub fn problem(&self, game: &str) -> Option<&'static str> {
+    if self.tooling.is_some() {
+      // its data/ is made from its version's by prepare
+      if ![&self.gk, &self.goalc, &self.extractor]
+        .iter()
+        .all(|p| p.is_file())
+        || self.builder(game) != BUILDER
+      {
+        return Some("runtime.launcher_version");
+      }
+      if !has_game_files(&self.iso_data) {
+        return Some("runtime.no_game_files");
+      }
+      return None;
+    }
     if !self
       .data_dir
       .join("goal_src")
@@ -230,6 +326,131 @@ impl OpenGoal {
       .arg(&self.data_dir)
       .current_dir(self.extractor.parent().unwrap_or(&self.folder));
     cmd
+  }
+
+  /// The game's files decompiled into its data folder (`extractor --folder --decompile`): what the
+  /// launcher's game needs once per tooling version, before its first build
+  pub fn decompile_command(&self, game: &str) -> Command {
+    let mut cmd = Command::new(&self.extractor);
+    cmd
+      .arg(&self.iso_data)
+      .args(["--folder", "--decompile", "--game", game, "--proj-path"])
+      .arg(&self.data_dir)
+      .current_dir(self.extractor.parent().unwrap_or(&self.folder));
+    cmd
+  }
+
+  /// where the launcher's game keeps a copy of each level installed in it, to install it again in
+  /// the data of another tooling version
+  pub fn packages_dir(&self) -> PathBuf {
+    self.folder.join("packages")
+  }
+
+  /// The launcher's game must be made again from its tooling version: its data/ was made from
+  /// another one, or not yet
+  pub fn stale(&self) -> bool {
+    self.tooling.as_ref().is_some_and(|t| {
+      RuntimeState::read(&self.folder).version != t.version
+        || !self.data_dir.join("goal_src").is_dir()
+    })
+  }
+
+  /// The launcher's game made from its tooling version when it is stale: data/ copied again from
+  /// the version's (its _settings/, the saves, kept), to be decompiled again, and the levels
+  /// installed before installed again from their copies. Returns what it is made from.
+  pub fn prepare(&self) -> Result<RuntimeState, String> {
+    let Some(t) = &self.tooling else {
+      return Ok(RuntimeState {
+        decompiled: true,
+        ..Default::default()
+      });
+    };
+    if !self.stale() {
+      return Ok(RuntimeState::read(&self.folder));
+    }
+    if self.data_dir.exists() {
+      std::fs::remove_dir_all(&self.data_dir)
+        .map_err(|e| format!("{}: {e}", self.data_dir.display()))?;
+    }
+    copy_dir(&t.dir.join("data"), &self.data_dir)?;
+    // the programs of the game's first versions, when it had its own
+    for p in ["gk", "goalc", "extractor"] {
+      let _ = std::fs::remove_file(exe(&self.folder, p));
+    }
+    let mut packages: Vec<PathBuf> = std::fs::read_dir(self.packages_dir())
+      .into_iter()
+      .flatten()
+      .flatten()
+      .map(|e| e.path())
+      .filter(|p| p.join(LevelPackage::MANIFEST).is_file())
+      .collect();
+    packages.sort();
+    for dir in packages {
+      level_package::apply(&self.data_dir, &LevelPackage::read(&dir)?)?;
+    }
+    // written last: a preparation stopped halfway starts again
+    let state = RuntimeState {
+      version: t.version.clone(),
+      decompiled: false,
+    };
+    state.write(&self.folder)?;
+    Ok(state)
+  }
+
+  /// Installs the level in its data folder (level_package::apply); the launcher's game keeps a
+  /// copy of it (packages/<name>/)
+  pub fn apply_level(&self, package: &LevelPackage) -> Result<(), String> {
+    level_package::apply(&self.data_dir, package)?;
+    let copy = self.packages_dir().join(&package.manifest.name);
+    if self.tooling.is_none() || copy == package.dir {
+      return Ok(());
+    }
+    let _ = std::fs::remove_dir_all(&copy);
+    let files = std::iter::once(LevelPackage::MANIFEST)
+      .chain(package.manifest.files.iter().map(String::as_str))
+      .chain((!package.manifest.level_info.is_empty()).then_some(&*package.manifest.level_info));
+    for f in files {
+      if !Path::new(f)
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_)))
+      {
+        return Err(format!("jle-level.json: a file outside the export ({f})"));
+      }
+      copy_file(&package.dir.join(f), &copy.join(f))?;
+    }
+    Ok(())
+  }
+
+  /// Takes the level out of its data folder (level_package::remove), and its copy
+  pub fn remove_level_files(&self, game: &str, name: &str) -> Result<(), String> {
+    let copy = self.packages_dir().join(name);
+    let had_copy = copy.is_dir();
+    let _ = std::fs::remove_dir_all(&copy);
+    let installed = level_package::installed(&self.data_dir)
+      .iter()
+      .any(|l| l.game == game && l.name == name);
+    if had_copy && !installed {
+      return Ok(());
+    }
+    level_package::remove(&self.data_dir, game, name)
+  }
+
+  /// The launcher's game ready to build: prepared, the disc decompiled when needed
+  fn ready(&self, game: &str, events: &HostEvents) -> Result<(), String> {
+    let Some(t) = &self.tooling else {
+      return Ok(());
+    };
+    if self.stale() {
+      step(events, "runtime.step.prepare", &[&t.version]);
+    }
+    let mut state = self.prepare()?;
+    if !state.decompiled {
+      step(events, "runtime.step.decompile", &[]);
+      run_logged(self.decompile_command(game), events)?;
+      state.decompiled = true;
+      state.write(&self.folder)?;
+    }
+    Ok(())
   }
 
   /// The game started (a debug game: its larger level heaps), with its own settings
@@ -335,18 +556,25 @@ impl GameRuntime for OpenGoal {
     if !m.builder.is_empty() && self.builder(&m.game) != m.builder {
       return Err(crate::i18n::tr("runtime.old_builder").into());
     }
+    self.ready(&m.game, &events)?;
     step(&events, "runtime.step.install", &[&m.name]);
-    level_package::apply(&self.data_dir, package)?;
+    self.apply_level(package)?;
     self.compile(&m.game, &events)
   }
 
   fn remove_level(&self, game: &str, name: &str, events: HostEvents) -> Result<(), String> {
     step(&events, "runtime.step.remove", &[name]);
-    level_package::remove(&self.data_dir, game, name)?;
+    self.remove_level_files(game, name)?;
+    self.ready(game, &events)?;
     self.compile(game, &events)
   }
 
   fn launch(&self, game: &str, name: &str, events: HostEvents) -> Result<(), String> {
+    // the launcher's game of another tooling version: made again, built, then started
+    if self.stale() {
+      self.ready(game, &events)?;
+      self.compile(game, &events)?;
+    }
     let level = level_package::installed(&self.data_dir)
       .into_iter()
       .find(|l| l.game == game && l.name == name)
@@ -440,27 +668,43 @@ impl GameRuntime for OpenGoal {
 // the standalone app's runtime
 // ------------------------------------------------------------------------------------------------
 
-/// The OpenGOAL Launcher's installation folder (its settings.json's installationDir)
-pub fn launcher_install_dir() -> Option<PathBuf> {
+/// A text of the OpenGOAL Launcher's settings.json
+fn launcher_setting(key: &str) -> Option<String> {
   let appdata = std::env::var_os("APPDATA")
     .map(PathBuf::from)
     .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
   let text = std::fs::read(appdata.join("OpenGOAL-Launcher/settings.json")).ok()?;
   let v: Value = serde_json::from_slice(&text).ok()?;
-  v["installationDir"]
+  v[key]
     .as_str()
     .filter(|d| !d.is_empty())
-    .map(PathBuf::from)
+    .map(str::to_string)
 }
 
-/// The OpenGOAL Launcher's isolated game for the editor: `<install>/features/<game>/level_edited/`,
+/// The OpenGOAL Launcher's installation folder (its settings.json's installationDir)
+pub fn launcher_install_dir() -> Option<PathBuf> {
+  launcher_setting("installationDir").map(PathBuf::from)
+}
+
+/// The OpenGOAL Launcher's active tooling version (its settings.json's activeVersion: "v0.3.9")
+pub fn launcher_active_version() -> Option<String> {
+  launcher_setting("activeVersion")
+}
+
+/// The OpenGOAL Launcher's isolated game for the editor: `<install>/features/<game>/level_edited/`
+/// (its data/, _settings/, packages/), run with the programs of the launcher's tooling version
+/// `version` (`<install>/versions/official/<version>/`, its data/ made from that version's) and
 /// built from the disc the launcher extracted (`<install>/active/<game>/data/iso_data/<game>`)
-pub fn launcher_level_edited(install: &Path, game: &str) -> OpenGoal {
+pub fn launcher_level_edited(install: &Path, version: &str, game: &str) -> OpenGoal {
   OpenGoal::distribution(
     "launcher",
     &install.join("features").join(game).join("level_edited"),
     &launcher_iso_data(install, game),
   )
+  .with_tooling(Tooling {
+    version: version.into(),
+    dir: install.join("versions").join("official").join(version),
+  })
 }
 
 /// The standalone app's runtime: the jak-project checkout chosen in the settings
@@ -486,7 +730,8 @@ impl StandaloneRuntime {
         "jak3",
       )
     });
-    let launcher = launcher_install_dir().map(|d| launcher_level_edited(&d, "jak3"));
+    let launcher = launcher_install_dir()
+      .map(|d| launcher_level_edited(&d, &launcher_active_version().unwrap_or_default(), "jak3"));
     (checkout, launcher)
   }
 
@@ -650,6 +895,124 @@ mod tests {
         && d.extractor == exe(&tmp.join("le"), "extractor"),
       "{d:?}"
     );
+    let _ = std::fs::remove_dir_all(&tmp);
+  }
+
+  /// the launcher's game follows its tooling version: made from the version's data, its levels
+  /// installed again in another version's, its saves kept
+  #[test]
+  fn launcher_game_follows_the_tooling_version() {
+    use crate::io::level_package::tests::{fake_data_dir, package};
+    let tmp = temp_dir("launcher-game");
+    let install = tmp.join("install");
+    let version = |v: &str, marker: bool| {
+      let dir = install.join("versions/official").join(v);
+      fake_data_dir(&dir.join("data"));
+      for p in ["gk", "goalc", "extractor"] {
+        std::fs::write(exe(&dir, p), "").unwrap();
+      }
+      if marker {
+        std::fs::create_dir_all(dir.join("data/custom_assets/jak3")).unwrap();
+        std::fs::write(
+          dir.join("data/custom_assets/jak3").join(BUILDER_MARKER),
+          r#"{"builder": "jle-1"}"#,
+        )
+        .unwrap();
+      }
+      dir
+    };
+    let v1 = version("v0.3.9-whozghiar.1", false);
+    let og = launcher_level_edited(&install, "v0.3.9-whozghiar.1", "jak3");
+    let folder = install.join("features/jak3/level_edited");
+    assert!(
+      og.gk == exe(&v1, "gk") && og.data_dir == folder.join("data") && og.folder == folder,
+      "{og:?}"
+    );
+    assert_eq!(og.problem("jak3"), Some("runtime.launcher_version"));
+    version("v0.3.9-whozghiar.1", true);
+    assert_eq!(og.problem("jak3"), Some("runtime.no_game_files"));
+    std::fs::create_dir_all(install.join("active/jak3/data/iso_data/jak3/CGO")).unwrap();
+    assert_eq!(og.problem("jak3"), None);
+    assert_eq!(
+      launcher_level_edited(&install, "", "jak3").problem("jak3"),
+      Some("runtime.launcher_version")
+    );
+
+    // made from the version's data, to decompile
+    assert!(og.stale());
+    let s = og.prepare().unwrap();
+    assert!(
+      s.version == "v0.3.9-whozghiar.1"
+        && !s.decompiled
+        && !og.stale()
+        && folder.join("data/goal_src/jak3/game.gp").is_file()
+        && RuntimeState::read(&folder) == s,
+      "{s:?}"
+    );
+    let decompile: Vec<String> = og
+      .decompile_command("jak3")
+      .get_args()
+      .map(|a| a.to_string_lossy().into_owned())
+      .collect();
+    assert!(
+      decompile[1..6] == ["--folder", "--decompile", "--game", "jak3", "--proj-path"]
+        && Path::new(&decompile[6]) == folder.join("data"),
+      "{decompile:?}"
+    );
+    RuntimeState {
+      decompiled: true,
+      ..s
+    }
+    .write(&folder)
+    .unwrap();
+    assert!(og.prepare().unwrap().decompiled, "prepared once");
+
+    // a level installed, and its copy kept
+    let p = package(&tmp.join("export"), "my-test", "", "v1");
+    std::fs::write(
+      p.dir.join(LevelPackage::MANIFEST),
+      serde_json::to_string(&p.manifest).unwrap(),
+    )
+    .unwrap();
+    og.apply_level(&p).unwrap();
+    let copy = folder.join("packages/my-test");
+    assert!(
+      copy.join(LevelPackage::MANIFEST).is_file()
+        && copy.join(&p.manifest.files[0]).is_file()
+        && copy.join(&p.manifest.level_info).is_file(),
+      "the copy"
+    );
+    std::fs::create_dir_all(&og.config_dir).unwrap();
+    std::fs::write(og.config_dir.join("save.bin"), "save").unwrap();
+    std::fs::write(folder.join("data/old.txt"), "").unwrap();
+
+    // another version: data/ made again, the level installed again, to decompile again
+    version("v0.3.9-whozghiar.2", true);
+    let og2 = launcher_level_edited(&install, "v0.3.9-whozghiar.2", "jak3");
+    assert!(og2.stale());
+    let s2 = og2.prepare().unwrap();
+    let names = |og: &OpenGoal| -> Vec<String> {
+      level_package::installed(&og.data_dir)
+        .into_iter()
+        .map(|l| l.name)
+        .collect()
+    };
+    assert!(
+      s2.version == "v0.3.9-whozghiar.2"
+        && !s2.decompiled
+        && names(&og2) == ["my-test"]
+        && folder
+          .join("data/custom_assets/jak3/levels/my-test/my-test.glb")
+          .is_file()
+        && !folder.join("data/old.txt").exists()
+        && og2.config_dir.join("save.bin").is_file(),
+      "{s2:?}"
+    );
+
+    // removed, its copy too
+    og2.remove_level_files("jak3", "my-test").unwrap();
+    assert!(!copy.exists() && names(&og2).is_empty());
+    assert!(og2.remove_level_files("jak3", "my-test").is_err());
     let _ = std::fs::remove_dir_all(&tmp);
   }
 

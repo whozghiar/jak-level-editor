@@ -445,13 +445,13 @@ pub fn remove(data_dir: &Path, game: &str, name: &str) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
   use super::*;
   use crate::host::LevelManifest;
   use crate::io::test_library::temp_dir;
 
   /// game.gp and level-info.gc of jak-project (read only), else small stand-ins
-  fn fake_data_dir(dir: &Path) {
+  pub(crate) fn fake_data_dir(dir: &Path) {
     let jak = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../jak-project/goal_src/jak3");
     let gp = dir.join("goal_src/jak3/game.gp");
     let info = dir.join("goal_src/jak3/engine/level/level-info.gc");
@@ -473,7 +473,7 @@ mod tests {
   }
 
   /// an export of a level `name` (its files and manifest)
-  fn package(dir: &Path, name: &str, replaces: &str, content: &str) -> LevelPackage {
+  pub(crate) fn package(dir: &Path, name: &str, replaces: &str, content: &str) -> LevelPackage {
     let level = format!("custom_assets/jak3/levels/{name}");
     std::fs::create_dir_all(dir.join(&level)).unwrap();
     std::fs::write(dir.join(format!("{level}/{name}.glb")), content).unwrap();
@@ -531,7 +531,8 @@ mod tests {
         && gp1.find("(build-custom-level \"my-test\")") > gp1.find("(custom-level-cgo \"TSZ.DGO\"")
         && gp1.find("(build-custom-level \"my-test\")") < gp1.find("(group-list \"iso\"")
         && r.index == max0 + 1
-        && info1.contains(&format!(":index #x{:x}\n", max0 + 1))
+        // (jak-project's level-info.gc has the line endings of its checkout)
+        && info1.replace("\r\n", "\n").contains(&format!(":index #x{:x}\n", max0 + 1))
         && find_define(&info1, "my-test") < find_define(&info1, "test-zone")
         && !info1.contains(";; add this")
         && data

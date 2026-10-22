@@ -667,8 +667,9 @@ has a game to play in, chosen in **File > Settings > Game**:
 - a **jak-project checkout** with the editor's level builder (the branch of jak-project with its
   fixes for the editor's exports: its `custom_assets/jak3/jle-builder.json` says `jle-1`), built,
   with your Jak 3 extracted in it;
-- or the **OpenGOAL Launcher's game for the editor** (`<install>/features/jak3/level_edited/`, which
-  the launcher installs), found by itself.
+- or the **OpenGOAL Launcher's game for the editor** (`<install>/features/jak3/level_edited/`, made
+  with the launcher's active OpenGOAL version when that version has the editor's level builder), found
+  by itself.
 
 It exports the level into `library/exports/<project>/`, installs it in that game (its files, and
 its lines in `game.gp` and `level-info.gc` between `;; jak-level-editor: begin <name>` and `end`
