@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import { untrack } from "svelte";
-  import { save, ui } from "../../lib/actions.svelte";
+  import { playLevel, save, ui } from "../../lib/actions.svelte";
   import { engine } from "../../lib/engine.svelte";
   import { has, t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
@@ -76,9 +76,10 @@
   const tabs = ["guide.tab.tour", "guide.tab.tools", "guide.tab.keys"];
   // the keys tab: help.<section>.<n>, in this order
   const keys: [string, number[]][] = [
+    ["help.layout", [1, 2, 3, 4, 5, 6]],
     ["help.camera", [1, 2, 3, 4]],
     ["help.story", [1, 2, 3]],
-    ["help.editing", [1, 2, 10, 3, 4, 5, 11, 12, 6, 7, 8, 9]],
+    ["help.editing", [1, 2, 10, 3, 4, 5, 11, 12, 6, 7, 8, 9, 13]],
   ];
 
   const ti = $derived(
@@ -94,9 +95,20 @@
     action === "replace" ||
       action === "export" ||
       action === "save" ||
-      action === "navmeshes",
+      action === "navmeshes" ||
+      action === "play",
   );
-  const blocked = $derived(needsDocument && !engine.state.document.open);
+  // why its button cannot be used: no level open, no game to play in (the host's runtime, as the
+  // toolbar's Play: one that installs its OpenGOAL itself can, its Play window offers it)
+  const blocked = $derived(
+    needsDocument && !engine.state.document.open
+      ? "tour.needs_level"
+      : action === "play" &&
+          !engine.state.runtime?.available &&
+          !engine.state.runtime?.tooling
+        ? "runtime.none"
+        : "",
+  );
 
   function go(i: number, j: number) {
     guide.tutorial = i;
@@ -117,6 +129,10 @@
       call("set_view", { game_view: !!engine.state.view.game_view_ready });
     else if (a === "save") save(false);
     else if (a === "navmeshes") windows.open("navmesh");
+    else if (a === "settings") windows.open("settings");
+    else if (a === "tooling") windows.open("settings", { section: "tooling" });
+    else if (a === "game_window") windows.open("game");
+    else if (a === "play") playLevel();
   }
 
   // its animations: one wide, two side by side, four in a square
@@ -251,14 +267,11 @@
             <span>
               <button
                 class={button}
-                disabled={blocked}
+                disabled={!!blocked}
                 onclick={() => run(action)}>{t(`${k}.action`)}</button
               >
             </span>
-            {#if blocked}<Tip
-                text={t("tour.needs_level")}
-                placement="top"
-              />{/if}
+            {#if blocked}<Tip text={t(blocked)} placement="top" />{/if}
           {/if}
           <button
             class="{button} ml-auto w-32"

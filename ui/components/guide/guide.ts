@@ -41,13 +41,16 @@ export const guideDemos: Record<string, string | null> = {
   jak2_level: null,
   terrain: null,
   assembly: null,
+  groups: null,
+  effects: null,
+  play: null,
 };
 
 // the sections of Every tool
 export const guideSections: { key: string; ids: string[] }[] = [
   {
     key: "guide.section.view",
-    ids: ["camera", "select", "box_select", "assembly", "game_view"],
+    ids: ["camera", "select", "box_select", "assembly", "groups", "game_view"],
   },
   {
     key: "guide.section.transform",
@@ -72,6 +75,7 @@ export const guideSections: { key: string; ids: string[] }[] = [
       "palette",
       "catalog",
       "interactive",
+      "effects",
       "models",
       "decor",
       "jak2",
@@ -94,7 +98,7 @@ export const guideSections: { key: string; ids: string[] }[] = [
   },
   {
     key: "guide.section.level",
-    ids: ["levels", "jak2_level", "story", "replace", "export"],
+    ids: ["levels", "jak2_level", "story", "replace", "export", "play"],
   },
 ];
 
@@ -109,7 +113,11 @@ export type TourAction =
   | "export"
   | "game_view"
   | "save"
-  | "navmeshes";
+  | "navmeshes"
+  | "settings"
+  | "tooling"
+  | "game_window"
+  | "play";
 
 // A step: its id, its animations, its button (the key <prefix><id>.action)
 export type TourStep = [id: string, demos: string[], action?: TourAction];
@@ -132,14 +140,20 @@ export const tutorials: { id: string; prefix: string; steps: TourStep[] }[] = [
       ["behaviors", ["bounce", "launch"]],
       ["replace", ["replace"], "replace"],
       ["export", [], "export"],
+      ["play", [], "play"],
     ],
+  },
+  {
+    id: "first_start",
+    prefix: "tuto.first_start.",
+    steps: [["library", [], "settings"], ["extractor", [], "extract"], ["disc", [], "extract"], ["jak2", []], ["open", [], "levels_tab"]],
   },
   { id: "move", prefix: "tuto.move.", steps: [["select", ["select", "box_select"]], ["drag", ["move"]], ["fine", ["snap"]], ["exact", []]] },
   { id: "rotate", prefix: "tuto.rotate.", steps: [["rings", ["rotate"]], ["free", ["free_rotate"]], ["exact", []]] },
   { id: "scale", prefix: "tuto.scale.", steps: [["axes", ["scale"]], ["exact", []], ["shapes", ["build"], "build_tab"]] },
   { id: "local", prefix: "tuto.local.", steps: [["what", ["local"]], ["when", ["local"]]] },
   { id: "snap", prefix: "tuto.snap.", steps: [["on", ["snap"]], ["steps", ["snap"]], ["place", ["place"]]] },
-  { id: "game_view", prefix: "tuto.game_view.", steps: [["what", [], "game_view"], ["hour", []], ["live", []], ["limits", []]] },
+  { id: "game_view", prefix: "tuto.game_view.", steps: [["what", [], "game_view"], ["hour", [], "game_window"], ["live", []], ["limits", []]] },
   {
     id: "ingame",
     prefix: "tuto.ingame.",
@@ -151,6 +165,11 @@ export const tutorials: { id: string; prefix: string; steps: TourStep[] }[] = [
   { id: "levels", prefix: "tuto.levels.", steps: [["open", ["story"], "levels_tab"], ["add", []], ["story", ["story"]]] },
   { id: "replace", prefix: "tuto.replace.", steps: [["choose", ["replace"], "replace"], ["align", ["replace"]], ["export", [], "export"]] },
   { id: "save", prefix: "tuto.save.", steps: [["save", [], "save"], ["export", [], "export"], ["navmesh", [], "navmeshes"]] },
+  {
+    id: "play",
+    prefix: "tuto.play.",
+    steps: [["export", [], "export"], ["game", [], "tooling"], ["play", [], "play"], ["installed", []], ["launcher", []], ["hand", []]],
+  },
   { id: "place", prefix: "tuto.place.", steps: [["click", ["place"], "catalog_tab"], ["hold", ["place"]], ["turn", ["free_rotate"]]] },
   { id: "topology", prefix: "tuto.topology.", steps: [["enter", []], ["points", []], ["faces", []], ["undo", []]] },
   { id: "shapes", prefix: "tuto.shapes.", steps: [["size", ["build"], "build_tab"], ["bend", []], ["ground", []]] },
