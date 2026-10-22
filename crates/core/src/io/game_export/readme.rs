@@ -102,9 +102,8 @@ fixes these levels need (its releases are the OpenGOAL the OpenGOAL Launcher ins
    its missions, the levels around it). The game's own `{dgo}` is still built: put the nickname
    back to play the game's {rep_name} again.
 4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout) and type `(mi)`.
-5. Start the game there: `gk -g jak3 -- -boot -fakeiso -debug -level {first}` (a gk of
-   whozghiar/jak-project newer than v0.3.9-whozghiar.1). Or start `gk` and go there as in the game
-   (from a level next to it), or in the REPL: `(lt)` then
+5. Start the game (`gk -g jak3 -- -boot -fakeiso -debug`) and go there as in the game (from a
+   level next to it), or in the REPL: `(lt)` then
    `(start 'play (get-continue-by-name *game-info* \"{first}\"))`.
 
 ",
@@ -118,8 +117,7 @@ fixes these levels need (its releases are the OpenGOAL the OpenGOAL Launcher ins
    and give it an `:index` no other level has. The player starts at
    ({}, {}, {}) m.
 4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout) and type `(mi)`.
-5. Start the game there: `gk -g jak3 -- -boot -fakeiso -debug -level {name}-start` (a gk of
-   whozghiar/jak-project newer than v0.3.9-whozghiar.1). Or start `gk` and, in the REPL, `(lt)` then
+5. Start the game there: start `gk -g jak3 -- -boot -fakeiso -debug`, then in the REPL `(lt)` and
    `(start 'play (get-continue-by-name *game-info* \"{name}-start\"))`.
    (`bg` loads it next to the levels already there: from the city, no memory is left.)
 

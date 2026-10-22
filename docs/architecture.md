@@ -714,12 +714,9 @@ a job: `jle:progress` "extract_fetch").
 
 **The level builder and gk**: OpenGOAL's builder needs fixes for the editor's exports (a level
 without regions, nav meshes, flat collision fragments, translucent surfaces, collision on both
-sides per mesh, the list of everything visible), and a tool starts the game at a level with gk's
-`-level <continue point>` (`gk -- -boot -fakeiso -debug -level <continue>`: Jak 3's play boots
-there). Both are in the user's fork `whozghiar/jak-project`, whose tooling releases are tagged
-`vX.Y.Z-whozghiar.N` (upstream's X.Y.Z, the fork's build N); `-level` from the release after
-`v0.3.9-whozghiar.1` on, which the export's README and the guide's tutorial use. The launcher
-installs and updates those releases (its `TOOLING_REPOSITORY`).
+sides per mesh, the list of everything visible). They are in the user's fork
+`whozghiar/jak-project`, whose tooling releases are tagged `vX.Y.Z-whozghiar.N` (upstream's X.Y.Z,
+the fork's build N). The launcher installs and updates those releases (its `TOOLING_REPOSITORY`).
 
 ## 17. In the launcher
 
@@ -1039,9 +1036,8 @@ their actor; links between actors by id become links by name.
 
 **Into the game**: copy `custom_assets` and `goal_src` into jak-project, add the lines of
 `README.md` to `goal_src/jak3/game.gp` and `level-info.gc` (or the one `:nickname` to change for a
-replacement), build with `(mi)`, then start the game there with
-`gk -g jak3 -- -boot -fakeiso -debug -level <name>-start` (a gk of whozghiar/jak-project newer than
-`v0.3.9-whozghiar.1`), or in the REPL `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
+replacement), build with `(mi)`, start `gk -g jak3 -- -boot -fakeiso -debug`, then in the REPL
+`(lt)` and `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
 
 ## 25. The remote control and the MCP server
 

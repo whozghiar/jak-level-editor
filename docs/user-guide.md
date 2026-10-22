@@ -624,10 +624,9 @@ export's `README.md` gives the exact lines for your level:
 3. Add the lines the export's `README.md` gives to `goal_src/jak3/game.gp` and
    `goal_src/jak3/engine/level/level-info.gc` (for a replacement: one word to change instead).
 4. Start `goalc`, type `(mi)` and wait for *Successfully built all*.
-5. Start the game in your level:
-   `gk -g jak3 -- -boot -fakeiso -debug -level my-ctyslum-start` (a `gk` of whozghiar/jak-project
-   newer than `v0.3.9-whozghiar.1`). With another `gk`: start it, then in `goalc` type `(lt)` and
-   `(start 'play (get-continue-by-name *game-info* "my-ctyslum-start"))`. Jak appears in your level.
+5. Start the game in your level: start `gk -g jak3 -- -boot -fakeiso -debug`, then in `goalc`
+   type `(lt)` and `(start 'play (get-continue-by-name *game-info* "my-ctyslum-start"))`. Jak
+   appears in your level.
 
 ![The export's report: open its folder, its README, or add it to the game by hand](captures/export/by-hand.png)
 

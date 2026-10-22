@@ -911,7 +911,7 @@ fn the_projects_exported_like_the_cpp_editor() {
       "{project}: the files"
     );
     for (path, text) in &theirs {
-      // the README: rewritten since (whozghiar/jak-project, gk -level, the launcher's Play)
+      // the README: rewritten since (whozghiar/jak-project, the steps by hand)
       if path == "README.md" {
         continue;
       }

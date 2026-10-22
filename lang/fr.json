@@ -1062,7 +1062,7 @@
   "tuto.manual.build.title": "Compiler le jeu",
   "tuto.manual.build.text": "Lancez le compilateur (goalc, ou task repl dans le checkout) et tapez (mi) : il compile le jeu avec votre niveau. À refaire après chaque nouvel export du niveau.",
   "tuto.manual.start.title": "Lancer le jeu dans votre niveau",
-  "tuto.manual.start.text": "gk -g jak3 -- -boot -fakeiso -debug -level <nom>-start démarre le jeu au point de continuation de votre niveau (le README donne son nom ; un gk de whozghiar/jak-project plus récent que v0.3.9-whozghiar.1). Avec un autre gk : lancez gk, puis dans goalc (lt) et la ligne (start 'play ...) du README.",
+  "tuto.manual.start.text": "Lancez gk (gk -g jak3 -- -boot -fakeiso -debug), puis dans goalc tapez (lt) et la ligne (start 'play ...) du README : le jeu démarre au point de continuation de votre niveau.",
   "build.no_document": "Ouvrez un niveau (panneau Niveaux) ou commencez-en un nouveau (Fichier > Nouveau niveau) pour y construire.",
   "build.shapes": "Volumes",
   "build.shape.tip": "%s, %.1f x %.1f x %.1f m : cliquez, puis cliquez dans la vue pour le poser, encore et encore (Échap arrête). L'inspecteur change sa taille.",

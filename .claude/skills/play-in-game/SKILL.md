@@ -7,7 +7,8 @@ description: Export a level made in the editor and check it in the real game (Op
 
 The editor runs no game, neither on its own nor in the OpenGOAL Launcher: it exports the level as
 files to copy into a jak-project, and the guide's tutorial *Add your level to the game by hand*
-(`manual`) walks the user through the steps below. Nothing installs the level for them (no
+(`manual`) walks the user through the steps below (gk has no option to start at a level: goalc takes
+Jak there). Nothing installs the level for them (no
 manifest, no backups): it is done by hand. Always give jak-project's programs `--proj-path` (else
 they find the project by the last "jak-project" in their path).
 
@@ -27,8 +28,6 @@ By hand:
    --target goalc`), then `goalc -g jak3` and `(mi)` in its REPL.
 4. **Play**: start `gk` (`-boot -fakeiso -debug` for a debug game), then in goalc `(lt)` and
    `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
-   A gk of whozghiar/jak-project newer than `v0.3.9-whozghiar.1` starts there on its own:
-   `gk -g jak3 -- -boot -fakeiso -debug -level <name>-start` (the export's README gives it).
 
 Checks worth doing in the game: the level loads (`(level-status? *level* '<name> #f)`), Jak stands
 on its floors (the export's report lists the places denser than the game's collision cache), doors
