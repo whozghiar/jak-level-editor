@@ -1,27 +1,17 @@
 ---
 name: play-in-game
-description: Export a level made in the editor and check it in the real game (OpenGOAL's jak-project, gk and goalc). Use when the user wants to play or verify an exported level in Jak 3.
+description: Export a level made in the editor and check it in the real game (OpenGOAL's jak-project, gk and goalc), by hand: the editor runs no game. Use when the user wants to play or verify an exported level in Jak 3.
 ---
 
 # From the editor to the game
 
-**Play** does all of it when the editor has a game runtime (`get_state.runtime.available`): the
-toolbar's Play, Level > Play in the game, or the call `play_level {wait?}` (then `play_state`).
-It exports into `<library>/exports/<project>/` (with `jle-level.json`, the manifest), installs the
-level with `jle_core::io::level_package` (marked blocks `;; jak-level-editor: begin/end <name>` in
-`game.gp` and `level-info.gc`, `<file>.jle-backup`, `jle-installed.json`), builds with
-`extractor <iso_data/jak3> --folder --compile --game jak3 --proj-path <data>` and starts `gk` with
-its own settings (`--config-path`, `-boot -fakeiso -debug`), then goalc's REPL as the user `jle`
-(`goal_src/user/jle/startup-jak3.gc`: `(lt)` then `start` at the continue point; Jak 3's kernel has
-no argument for it) until the game prints `Displaying level <name>` (`crates/core/src/runtime.rs`). `runtime_remove {name}` takes it out (the files back as they were).
-The standalone app's runtime is the jak-project checkout of File > Settings > Game (used as it
-is; the editor's levels need the level builder's fixes of whozghiar/jak-project), else the OpenGOAL
-Launcher's `<install>/features/jak3/level_edited/` when the launcher's active version is a release
-of whozghiar/jak-project (`v0.3.X-whozghiar.N`; its programs, `versions/official/<version>/`). Never choose the user's own checkout as
-the runtime without asking: Play writes into it. Always give jak-project's programs `--proj-path`
-(else they find the project by the last "jak-project" in their path).
+The editor runs no game, neither on its own nor in the OpenGOAL Launcher: it exports the level as
+files to copy into a jak-project, and the guide's tutorial *Add your level to the game by hand*
+(`manual`) walks the user through the steps below. Nothing installs the level for them (no
+manifest, no backups): it is done by hand. Always give jak-project's programs `--proj-path` (else
+they find the project by the last "jak-project" in their path).
 
-By hand (no runtime, or to debug the build):
+By hand:
 
 0. **The editor**: `target/release/jak-level-editor.exe` (or `target/debug/`, or
    `npx yarn tauri dev`; build it first: the build-and-test skill), with `--library <folder>` when
@@ -37,6 +27,8 @@ By hand (no runtime, or to debug the build):
    --target goalc`), then `goalc -g jak3` and `(mi)` in its REPL.
 4. **Play**: start `gk` (`-boot -fakeiso -debug` for a debug game), then in goalc `(lt)` and
    `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
+   A gk of whozghiar/jak-project newer than `v0.3.9-whozghiar.1` starts there on its own:
+   `gk -g jak3 -- -boot -fakeiso -debug -level <name>-start` (the export's README gives it).
 
 Checks worth doing in the game: the level loads (`(level-status? *level* '<name> #f)`), Jak stands
 on its floors (the export's report lists the places denser than the game's collision cache), doors

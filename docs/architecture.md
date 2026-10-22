@@ -378,7 +378,7 @@ Follow the industrial zone, `ctyinda`, from the disc to the game:
    settings each object's code reads, the order of the story's tasks. Python scripts of `tools/`
    read it from OpenGOAL's decompiled code. It is how the inspector knows that a door can stay
    locked until a task of the story is done.
-4. **The export** (File > Export for the game) writes into `exports/<your project>/` the files
+4. **The export** (Level > Export for the game) writes into `exports/<your project>/` the files
    OpenGOAL's level builder reads: the decor in the game's units (4096 per meter), the level's
    description, the code of the behaviors you set, the nav meshes, and a README with the lines to
    add to a jak-project. You copy them there and build: the level is then in the game.
