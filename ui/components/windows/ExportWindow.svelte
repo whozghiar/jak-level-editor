@@ -340,7 +340,7 @@
       <p class="mt-1 text-neutral-300">{t("export.install")}</p>
       <!-- with the host's game runtime the editor does it (Play); without, by hand -->
       {#if !engine.state.runtime?.available}<p class={muted}>
-          {t("export.no_runtime")}
+          {t(engine.state.runtime?.reason || "export.no_runtime")}
         </p>{/if}
       <div class="flex gap-2">
         <button class={button} onclick={() => openIt(report!.dir)}
@@ -351,7 +351,7 @@
           onclick={() => openIt(`${report!.dir}/README.md`)}
           >{t("export.open_readme")}</button
         >
-        {#if engine.state.runtime?.available}
+        {#if engine.state.runtime?.available || engine.state.runtime?.tooling}
           <button class={button} disabled={busy} onclick={playLevel}
             >{t("menu.level.play")}</button
           >

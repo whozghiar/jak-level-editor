@@ -500,6 +500,8 @@ impl Editor {
   pub fn tick(&mut self, dt: f32) -> bool {
     // the library's workers, the files the Place tool waits for (catalog.rs)
     self.poll_library_work();
+    // GitHub's answer about OpenGOAL's releases (runtime.rs)
+    self.poll_tooling();
     if !self.weather.time_passes && !self.weather.lightning {
       return false;
     }

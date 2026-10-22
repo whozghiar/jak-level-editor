@@ -87,6 +87,10 @@ pub struct RuntimeInfo {
   pub games: Vec<String>,
   /// the levels installed in it (their names)
   pub installed: Vec<String>,
+  /// what the Play window says besides, a translation key and its arguments ("" nothing): the
+  /// launcher's game says a newer release of the tooling is out
+  pub notice: String,
+  pub notice_args: Vec<String>,
 }
 
 /// What `play` did: the game is starting, or the host took the operation over in its own
@@ -121,6 +125,13 @@ pub trait GameRuntime: Send + Sync {
   /// can use, which one it uses), null when nothing
   fn settings(&self) -> serde_json::Value {
     serde_json::Value::Null
+  }
+  /// where it installs OpenGOAL's tooling itself (the standalone app's
+  /// `<library>/opengoal/versions/`): the editor then offers its releases, their installation and
+  /// the one used (crate::tooling). None: the host does it (the OpenGOAL Launcher: its header, its
+  /// Versions page)
+  fn tooling_dir(&self) -> Option<PathBuf> {
+    None
   }
 }
 

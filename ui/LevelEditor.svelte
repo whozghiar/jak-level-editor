@@ -9,6 +9,7 @@
   import { fly } from "svelte/transition";
   import IconAlert from "~icons/mdi/alert-circle";
   import IconCheck from "~icons/mdi/check";
+  import IconDownload from "~icons/mdi/tray-arrow-down";
   import IconGroup from "~icons/mdi/group";
   import IconHammer from "~icons/mdi/hammer";
   import IconMap from "~icons/mdi/map";
@@ -226,6 +227,34 @@
         {#if unsaved}<span class="size-2 shrink-0 rounded-full bg-orange-500"
           ></span>{/if}
       </p>
+      <!-- the OpenGOAL the runtime installs itself (the standalone app's; the launcher's header shows
+           its own), and a newer release to install, as the launcher's header shows them -->
+      {#if s.runtime?.tooling}
+        {@const tool = s.runtime.tooling}
+        <div
+          class="pointer-events-none mx-3 h-6 shrink-0 border-l border-neutral-800"
+        ></div>
+        <div
+          class="flex shrink-0 items-center gap-2 font-mono text-sm whitespace-nowrap"
+        >
+          <span class="pointer-events-none text-neutral-400"
+            >{t("tooling.title")}</span
+          >
+          <span class="pointer-events-none text-neutral-500"
+            >{tool.active || t("tooling.bar.none")}</span
+          >
+          {#if tool.update}
+            <button
+              class="animate-pulse text-green-500 hover:text-green-300"
+              aria-label={t("tooling.update", tool.latest)}
+              onclick={() => windows.open("settings", { section: "tooling" })}
+            >
+              <IconDownload />
+            </button>
+            <Tip text={t("tooling.update", tool.latest)} />
+          {/if}
+        </div>
+      {/if}
       <div class="ml-auto flex shrink-0 self-stretch">
         <button
           class={winButton}

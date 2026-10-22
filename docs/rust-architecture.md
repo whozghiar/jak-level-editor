@@ -29,6 +29,8 @@ crates/
                                   Recast's own steps where rerecast differs)
     src/runtime.rs                the game runtimes: an OpenGOAL the editor drives, the standalone
                                   app's (section 6)
+    src/tooling.rs                OpenGOAL's releases (whozghiar/jak-project) the standalone app
+                                  installs itself (section 6)
     src/editor/                   the application without its interface: the Editor (mod.rs), the
                                   dispatch of `call` (api.rs), get_state (state.rs), levels,
                                   project, selection, groups, placement, the tools (terrain_tool,
@@ -217,7 +219,7 @@ which application hosts it: it uses what it is given and hides what it is not.
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
 | `extract_source` | none (the user's disc) | `<install>/active/jak3/data/iso_data/jak3`: the disc it already extracted |
 | `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version |
-| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (used as it is), else the OpenGOAL Launcher's game for the editor when the launcher's active version is a release of `whozghiar/jak-project` | the launcher's isolated game `<install>/features/jak3/level_edited/`, run with the programs of the launcher's active tooling version (`<install>/versions/official/<version>/`, from the release of `whozghiar/jak-project`; nothing else is downloaded) |
+| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (used as it is), else its own OpenGOAL: the releases of `whozghiar/jak-project` it installs in `<library>/opengoal/` (`tooling_dir`) and its game there | the launcher's isolated game `<install>/features/jak3/level_edited/`, run with the programs of the launcher's active tooling version (`<install>/versions/official/<version>/`, from the release of `whozghiar/jak-project`; nothing else is downloaded); no `tooling_dir`: the launcher's header and Versions page install the tooling |
 
 **The library** (`crates/core/src/editor/library.rs`): until the user chose one (the preference
 `library_chosen`; preferences of before it whose library holds an extracted game count as chosen),
@@ -285,10 +287,42 @@ and the make system's `[ 42%]` as `HostEvent`s. The launcher can use the same pi
 `StandaloneRuntime`, the standalone app's, reads the preferences at each call: the jak-project
 checkout chosen in File > Settings (`runtime_folder`, its programs in `runtime_bin` or its build's
 `out/build/Release/bin`; the user's choice is trusted: only its sources, programs and game files
-are looked for), else the OpenGOAL Launcher's game for the editor (`installationDir` and
-`activeVersion` of `%APPDATA%/OpenGOAL-Launcher/settings.json`, then `features/jak3/level_edited/`
-with that version's programs, when the version is a release of `whozghiar/jak-project`). `GameRuntime::settings` (a default method answering null) is what the Settings window
-shows besides `info`. `info` is asked at each `get_state`: a runtime keeps it cheap.
+are looked for), else its own OpenGOAL (`StandaloneRuntime::own`, kind `opengoal`): under the
+library, `<library>/opengoal/` holds `versions/<tag>/` (the tooling it installed, below), `jak3/`
+(its game: `OpenGoal::distribution(...).with_tooling(...)`, made from the version used by the same
+`prepare` as the launcher's game: `data/`, `_settings/`, `packages/`, `jle-runtime.json`) and
+`iso_data/jak3` (the disc, when it extracts it). The game's files: the OpenGOAL Launcher's extracted
+disc when it is installed (`installationDir` of `%APPDATA%/OpenGOAL-Launcher/settings.json`, read
+only), else the disc folder the library is extracted from (`extract_source`), else that `.iso`
+extracted once before the first build (`extract_command`: `extractor <iso> --extract --validate
+--extract-path <...>/iso_data --game jak3 --proj-path <data>`, the step `runtime.step.extract_disc`;
+`info` counts it as available, `runtime.no_disc` without any disc). Nothing installed:
+`runtime.no_tooling`. The standalone app no longer plays in the launcher's game for the editor (the
+launcher's tooling is the launcher's to update). `GameRuntime::settings` (a default method answering
+null) is what the Settings window shows besides `info`. `info` is asked at each `get_state`: a
+runtime keeps it cheap. `RuntimeInfo::notice` (and `notice_args`) is what the Play window says
+besides: the launcher's game (`OpenGoal::info`, kind `launcher`) says `runtime.launcher_update`
+when a release newer than the active version is out (`tooling::newer_than`), pointing to the
+launcher's header and Versions page.
+
+**OpenGOAL's tooling** (`crates/core/src/tooling.rs`): `GameRuntime::tooling_dir` (default None) is
+where a runtime installs the tooling itself (the standalone app's `<library>/opengoal/versions/`);
+the editor offers it only then (the launcher's runtime has none: its header and Versions page do
+it, no second update button). The releases of `whozghiar/jak-project` come from GitHub's API
+(`/repos/whozghiar/jak-project/releases`, `known`: asked on a thread of its own at the first call,
+an hour later or on request, never waiting; no network or GitHub's limit keeps what was known and
+the versions installed); a release's archive is the launcher's choice (`asset_for`: the system's
+name, not `lsp`, not `.bin`: `opengoal-windows-<tag>.zip`, `opengoal-linux-<tag>.tar.gz`); the
+newest is the highest X.Y.Z, then N, then the later date (`version_key`). `install` downloads it
+(reqwest, zip, tar and flate2, as the launcher: nothing more in its build) into `<tag>.part/`,
+unpacks it there and renames it `<tag>/`; the version used is the preference `tooling_version` when
+installed, else the newest installed. Calls: `tooling_state {check?}` (null without `tooling_dir`:
+`{dir, status, active, releases: [{tag, date, size, asset, installed}], checked, checking, error,
+installing}`), `tooling_install {version, wait?}` (the job `tooling`, `jle:progress`; then used),
+`tooling_use {version}`, `tooling_remove {version}`. `get_state.runtime.tooling` is
+`{active, latest, update}` (`update`: a newer release, not installed): the title bar shows the
+version and, on `update`, a pulsing green icon opening File > Settings at the OpenGOAL section; the
+editor's tick emits `jle:changed` when GitHub answered.
 
 **Play** (`crates/core/src/editor/runtime.rs`): `get_state.runtime` is the runtime's `RuntimeInfo`
 (null without one). `play_level {options?, wait?}` exports the document with the Export window's
@@ -297,15 +331,18 @@ each step); `play_state` answers `{busy, action, name, steps: [{key, args}], don
 outcome: "started" | "handed_over" | null, error, seconds, generation}`; `runtime_levels` (the
 levels installed), `runtime_remove {name, wait?}`, `runtime_launch {name, wait?}`,
 `runtime_settings` (`{info, settings}`). The interface shows the toolbar's Play, Level > Play in the
-game and the Play window only when `runtime.available`; without it the Export window points to the
-README and to File > Settings.
+game and the Play window when `runtime.available`, or when the runtime installs its tooling
+(`runtime.tooling`): with none installed, the Play window offers the latest release (one click:
+installed, then the level played); otherwise it says `runtime.reason`, as the Export window does
+(without a runtime it points to the README and to File > Settings).
 
 **The level builder**: OpenGOAL's builder needs fixes for the editor's exports (a level without
 regions, nav meshes, flat collision fragments, translucent surfaces, collision on both sides per
 mesh, the list of everything visible). They are in the user's fork `whozghiar/jak-project`, whose
 tooling releases are tagged `vX.Y.Z-whozghiar.N` (upstream's X.Y.Z, the fork's build N): the
 launcher's game plays with those releases only; a checkout chosen in the settings is the user's
-responsibility.
+responsibility. The standalone app installs those releases itself; the launcher lists and updates
+them from the same repository (its `TOOLING_REPOSITORY`).
 
 ## 7. In the launcher
 

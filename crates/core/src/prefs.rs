@@ -32,10 +32,13 @@ pub struct Prefs {
   /// the user chose where the library goes (the first-run assistant); preferences of before it
   /// whose library holds an extracted game count as chosen
   pub library_chosen: bool,
-  /// the standalone app's game runtime: a jak-project checkout ("" none: the OpenGOAL Launcher's
-  /// isolated game when it is there), and the folder of its goalc and gk ("" its build's)
+  /// the standalone app's game runtime: a jak-project checkout ("" none: its own OpenGOAL, below),
+  /// and the folder of its goalc and gk ("" its build's)
   pub runtime_folder: String,
   pub runtime_bin: String,
+  /// the standalone app's OpenGOAL: the tooling version it plays with, installed in
+  /// <library>/opengoal/versions/ ("" or not installed: the newest installed; tooling.rs)
+  pub tooling_version: String,
 }
 
 /// The settings folder of an application, as SDL_GetPrefPath makes it ('/' separated, ending

@@ -17,10 +17,10 @@ appears, with an example, and shows each tool in a picture.
 
 - **Nothing of the game is in this repository.** Everything comes from your disc: you extract it once.
 - **It needs nothing else**: not OpenGOAL, not the game, to build or to run. To *play* what you
-  exported you need the editor's **jak-project** ([whozghiar/jak-project](https://github.com/whozghiar/jak-project),
-  OpenGOAL with the level builder's fixes): built on your computer, or installed by the OpenGOAL
-  Launcher (its game for the editor); **Play** then installs
-  it and starts the game in it (see [15](#15-playing-it-in-the-game-export)).
+  exported, the editor installs OpenGOAL itself, in one click: the releases of
+  [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (OpenGOAL with the level
+  builder's fixes); **Play** then installs your level and starts the game in it (see
+  [15](#15-playing-it-in-the-game-export)). In the OpenGOAL Launcher, the launcher's OpenGOAL is used.
 - **On its own or in the OpenGOAL Launcher**: it is made like the
   [OpenGOAL Launcher](https://github.com/open-goal/launcher) (an engine in Rust, an interface in
   Svelte, in a Tauri window), so the same editor runs as its own program or opens from the
@@ -662,15 +662,29 @@ blue ghost to compare), **Place it where the original is**, check where the game
 
 ![A level made the replacement of ctyindb: the inspector's section](docs/captures/export/replace.png)
 
-**Play** (the toolbar's button, **Level > Play in the game**) does the rest for you when the editor
-has a game to play in, chosen in **File > Settings > Game**:
+**Play** (the toolbar's button, **Level > Play in the game**) does the rest for you, in a game of
+the editor's own, apart from your Jak 3 and its saves:
 
-- a **jak-project checkout** of your own, built, with your Jak 3 extracted in it (used as it is:
-  the editor's levels need the level builder's fixes of
-  [whozghiar/jak-project](https://github.com/whozghiar/jak-project));
-- or the **OpenGOAL Launcher's game for the editor** (`<install>/features/jak3/level_edited/`, made
-  with the launcher's active OpenGOAL version when it is a release of whozghiar/jak-project,
-  `v0.3.X-whozghiar.N`), found by itself.
+- **OpenGOAL**: the editor plays with the releases of
+  [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (`v0.3.X-whozghiar.N`: OpenGOAL
+  with the level builder's fixes the editor's levels need). The first Play offers to install the
+  latest one (a download of about 40 MB, into `<library>/opengoal/versions/`). The title bar shows
+  the version used and, when a newer one is out, a green download icon (as the OpenGOAL Launcher's
+  header); **File > Settings > OpenGOAL** lists the releases, installs, uses or removes one, and
+  asks GitHub again. Without network, the version installed is still used.
+- **The game's files**: the disc the OpenGOAL Launcher extracted when it is installed (read only),
+  else the disc you extract the levels from (**File > Extract game assets**): a folder is used as it
+  is, an `.iso` is extracted once into `<library>/opengoal/iso_data/`.
+- **Its game**, `<library>/opengoal/jak3/`: made from the version's data, decompiled once per
+  version (about ten minutes the first time), with its own settings and saves; another version
+  makes it again at the next Play, with the levels installed in it.
+- For advanced users, **File > Settings > Game** takes a **jak-project checkout** of your own
+  instead, built, with your Jak 3 extracted in it (used as it is).
+
+In the OpenGOAL Launcher, Play uses the launcher's game for the editor
+(`<install>/features/jak3/level_edited/`), with the launcher's active OpenGOAL version: the
+launcher's header and its Settings > Versions install and choose it; the editor shows no OpenGOAL
+of its own there, and says when the active version cannot play or a newer release is out.
 
 It exports the level into `library/exports/<project>/`, installs it in that game (its files, and
 its lines in `game.gp` and `level-info.gc` between `;; jak-level-editor: begin <name>` and `end`
@@ -680,7 +694,7 @@ takes the level out of that game again and builds it: its files are as they were
 Launcher, the launcher does it in its own window. The export's `jle-level.json` is what Play reads:
 the same as its README, for a program.
 
-Without a game to play in, the Play button is not there. To play it by hand (the export's
+To play it by hand instead (the export's
 `README.md` gives the exact lines for your level):
 
 1. Get **jak-project** (OpenGOAL's source code) and build it, as its own

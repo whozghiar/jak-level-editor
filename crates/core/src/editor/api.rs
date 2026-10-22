@@ -40,6 +40,7 @@ const QUERIES: &[&str] = &[
   "export_state",
   "play_state",
   "runtime_levels",
+  "tooling_state",
   "export_check",
   "navmesh_state",
   "navmesh_data",
@@ -503,6 +504,11 @@ impl Editor {
       "runtime_remove" => self.runtime_remove(s(a, "name"), b(a, "wait").unwrap_or(false)),
       "runtime_launch" => self.runtime_launch(s(a, "name"), b(a, "wait").unwrap_or(false)),
       "runtime_settings" => Ok(self.runtime_settings()),
+      // ---- OpenGOAL's tooling, when the runtime installs it itself (runtime.rs, crate::tooling)
+      "tooling_state" => Ok(self.tooling_state(b(a, "check").unwrap_or(false))),
+      "tooling_install" => self.tooling_install(s(a, "version"), b(a, "wait").unwrap_or(false)),
+      "tooling_use" => self.tooling_use(s(a, "version")),
+      "tooling_remove" => self.tooling_remove(s(a, "version")),
       "generate_navmesh" => {
         self.generate_navmesh_call(a)?;
         Ok(self.navmesh_state())

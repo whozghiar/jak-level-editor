@@ -14,7 +14,8 @@ use tauri_plugin_jak_level_editor::{Host, set_host};
 
 // what this app gives the editor (docs/rust-architecture.md §6): the library in Documents/Jak Level
 // Editor (known before the app, so the editor starts on it), the game runtime of the settings (a
-// jak-project checkout, else the OpenGOAL Launcher's game for the editor)
+// jak-project checkout chosen, else its own OpenGOAL: the releases of whozghiar/jak-project it
+// installs in <library>/opengoal)
 fn host() -> Host {
   Host {
     name: "standalone".into(),

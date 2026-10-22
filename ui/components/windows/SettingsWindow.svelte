@@ -1,6 +1,7 @@
 <script lang="ts">
   // File > Settings: the library folder (another one is used as it is: nothing moved or deleted),
-  // the language, where ogle-extract was found (or the host's download), the game runtime.
+  // the language, where ogle-extract was found (or the host's download), the game runtime and its
+  // OpenGOAL (section "tooling": shown at once).
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import IconFolder from "~icons/mdi/folder-outline";
@@ -11,6 +12,7 @@
   import RuntimeSettings from "../settings/RuntimeSettings.svelte";
   import type { LibrarySetup } from "./WelcomeWindow.svelte";
 
+  let { section }: { section?: string } = $props();
   let setup = $state<LibrarySetup>();
   // the folder left for an empty one: what to do with it
   let left = $state("");
@@ -111,5 +113,5 @@
     {/if}
   {/if}
 
-  <RuntimeSettings />
+  <RuntimeSettings tooling={section === "tooling"} />
 </div>

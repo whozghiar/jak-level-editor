@@ -1,13 +1,17 @@
 <script lang="ts">
   // Settings > Game: where Play installs the levels and starts the game (the host's game runtime,
-  // runtime_settings). The standalone app's: a jak-project checkout chosen here (its goalc and gk:
-  // its build's, or a folder chosen), else the OpenGOAL Launcher's game for the editor when it is
-  // installed; which one is used, why one cannot be.
+  // runtime_settings). The standalone app's: its own OpenGOAL (the release installed below,
+  // ToolingSettings), else a jak-project checkout chosen here (its goalc and gk: its build's, or a
+  // folder chosen); which one is used, why one cannot be.
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
   import { heading, muted, small } from "../common/classes";
+  import ToolingSettings from "./ToolingSettings.svelte";
+
+  // tooling: the OpenGOAL section shown at once
+  let { tooling = false }: { tooling?: boolean } = $props();
 
   type Candidate = {
     kind: string;
@@ -22,12 +26,14 @@
       available: boolean;
       reason: string;
       installed: string[];
+      notice: string;
+      notice_args: string[];
     };
     settings: {
       folder: string;
       bin: string;
       checkout: Candidate | null;
-      launcher: Candidate | null;
+      own: Candidate;
       used: string | null;
     } | null;
   } | null;
@@ -70,10 +76,25 @@
   <p class="text-xs {r.info.available ? 'text-green-400' : 'text-amber-300'}">
     {r.info.available ? t("settings.runtime.ready") : t(r.info.reason)}
   </p>
+  {#if r.info.notice}<p class="text-xs text-sky-300">
+      {t(r.info.notice, ...r.info.notice_args)}
+    </p>{/if}
 {:else if r?.settings}
   {@const s = r.settings}
   <div class="flex flex-col gap-1.5">
     <p class="text-xs font-semibold text-neutral-300">
+      {t("settings.runtime.own")}
+      {#if s.used === "opengoal"}<span class="ml-1 text-orange-400"
+          >({t("settings.runtime.used")})</span
+        >{/if}
+    </p>
+    {#if s.own.folder}<span class={path}>{s.own.folder}</span>{/if}
+    <p class="text-xs {color(s.own)}">{status(s.own)}</p>
+    {#if s.used === "jak-project"}<p class={muted}>
+        {t("settings.runtime.own.not_used")}
+      </p>{/if}
+
+    <p class="mt-2 text-xs font-semibold text-neutral-300">
       {t("settings.runtime.checkout")}
       {#if s.used === "jak-project"}<span class="ml-1 text-orange-400"
           >({t("settings.runtime.used")})</span
@@ -106,25 +127,6 @@
           >{/if}
       </div>
     {/if}
-
-    <p class="mt-2 text-xs font-semibold text-neutral-300">
-      {t("settings.runtime.launcher")}
-      {#if s.used === "launcher"}<span class="ml-1 text-orange-400"
-          >({t("settings.runtime.used")})</span
-        >{/if}
-    </p>
-    {#if s.launcher}
-      <span class={path}>{s.launcher.folder}</span>
-      <p class="text-xs {color(s.launcher)}">{status(s.launcher)}</p>
-      {#if s.used !== "launcher" && s.launcher.available}<p class={muted}>
-          {t("settings.runtime.launcher.not_used")}
-        </p>{/if}
-    {:else}
-      <p class={muted}>{t("settings.runtime.launcher.none")}</p>
-    {/if}
-    {#if !s.used}<p class="mt-1 text-xs text-amber-300">
-        {t("runtime.none")}
-      </p>{/if}
     {#if r.info.installed.length}
       <p class="mt-1 {muted}">
         {t("settings.runtime.installed", r.info.installed.join(", "))}
@@ -132,3 +134,4 @@
     {/if}
   </div>
 {/if}
+<ToolingSettings focus={tooling} onchange={refresh} />
