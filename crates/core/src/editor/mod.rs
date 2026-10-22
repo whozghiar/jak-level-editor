@@ -26,7 +26,7 @@
 //!                 lists and the workers making them
 //!   thumbs.rs     the panels' pictures: what the interface draws, the PNGs it drew
 //!   remote.rs     the remote control (MCP server): a local port, one JSON line per request
-//!   remote_tools.rs  the tools of the MCP server
+//!   remote_tools/    the tools of the MCP server (levels, find, change, view, catalog)
 //!   terrain_tool.rs  the terrain brush (terrain_tool.cpp)
 //!   topology_tool.rs the points and faces of one element's mesh (topology_tool.cpp)
 //!   preview.rs    the inspector's preview of an animation or an effect (preview.cpp)

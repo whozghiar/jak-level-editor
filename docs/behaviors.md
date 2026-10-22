@@ -16,7 +16,7 @@ Select a piece of decor: the inspector's **In the game** section
 (`ui/components/inspector/DecorBehavior.svelte`) sets it, for every selected piece at once, undone
 like any change. It is kept in the node's extras (`og_decor`, `crates/core/src/io/decor_behaviors.rs`),
 saved with the project and in prefabs, and written by **Level > Export for the game**
-(`crates/core/src/io/game_export.rs`). The MCP tool
+(`crates/core/src/io/game_export/`). The MCP tool
 `set_decor` sets the same.
 
 | Behavior | How it is made | Code generated |
@@ -246,7 +246,7 @@ animation. The route is the one of [Breakable](#breakable).
 
 ## What was checked
 
-- The engine's tests (`the_decors_behaviors`, `crates/core/src/io/game_export.rs`) export a
+- The engine's tests (`the_decors_behaviors`, `crates/core/src/io/game_export/tests.rs`) export a
   level with a slab of deadly ice, a cable Jak goes through, a pad that bounces and a ramp that
   launches, and check the extras, the actors (their place, their `spring-height`) and the code the
   export writes.
