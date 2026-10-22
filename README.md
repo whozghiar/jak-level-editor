@@ -10,16 +10,13 @@ play in the game.
 You do not need to have used a level editor before. This guide explains each idea the first time it
 appears, with an example, and shows each tool in a picture.
 
-> The pictures of this guide show the previous interface of the editor (C++ and Dear ImGui, when it
-> was called *OpenGOAL Level Editor*); they will be taken again. The menus, tools and keys are the same.
-
-![The editor: the levels on the left, the level in the middle as the game draws it, the inspector on the right](docs/captures/getting-started/window.png)
+![The editor: the bar of icons and the Levels panel on the left, the level in the middle as the game draws it, the inspector on the right](docs/captures/getting-started/window.png)
 
 - **Nothing of the game is in this repository.** Everything comes from your disc: you extract it once.
 - **It needs nothing else**: not OpenGOAL, not the game, to build or to run. To *play* what you
-  exported, the editor installs OpenGOAL itself, in one click: the releases of
-  [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (OpenGOAL with the level
-  builder's fixes); **Play** then installs your level and starts the game in it (see
+  exported, the editor installs OpenGOAL itself, in one click (a download of about 40 MB, once):
+  the releases of [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (OpenGOAL with
+  the level builder's fixes); **Play** then installs your level and starts the game in it (see
   [15](#15-playing-it-in-the-game-export)). In the OpenGOAL Launcher, the launcher's OpenGOAL is used.
 - **On its own or in the OpenGOAL Launcher**: it is made like the
   [OpenGOAL Launcher](https://github.com/open-goal/launcher) (an engine in Rust, an interface in
@@ -187,17 +184,28 @@ the weathers, the terrain brush, the nav meshes.
 ### Your library
 
 The first time, the editor asks where to keep your **library**: the folder that holds the extracted
-game (`jak3/`, `jak2/`), your projects (`projects/`), your levels exported for the game (`exports/`)
-and your prefabs (`prefabricated/`). It offers `Documents/Jak Level Editor` (in the OpenGOAL
-Launcher: `jak-level-editor/` of its installation folder; the editor built and started from this
-folder: `library/` here, which git ignores); **Choose another folder...** takes any other.
+game (`jak3/`, `jak2/`), your projects (`projects/`), your levels exported for the game (`exports/`),
+your prefabs (`prefabricated/`) and, once Play installed it, the editor's OpenGOAL (`opengoal/`).
+It offers `Documents/Jak Level Editor` (in the OpenGOAL Launcher: `jak-level-editor/` of its
+installation folder; the editor built and started from this folder: `library/` here, which git
+ignores); **Choose another folder...** takes any other, **Confirm** uses it.
+
+![The first start: what the library holds, the folder the editor offers](docs/captures/getting-started/welcome.png)
+
 **File > Settings...** shows it and changes it later: the editor then uses the new folder, and
 neither moves nor deletes anything in the old one (extract the game again there, or copy the old
-folder's content by hand). The same window has the language and where ogle-extract was found.
+folder's content by hand). The same window has the language, where ogle-extract was found (or a
+button that downloads it, when the application can), the game Play uses and the OpenGOAL versions
+([15](#15-playing-it-in-the-game-export)).
+
+![File > Settings: the library, the language, the extractor, the game Play uses and its OpenGOAL](docs/captures/getting-started/settings.png)
 
 ### Extract your game
 
-Then it asks for your game: **File > Extract game assets...**
+Then it asks for your game: **File > Extract game assets...** (when the folder holds no extracted
+game yet, the window opens by itself). ogle-extract, the extractor, comes with the installers; when
+it is missing, the window says so and offers **Download ogle-extract** when the application can (the
+OpenGOAL Launcher does).
 
 1. **Your Jak 3 disc**: choose the `.iso` (**.iso file...**) or the folder (**Folder...**). The editor
    tells which game and version it is (for example *Jak 3 - ntsc_v1 - SCUS-97330*). In the OpenGOAL
@@ -215,30 +223,41 @@ game: keep them on your computer, do not share them.
 ### The window
 
 ```text
-+-----------------------------------------------------------------------------+
-| File  Edit  View  Build  Level  Help                                        |
-| [Move] [Rotate] [Scale] [Topology] [Terrain] [Local] [Snap] | [Copy] ...   |
-+------------------+--------------------------------------+-------------------+
-| Levels | Build | |                                      | Inspector         |
-| Catalog |        |              the 3D view             | (what is selected,|
-| Prefabs | Groups |                                      |  or the level)    |
-|                  | [Story] < ======o======== >          |                   |
-+------------------+--------------------------------------+-------------------+
-| what the mouse does here            |  the last message                      |
-+-----------------------------------------------------------------------------+
++------------------------------------------------------------------------------+
+| Jak Level Editor | the level * | OpenGOAL v0.3.9-whozghiar.1          _ [] X |
+| File  Edit  View  Build  Level  Help                                         |
+| [Move] [Rotate] [Scale] [Topology] [Terrain] [Local] [Snap] [Copy] ... [Play]|
++----+---------------+---------------------------------------+-----------------+
+| Lv |               |                                       | Inspector       |
+| Bd |  the panel    |              the 3D view              | (what is        |
+| Ct |  of the icon  |                                       |  selected, or   |
+| Pf |  chosen       |                                       |  the level)     |
+| Gr |               | [x] Story  < =====o========= >        |                 |
++----+---------------+---------------------------------------+-----------------+
+| what the mouse does here | the last message              the work going on   |
++------------------------------------------------------------------------------+
 ```
 
-- The **left panel** has the steps of the work: **Levels** to open one, **Build** to make shapes,
-  **Catalog** and **Prefabs** to place things, **Groups** to find the groups you made.
+- The **title bar** names the level open (an orange dot: unsaved changes) and the OpenGOAL Play
+  uses (a green download icon: a newer one is out).
+- The **bar of icons** on the left opens the panels, the steps of the work: **Levels** (the map) to
+  open one, **Build** (the hammer) to make shapes, **Catalog** and **Prefabs** to place things,
+  **Groups** to find the groups you made. Hover an icon for its name; drag a panel's edge to widen
+  it.
 - The **inspector** (right) shows what is selected and lets you change it precisely; with nothing
   selected, it shows the level.
-- The **status bar** says what the mouse does where it is, and the last thing that happened.
+- The **status bar** says what the mouse does where it is, the last thing that happened (click it:
+  the log) and the work going on (reading the levels, an export, Play).
+- The **windows** (the export, the sky and the hour, the terrain brush, the guide...) float over the
+  editor: drag their title to move them, their cross closes them.
 
 ### The guide
 
 **F1** (Help > Tutorials) opens the guide: named tutorials, from *Getting started* (from your disc to
-the game, step by step) to one per tool, each with a short animation. Hovering any tool also shows
-what it does, its keys and an example.
+the game, step by step), *First start* (the library and the extraction) and *Play your level in the
+game* to one per tool, each with a short animation and a button that shows where it is; *Every
+tool* and *Keys* (with where things are) in its other tabs. It opens by itself the first time.
+Hovering any tool also shows what it does, its keys and an example.
 
 ![The guide: Getting started at its fifth step, the animations of the move, rotate and scale tools](docs/captures/getting-started/guide.png)
 
@@ -330,7 +349,7 @@ Scale, the square at the end of an axis stretches along it.
 - **Hold the right button on the selection** and move the mouse to turn it on every axis.
 - The inspector gives the exact position, rotation and scale.
 
-| Moving a selected prefab with the mouse | A bridge stretched along its length with the scale gizmo |
+| Moving a selected prefab with the mouse: see-through where it was, how far it went | A catwalk of the industrial zone stretched with the scale gizmo |
 |---|---|
 | ![moving](docs/captures/selecting/moving.png) | ![scale](docs/captures/selecting/scale.png) |
 
@@ -453,7 +472,7 @@ spiral staircase) and rounded **Corners**.
 **In the style of a level**: choose a level, and **Place a floor** or **Place a wall** gives a
 floor or a wall that looks like it (its textures, their size, its light, how uneven its ground is).
 
-| The Build panel | A yard in the style of the port: its cobbles, a bent wall, a round pillar, a spiral staircase |
+| The Build panel and its shapes | In the style of the port: what the panel measured of its floors and walls, a yard of its cobbles, a bent wall, a round pillar, a spiral staircase |
 |---|---|
 | ![shapes](docs/captures/building/shapes.png) | ![style](docs/captures/building/style.png) |
 
@@ -476,7 +495,7 @@ next to it (a platform, a quay: 2 cm under it; not small props), named next to t
 preview shows the ground at that level before you click and while you hold the button. The right
 button never lays ground while erasing: it raises or digs what is there.
 
-| The terrain brush in the style of the desert: hills, a riverbed dug, a walled yard, a hill raised | The right button held and the mouse moved up: the hill it raises, before it is let go |
+| The terrain brush in the style of the desert over hills it generated, a riverbed dug, a hill raised: its square and its window | The right button held and the mouse moved up: the hill it raises, before it is let go |
 |---|---|
 | ![terrain](docs/captures/building/terrain.png) | ![raise](docs/captures/building/terrain-raise.png) |
 
@@ -681,6 +700,10 @@ the editor's own, apart from your Jak 3 and its saves:
 - For advanced users, **File > Settings > Game** takes a **jak-project checkout** of your own
   instead, built, with your Jak 3 extracted in it (used as it is).
 
+| The first Play: OpenGOAL installed and the level played, in one click | File > Settings > OpenGOAL: the releases, the one installed and used, also named in the title bar |
+|---|---|
+| ![play](docs/captures/export/play.png) | ![opengoal](docs/captures/export/opengoal.png) |
+
 In the OpenGOAL Launcher, Play uses the launcher's game for the editor
 (`<install>/features/jak3/level_edited/`), with the launcher's active OpenGOAL version: the
 launcher's header and its Settings > Versions install and choose it; the editor shows no OpenGOAL
@@ -762,6 +785,8 @@ library/                 the library: everything made from your game (git ignore
   prefabricated/         the prefabs: yours, and the game's in prefabricated/game/
   projects/<name>/       your saved projects
   exports/<project>/     the levels exported for the game (older exports: export/<project>/)
+  opengoal/              the editor's OpenGOAL, installed by Play: versions/, its game jak3/, the
+                         disc's files iso_data/ when an .iso was extracted for it
 iso_data/                put your disc images here if you like (git ignores them)
 data/                    what the editor knows of the game: names and rules, no asset
 lang/                    the interface texts (en.json, fr.json)
