@@ -294,10 +294,47 @@ fn download(url: &str, to: &Path, size: u64, events: &HostEvents) -> Result<(), 
   Ok(())
 }
 
-/// A release's archive (.zip, .tar.gz) unpacked into `dest`
-pub fn unpack(archive: &Path, dest: &Path) -> Result<(), String> {
+/// An archive being read, its bytes counted for the progress bar (an unpacking of 200 MB takes
+/// seconds, the bar must not stand still)
+struct Counted<'a, R> {
+  inner: R,
+  read: u64,
+  total: u64,
+  shown: u64,
+  progress: &'a dyn Fn(u64, u64),
+}
+
+impl<R: std::io::Read> std::io::Read for Counted<'_, R> {
+  fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    let n = self.inner.read(buf)?;
+    self.read += n as u64;
+    if self.read - self.shown > self.total / 100 {
+      self.shown = self.read;
+      (self.progress)(self.read.min(self.total), self.total);
+    }
+    Ok(n)
+  }
+}
+
+impl<R: std::io::Seek> std::io::Seek for Counted<'_, R> {
+  fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+    self.inner.seek(pos)
+  }
+}
+
+/// Unpacks a release's archive (.zip, else .tar.gz) into `dest`, `progress(done, total)` in bytes
+/// of the archive read
+pub fn unpack(archive: &Path, dest: &Path, progress: &dyn Fn(u64, u64)) -> Result<(), String> {
   let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", archive.display());
   let file = std::fs::File::open(archive).map_err(|e| fail(&e))?;
+  let total = file.metadata().map(|m| m.len()).unwrap_or(0);
+  let file = Counted {
+    inner: file,
+    read: 0,
+    total,
+    shown: 0,
+    progress,
+  };
   if archive.extension().is_some_and(|e| e == "zip") {
     zip::ZipArchive::new(file)
       .and_then(|mut z| z.extract(dest))
@@ -339,7 +376,9 @@ pub fn install(versions: &Path, release: &Release, events: &HostEvents) -> Resul
       key: "tooling.step.unpack".into(),
       args: vec![release.tag.clone()],
     });
-    unpack(&archive, &dest)?;
+    unpack(&archive, &dest, &|done, total| {
+      events(HostEvent::Progress { done, total })
+    })?;
     let _ = std::fs::remove_file(&archive);
     if !exe(&dest, "gk").is_file() {
       return Err(format!("{}: no gk in it", release.asset));
@@ -487,7 +526,7 @@ mod tests {
       .unwrap();
     z.finish().unwrap();
     let dest = tmp.join("v0.3.9-whozghiar.1");
-    unpack(&archive, &dest).unwrap();
+    unpack(&archive, &dest, &|_, _| {}).unwrap();
     assert!(dest.join("data/goal_src/jak3/game.gp").is_file());
     assert!(installed(&tmp).is_empty(), "not marked complete yet");
     std::fs::write(dest.join(COMPLETE), "v0.3.9-whozghiar.1").unwrap();
@@ -503,7 +542,7 @@ mod tests {
     h.set_mode(0o755);
     t.append_data(&mut h, "gk", &b"gk"[..]).unwrap();
     t.into_inner().unwrap().finish().unwrap();
-    unpack(&tgz, &tmp.join("linux")).unwrap();
+    unpack(&tgz, &tmp.join("linux"), &|_, _| {}).unwrap();
     assert!(tmp.join("linux/gk").is_file());
     let _ = std::fs::remove_dir_all(&tmp);
   }
@@ -518,7 +557,7 @@ mod tests {
     let archive = PathBuf::from(std::env::var("JLE_TOOLING_ARCHIVE").expect("JLE_TOOLING_ARCHIVE"));
     let zip = archive.extension().is_some_and(|e| e == "zip");
     let dest = temp_dir("tooling-real");
-    unpack(&archive, &dest).unwrap();
+    unpack(&archive, &dest, &|_, _| {}).unwrap();
     assert!(dest.join("data/goal_src/jak3/game.gp").is_file());
     let programs = ["gk", "goalc", "extractor"];
     for p in programs {
