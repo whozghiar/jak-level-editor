@@ -1,0 +1,41 @@
+name: Lint
+
+# The code's form, before anything is built: Rust formatted by rustfmt, the interface by Prettier,
+# its TypeScript and Svelte type-checked. docs/workflows.md explains it.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rust:
+    name: Rust formatting
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+  interface:
+    name: Interface (formatting, types)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Install, check the formatting and the types
+        run: |
+          yarn install --frozen-lockfile
+          yarn check-format
+          yarn typecheck

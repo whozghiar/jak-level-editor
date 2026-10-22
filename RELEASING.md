@@ -76,7 +76,5 @@ git commit
 ```
 
 Its release workflow refuses a submodule that is not at the tag of a published release of the
-editor with `ogle-extract-windows-x64.zip` and `ogle-extract-linux-x64.zip`. The job **OpenGOAL
-Launcher** of this repository's Build workflow builds the launcher with each commit of the editor,
-on the four platforms of its releases: its branch is the repository variable `LAUNCHER_REF`
-(**Settings > Secrets and variables > Actions > Variables**), else `master-dev`.
+editor with `ogle-extract-windows-x64.zip` and `ogle-extract-linux-x64.zip`; its own Build
+workflow compiles it with the editor's commit it pins.
