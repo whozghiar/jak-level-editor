@@ -11,7 +11,7 @@ decompiled code, and the levels are extracted from the user's disc into `library
 | File | Made by | From |
 |---|---|---|
 | `data/jak3/game-data.json` | `python tools/gen_game_data.py <jak-project>/goal_src` | the decompiled code (read only), `tools/object_categories.json` for the catalog's choices |
-| `data/jak3/particles.json`, `extractor/data/jak3/sprite-pages.json` | `python tools/gen_particles.py <jak-project>/goal_src` | the `defpartgroup` / `defpart` of the code |
+| `data/jak3/particles.json`, `extractor/data/jak3/sprite-pages.json` | `python tools/gen_particles.py <jak-project>/goal_src` | the `defpartgroup` / `defpart` of the code, and the particle curves (`particle-curve-settings`, `curve2d-fast`, `curve-color-fast`) |
 | `data/jak2/creatures.json` | `python tools/gen_jak2_creatures.py` | `extractor/data/jak2/all-types.gc` |
 | `data/jak3/prefabs.json`, `data/jak2/prefabs.json` | `python tools/gen_prefab_recipes.py library --game jak3` (and `jak2`) | an extracted library, through a hidden editor (`target/release` or `target/debug/jak-level-editor`, or `--editor <program>`); `tools/prefab_review.json` keeps what was reviewed |
 

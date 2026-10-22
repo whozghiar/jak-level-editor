@@ -18,6 +18,14 @@ of a jak-project checkout (goal_src/jak3, read only). The editor draws the effec
                tex   the texture b: "<tpage>/<name>", or "<page>:<index>" when the code names none
              Values are the game's units: meters times 4096, angles in 65536 a turn, times in
              ticks (300 a second).
+  curves     per launcher id drawn by the game's curves (birth-func-curve, live-func-curve:
+             fire, flames, lava): its particle-curve-settings, {life: [base, offset] in ticks,
+             flags: the bits of pcf0 (scale-y is scale-x), pcf1 (the color changes with its
+             life), pcf2 (the color and size chosen at birth); birth, live: the functions it runs;
+             and its curves, each {xs, ys, odx} (curve2d-fast, curve-color-fast: ys 4 colors):
+             color-start, alpha-start, scale-x-start, scale-y-start (picked at random, the size
+             in meters), r-scalar, g-scalar, b-scalar, a-scalar, scale-x-scalar, scale-y-scalar
+             (over its life, 0 to 1)}
   textures   the texture pages and textures the launchers draw
 
 It also writes extractor/data/jak3/sprite-pages.json: the texture pages ogle-extract writes to
@@ -214,6 +222,73 @@ def init_spec(spec):
     return None
 
 
+def vector(form):
+    """(new 'static 'vector :x 1.0 ...) as [x, y, z, w] (0 for those not given), or None"""
+    if not (isinstance(form, list) and len(form) > 2 and form[0] == 'new' and form[2] == ['quote', 'vector']):
+        return None
+    k = keywords(form[3:])
+    v = [value(k.get(a, '0')) for a in 'xyzw']
+    return None if None in v else [float(x) for x in v]
+
+
+def curve(form):
+    """(new 'static 'curve2d-fast :xs v :ys v :one-over-x-deltas v), or a curve-color-fast (its ys
+    an inline-array of 4 colors), as {xs, ys, odx}, or None"""
+    if not (isinstance(form, list) and len(form) > 2 and form[0] == 'new' and
+            form[2] in (['quote', 'curve2d-fast'], ['quote', 'curve-color-fast'])):
+        return None
+    k = keywords(form[3:])
+    ys = k.get('ys')
+    if form[2][1] == 'curve-color-fast':
+        colors = [vector(x) for x in ys[5:]] if isinstance(ys, list) else []
+        ys = sum(colors, []) if len(colors) == 4 and None not in colors else None
+    else:
+        ys = vector(ys)
+    out = {'xs': vector(k.get('xs')), 'ys': ys, 'odx': vector(k.get('one-over-x-deltas'))}
+    return None if None in out.values() else out
+
+
+CURVE_FIELDS = ('color-start', 'alpha-start', 'scale-x-start', 'scale-y-start', 'r-scalar', 'g-scalar',
+                'b-scalar', 'a-scalar', 'scale-x-scalar', 'scale-y-scalar')
+PCF = {'pcf0': 1, 'pcf1': 2, 'pcf2': 4}
+CURVE_SETTINGS = ['new', ['quote', 'static'], ['quote', 'particle-curve-settings']]
+
+
+def read_curves(form, curves, settings, bound):
+    """The curves, the particle-curve-settings and the launcher each is given to, anywhere in a
+    form: (set! *c* (new 'static 'curve2d-fast ...)), (define *s* (new 'static
+    'particle-curve-settings ...)), (set! (-> *s* color-start) *c*), (set! (-> *part-id-table* id
+    init-specs n initial-valuef) (the-as float *s*))"""
+    if not isinstance(form, list):
+        return
+    if len(form) == 3 and form[0] in ('set!', 'define'):
+        name, val = form[1], form[2]
+        if isinstance(name, str):
+            c = curve(val)
+            if c:
+                curves[name] = c
+            elif isinstance(val, list) and val[:3] == CURVE_SETTINGS:
+                k = keywords(val[3:])
+                flags = k.get('flags')
+                settings.setdefault(name, {}).update({
+                    'life': [int(value(k.get('lifetime-base', '0')) or 0),
+                             int(value(k.get('lifetime-offset', '0')) or 0)],
+                    'flags': sum(PCF.get(f, 0) for f in flags[1:]) if isinstance(flags, list) else 0,
+                })
+            return
+        if isinstance(name, list) and len(name) == 3 and name[0] == '->' and name[2] in CURVE_FIELDS:
+            if isinstance(val, str) and val.startswith('*'):
+                settings.setdefault(name[1], {})[name[2]] = val
+            return
+        if (isinstance(name, list) and len(name) == 6 and name[:2] == ['->', '*part-id-table*'] and
+                name[3] == 'init-specs' and isinstance(val, list) and len(val) == 3 and
+                val[:2] == ['the-as', 'float'] and isinstance(val[2], str) and number(name[2]) is not None):
+            bound[number(name[2])] = val[2]
+            return
+    for x in form:
+        read_curves(x, curves, settings, bound)
+
+
 def sp_item(form):
     """(sp-item launcher :key value...) as [launcher, flags, period, length, offset, fade-after,
     falloff-to, binding, hour-mask]"""
@@ -239,11 +314,13 @@ def main():
         raise SystemExit(__doc__)
     src = os.path.join(sys.argv[1], 'jak3')
     groups, launchers, pages = {}, {}, {}
+    curves, settings, bound = {}, {}, {}
     for path in sorted(glob.glob(os.path.join(src, '**', '*.gc'), recursive=True)):
         text = open(path, encoding='utf-8', errors='replace').read()
-        if 'defpart' not in text:
+        if not any(w in text for w in ('defpart', 'curve2d-fast', 'curve-color-fast')):
             continue
         for form in read_forms(text):
+            read_curves(form, curves, settings, bound)
             if not isinstance(form, list) or not form:
                 continue
             if form[0] == 'defpartgroup' and len(form) > 2:
@@ -271,19 +348,38 @@ def main():
                         if s[1] == 'tex' and '/' in s[3]:
                             page, name = s[3].split('/', 1)
                             pages.setdefault(page, set()).add(name)
+    # the launchers drawn by curves: their settings and curves
+    by_launcher = {}
+    for lid, name in sorted(bound.items()):
+        specs = launchers.get(str(lid))
+        st = settings.get(name)
+        if not specs or not st or 'life' not in st:
+            continue
+        syms = {(s[0], s[3]) for s in specs if s[1] == 'sym'}
+        c = {'life': st['life'], 'flags': st['flags'],
+             'birth': (FIELDS['birth-func'], 'birth-func-curve') in syms,
+             'live': (FIELDS['func'], 'live-func-curve') in syms}
+        if not c['birth'] and not c['live']:
+            continue
+        for f in CURVE_FIELDS:
+            if st.get(f) in curves:
+                c[f] = curves[st[f]]
+        by_launcher[str(lid)] = c
     out = {
         'format': 1,
         'game': 'jak3',
         'source': 'goal_src/jak3 (OpenGOAL decompiled code): defpartgroup, defpart',
         'groups': groups,
         'launchers': launchers,
+        'curves': by_launcher,
         'textures': {p: sorted(n) for p, n in sorted(pages.items())},
     }
     dst = os.path.join(REPO, 'data', 'jak3', 'particles.json')
     with open(dst, 'w', encoding='utf-8', newline='\n') as f:
         json.dump(out, f, separators=(',', ':'), sort_keys=True)
         f.write('\n')
-    print('%s: %d groups, %d launchers, %d texture pages' % (dst, len(groups), len(launchers), len(pages)))
+    print('%s: %d groups, %d launchers (%d by curves), %d texture pages' % (
+        dst, len(groups), len(launchers), len(by_launcher), len(pages)))
     # the pages ogle-extract writes the textures of (library/jak3/common/sprites/)
     ids = sorted({int(s[3].split(':')[0]) for l in launchers.values() for s in l if s[1] == 'tex' and ':' in s[3]})
     sprite_pages = os.path.join(REPO, 'extractor', 'data', 'jak3', 'sprite-pages.json')

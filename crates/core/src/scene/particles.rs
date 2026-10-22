@@ -5,7 +5,8 @@
 //! fields (a value and a random range each: its position, velocity, size, rotation, color and how
 //! they change, its life) and moves 60 times a second: velocities are per tick (300 a second, 5 a
 //! frame), friction and acceleration per frame. At a time of its life it can take the fields of
-//! another launcher (next-launcher: steam that fades out).
+//! another launcher (next-launcher: steam that fades out). Fire, flames and lava take their color,
+//! alpha and size from the game's curves over their life (birth-func-curve, live-func-curve).
 //!
 //! The editor shows them where the effects of the levels are (the actors naming a group by their
 //! art-name: part-spawner...), and in the catalog. The view runs them in the interface
@@ -13,12 +14,12 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{NodeKind, Scene};
+use super::{BlendMode, NodeKind, Scene};
 use crate::math::{AABB, K_PI, Mat4, Quat, Vec3, Vec4, length, normalize};
 
 /// sp-field-id
@@ -100,6 +101,10 @@ pub struct SpSpec {
 }
 
 // sp-cpuinfo-flag bits the editor uses
+/// sp-cpuinfo-flag-3: added to what is behind (the GS's alpha #x48)
+pub const K_SP_ADD: u32 = 1 << 3;
+/// sp-cpuinfo-flag-4: taken from what is behind (#x42)
+pub const K_SP_SUB: u32 = 1 << 4;
 /// drawn by the glow renderer: added to what is behind
 pub const K_SP_GLOW: u32 = 1 << 15;
 /// its acceleration in the world (not turned with the effect)
@@ -130,6 +135,99 @@ pub struct SpGroup {
   /// meters: its bounds
   pub radius: f32,
   pub items: Vec<SpItem>,
+}
+
+/// How a particle mixes with what is behind it (sp-launch-particles-var: the GS's alpha #x44,
+/// mixed, unless flag 4, subtracted, or flag 3, added: most fire, sparks and lights, their textures
+/// opaque, their shape in their colors on black).
+pub fn blend_of(flags: u32) -> BlendMode {
+  if flags & (K_SP_ADD | K_SP_GLOW) != 0 {
+    BlendMode::AddAlpha
+  } else if flags & K_SP_SUB != 0 {
+    BlendMode::Subtract
+  } else {
+    BlendMode::Alpha
+  }
+}
+
+/// A curve of the game (curve2d-fast; curve-color-fast: ys 4 colors), its keys at -xs: odx the
+/// slope of each segment (2d), or 1 / its length (colors).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Curve {
+  pub xs: [f32; 4],
+  pub ys: Vec<f32>,
+  pub odx: [f32; 4],
+}
+
+impl Curve {
+  /// {xs, ys, odx}, ys `n` numbers (4, or 16 for colors)
+  fn from_json(v: &Value, n: usize) -> Option<Curve> {
+    let list = |k: &str, n: usize| {
+      let a = v.get(k)?.as_array().filter(|a| a.len() == n)?;
+      a.iter().map(num).collect::<Option<Vec<f32>>>()
+    };
+    Some(Curve {
+      xs: list("xs", 4)?.try_into().ok()?,
+      ys: list("ys", n)?,
+      odx: list("odx", 4)?.try_into().ok()?,
+    })
+  }
+
+  /// curve2d-fast at x (0 to 1)
+  pub fn at(&self, x: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    let k = if x + self.xs[2] >= 0.0 {
+      2
+    } else if x + self.xs[1] >= 0.0 {
+      1
+    } else {
+      0
+    };
+    self.ys[k] + (x + self.xs[k]) * self.odx[k]
+  }
+
+  /// curve-color-fast at x: between the two colors of its segment (the sign as the VU tests it)
+  pub fn color(&self, x: f32) -> [f32; 3] {
+    let w = |k: usize| (x + self.xs[k]) * self.odx[k];
+    let k = if !w(2).is_sign_negative() {
+      2
+    } else if !w(1).is_sign_negative() {
+      1
+    } else {
+      0
+    };
+    let f = w(k);
+    std::array::from_fn(|i| self.ys[k * 4 + i] * (1.0 - f) + self.ys[(k + 1) * 4 + i] * f)
+  }
+}
+
+/// in the game's order: picked at random at birth, then scaled over the life (0 to 1)
+const CURVE_FIELDS: [&str; 10] = [
+  "color-start",
+  "alpha-start",
+  "scale-x-start",
+  "scale-y-start",
+  "r-scalar",
+  "g-scalar",
+  "b-scalar",
+  "a-scalar",
+  "scale-x-scalar",
+  "scale-y-scalar",
+];
+
+/// particle-curve-settings: a launcher drawn by curves (birth-func-curve, live-func-curve)
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CurveSettings {
+  /// ticks, and a random offset
+  pub life: i32,
+  pub offset: i32,
+  /// pcf0 1: scale-y is scale-x; pcf1 2: the color over its life; pcf2 4: color and size at birth
+  pub flags: u32,
+  /// the functions it runs
+  pub birth: bool,
+  pub live: bool,
+  /// CURVE_FIELDS
+  pub curves: [Option<Curve>; 10],
 }
 
 // sp-cpuinfo-flag
@@ -199,6 +297,7 @@ fn num(v: &Value) -> Option<f32> {
 pub struct ParticleData {
   groups: HashMap<String, SpGroup>,
   launchers: HashMap<i32, Vec<SpSpec>>,
+  curves: HashMap<i32, Arc<CurveSettings>>,
   textures: Vec<String>,
 }
 
@@ -276,6 +375,25 @@ impl ParticleData {
         list.push(spec);
       }
     }
+    for (id, c) in j
+      .get("curves")
+      .and_then(Value::as_object)
+      .into_iter()
+      .flatten()
+    {
+      let life = |i: usize| c.get("life").and_then(|l| l.get(i)).and_then(num);
+      let settings = CurveSettings {
+        life: life(0).unwrap_or(0.0) as i32,
+        offset: life(1).unwrap_or(0.0) as i32,
+        flags: c.get("flags").and_then(num).unwrap_or(0.0) as u32,
+        birth: c.get("birth") == Some(&Value::Bool(true)),
+        live: c.get("live") == Some(&Value::Bool(true)),
+        curves: std::array::from_fn(|i| {
+          Curve::from_json(c.get(CURVE_FIELDS[i])?, if i == 0 { 16 } else { 4 })
+        }),
+      };
+      out.curves.insert(atoi(id), Arc::new(settings));
+    }
     for (name, g) in groups.as_object().into_iter().flatten() {
       let mut group = SpGroup {
         name: name.clone(),
@@ -331,6 +449,11 @@ impl ParticleData {
 
   pub fn launcher(&self, id: i32) -> Option<&Vec<SpSpec>> {
     self.launchers.get(&id)
+  }
+
+  /// the curves of a launcher drawn by them
+  pub fn curve(&self, id: i32) -> Option<&Arc<CurveSettings>> {
+    self.curves.get(&id)
   }
 
   /// the textures the launchers draw: "<tpage>/<name>", or "<page>:<index>"
@@ -399,7 +522,8 @@ pub struct ParticleSprite {
   pub color: Vec4,
   /// ParticleData::textures(), -1 none
   pub texture: i32,
-  pub additive: bool,
+  /// Alpha, AddAlpha or Subtract
+  pub blend: BlendMode,
   /// the sprite starts at its position (the game's flag 4: streaks), else centered
   pub from_left: bool,
 }
@@ -418,6 +542,10 @@ struct Particle {
   age: i32,
   texture: i32,
   flags: u32,
+  /// drawn by curves: their random picks, its life (ticks)
+  curve: Option<Arc<CurveSettings>>,
+  rnd: [f32; 4],
+  life: f32,
 }
 
 impl Default for Particle {
@@ -431,6 +559,9 @@ impl Default for Particle {
       age: 0,
       texture: -1,
       flags: 0,
+      curve: None,
+      rnd: [0.0; 4],
+      life: 0.0,
     }
   }
 }
@@ -532,6 +663,77 @@ fn init(p: &mut Particle, specs: &[SpSpec], relaunch: bool, rng: &mut Rng) {
   }
 }
 
+// birth-func-curve: its life, its random picks; its color and size picked now (pcf2, or a color that
+// does not change)
+fn birth(p: &mut Particle, c: &Arc<CurveSettings>, rng: &mut Rng) {
+  p.curve = Some(c.clone());
+  p.life = c.life as f32
+    + if c.offset > 0 {
+      (rng.next() * c.offset as f32).floor()
+    } else {
+      0.0
+    };
+  p.rnd = std::array::from_fn(|_| rng.next());
+  if !c.birth {
+    return;
+  }
+  let (f, r) = (&mut p.f, p.rnd);
+  let [color, _, sx, sy, ..] = &c.curves;
+  f[sp::TIMER] = p.life;
+  f[sp::A] = 0.0;
+  if let Some(color) = color
+    .as_ref()
+    .filter(|_| c.flags & 4 != 0 || c.flags & 2 == 0)
+  {
+    f[sp::R..sp::R + 3].copy_from_slice(&color.color(r[0]));
+  }
+  if c.flags & 4 == 0 {
+    return;
+  }
+  if let Some(sx) = sx {
+    f[sp::SCALE_X] = sx.at(r[2]) * 4096.0;
+  }
+  if c.flags & 1 != 0 {
+    f[sp::SCALE_Y] = f[sp::SCALE_X];
+  } else if let Some(sy) = sy {
+    f[sp::SCALE_Y] = sy.at(r[3]) * 4096.0;
+  }
+}
+
+// live-func-curve: its color, alpha and size, picked at birth, scaled over its life
+fn live(p: &mut Particle) {
+  let Some(c) = p.curve.clone().filter(|c| c.live) else {
+    return;
+  };
+  let (f, r) = (&mut p.f, p.rnd);
+  let [color, alpha, sx, sy, over @ ..] = &c.curves;
+  let [_, _, _, a, sx_over, sy_over] = over;
+  let t = if p.life > 0.0 {
+    (p.life - f[sp::TIMER]) / p.life
+  } else {
+    0.0
+  };
+  if let Some(color) = color.as_ref().filter(|_| c.flags & 2 != 0) {
+    let rgb = color.color(r[0]);
+    for i in 0..3 {
+      if let Some(o) = &over[i] {
+        f[sp::R + i] = rgb[i] * o.at(t);
+      }
+    }
+  }
+  if let (Some(alpha), Some(a)) = (alpha, a) {
+    f[sp::A] = alpha.at(r[1]) * a.at(t);
+  }
+  if let (Some(sx), Some(o)) = (sx, sx_over) {
+    f[sp::SCALE_X] = (sx.at(r[2]) * 4096.0 * o.at(t)).abs();
+  }
+  if c.flags & 1 != 0 {
+    f[sp::SCALE_Y] = f[sp::SCALE_X];
+  } else if let (Some(sy), Some(o)) = (sy, sy_over) {
+    f[sp::SCALE_Y] = (sy.at(r[3]) * 4096.0 * o.at(t)).abs();
+  }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn launch(
   particles: &mut Vec<Particle>,
@@ -542,6 +744,7 @@ fn launch(
   specs: &[SpSpec],
   rate: f32,
   accum: &mut f32,
+  curve: Option<&Arc<CurveSettings>>,
 ) {
   // how many: num a launch (a fraction carried to the next)
   let mut count = 1.0;
@@ -563,6 +766,9 @@ fn launch(
   while n > 0 && particles.len() < max_particles {
     let mut p = Particle::default();
     init(&mut p, specs, false, rng);
+    if let Some(c) = curve {
+      birth(&mut p, c, rng);
+    }
     let f = &p.f;
     // launched along its cone and turned (the launcher's), then turned with the effect
     let r = rotation(f[sp::ROTATE_X], f[sp::ROTATE_Y], f[sp::ROTATE_Z], false)
@@ -696,6 +902,7 @@ impl ParticleSystem {
               specs,
               rate,
               &mut e.accum[i],
+              data.curve(item.launcher),
             );
           }
           continue;
@@ -718,6 +925,7 @@ impl ParticleSystem {
           specs,
           rate,
           &mut e.accum[i],
+          data.curve(item.launcher),
         );
       }
       e.clock += K_TICKS;
@@ -773,6 +981,10 @@ impl ParticleSystem {
       for c in 0..4 {
         f[sp::R + c] = (f[sp::R + c] + f[sp::FADE_R + c] * ticks).max(0.0);
       }
+      if p.curve.as_ref().is_some_and(|c| c.live) {
+        live(p);
+        return true; // at the end of its life
+      }
       // faded out
       !(f[sp::A] <= 0.0 && f[sp::FADE_A] <= 0.0 && p.age > K_TICKS)
     });
@@ -796,7 +1008,7 @@ impl ParticleSystem {
             f[sp::A].min(128.0) / 128.0,
           ),
           texture: p.texture,
-          additive: p.flags & K_SP_GLOW != 0,
+          blend: blend_of(p.flags),
           from_left: (f[sp::ROT_X] as i32 & 15) == 4,
         }
       })
@@ -906,7 +1118,9 @@ mod tests {
     ps.update(&pd, 1.0 / 60.0, Vec3::default(), 12.0);
     let sprites = ps.sprites();
     assert!(
-      sprites.len() == 1 && sprites[0].additive && (sprites[0].sx - 4.0).abs() < 0.01,
+      sprites.len() == 1
+        && sprites[0].blend == BlendMode::AddAlpha
+        && (sprites[0].sx - 4.0).abs() < 0.01,
       "{sprites:?}"
     );
     assert!(sprites[0].texture >= 0 && pd.textures()[sprites[0].texture as usize].contains('/'));
@@ -916,6 +1130,88 @@ mod tests {
     far.emit(1, light, Mat4::translate(Vec3::new(0.0, 0.0, 200.0)));
     far.update(&pd, 1.0 / 60.0, Vec3::default(), 12.0);
     assert_eq!(far.count(), 0);
+  }
+
+  // the desert's fire (group-firepit-fire, demo-oasis): its glow, its sparks and its flames are
+  // added to what is behind (glow, sp-cpuinfo-flag-3), their textures opaque, their shape in their
+  // colors on black: mixed, they were squares; its flames take their color, alpha and size from
+  // the game's curves (else never seen)
+  #[test]
+  fn particles_fire_is_added() {
+    assert_eq!(blend_of(0), BlendMode::Alpha);
+    assert_eq!(blend_of(K_SP_SUB), BlendMode::Subtract);
+    assert_eq!(blend_of(K_SP_SUB | K_SP_ADD), BlendMode::AddAlpha);
+    assert_eq!(blend_of(K_SP_GLOW), BlendMode::AddAlpha);
+    let Some(pd) = data() else { return };
+    let fire = pd.group("group-firepit-fire").expect("the firepit's fire");
+    let mut ps = ParticleSystem::new();
+    for _ in 0..30 {
+      ps.begin_frame();
+      ps.emit(1, fire, Mat4::identity());
+      ps.update(&pd, 1.0 / 6.0, Vec3::default(), 12.0);
+    }
+    let sprites = ps.sprites();
+    let names: Vec<&str> = sprites
+      .iter()
+      .map(|s| pd.textures()[s.texture as usize].as_str())
+      .collect();
+    for t in [
+      "level-default-sprite/glow",
+      "level-default-sprite/glow-hotdot",
+      "level-default-sprite/explosion-nebula",
+    ] {
+      assert!(names.contains(&t), "{t} in {names:?}");
+    }
+    assert!(
+      sprites.iter().all(|s| s.blend == BlendMode::AddAlpha),
+      "{sprites:?}"
+    );
+    // the flames: 10 to 15 m times 0.2 to 0.6 over their life
+    let flames: Vec<_> = (0..sprites.len())
+      .filter(|&i| names[i].ends_with("explosion-nebula"))
+      .map(|i| sprites[i])
+      .collect();
+    assert!(flames.len() > 3, "{flames:?}");
+    for s in &flames {
+      let c = s.color;
+      assert!(
+        (1.9..9.1).contains(&s.sx) && (1.9..9.1).contains(&s.sy) && c.w <= 1.0,
+        "{s:?}"
+      );
+      assert!(c.x > 0.5, "{s:?}");
+    }
+    // white at first, then orange and red (their blue gone)
+    assert!(
+      flames.iter().any(|s| s.color.z < s.color.x * 0.5),
+      "{flames:?}"
+    );
+  }
+
+  // the game's curves (particle-curves.gc): picked at random in a range, scaled over the life
+  #[test]
+  fn particles_curves() {
+    let range = |ys: Value, odx: Value| json!({"xs": [0, -1, -2, -3], "ys": ys, "odx": odx});
+    let j = json!({"groups": {}, "launchers": {}, "curves": {"7": {
+      "life": [90, 120], "flags": 2, "birth": true, "live": true,
+      "color-start": range(json!([255, 255, 255, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+        128, 128, 128, 128]), json!([1, 1, 1, 1])),
+      "alpha-start": range(json!([96, 255, 256, 257]), json!([159, 1, 1, 1])),
+      "a-scalar": {"xs": [0, -0.4, -0.7, -1], "ys": [0, 0, 1, 0.2],
+        "odx": [0, 3.3333335, -2.6666665, 1]},
+      "r-scalar": {"xs": [0, -1, -2], "ys": [1, 1, 1, 1], "odx": [0, 0, 0, 0]}}}});
+    let pd = ParticleData::from_json(&j).unwrap();
+    let c = pd.curve(7).unwrap();
+    assert_eq!(
+      (c.life, c.offset, c.flags, c.birth, c.live),
+      (90, 120, 2, true, true)
+    );
+    assert!(c.curves[4].is_none(), "r-scalar: 3 keys, not a curve");
+    let (alpha, a) = (c.curves[1].as_ref().unwrap(), c.curves[7].as_ref().unwrap());
+    assert_eq!(alpha.at(0.5), 175.5);
+    assert_eq!(alpha.at(2.0), 255.0); // clamped to 0..1
+    assert_eq!(a.at(0.2), 0.0);
+    assert!((a.at(0.55) - 0.5).abs() < 1e-5 && (a.at(0.85) - 0.6).abs() < 1e-5);
+    assert_eq!(c.curves[0].as_ref().unwrap().color(0.5), [191.5; 3]);
   }
 
   #[test]

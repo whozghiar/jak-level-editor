@@ -34,6 +34,7 @@ import {
   type Mat4,
   type Vec3,
 } from "../math";
+import { ParticleData, ParticleSystem } from "../particles";
 import { parseMaterials, parseMesh, parseScene } from "../protocol";
 import {
   AlphaMode,
@@ -1118,6 +1119,7 @@ export function install(t: typeof Transport) {
     }
   };
   selfcheck();
+  effectsSelfcheck();
   gameSelfcheck(game);
   // in the page's console: gameView, call("set_view", {hour: 22}) (the mood of 22:00)
   Object.assign(window, { gameView, call: t.call });
@@ -1153,6 +1155,58 @@ const EFFECTS = [
     world: [...translate([-2, 4, 4])],
   },
 ];
+
+// how a particle mixes with what is behind it: its flags (glow, sp-cpuinfo-flag-3 added, -4
+// subtracted); a particle drawn by the game's curves: its alpha and size from them
+function effectsSelfcheck() {
+  const sprite = (flags: string[], curves?: object) => {
+    const pd = ParticleData.fromJson({
+      groups: { g: { parts: [[1, [], 0, 0, 0, 0, 0, 0, 0]] } },
+      launchers: {
+        1: [
+          [13, "f", 4096, 0, 1],
+          [17, "copy", 0, 13, 0],
+          [21, "f", 128, 0, 1],
+          [47, "flags", 0, flags, 0],
+        ],
+      },
+      curves: curves && { 1: curves },
+    })!;
+    const ps = new ParticleSystem();
+    ps.beginFrame();
+    ps.emit(1, pd.group("g")!, identity());
+    ps.update(pd, 1 / 60, [0, 0, 0]);
+    return ps.sprites()[0];
+  };
+  const blend = (flags: string[]) => sprite(flags)?.blend;
+  console.assert(
+    blend([]) === BlendMode.Alpha &&
+      blend(["sp-cpuinfo-flag-3"]) === BlendMode.AddAlpha &&
+      blend(["glow"]) === BlendMode.AddAlpha &&
+      blend(["sp-cpuinfo-flag-4"]) === BlendMode.Subtract,
+    "particle blends",
+  );
+  const flat = (v: number) => ({
+    xs: [0, -1, -2, -3],
+    ys: [v, v, v, v],
+    odx: [0, 0, 0, 0],
+  });
+  const s = sprite(["sp-cpuinfo-flag-3"], {
+    life: [60, 0],
+    flags: 1,
+    birth: true,
+    live: true,
+    "alpha-start": flat(192),
+    "a-scalar": flat(1),
+    "scale-x-start": flat(4),
+    "scale-x-scalar": flat(0.5),
+  });
+  console.assert(
+    s?.color[3] === 1 && s.sx === 2 && s.sy === 2,
+    "particle curves",
+    s,
+  );
+}
 
 // a file of asset?path=: the game's tables from the dev server (it serves the repository), the
 // sprites a soft white disc (their alpha the PS2's: 128 is opaque)

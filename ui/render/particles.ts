@@ -6,7 +6,8 @@
 // value and a random range each: its position, velocity, size, rotation, color and how they change,
 // its life) and moves 60 times a second: velocities are per tick (300 a second, 5 a frame),
 // friction and acceleration per frame. At a time of its life it can take the fields of another
-// launcher (next-launcher: steam that fades out).
+// launcher (next-launcher: steam that fades out). Fire, flames and lava take their color, alpha and
+// size from the game's curves over their life (birth-func-curve, live-func-curve).
 //
 // The view runs the effects of the document (the actors naming a group by their art-name: the
 // call `effect_emitters`) and draws them as sprites facing the camera with the game's textures,
@@ -30,7 +31,7 @@ import {
   type Vec4,
 } from "./math";
 import type { Renderer } from "./renderer";
-import type { RenderSettings } from "./types";
+import { BlendMode, type RenderSettings } from "./types";
 import { viewport } from "./viewport_api";
 
 // the files the engine serves (asset?path=, docs/rust-architecture.md §4)
@@ -98,8 +99,18 @@ export interface SpSpec {
 }
 
 // sp-cpuinfo-flag bits the editor uses
+const kSpAdd = 1 << 3; // sp-cpuinfo-flag-3: added to what is behind (the GS's alpha #x48)
+const kSpSub = 1 << 4; // sp-cpuinfo-flag-4: taken from what is behind (#x42)
 const kSpGlow = 1 << 15; // drawn by the glow renderer: added to what is behind
 const kSpGlobalAcc = 1 << 16; // its acceleration in the world (not turned with the effect)
+
+// how a particle mixes with what is behind it (sp-launch-particles-var: the GS's alpha #x44, mixed,
+// unless flag 4, subtracted, or flag 3, added: most fire, sparks and lights, their textures opaque,
+// their shape in their colors on black)
+function blendOf(flags: number): number {
+  if (flags & (kSpAdd | kSpGlow)) return BlendMode.AddAlpha;
+  return flags & kSpSub ? BlendMode.Subtract : BlendMode.Alpha;
+}
 
 // a part of a group: a launcher and when it launches (sp-group-item)
 export interface SpItem {
@@ -118,6 +129,63 @@ export interface SpGroup {
   flags: number; // sp-group-flag: bit 4, the effect turned with its actor
   radius: number; // meters: its bounds
   items: SpItem[];
+}
+
+// a curve of the game (curve2d-fast; curve-color-fast: ys 4 colors), its keys at -xs: odx the
+// slope of each segment (2d), or 1 / its length (colors)
+export interface Curve {
+  xs: number[];
+  ys: number[];
+  odx: number[];
+}
+
+// particle-curve-settings: a launcher drawn by curves (birth-func-curve, live-func-curve)
+export interface CurveSettings {
+  life: number; // ticks, and a random offset
+  offset: number;
+  flags: number; // pcf0 1: scale-y is scale-x; pcf1 2: the color over its life; pcf2 4: color and size at birth
+  birth: boolean; // the functions it runs
+  live: boolean;
+  curves: (Curve | null)[]; // CURVE_FIELDS
+}
+
+// in the game's order: picked at random at birth, then scaled over the life (0 to 1)
+const CURVE_FIELDS = [
+  "color-start",
+  "alpha-start",
+  "scale-x-start",
+  "scale-y-start",
+  "r-scalar",
+  "g-scalar",
+  "b-scalar",
+  "a-scalar",
+  "scale-x-scalar",
+  "scale-y-scalar",
+];
+function curveOf(v: any, ys: number): Curve | null {
+  const ok = (a: unknown, n: number) =>
+    Array.isArray(a) && a.length === n && a.every((x) => typeof x === "number");
+  return v && ok(v.xs, 4) && ok(v.odx, 4) && ok(v.ys, ys)
+    ? { xs: v.xs, ys: v.ys, odx: v.odx }
+    : null;
+}
+
+// curve2d-fast at x (0 to 1)
+function curveAt(c: Curve, x: number): number {
+  x = Math.min(Math.max(x, 0), 1);
+  const k = x + c.xs[2] >= 0 ? 2 : x + c.xs[1] >= 0 ? 1 : 0;
+  return c.ys[k] + (x + c.xs[k]) * c.odx[k];
+}
+
+// curve-color-fast at x: between the two colors of its segment (the sign as the VU tests it)
+function curveColor(c: Curve, x: number): number[] {
+  const w = (k: number) => (x + c.xs[k]) * c.odx[k];
+  const pos = (v: number) => v > 0 || Object.is(v, 0);
+  const k = pos(w(2)) ? 2 : pos(w(1)) ? 1 : 0;
+  const f = w(k);
+  return [0, 1, 2].map(
+    (i) => c.ys[k * 4 + i] * (1 - f) + c.ys[(k + 1) * 4 + i] * f,
+  );
 }
 
 const CPUINFO_BITS: Record<string, number> = {
@@ -158,6 +226,7 @@ const num = (v: unknown) => (typeof v === "number" ? v : 0);
 export class ParticleData {
   private groups = new Map<string, SpGroup>();
   private launchers = new Map<number, SpSpec[]>();
+  private curves = new Map<number, CurveSettings>();
   // the textures the launchers draw: "<tpage>/<name>", or "<page>:<index>"
   readonly textures: string[] = [];
 
@@ -225,6 +294,17 @@ export class ParticleData {
         list.push(spec);
       }
     }
+    for (const [id, c] of Object.entries<any>(j.curves ?? {})) {
+      if (!c || typeof c !== "object") continue;
+      out.curves.set(parseInt(id) || 0, {
+        life: Math.trunc(num(c.life?.[0])),
+        offset: Math.trunc(num(c.life?.[1])),
+        flags: Math.trunc(num(c.flags)),
+        birth: c.birth === true,
+        live: c.live === true,
+        curves: CURVE_FIELDS.map((n, i) => curveOf(c[n], i ? 4 : 16)),
+      });
+    }
     for (const [name, g] of Object.entries<any>(j.groups)) {
       const group: SpGroup = {
         name,
@@ -263,6 +343,9 @@ export class ParticleData {
   launcher(id: number): SpSpec[] | null {
     return this.launchers.get(id) ?? null;
   }
+  curve(id: number): CurveSettings | null {
+    return this.curves.get(id) ?? null;
+  }
 }
 
 let data_promise: Promise<ParticleData | null> | null = null;
@@ -289,7 +372,7 @@ export interface ParticleSprite {
   rot: number; // radians
   color: Vec4; // 1 is the texture as it is (the game's 128)
   texture: number; // ParticleData.textures, -1 none
-  additive: boolean;
+  blend: number; // BlendMode: Alpha, AddAlpha or Subtract
   from_left: boolean; // the sprite starts at its position (the game's flag 4: streaks), else centered
 }
 
@@ -302,6 +385,9 @@ interface Particle {
   age: number; // ticks
   texture: number;
   flags: number;
+  curve: CurveSettings | null; // drawn by curves: their random picks, its life (ticks)
+  rnd: number[];
+  life: number;
 }
 
 interface Emitter {
@@ -420,7 +506,13 @@ export class ParticleSystem {
     }
   }
 
-  private launch(e: Emitter, specs: SpSpec[], rate: number, i: number) {
+  private launch(
+    e: Emitter,
+    specs: SpSpec[],
+    rate: number,
+    i: number,
+    curve: CurveSettings | null,
+  ) {
     // how many: num a launch (a fraction carried to the next)
     let count = 1;
     for (const s of specs)
@@ -452,8 +544,12 @@ export class ParticleSystem {
         age: 0,
         texture: -1,
         flags: 0,
+        curve: null,
+        rnd: [],
+        life: 0,
       };
       this.init(p, specs, false);
+      if (curve) this.birth(p, curve);
       const f = p.f;
       // launched along its cone and turned (the launcher's), then turned with the effect
       const r = matMul(
@@ -474,6 +570,53 @@ export class ParticleSystem {
       p.next_time = f[SP.NextLauncher] !== 0 ? Math.trunc(f[SP.NextTime]) : -1;
       this.particles.push(p);
     }
+  }
+
+  // birth-func-curve: its life, its random picks; its color and size picked now (pcf2, or a color
+  // that does not change)
+  private birth(p: Particle, c: CurveSettings) {
+    const f = p.f,
+      [color, , sx, sy] = c.curves;
+    p.curve = c;
+    p.life = c.life + (c.offset > 0 ? Math.floor(this.random() * c.offset) : 0);
+    const r = (p.rnd = [
+      this.random(),
+      this.random(),
+      this.random(),
+      this.random(),
+    ]);
+    if (!c.birth) return;
+    f[SP.Timer] = p.life;
+    f[SP.A] = 0;
+    if (color && (c.flags & 4 || !(c.flags & 2)))
+      f.set(curveColor(color, r[0]), SP.R);
+    if (!(c.flags & 4)) return;
+    if (sx) f[SP.ScaleX] = curveAt(sx, r[2]) * 4096;
+    if (c.flags & 1) f[SP.ScaleY] = f[SP.ScaleX];
+    else if (sy) f[SP.ScaleY] = curveAt(sy, r[3]) * 4096;
+  }
+
+  // live-func-curve: its color, alpha and size, picked at birth, scaled over its life
+  private live(p: Particle) {
+    const c = p.curve!,
+      f = p.f,
+      r = p.rnd;
+    const [color, alpha, sx, sy, ...over] = c.curves;
+    const [, , , a, sxOver, syOver] = over;
+    const t = p.life > 0 ? (p.life - f[SP.Timer]) / p.life : 0;
+    if (color && c.flags & 2) {
+      const rgb = curveColor(color, r[0]);
+      for (let i = 0; i < 3; i++) {
+        const o = over[i];
+        if (o) f[SP.R + i] = rgb[i] * curveAt(o, t);
+      }
+    }
+    if (alpha && a) f[SP.A] = curveAt(alpha, r[1]) * curveAt(a, t);
+    if (sx && sxOver)
+      f[SP.ScaleX] = Math.abs(curveAt(sx, r[2]) * 4096 * curveAt(sxOver, t));
+    if (c.flags & 1) f[SP.ScaleY] = f[SP.ScaleX];
+    else if (sy && syOver)
+      f[SP.ScaleY] = Math.abs(curveAt(sy, r[3]) * 4096 * curveAt(syOver, t));
   }
 
   private step(data: ParticleData, camera: Vec3, hour: number) {
@@ -498,7 +641,7 @@ export class ParticleSystem {
           // sp3: once
           if (!e.launched[i]) {
             e.launched[i] = true;
-            this.launch(e, specs, rate, i);
+            this.launch(e, specs, rate, i, data.curve(item.launcher));
           }
           return;
         }
@@ -513,7 +656,7 @@ export class ParticleSystem {
             item.period;
           if (t >= item.length) return;
         }
-        this.launch(e, specs, rate, i);
+        this.launch(e, specs, rate, i, data.curve(item.launcher));
       });
       e.clock += kTicks;
     }
@@ -567,7 +710,9 @@ export class ParticleSystem {
       f[SP.RotZ] += f[SP.RotVelZ] * kTicks;
       for (let c = 0; c < 4; c++)
         f[SP.R + c] = Math.max(0, f[SP.R + c] + f[SP.FadeR + c] * kTicks);
-      if (f[SP.A] <= 0 && f[SP.FadeA] <= 0 && p.age > kTicks) continue; // faded out
+      if (p.curve?.live) this.live(p);
+      // faded out (curves: at the end of its life)
+      else if (f[SP.A] <= 0 && f[SP.FadeA] <= 0 && p.age > kTicks) continue;
       list[alive++] = p;
     }
     list.length = alive;
@@ -589,7 +734,7 @@ export class ParticleSystem {
           Math.min(f[SP.A], 128) / 128,
         ],
         texture: p.texture,
-        additive: (p.flags & kSpGlow) !== 0,
+        blend: blendOf(p.flags),
         from_left: (Math.trunc(f[SP.RotX]) & 15) === 4,
       };
       if (s.sx <= 0 || s.sy <= 0 || s.color[3] <= 0.002) continue;
@@ -787,8 +932,7 @@ export class SpriteRenderer {
       .sort((a, b) => {
         const sa = sprites[a],
           sb = sprites[b];
-        if (sa.additive !== sb.additive) return sa.additive ? 1 : -1;
-        return sa.texture - sb.texture;
+        return sa.blend - sb.blend || sa.texture - sb.texture;
       });
     if (this.verts.length < sprites.length * 6 * FLOATS)
       this.verts = new Float32Array(sprites.length * 6 * FLOATS * 2);
@@ -797,7 +941,7 @@ export class SpriteRenderer {
       first: number;
       count: number;
       texture: number;
-      additive: boolean;
+      blend: number;
     }[] = [];
     const ax = [0, 0, 0],
       ay = [0, 0, 0],
@@ -815,12 +959,12 @@ export class SpriteRenderer {
       xs[0] = xs[3] = s.from_left ? 0 : -0.5;
       xs[1] = xs[2] = xs[0] + 1;
       const last = runs[runs.length - 1];
-      if (!last || last.texture !== s.texture || last.additive !== s.additive)
+      if (!last || last.texture !== s.texture || last.blend !== s.blend)
         runs.push({
           first: o / FLOATS,
           count: 0,
           texture: s.texture,
-          additive: s.additive,
+          blend: s.blend,
         });
       for (const k of CORNERS) {
         for (let a = 0; a < 3; a++)
@@ -844,16 +988,22 @@ export class SpriteRenderer {
     gl.depthMask(false);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
-    gl.blendEquation(gl.FUNC_ADD);
     let draws = 0;
     for (const r of runs) {
       const tex = this.texture(textures[r.texture]);
       if (!tex) continue; // its picture is being read
-      gl.blendFunc(gl.SRC_ALPHA, r.additive ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
+      gl.blendEquation(
+        r.blend === BlendMode.Subtract ? gl.FUNC_REVERSE_SUBTRACT : gl.FUNC_ADD,
+      );
+      gl.blendFunc(
+        gl.SRC_ALPHA,
+        r.blend === BlendMode.Alpha ? gl.ONE_MINUS_SRC_ALPHA : gl.ONE,
+      );
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.drawArrays(gl.TRIANGLES, r.first, r.count);
       draws++;
     }
+    gl.blendEquation(gl.FUNC_ADD);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.disable(gl.BLEND);
     gl.depthMask(true);
@@ -882,9 +1032,10 @@ function fogEffects(
     const f = Math.min(Math.max((d - start) / (end - start), 0), 1) * most;
     if (f <= 0) continue;
     for (let k = 0; k < 3; k++)
-      s.color[k] = s.additive
-        ? s.color[k] * (1 - f)
-        : s.color[k] + (rs.game_fog[k] - s.color[k]) * f;
+      s.color[k] =
+        s.blend !== BlendMode.Alpha
+          ? s.color[k] * (1 - f)
+          : s.color[k] + (rs.game_fog[k] - s.color[k]) * f;
   }
 }
 

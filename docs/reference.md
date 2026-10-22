@@ -240,7 +240,10 @@ copy of `data/` a build puts next to its program (the engine's tests read `data/
 - **Effects**: the particle effects run by the game's rules (`data/jak3/particles.json`,
   `ui/render/particles.ts`; `crates/core/src/scene/particles.rs` is the reference its tests prove);
   some parts launch only at some hours; in the game rendering they fade in the fog by their
-  distance.
+  distance. A particle mixes with what is behind it as the game sets it (`sp-cpuinfo-flag-3` and
+  glows added: fire, sparks, lights; `-4` subtracted; the others mixed), and fire, flames and lava
+  take their color, alpha and size over their life from the game's curves (`birth-func-curve`,
+  `live-func-curve`: the `curves` of `particles.json`).
 
 ## 6. The export for the game
 

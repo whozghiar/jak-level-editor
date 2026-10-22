@@ -37,7 +37,7 @@ export function thumbKey(r: ThumbRequest): string {
     case "icon":
       return `i1:${r.etype}#${r.family}`;
     case "effect":
-      return `e2:${r.group}@0`;
+      return `e4:${r.group}@0`;
     case "shape":
       return `s:${r.preset}`;
   }
