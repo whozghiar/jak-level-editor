@@ -35,16 +35,16 @@ This document has two parts:
 ## 1. What it is, in plain words
 
 **MCP** (Model Context Protocol) is a common language that lets an AI assistant use the tools of a
-program, the way you use its menus. **jak-level-editor-mcp**, the editor's MCP server, is the
-interpreter between the two: the assistant says *"place the prefab small-fountain at 0, 0, 18"*, the
+program. **jak-level-editor-mcp**, the editor's MCP server, passes the assistant's requests to the
+editor: the assistant says *"place the prefab small-fountain at 0, 0, 18"*, the
 server passes it to the editor, the fountain appears in your window.
 
-Think of it as a remote control for the editor that only an assistant you started can hold:
+Who does what:
 
 - **you** talk to the assistant (Claude Code, or another MCP client) in your own words;
 - **the assistant** chooses the editor's tools and their settings, and calls them one after the
   other;
-- **the editor** does each one in its window, as if you had clicked: you see it happen, you can
+- **the editor** does each one in its window, through the same calls as your clicks: you see it happen, you can
   stop the assistant at any moment, and **Edit > Undo** (Ctrl+Z) takes back any step.
 
 It never touches the game itself nor your files without being asked: it saves or exports only when

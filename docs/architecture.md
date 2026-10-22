@@ -56,11 +56,9 @@ The editor is made of two halves that talk to each other:
   the engine tells it and passes on what you do. It is a web page (**Svelte** and **TypeScript**)
   shown in a desktop window.
 
-Think of a restaurant. The interface is the dining room: the waiter takes your order and brings
-your plate. The engine is the kitchen: it has the ingredients (the level) and the recipes (the
-editor's tools); it cooks, and never goes into the dining room. The order is written on a ticket
-(a **call**); when the plate is ready, the kitchen rings a bell (an **event**) and the waiter comes
-to get it.
+They exchange two kinds of messages: **calls**, the interface asking the engine to do or tell
+something (`open_level`, `select_only`, `transform_nodes`), and **events**, the engine telling the
+interface that something changed (`jle:changed`).
 
 Follow one action from beginning to end. In the industrial zone of Haven City (the level
 `ctyinda`), you click a crate, then drag the red arrow of the gizmo to move it 2 meters to the left:
@@ -96,7 +94,7 @@ sequenceDiagram
 3. **The release.** Now the move is decided: the interface sends one call, `transform_nodes`, with
    the crate's new place. The engine moves the crate and writes in its **history** how to put it
    back. **Ctrl+Z** undoes the whole move in one step, not the hundreds of small moves of the drag.
-4. **The bell.** The engine sends the event `jle:changed`, saying what changed (here, the scene).
+4. **The event.** The engine sends the event `jle:changed`, saying what changed (here, the scene).
    Every part of the interface that cares is listening: the 3D view asks what moved (only the crate,
    not the whole level), the inspector shows the crate's new position, the Edit menu now offers
    *Undo Move*.
@@ -109,7 +107,7 @@ Why split it in two?
 
 - **The engine can be tested without a window.** Its tests (`cargo test -p jak-level-editor-core`,
   more than a hundred) open levels, move things, undo, export, with nothing on screen.
-- **The same engine serves three masters**: the editor's own window, the OpenGOAL Launcher, and an
+- **The same engine is used from three places**: the editor's own window, the OpenGOAL Launcher, and an
   AI assistant through the MCP server. They all send the same calls.
 - **Each half does what its language is good at**: Rust for the heavy work (reading gigabytes of
   levels, casting rays, making nav meshes), the web for windows, buttons and drawing.
@@ -186,8 +184,9 @@ You do not need to learn these by heart: come back here when a word stops you.
 | `.claude/skills/`, `.agents/skills/` | instructions for AI agents working on the repository | |
 
 Why so many pieces for one editor? The engine knows nothing of windows, and it must not: it also
-runs in its tests and inside the launcher. `crates/tauri-plugin` is its plug: the same appliance
-works in any socket, and the standalone app and the OpenGOAL Launcher are two sockets.
+runs in its tests and inside the launcher. `crates/tauri-plugin` connects it to a Tauri
+window, and the standalone app (`src-tauri/`) and the OpenGOAL Launcher both load that same plugin:
+the launcher adds it with two lines of Rust, without a copy of the engine's code.
 
 ```mermaid
 flowchart LR
@@ -234,8 +233,8 @@ shows the brush's circle.
 under it, to light it up. Testing the ray against every triangle of a level would be far too slow.
 So the engine sorts the triangles into boxes, the boxes into bigger boxes, and so on: a **BVH**
 (`crates/core/src/scene/bvh.rs`). The ray tests a big box first; if it misses it, everything inside
-is skipped at once. It is how you would find a street: the city first, then the district, then the
-street, never every house of the country.
+is skipped at once. A ray cast at the sky above the slums misses the boxes of every house at the
+first tests, and no triangle of theirs is ever looked at.
 
 ## 5. The interface: what you see and touch
 
@@ -272,9 +271,9 @@ call.
 
 ## 6. How the two talk
 
-There are three channels, like the restaurant's ticket, bell and delivery door.
+There are three channels.
 
-**1. Calls, the ticket.** One Tauri command carries every call, a name and its arguments, answered
+**1. Calls.** One Tauri command carries every call, a name and its arguments, answered
 with JSON:
 
 ```ts
@@ -287,7 +286,7 @@ There are about 160 calls, listed in `crates/core/src/editor/api.rs`. Their name
 before the program even runs, and a test of the engine checks that this list is exactly the
 engine's.
 
-**2. Events, the bell.** The engine speaks first only through events:
+**2. Events.** The engine speaks first only through events:
 
 | Event | When | Example |
 |---|---|---|
@@ -296,7 +295,7 @@ engine's.
 | `jle:log` | a line of the log | "Level ctyinda loaded (... actors)" |
 | `jle:request` | the engine needs the interface | the MCP server wants a picture of the 3D view |
 
-**3. `jle://` addresses, the delivery door.** Meshes and textures are big, and JSON is text: a
+**3. `jle://` addresses.** Meshes and textures are big, and JSON is text: a
 vertex's position written `[123.456789, 4.000000, -35.500000]` is about 35 characters, the same
 position in binary is 12 bytes. For a level of many thousands of triangles that is several times
 more to send and far more to read. So the 3D view reads them like files from a web address that the

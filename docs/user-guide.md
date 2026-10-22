@@ -59,7 +59,7 @@ piece carries its colors for the sun from four directions, the ambient light and
 game mixes them according to the **hour of the day** and the **weather**. The editor's **game
 rendering** draws the level exactly so: what you see is what the game will show.
 
-**A prefab** is a set of elements saved together to be placed again anywhere, like a stamp: a
+**A prefab** is a set of elements saved together to be placed again anywhere: a
 house, a fountain, a market stall. The editor also makes **the game's prefabs**: whole buildings,
 towers and bridges taken from the game's levels.
 
