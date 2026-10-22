@@ -86,3 +86,56 @@ jobs:
         run: |
           yarn install --frozen-lockfile
           yarn tauri build --no-bundle
+
+  launcher:
+    # the OpenGOAL Launcher built with this commit of the editor as its submodule level-editor/, on
+    # the platforms of its releases: a change that breaks it shows here, not at its release. Its
+    # branch: the repository variable LAUNCHER_REF, else master-dev
+    name: OpenGOAL Launcher (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: whozghiar/open-goal-launcher
+          ref: ${{ vars.LAUNCHER_REF || 'master-dev' }}
+          path: launcher
+
+      - uses: actions/checkout@v7
+        with:
+          path: launcher/level-editor
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: launcher/yarn.lock
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: launcher-${{ matrix.os }}
+          workspaces: launcher/src-tauri
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Check and build its interface
+        working-directory: launcher
+        run: |
+          yarn install --frozen-lockfile
+          yarn typecheck
+          yarn build
+
+      - name: Build it and test its Level Editor's parts
+        working-directory: launcher/src-tauri
+        run: |
+          cargo build
+          cargo test level_edited

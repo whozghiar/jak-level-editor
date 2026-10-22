@@ -25,11 +25,16 @@ git push origin v2.1.0    # the tag
 ```
 
 The tag starts the workflow (the **Actions** tab, **Release**). Its first step fails when the tag
-and the three versions differ: fix the files, then move the tag
-(`git tag -f v2.1.0 && git push -f origin v2.1.0`).
+and the three versions differ: delete the tag (`git push origin :v2.1.0`, nothing was released
+yet), fix the files, then tag again.
 
-Without a tag: **Actions > Release > Run workflow** on a branch. The draft is then named after the
-version of `package.json`, and its tag is created on the commit built when you publish it.
+A tag whose release was published is never moved: the OpenGOAL Launcher's submodule is pinned to
+it, and its users download ogle-extract from that release. A wrong release is fixed by the next
+version.
+
+To try a build first: **Actions > Release > Run workflow** on a branch, without a tag. The draft
+is then named after the version of `package.json`; delete it when done (its tag is only created
+when it is published).
 
 ## 3. Check the draft
 
@@ -58,3 +63,23 @@ it works once the release is published.
 
 A failed platform can be built again: **Re-run failed jobs** on the workflow's run (the assets
 already uploaded are replaced).
+
+## 5. The OpenGOAL Launcher
+
+The launcher holds the editor as its submodule `level-editor/`, pinned to a release's tag:
+
+```bash
+git -C level-editor fetch --tags
+git -C level-editor checkout v2.1.0
+git add level-editor
+git commit
+```
+
+Its release workflow refuses a submodule that is not at the tag of a published release of the
+editor with `ogle-extract-windows-x64.zip` and `ogle-extract-linux-x64.zip`. The job **OpenGOAL
+Launcher** of this repository's Build workflow builds the launcher with each commit of the editor,
+on the four platforms of its releases: its branch is the repository variable `LAUNCHER_REF`
+(**Settings > Secrets and variables > Actions > Variables**), else `master-dev`.
+
+The launcher's Play needs a release of whozghiar/jak-project newer than `v0.3.9-whozghiar.1`: its
+gk starts the game at a level's continue point (`-level`).
