@@ -353,6 +353,8 @@ impl OpenGoal {
     if !self.stale() {
       return Ok(RuntimeState::read(&self.folder));
     }
+    // the game started before keeps its data's files open
+    stop_game();
     if self.data_dir.exists() {
       std::fs::remove_dir_all(&self.data_dir)
         .map_err(|e| format!("{}: {e}", self.data_dir.display()))?;
