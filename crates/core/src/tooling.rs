@@ -217,15 +217,17 @@ fn exe(dir: &Path, name: &str) -> PathBuf {
   dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX))
 }
 
-/// The versions installed in `versions` (a folder with gk), newest first
+/// Written last into a version's folder: it is complete (a folder without it was being unpacked)
+pub(crate) const COMPLETE: &str = ".jle-installed";
+
+/// The versions installed in `versions` (a complete folder with gk), newest first
 pub fn installed(versions: &Path) -> Vec<String> {
   let mut list: Vec<String> = std::fs::read_dir(versions)
     .into_iter()
     .flatten()
     .flatten()
-    .filter(|e| exe(&e.path(), "gk").is_file())
+    .filter(|e| exe(&e.path(), "gk").is_file() && e.path().join(COMPLETE).is_file())
     .filter_map(|e| e.file_name().to_str().map(str::to_string))
-    .filter(|n| !n.ends_with(".part"))
     .collect();
   list.sort_by(|a, b| version_key(b).cmp(&version_key(a)).then_with(|| b.cmp(a)));
   list
@@ -314,8 +316,9 @@ pub fn installing() -> String {
   INSTALLING.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
-/// Downloads `release` into `versions/<tag>/` (unpacked in `<tag>.part/`, renamed once complete),
-/// its progress as events
+/// Downloads `release` and unpacks it into `versions/<tag>/`, marked complete at the end, its
+/// progress as events. Nothing is renamed: a folder synchronised by a cloud drive, or scanned by an
+/// antivirus, refuses the rename of a folder whose programs were just written (os error 5).
 pub fn install(versions: &Path, release: &Release, events: &HostEvents) -> Result<PathBuf, String> {
   {
     let mut busy = INSTALLING.lock().unwrap_or_else(|e| e.into_inner());
@@ -326,29 +329,29 @@ pub fn install(versions: &Path, release: &Release, events: &HostEvents) -> Resul
   }
   let r = (|| {
     let dest = versions.join(&release.tag);
-    let part = versions.join(format!("{}.part", release.tag));
-    let _ = std::fs::remove_dir_all(&part);
-    std::fs::create_dir_all(&part).map_err(|e| format!("{}: {e}", part.display()))?;
-    let archive = part.join(&release.asset);
+    if dest.exists() {
+      std::fs::remove_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+    }
+    std::fs::create_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+    let archive = versions.join(&release.asset);
     download(&release.url, &archive, release.size, events)?;
     events(HostEvent::Step {
       key: "tooling.step.unpack".into(),
       args: vec![release.tag.clone()],
     });
-    unpack(&archive, &part)?;
+    unpack(&archive, &dest)?;
     let _ = std::fs::remove_file(&archive);
-    if !exe(&part, "gk").is_file() {
+    if !exe(&dest, "gk").is_file() {
       return Err(format!("{}: no gk in it", release.asset));
     }
-    if dest.exists() {
-      std::fs::remove_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
-    }
-    std::fs::rename(&part, &dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+    std::fs::write(dest.join(COMPLETE), &release.tag)
+      .map_err(|e| format!("{}: {e}", dest.display()))?;
     Ok(dest)
   })();
   INSTALLING.lock().unwrap_or_else(|e| e.into_inner()).clear();
   if r.is_err() {
-    let _ = std::fs::remove_dir_all(versions.join(format!("{}.part", release.tag)));
+    let _ = std::fs::remove_dir_all(versions.join(&release.tag));
+    let _ = std::fs::remove_file(versions.join(&release.asset));
   }
   r
 }
@@ -432,10 +435,14 @@ mod tests {
     for v in [
       "v0.3.9-whozghiar.1",
       "v0.3.10-whozghiar.1",
-      "v0.3.9-whozghiar.2.part",
+      "v0.3.9-whozghiar.2",
     ] {
       std::fs::create_dir_all(versions.join(v)).unwrap();
       std::fs::write(exe(&versions.join(v), "gk"), "").unwrap();
+      // the last one was still being unpacked: not complete
+      if v != "v0.3.9-whozghiar.2" {
+        std::fs::write(versions.join(v).join(COMPLETE), v).unwrap();
+      }
     }
     std::fs::create_dir_all(versions.join("empty")).unwrap();
     let list = installed(&versions);
@@ -482,6 +489,8 @@ mod tests {
     let dest = tmp.join("v0.3.9-whozghiar.1");
     unpack(&archive, &dest).unwrap();
     assert!(dest.join("data/goal_src/jak3/game.gp").is_file());
+    assert!(installed(&tmp).is_empty(), "not marked complete yet");
+    std::fs::write(dest.join(COMPLETE), "v0.3.9-whozghiar.1").unwrap();
     assert_eq!(installed(&tmp), ["v0.3.9-whozghiar.1"]);
     // a .tar.gz (Linux's)
     let tgz = tmp.join("a.tar.gz");

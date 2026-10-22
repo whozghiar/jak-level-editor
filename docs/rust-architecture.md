@@ -314,8 +314,9 @@ an hour later or on request, never waiting; no network or GitHub's limit keeps w
 the versions installed); a release's archive is the launcher's choice (`asset_for`: the system's
 name, not `lsp`, not `.bin`: `opengoal-windows-<tag>.zip`, `opengoal-linux-<tag>.tar.gz`); the
 newest is the highest X.Y.Z, then N, then the later date (`version_key`). `install` downloads it
-(reqwest, zip, tar and flate2, as the launcher: nothing more in its build) into `<tag>.part/`,
-unpacks it there and renames it `<tag>/`; the version used is the preference `tooling_version` when
+(reqwest, zip, tar and flate2, as the launcher: nothing more in its build) and unpacks it into
+`<tag>/`, marked complete last by `.jle-installed` (no folder is renamed: a cloud drive or an
+antivirus refuses it while they hold the new programs); the version used is the preference `tooling_version` when
 installed, else the newest installed. Calls: `tooling_state {check?}` (null without `tooling_dir`:
 `{dir, status, active, releases: [{tag, date, size, asset, installed}], checked, checking, error,
 installing}`), `tooling_install {version, wait?}` (the job `tooling`, `jle:progress`; then used),

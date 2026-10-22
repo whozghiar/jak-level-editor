@@ -1183,6 +1183,7 @@ mod tests {
     for p in ["gk", "goalc", "extractor"] {
       std::fs::write(exe(&v1, p), "").unwrap();
     }
+    std::fs::write(v1.join(crate::tooling::COMPLETE), "v0.3.9-whozghiar.1").unwrap();
     let og = own().unwrap().game;
     assert!(
       og.kind == "opengoal"

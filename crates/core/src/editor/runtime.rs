@@ -574,6 +574,7 @@ mod tests {
       std::fs::create_dir_all(versions.join(v)).unwrap();
       let gk = format!("gk{}", std::env::consts::EXE_SUFFIX);
       std::fs::write(versions.join(v).join(gk), "").unwrap();
+      std::fs::write(versions.join(v).join(crate::tooling::COMPLETE), v).unwrap();
     }
     ed.host = Host {
       runtime: Some(Arc::new(ToolingRuntime(versions.clone()))),
