@@ -81,5 +81,6 @@ Launcher** of this repository's Build workflow builds the launcher with each com
 on the four platforms of its releases: its branch is the repository variable `LAUNCHER_REF`
 (**Settings > Secrets and variables > Actions > Variables**), else `master-dev`.
 
-The launcher's Play needs a release of whozghiar/jak-project newer than `v0.3.9-whozghiar.1`: its
-gk starts the game at a level's continue point (`-level`).
+The launcher's Play needs a release of whozghiar/jak-project; from the one after
+`v0.3.9-whozghiar.1` on, its gk starts the game at a level's continue point itself (`-level`),
+without goalc.

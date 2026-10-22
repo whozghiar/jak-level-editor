@@ -686,9 +686,10 @@ blue ghost to compare), **Place it where the original is**, check where the game
 Play in the game**) does the rest for you, in the launcher's game for the editor
 (`<install>/features/jak3/level_edited/`), apart from your Jak 3, its saves and your mods. It runs
 with the launcher's active OpenGOAL, a release of
-[whozghiar/jak-project](https://github.com/whozghiar/jak-project) newer than `v0.3.9-whozghiar.1`
-(OpenGOAL with the level builder's fixes the editor's levels need, and a `gk` that starts the game
-at a level): the launcher's header and its Settings > Versions install and choose it. Play exports
+[whozghiar/jak-project](https://github.com/whozghiar/jak-project) (OpenGOAL with the level
+builder's fixes the editor's levels need; from the release after `v0.3.9-whozghiar.1` on, its `gk`
+starts the game at a level by itself): the launcher's header and its Settings > Versions install
+and choose it. Play exports
 the level into `exports/<project>/`, installs it in that game (its files in the level's own folders,
 its lines in `game.gp` and `level-info.gc` between `;; jak-level-editor: begin <name>` and `end`
 lines), builds the game and starts it at your level. The first Play with a version also decompiles

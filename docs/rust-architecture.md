@@ -288,8 +288,9 @@ sides per mesh, the list of everything visible), and a tool starts the game at a
 `-level <continue point>` (`gk -- -boot -fakeiso -debug -level <continue>`: Jak 3's play boots
 there). Both are in the user's fork `whozghiar/jak-project`, whose tooling releases are tagged
 `vX.Y.Z-whozghiar.N` (upstream's X.Y.Z, the fork's build N); `-level` from the release after
-`v0.3.9-whozghiar.1` on. The launcher installs and updates those releases (its
-`TOOLING_REPOSITORY`) and plays with them only.
+`v0.3.9-whozghiar.1` on (with that one, the launcher's goalc REPL takes Jak to the continue point
+instead). The launcher installs and updates those releases (its `TOOLING_REPOSITORY`) and plays
+with them only.
 
 ## 7. In the launcher
 
