@@ -1,4 +1,4 @@
-//! The jle:// protocol's answers (docs/rust-architecture.md §4), little-endian: the scene (in full
+//! The jle:// protocol's answers (docs/architecture.md §14), little-endian: the scene (in full
 //! or what changed since the last answer), a mesh, a texture, the materials. The plugin serves
 //! them: it copies what it needs under the editor's lock (`scene_records`, an `Arc` of a mesh, a
 //! texture's bytes), then encodes without it.

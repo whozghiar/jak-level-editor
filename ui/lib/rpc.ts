@@ -1,4 +1,4 @@
-// The interface's line to the engine (docs/rust-architecture.md, 3 and 4): one command carrying every
+// The interface's line to the engine (docs/architecture.md, 13 and 14): one command carrying every
 // call, the engine's events, the URLs of the jle:// protocol; and the toasts that show its errors.
 
 import { invoke } from "@tauri-apps/api/core";

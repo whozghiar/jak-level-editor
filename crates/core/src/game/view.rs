@@ -10,7 +10,7 @@
 //! Actors' models, the levels shown for reference and the editor's overlays are the editor's to
 //! draw, with the game's camera and depth.
 //!
-//! The interface reads them on the jle:// protocol (docs/rust-architecture.md §4, "Game view"):
+//! The interface reads them on the jle:// protocol (docs/architecture.md §14, "Game view"):
 //! `gameview` (update, then encode_chunk_list), `gameview/chunk/<id>` (encode_chunk),
 //! `gameview/palette/<key>` (encode_palette).
 

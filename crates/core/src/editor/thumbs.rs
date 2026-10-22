@@ -4,7 +4,7 @@
 //! interface draws it offscreen (ui/render/thumbnails.ts) and stores the PNG with
 //! `thumb_store {name, png}` in <preferences>/thumbs, served again as `thumb/<name>` (404 until
 //! then), so each is drawn once. `palette?...` is the image of a texture of the games (the texture
-//! browser's). docs/rust-architecture.md §4.
+//! browser's). docs/architecture.md §14.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

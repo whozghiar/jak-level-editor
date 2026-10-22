@@ -2,7 +2,7 @@
 //! or with the editor's command line (its own app):
 //! `.plugin(tauri_plugin_jak_level_editor::Builder::new().args(std::env::args()).build())`.
 //! The interface (ui/) calls the engine through the `call` command and reads the viewport's data
-//! on the `jle://` protocol (docs/rust-architecture.md).
+//! on the `jle://` protocol (docs/architecture.md).
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -292,7 +292,7 @@ fn bytes(body: Option<Vec<u8>>) -> Response<Vec<u8>> {
   }
 }
 
-/// The jle:// protocol (docs/rust-architecture.md §4). What it needs of the editor is copied
+/// The jle:// protocol (docs/architecture.md §14). What it needs of the editor is copied
 /// under its lock, then encoded without it.
 fn serve(
   editor: &EditorState,

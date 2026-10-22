@@ -8,7 +8,7 @@ description: Build or change a Jak 3 level in Jak Level Editor through its MCP t
 The editor's MCP server (`jak-level-editor-mcp`, the server `jak-level-editor` of `.mcp.json`: its
 tools are `mcp__jak-level-editor__<tool>`) acts on the editor window the user sees, and starts the
 editor when none runs (build both first: the build-and-test skill). The full guide, with
-examples, is `docs/mcp-agent-guide.md`: read it the first time. Positions are meters, Y is up;
+examples, is `docs/mcp.md` (its part 2): read it the first time. Positions are meters, Y is up;
 every change is undone with `undo`.
 
 ## The four rules (always)

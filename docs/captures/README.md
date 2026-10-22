@@ -1,7 +1,7 @@
 # Screenshots of the documentation
 
-The pictures of the [README](../../README.md) and of the [guide for AI agents](../mcp-agent-guide.md),
-one folder per feature:
+The pictures of the [user guide](../user-guide.md), of the [MCP tutorial](../mcp.md) and of the
+[README](../../README.md), one folder per feature:
 
 | Folder | What it shows |
 |---|---|

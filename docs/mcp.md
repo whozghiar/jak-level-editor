@@ -1,52 +1,62 @@
-# Building Jak 3 levels with the editor: a guide for AI agents
+# The MCP server: building levels with an AI assistant
 
-This guide is for an AI agent (Claude Code or any other client of the
-[Model Context Protocol](https://modelcontextprotocol.io)) that builds or changes levels of Jak 3 in
-Jak Level Editor, and for the person who sets it up. It explains what the editor's tools
-do, the ideas behind them (what a level, a facade, a prefab or a hole in the decor is) and the
-rules that make a level look right in the game, with complete examples.
+An AI assistant can use Jak Level Editor for you: you tell it what you want, in your own words, and
+it opens the level, places the buildings and the decor, checks for holes, looks at the result and
+shows it to you. It works in the editor's window, under your eyes, and every change it makes can be
+undone like yours.
 
-You do not need to know level editors to follow it: the notions a level needs are explained
-when they first appear. The user's guide of the editor itself is the [README](../README.md).
+This document has two parts:
 
-![What an agent sees after building a street: capture_view at the height of the player's eyes](captures/mcp/assistant-view.png)
+- **[Part 1, for you](#part-1-for-you)**: what it is, how to set it up, what to ask, what it can do.
+- **[Part 2, for the assistant](#part-2-for-the-assistant)**: what an AI agent needs to know to build
+  well (what a level is made of, the four rules, recipes, every tool). Claude Code reads it through
+  the repository's skill `.claude/skills/level-building-mcp/`; you can read it too, to know what
+  to expect.
+
+![What an assistant built and saw, at the height of the player's eyes: a street of Jak II's Main Town, a fountain, trees](captures/mcp/assistant-view.png)
 
 ## Contents
 
-1. [How it works](#1-how-it-works)
-2. [Setting it up](#2-setting-it-up)
-3. [What you need to know about a level](#3-what-you-need-to-know-about-a-level)
-4. [The four rules](#4-the-four-rules)
-5. [Recipes](#5-recipes)
-6. [Every tool](#6-every-tool)
-7. [When something goes wrong](#7-when-something-goes-wrong)
+- [Part 1, for you](#part-1-for-you)
+  1. [What it is, in plain words](#1-what-it-is-in-plain-words)
+  2. [Setting it up](#2-setting-it-up)
+  3. [Your first requests](#3-your-first-requests)
+  4. [What it can do](#4-what-it-can-do)
+  5. [How it works](#5-how-it-works)
+- [Part 2, for the assistant](#part-2-for-the-assistant)
+  6. [What you need to know about a level](#6-what-you-need-to-know-about-a-level)
+  7. [The four rules](#7-the-four-rules)
+  8. [Recipes](#8-recipes)
+  9. [Every tool](#9-every-tool)
+  10. [When something goes wrong](#10-when-something-goes-wrong)
 
-## 1. How it works
+# Part 1, for you
 
-```text
- you (the agent)  --MCP, stdio-->  jak-level-editor-mcp  --TCP 127.0.0.1:47821-->  the editor window
-```
+## 1. What it is, in plain words
 
-- `jak-level-editor-mcp` is the MCP server. It speaks the protocol on its standard input
-  and output and forwards every tool call to **the editor running on the user's computer**. When
-  no editor runs, it starts one (it takes a few seconds the first time).
-- Everything you do happens **in the window the user sees**: the user watches you build, and can
-  take over at any moment. Every change is one step of the editor's history: the user (or you,
-  with `undo`) can take it back.
-- The editor only listens on the computer itself (127.0.0.1): nothing is reachable from the
-  network. It listens only when the user lets an assistant control it (**File > Settings >
-  Assistant (MCP)**), or when the MCP server started it itself; every request carries the key the
-  editor writes into its settings folder (`remote.json`), which the server reads there.
+**MCP** (Model Context Protocol) is a common language that lets an AI assistant use the tools of a
+program, the way you use its menus. **jak-level-editor-mcp**, the editor's MCP server, is the
+interpreter between the two: the assistant says *"place the prefab small-fountain at 0, 0, 18"*, the
+server passes it to the editor, the fountain appears in your window.
 
-The server tells your client its rules when it starts (its `instructions`): they are the
-[four rules](#4-the-four-rules) of this guide in short.
+Think of it as a remote control for the editor that only an assistant you started can hold:
+
+- **you** talk to the assistant (Claude Code, or another MCP client) in your own words;
+- **the assistant** chooses the editor's tools and their settings, and calls them one after the
+  other;
+- **the editor** does each one in its window, as if you had clicked: you see it happen, you can
+  stop the assistant at any moment, and **Edit > Undo** (Ctrl+Z) takes back any step.
+
+It never touches the game itself nor your files without being asked: it saves or exports only when
+you ask it to.
 
 ## 2. Setting it up
 
-1. Build the editor and its MCP server ([README, Build it](../README.md#build-it): `npx yarn
-   install` once, `npx vite build`, then `cargo build --release -p jak-level-editor -p
-   jak-level-editor-mcp`: both land in `target/release/`) and extract the game
-   ([README, Extract your game](../README.md#extract-your-game)): without the extracted levels,
+1. Get the editor and its MCP server: a release's `jak-level-editor-mcp-<platform>.zip`, unzipped
+   next to the editor's program; or build both ([Build it yourself](architecture.md#10-build-it-yourself-and-test-it):
+   `npx yarn install` once, `npx vite build`, then `cargo build --release -p jak-level-editor -p
+   jak-level-editor-mcp`: both land in `target/release/`). Extract the game
+   ([user guide, Extract your game](user-guide.md#extract-your-game)): without the extracted levels,
    there is nothing to build with. The MCP server starts the editor found next to it (else in
    `target/debug/`), in its own window, when none listens; one already open is used once **File >
    Settings > Assistant (MCP) > Let an assistant control the editor** is ticked (else close it and
@@ -76,7 +86,69 @@ The server tells your client its rules when it starts (its `instructions`): they
 The repository also has a skill for Claude Code, `.claude/skills/level-building-mcp/`, which
 reminds an agent of these rules whenever it builds.
 
-## 3. What you need to know about a level
+## 3. Your first requests
+
+Talk to the assistant as you would to a person who knows Jak 3 and the editor. A few examples, and
+what it does with them:
+
+| You ask | What the assistant does |
+|---|---|
+| *"Open the slums and show me a picture of the tower at dusk."* | `open_level ctysluma`, `set_camera` on the tower, `capture_view` at 18:00 with the game rendering: you get the picture in the conversation |
+| *"Build a little square with a fountain and two trees in front of the tower."* | finds the ground with `raycast`, places the prefabs `small-fountain` and `haven-tree` with `place`, looks for holes with `find_gaps`, then shows you a picture |
+| *"Make this door open only once the crate in front of it is broken."* | finds the door and the crate with `find_nodes`, sets the door's behavior with `set_actor` |
+| *"Put a street of Haven City's Main Town in the desert."* | opens a desert level, lists Jak II's prefabs, places the buildings so that their backs face away from the player, matches their light with `match_lighting` |
+| *"Save it as my-square, then export it for the game."* | `save_project my-square`, then `export_level`: the files to copy into a jak-project, and their README |
+
+Good habits:
+
+- **Say where.** "In front of the tower", "on the roof of the hip-hop bar", "100 m north of the
+  palace": the assistant finds the place in the level.
+- **Ask for pictures.** It looks at the result itself before telling you it is done (one of its
+  rules), and can send you the picture.
+- **Keep an eye on the window.** If something goes wrong, stop it and undo: every step is one undo.
+- **It does not save on its own.** Ask it to save (and to export) when you are happy with the level.
+
+## 4. What it can do
+
+| Family | Examples |
+|---|---|
+| **Look around** | list the levels, open one or several side by side, show the level at a point of the story, find elements by name or near a point, read an element's settings |
+| **Place** | the game's objects (doors, crates, lamps, effects), its models, its decor parts, the prefabs (yours and the game's whole buildings), up to 2,000 at once |
+| **Build** | shapes (floors, walls, doorways, stairs, roofs, pillars), natural ground with the terrain brush, textures |
+| **Change** | move, turn, scale, copy, delete, group; what an object does (doors, jump pads, elevators, crates); what the game does with decor (collision, ground material, bounce, launch) |
+| **Check** | find the holes through which the player would see the void, look from any point, take pictures at any hour and weather with the game rendering |
+| **Save and export** | save the project, export it for the game, make nav meshes, undo and redo |
+
+The complete list, tool by tool, is [Every tool](#9-every-tool).
+
+## 5. How it works
+
+```text
+ you (the agent)  --MCP, stdio-->  jak-level-editor-mcp  --TCP 127.0.0.1:47821-->  the editor window
+```
+
+- `jak-level-editor-mcp` is the MCP server. It speaks the protocol on its standard input
+  and output and forwards every tool call to **the editor running on the user's computer**. When
+  no editor runs, it starts one (it takes a few seconds the first time).
+- Everything you do happens **in the window the user sees**: the user watches you build, and can
+  take over at any moment. Every change is one step of the editor's history: the user (or you,
+  with `undo`) can take it back.
+- The editor only listens on the computer itself (127.0.0.1): nothing is reachable from the
+  network. It listens only when the user lets an assistant control it (**File > Settings >
+  Assistant (MCP)**), or when the MCP server started it itself; every request carries the key the
+  editor writes into its settings folder (`remote.json`), which the server reads there.
+
+The server tells your client its rules when it starts (its `instructions`): they are the
+[four rules](#7-the-four-rules) of this guide in short.
+
+# Part 2, for the assistant
+
+This part is written for an AI agent that builds or changes levels of Jak 3 with the editor's tools:
+the ideas behind them, the rules that make a level look right in the game, recipes, and every tool.
+You do not need to know level editors to follow it: the notions a level needs are explained when
+they first appear; the user guide of the editor is [user-guide.md](user-guide.md).
+
+## 6. What you need to know about a level
 
 ### Coordinates
 
@@ -150,7 +222,7 @@ place **takes the light of the level around it** automatically. The **game rende
 level with the game's own renderer: what the level will look like in the game. Set its hour and
 weather with `set_view`, and see it with `capture_view`.
 
-## 4. The four rules
+## 7. The four rules
 
 ### Rule 1: no holes
 
@@ -233,7 +305,7 @@ Never say a level is done without looking at it. At least:
 3. `capture_view` from above, to see that nothing floats and nothing is missing.
 4. Describe what you see to the user, problems included.
 
-## 5. Recipes
+## 8. Recipes
 
 Each recipe gives the calls in order, with their arguments. Answers are shortened.
 
@@ -357,7 +429,7 @@ export_level {"name": "mtstreet", "nickname": "mts"}
                                                  its README.md says how to add it to the game
 ```
 
-## 6. Every tool
+## 9. Every tool
 
 **Status and levels**
 
@@ -426,7 +498,7 @@ export_level {"name": "mtstreet", "nickname": "mts"}
 
 The complete description of each argument is what your client receives from `tools/list`.
 
-## 7. When something goes wrong
+## 10. When something goes wrong
 
 | Problem | What to do |
 |---|---|

@@ -1,11 +1,11 @@
 ---
 name: doc-captures
-description: Make the screenshots of the documentation again (README.md, docs/mcp-agent-guide.md) in docs/captures/<feature>/. Use after a change to the interface or a feature shown in the docs, or when adding a feature to the README.
+description: Make the screenshots of the documentation again (docs/user-guide.md, docs/mcp.md, README.md) in docs/captures/<feature>/. Use after a change to the interface or a feature shown in the docs, or when adding a feature to the user guide.
 ---
 
 # Documentation captures
 
-The pictures go in `docs/captures/<feature>/<name>.png`, one folder per feature of the README
+The pictures go in `docs/captures/<feature>/<name>.png`, one folder per feature of the user guide
 (getting-started, levels, selecting, groups, catalog, prefabs, building, holes, game-rendering,
 behaviors, nav-meshes, export, mcp), 1600 x 900, the interface in English.
 

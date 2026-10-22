@@ -1082,7 +1082,7 @@ const K_INSTRUCTIONS: &str = "Tools of Jak Level Editor (levels of Jak 3), actin
   editor window the user sees (started when needed). Positions are in meters, Y is up. A typical \
   session: get_status; open_level (or new_level); find_nodes / raycast to know where things are; \
   list_catalog, list_decor and list_prefabs to choose what to put; place; capture_view to check; \
-  save_project. Every change can be undone. Rules for what you build (docs/mcp-agent-guide.md \
+  save_project. Every change can be undone. Rules for what you build (docs/mcp.md \
   explains them): 1. No holes: pieces must touch or overlap (by 5 to 10 cm), floors reach the \
   walls, walls reach the ground and each other; a gap lets the player see the void, a visual bug \
   in the game. Run find_gaps on what you built and fix every 'gap' (and every 'edge' the player \

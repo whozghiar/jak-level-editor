@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Makes the pictures of the documentation (README.md, docs/mcp-agent-guide.md) in
+"""Makes the pictures of the documentation (docs/user-guide.md, docs/mcp.md, README.md) in
 docs/captures/<feature>/. It starts the editor (target/release or target/debug jak-level-editor,
 built before) and drives it two ways:
 

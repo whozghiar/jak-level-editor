@@ -1,4 +1,4 @@
-// What the viewport reads from the engine (docs/rust-architecture.md §4) and what it answers.
+// What the viewport reads from the engine (docs/architecture.md §14) and what it answers.
 
 import type { AABB, Mat4, Vec3 } from "./math";
 

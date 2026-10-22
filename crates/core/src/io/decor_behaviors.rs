@@ -1,5 +1,5 @@
 //! What the game does with an element of the decor (a wall, a slab, a vent grate, a shape), kept
-//! in its node's extras "og_decor" and written by the export for the game (docs/behaviors.md):
+//! in its node's extras "og_decor" and written by the export for the game (the appendix of docs/user-guide.md):
 //!
 //!   collision  how it collides, through the level builder's own fields (nothing generated):
 //!              "shape" (the default: by its shape, made by the builder), "none" (Jak goes through
@@ -18,7 +18,7 @@
 //!              generated
 //!
 //! Breaking or deforming an element needs a model of its own that the game draws as an actor (the
-//! decor the builder makes is drawn as one): not offered for the decor (docs/behaviors.md says
+//! decor the builder makes is drawn as one): not offered for the decor (the user guide's appendix says
 //! how).
 
 use std::fmt::Write as _;

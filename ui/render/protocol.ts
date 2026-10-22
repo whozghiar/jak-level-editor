@@ -1,4 +1,4 @@
-// The jle:// protocol's answers (docs/rust-architecture.md §4), little-endian, read in place:
+// The jle:// protocol's answers (docs/architecture.md §14), little-endian, read in place:
 // the matrices and the vertex arrays are views into the answer's bytes, nothing is copied.
 
 import { fetchBytes } from "./engine";

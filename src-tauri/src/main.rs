@@ -11,7 +11,7 @@
 use tauri::Manager;
 use tauri_plugin_jak_level_editor::{Host, set_host};
 
-// what this app gives the editor (docs/rust-architecture.md §6): the library in Documents/Jak Level
+// what this app gives the editor (docs/architecture.md §16): the library in Documents/Jak Level
 // Editor (known before the app, so the editor starts on it). No game runtime: the standalone app
 // exports the levels; the guide tells how to add one to the game by hand.
 fn host() -> Host {

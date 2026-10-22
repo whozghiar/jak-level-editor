@@ -35,7 +35,7 @@ export type { GameMood };
 const K_UNITS = 4096; // game units per meter
 
 // ---------------------------------------------------------------------------------------------
-// the engine's answers (docs/rust-architecture.md §4, "Game view"), little-endian, read in place
+// the engine's answers (docs/architecture.md §14, "Game view"), little-endian, read in place
 
 const magic = (dv: DataView, s: string) =>
   dv.byteLength >= 12 &&

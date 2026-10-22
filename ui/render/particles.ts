@@ -34,7 +34,7 @@ import type { Renderer } from "./renderer";
 import { BlendMode, type RenderSettings } from "./types";
 import { viewport } from "./viewport_api";
 
-// the files the engine serves (asset?path=, docs/rust-architecture.md §4)
+// the files the engine serves (asset?path=, docs/architecture.md §14)
 const PARTICLES_PATH = "data/jak3/particles.json";
 const SPRITES_PATH = "library/jak3/common/sprites"; // <page>/<texture>.png, index.json
 const asset = (path: string) =>
