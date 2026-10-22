@@ -507,4 +507,49 @@ mod tests {
     assert!(tmp.join("linux/gk").is_file());
     let _ = std::fs::remove_dir_all(&tmp);
   }
+
+  /// A release's real archive (its path in JLE_TOOLING_ARCHIVE) unpacked as `install` unpacks it:
+  /// its programs and data/; a .tar.gz's programs executable (the archive's modes, which the tar
+  /// crate keeps on Unix). `JLE_TOOLING_ARCHIVE=<archive> cargo test -p jak-level-editor-core
+  /// real_archive -- --ignored`
+  #[test]
+  #[ignore]
+  fn real_archive() {
+    let archive = PathBuf::from(std::env::var("JLE_TOOLING_ARCHIVE").expect("JLE_TOOLING_ARCHIVE"));
+    let zip = archive.extension().is_some_and(|e| e == "zip");
+    let dest = temp_dir("tooling-real");
+    unpack(&archive, &dest).unwrap();
+    assert!(dest.join("data/goal_src/jak3/game.gp").is_file());
+    let programs = ["gk", "goalc", "extractor"];
+    for p in programs {
+      let file = dest.join(if zip { format!("{p}.exe") } else { p.into() });
+      assert!(file.is_file(), "{}", file.display());
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&file).unwrap().permissions().mode();
+        assert_eq!(mode & 0o111, 0o111, "{}: {mode:o}", file.display());
+      }
+    }
+    if !zip {
+      let file = std::fs::File::open(&archive).unwrap();
+      let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
+      let mut seen = 0;
+      for e in tar.entries().unwrap() {
+        let e = e.unwrap();
+        let path = e.path().unwrap().into_owned();
+        if path
+          .parent()
+          .is_some_and(|d| d.as_os_str().is_empty() || d == Path::new("."))
+          && programs.iter().any(|p| path.ends_with(p))
+        {
+          let mode = e.header().mode().unwrap();
+          assert_eq!(mode & 0o111, 0o111, "{}: {mode:o}", path.display());
+          seen += 1;
+        }
+      }
+      assert_eq!(seen, programs.len());
+    }
+    let _ = std::fs::remove_dir_all(&dest);
+  }
 }
