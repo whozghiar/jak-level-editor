@@ -2,13 +2,14 @@
 // release after them): the moves of the mouse waiting while one is out merged into the last one
 // (`merge` gives its arguments; dt summed for a drag).
 
+import type { CallName } from "../lib/api";
 import { call } from "./engine";
 
 export function callQueue(
-  onAnswer: (name: string, answer: any) => void,
-  merged: string[],
+  onAnswer: (name: CallName, answer: any) => void,
+  merged: CallName[],
 ) {
-  const queue: { name: string; args: Record<string, unknown> }[] = [];
+  const queue: { name: CallName; args: Record<string, unknown> }[] = [];
   let running = false;
   let idle: (() => void)[] = [];
   async function pump() {
@@ -26,7 +27,7 @@ export function callQueue(
     for (const f of idle.splice(0)) f();
   }
   return {
-    send(name: string, args: Record<string, unknown> = {}) {
+    send(name: CallName, args: Record<string, unknown> = {}) {
       const last = queue[queue.length - 1];
       if (last && last.name === name && merged.includes(name)) {
         if (typeof args.dt === "number")

@@ -2,6 +2,7 @@
 // (not while a field is dragged: it shows its own value), and their edits sent in order (the engine
 // runs calls on a pool of threads: a drag's last value must arrive last).
 
+import type { CallName } from "../../lib/api";
 import { call, onEngine } from "../../lib/rpc";
 
 export const inspector = $state({
@@ -30,7 +31,7 @@ export function followChanges(): () => void {
 /** The engine's answer to `name` with the arguments `args()` gives (null: nothing asked), asked again
  * when they change and after each change of the document. In a component's script. */
 export function query<T = any>(
-  name: string,
+  name: CallName,
   args: () => Record<string, unknown> | null,
 ): { value: T | null } {
   const r = $state({ value: null as T | null });
@@ -56,7 +57,7 @@ let queue: Promise<unknown> = Promise.resolve();
 
 /** A call after the ones sent before it. */
 export function send<T = any>(
-  name: string,
+  name: CallName,
   args: Record<string, unknown>,
 ): Promise<T | undefined> {
   const p = queue.then(() => call<T>(name, args));
@@ -65,11 +66,11 @@ export function send<T = any>(
 }
 
 // the last value of the field dragged not sent yet (one live call at a time: the others are skipped)
-let pending: { name: string; args: Record<string, unknown> } | null = null;
+let pending: { name: CallName; args: Record<string, unknown> } | null = null;
 let pumping = false;
 
 /** A field being dragged: its value shown at once in the view, not yet an undo step. */
-export function live(name: string, args: Record<string, unknown>): void {
+export function live(name: CallName, args: Record<string, unknown>): void {
   inspector.dragging = true;
   pending = { name, args };
   if (pumping) return;
@@ -85,7 +86,7 @@ export function live(name: string, args: Record<string, unknown>): void {
 
 /** The change made (the drag let go, a value typed, a choice): one undo step. */
 export function commit(
-  name: string,
+  name: CallName,
   args: Record<string, unknown>,
 ): Promise<unknown> {
   pending = null;

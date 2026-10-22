@@ -609,3 +609,57 @@ impl Editor {
     ));
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use std::path::Path;
+
+  /// the names of the calls: the patterns of `dispatch`'s arms (one level of indentation in its
+  /// `match`)
+  fn call_names() -> Vec<String> {
+    let src = include_str!("api.rs");
+    let body = &src[src.find("  fn dispatch(").unwrap()..];
+    let body = &body[..body.find("\n  }\n").unwrap()];
+    let mut names = Vec::new();
+    for line in body.lines() {
+      let Some(arm) = line
+        .strip_prefix("      ")
+        .filter(|l| l.starts_with('"') || l.starts_with("| \""))
+      else {
+        continue;
+      };
+      let pattern = arm.split("=>").next().unwrap_or_default();
+      names.extend(pattern.split('"').skip(1).step_by(2).map(str::to_string));
+    }
+    names
+  }
+
+  // the interface calls the engine by these names only: ui/lib/api.ts's type CallName, which
+  // svelte-check holds every call of ui/ to (`JLE_WRITE_API=1` writes it again)
+  #[test]
+  fn the_interfaces_calls_are_the_engines() {
+    let names = call_names();
+    assert!(names.len() > 100 && names.contains(&"ping".to_string()));
+    let mut ts = String::from(
+      "// The names of the engine's calls (crates/core/src/editor/api.rs), written by its test\n\
+       // the_interfaces_calls_are_the_engines (JLE_WRITE_API=1 cargo test -p jak-level-editor-core\n\
+       // the_interfaces_calls): rpc.ts's call() takes only these.\nexport type CallName =\n",
+    );
+    for (i, n) in names.iter().enumerate() {
+      let end = if i + 1 == names.len() { ";" } else { "" };
+      ts += &format!("  | \"{n}\"{end}\n");
+    }
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/lib/api.ts");
+    if std::env::var_os("JLE_WRITE_API").is_some() {
+      std::fs::write(&path, &ts).unwrap();
+    }
+    let written = std::fs::read_to_string(&path)
+      .unwrap_or_default()
+      .replace("\r\n", "\n");
+    assert!(
+      written == ts,
+      "ui/lib/api.ts is not api.rs's calls: JLE_WRITE_API=1 cargo test -p jak-level-editor-core \
+       the_interfaces_calls"
+    );
+  }
+}

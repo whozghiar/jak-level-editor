@@ -8,6 +8,7 @@
   import IconCheck from "~icons/mdi/check";
   import IconClose from "~icons/mdi/close";
   import IconLoading from "~icons/mdi/loading";
+  import type { CallName } from "../../lib/api";
   import { engine } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
   import { call, onEngine } from "../../lib/rpc";
@@ -57,7 +58,7 @@
     if (box) box.scrollTop = box.scrollHeight;
   });
 
-  async function run(name: string, args: Record<string, unknown> = {}) {
+  async function run(name: CallName, args: Record<string, unknown> = {}) {
     const r = await call<PlayState>(name, args);
     if (r) s = r;
   }

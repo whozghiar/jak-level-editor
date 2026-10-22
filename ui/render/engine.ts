@@ -4,13 +4,14 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { CallName } from "../lib/api";
 import { jleUrl } from "../lib/rpc";
 
 // rpc.ts's call() shows its errors in a toast: the viewport's calls (a pick at each mouse move)
 // fail quietly, to the caller
 
 export const transport = {
-  call: (name: string, args: Record<string, unknown> = {}): Promise<any> =>
+  call: (name: CallName, args: Record<string, unknown> = {}): Promise<any> =>
     invoke("plugin:jak-level-editor|call", { name, args }),
   fetch: async (path: string): Promise<ArrayBuffer> => {
     const r = await fetch(jleUrl(path));
@@ -23,7 +24,7 @@ export const transport = {
   },
 };
 
-export const call = (name: string, args: Record<string, unknown> = {}) =>
+export const call = (name: CallName, args: Record<string, unknown> = {}) =>
   transport.call(name, args);
 export const onEngine = (event: string, cb: (payload: any) => void) =>
   transport.listen(event, cb);

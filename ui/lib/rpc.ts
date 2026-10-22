@@ -4,6 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { SvelteMap } from "svelte/reactivity";
+import type { CallName } from "./api";
 import { t } from "./i18n";
 
 export type ToastLevel = "info" | "warn" | "error";
@@ -36,7 +37,7 @@ export function errorText(e: unknown): string {
  * toast, unless `quiet`).
  */
 export async function call<T = any>(
-  name: string,
+  name: CallName,
   args: Record<string, unknown> = {},
   quiet = false,
 ): Promise<T | undefined> {
