@@ -14,9 +14,10 @@ level with `jle_core::io::level_package` (marked blocks `;; jak-level-editor: be
 its own settings (`--config-path`, `-boot -fakeiso -debug`), then goalc's REPL as the user `jle`
 (`goal_src/user/jle/startup-jak3.gc`: `(lt)` then `start` at the continue point; Jak 3's kernel has
 no argument for it) until the game prints `Displaying level <name>` (`crates/core/src/runtime.rs`). `runtime_remove {name}` takes it out (the files back as they were).
-The standalone app's runtime is the jak-project checkout of File > Settings > Game (the editor's
-branch `jle/level-builder-fixes`: `custom_assets/jak3/jle-builder.json` says `jle-1`), else the
-OpenGOAL Launcher's `<install>/features/jak3/level_edited/`. Never choose the user's own checkout as
+The standalone app's runtime is the jak-project checkout of File > Settings > Game (used as it
+is; the editor's levels need the level builder's fixes of whozghiar/jak-project), else the OpenGOAL
+Launcher's `<install>/features/jak3/level_edited/` when the launcher's active version is a release
+of whozghiar/jak-project (`v0.3.X-whozghiar.N`; its programs, `versions/official/<version>/`). Never choose the user's own checkout as
 the runtime without asking: Play writes into it. Always give jak-project's programs `--proj-path`
 (else they find the project by the last "jak-project" in their path).
 

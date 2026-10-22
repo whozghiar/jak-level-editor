@@ -17,8 +17,9 @@ appears, with an example, and shows each tool in a picture.
 
 - **Nothing of the game is in this repository.** Everything comes from your disc: you extract it once.
 - **It needs nothing else**: not OpenGOAL, not the game, to build or to run. To *play* what you
-  exported you need **jak-project**, OpenGOAL's source code, built on your computer with the
-  editor's level builder, or the OpenGOAL Launcher's game for the editor; **Play** then installs
+  exported you need the editor's **jak-project** ([whozghiar/jak-project](https://github.com/whozghiar/jak-project),
+  OpenGOAL with the level builder's fixes): built on your computer, or installed by the OpenGOAL
+  Launcher (its game for the editor); **Play** then installs
   it and starts the game in it (see [15](#15-playing-it-in-the-game-export)).
 - **On its own or in the OpenGOAL Launcher**: it is made like the
   [OpenGOAL Launcher](https://github.com/open-goal/launcher) (an engine in Rust, an interface in
@@ -664,12 +665,12 @@ blue ghost to compare), **Place it where the original is**, check where the game
 **Play** (the toolbar's button, **Level > Play in the game**) does the rest for you when the editor
 has a game to play in, chosen in **File > Settings > Game**:
 
-- a **jak-project checkout** with the editor's level builder (the branch of jak-project with its
-  fixes for the editor's exports: its `custom_assets/jak3/jle-builder.json` says `jle-1`), built,
-  with your Jak 3 extracted in it;
+- a **jak-project checkout** of your own, built, with your Jak 3 extracted in it (used as it is:
+  the editor's levels need the level builder's fixes of
+  [whozghiar/jak-project](https://github.com/whozghiar/jak-project));
 - or the **OpenGOAL Launcher's game for the editor** (`<install>/features/jak3/level_edited/`, made
-  with the launcher's active OpenGOAL version when that version has the editor's level builder), found
-  by itself.
+  with the launcher's active OpenGOAL version when it is a release of whozghiar/jak-project,
+  `v0.3.X-whozghiar.N`), found by itself.
 
 It exports the level into `library/exports/<project>/`, installs it in that game (its files, and
 its lines in `game.gp` and `level-info.gc` between `;; jak-level-editor: begin <name>` and `end`

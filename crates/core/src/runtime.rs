@@ -8,9 +8,9 @@
 //! one: the launcher's isolated game for the editor runs those of the launcher's active tooling
 //! version, its data/ made from that version's (`launcher_level_edited`, `prepare`). The OpenGOAL
 //! Launcher uses the same pieces (`launcher_level_edited`, `prepare`, `decompile_command`,
-//! `compile_command`, `apply_level`, `launch`) for its own runtime. The level builder must have
-//! the fixes of the editor's exports (`custom_assets/<game>/jle-builder.json`:
-//! `{"builder": "jle-1"}`).
+//! `compile_command`, `apply_level`, `launch`) for its own runtime. The launcher's game plays with
+//! the releases of whozghiar/jak-project only (`is_fork_release`), whose level builder has the
+//! fixes of the editor's exports; a checkout the user chose is used as it is.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -22,11 +22,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::host::{GameRuntime, HostEvent, HostEvents, LevelPackage, RuntimeInfo};
-use crate::io::level_package::{self, BUILDER_MARKER};
+use crate::io::level_package;
 use crate::prefs::Prefs;
 
-/// the builder this editor's exports need (LevelManifest::builder)
-pub const BUILDER: &str = "jle-1";
+/// the suffix of the tags of whozghiar/jak-project's releases (`v0.3.9-whozghiar.1`: upstream's
+/// 0.3.9, the fork's first build of it, with the level builder's fixes for the editor's exports)
+pub const FORK_SUFFIX: &str = "-whozghiar.";
+
+/// A tooling version the editor's levels can be played with: a release of whozghiar/jak-project
+pub fn is_fork_release(version: &str) -> bool {
+  version.contains(FORK_SUFFIX)
+}
 
 fn exe(dir: &Path, name: &str) -> PathBuf {
   dir.join(if cfg!(windows) {
@@ -258,32 +264,14 @@ impl OpenGoal {
     self
   }
 
-  /// The builder it has: its jle-builder.json (its tooling version's), else (a checkout of before
-  /// it) the fixes' code
-  pub fn builder(&self, game: &str) -> String {
-    let data = self
-      .tooling
-      .as_ref()
-      .map_or_else(|| self.data_dir.clone(), |t| t.dir.join("data"));
-    let b = level_package::builder_of(&data, game);
-    if !b.is_empty() {
-      return b;
-    }
-    let gltf = data.join("common/util/gltf_util.cpp");
-    match std::fs::read_to_string(gltf) {
-      Ok(code) if code.contains("og_blend") => BUILDER.into(),
-      _ => String::new(),
-    }
-  }
-
   /// Why it cannot play a level of `game` now (a translation key), None when it can
   pub fn problem(&self, game: &str) -> Option<&'static str> {
-    if self.tooling.is_some() {
+    if let Some(t) = &self.tooling {
       // its data/ is made from its version's by prepare
-      if ![&self.gk, &self.goalc, &self.extractor]
-        .iter()
-        .all(|p| p.is_file())
-        || self.builder(game) != BUILDER
+      if !is_fork_release(&t.version)
+        || ![&self.gk, &self.goalc, &self.extractor]
+          .iter()
+          .all(|p| p.is_file())
       {
         return Some("runtime.launcher_version");
       }
@@ -306,9 +294,6 @@ impl OpenGoal {
       .all(|p| p.is_file())
     {
       return Some("runtime.no_programs");
-    }
-    if self.builder(game) != BUILDER {
-      return Some("runtime.old_builder");
     }
     if !has_game_files(&self.iso_data) {
       return Some("runtime.no_game_files");
@@ -553,9 +538,6 @@ impl GameRuntime for OpenGoal {
     if let Some(p) = self.problem(&m.game) {
       return Err(crate::i18n::tr(p).into());
     }
-    if !m.builder.is_empty() && self.builder(&m.game) != m.builder {
-      return Err(crate::i18n::tr("runtime.old_builder").into());
-    }
     self.ready(&m.game, &events)?;
     step(&events, "runtime.step.install", &[&m.name]);
     self.apply_level(package)?;
@@ -792,7 +774,6 @@ impl GameRuntime for StandaloneRuntime {
         "folder": o.folder,
         "available": o.problem("jak3").is_none(),
         "reason": o.problem("jak3").unwrap_or_default(),
-        "builder": o.builder("jak3"),
       })
     };
     // (current() reads the preferences: not while they are held)
@@ -807,7 +788,6 @@ impl GameRuntime for StandaloneRuntime {
       "checkout": checkout.as_ref().map(describe),
       "launcher": launcher.as_ref().map(describe),
       "used": used,
-      "marker": BUILDER_MARKER,
     })
   }
 }
@@ -836,13 +816,7 @@ mod tests {
     for p in ["gk", "goalc", "extractor"] {
       std::fs::write(exe(&bin, p), "").unwrap();
     }
-    assert_eq!(c.problem("jak3"), Some("runtime.old_builder"));
-    std::fs::create_dir_all(tmp.join("custom_assets/jak3")).unwrap();
-    std::fs::write(
-      tmp.join("custom_assets/jak3").join(BUILDER_MARKER),
-      r#"{"builder": "jle-1"}"#,
-    )
-    .unwrap();
+    // a checkout the user chose: used as it is
     assert_eq!(c.problem("jak3"), Some("runtime.no_game_files"));
     // an empty iso_data/jak3 (a checkout's before the extraction) is not the game
     std::fs::create_dir_all(tmp.join("iso_data/jak3")).unwrap();
@@ -905,31 +879,33 @@ mod tests {
     use crate::io::level_package::tests::{fake_data_dir, package};
     let tmp = temp_dir("launcher-game");
     let install = tmp.join("install");
-    let version = |v: &str, marker: bool| {
+    let version = |v: &str| {
       let dir = install.join("versions/official").join(v);
       fake_data_dir(&dir.join("data"));
       for p in ["gk", "goalc", "extractor"] {
         std::fs::write(exe(&dir, p), "").unwrap();
       }
-      if marker {
-        std::fs::create_dir_all(dir.join("data/custom_assets/jak3")).unwrap();
-        std::fs::write(
-          dir.join("data/custom_assets/jak3").join(BUILDER_MARKER),
-          r#"{"builder": "jle-1"}"#,
-        )
-        .unwrap();
-      }
       dir
     };
-    let v1 = version("v0.3.9-whozghiar.1", false);
+    // upstream's releases: not for the editor's levels
+    assert!(
+      is_fork_release("v0.3.9-whozghiar.1")
+        && !is_fork_release("v0.3.9")
+        && !is_fork_release("v0.3.9-jle.1")
+    );
+    version("v0.3.9");
+    assert_eq!(
+      launcher_level_edited(&install, "v0.3.9", "jak3").problem("jak3"),
+      Some("runtime.launcher_version")
+    );
     let og = launcher_level_edited(&install, "v0.3.9-whozghiar.1", "jak3");
+    assert_eq!(og.problem("jak3"), Some("runtime.launcher_version"));
+    let v1 = version("v0.3.9-whozghiar.1");
     let folder = install.join("features/jak3/level_edited");
     assert!(
       og.gk == exe(&v1, "gk") && og.data_dir == folder.join("data") && og.folder == folder,
       "{og:?}"
     );
-    assert_eq!(og.problem("jak3"), Some("runtime.launcher_version"));
-    version("v0.3.9-whozghiar.1", true);
     assert_eq!(og.problem("jak3"), Some("runtime.no_game_files"));
     std::fs::create_dir_all(install.join("active/jak3/data/iso_data/jak3/CGO")).unwrap();
     assert_eq!(og.problem("jak3"), None);
@@ -987,7 +963,7 @@ mod tests {
     std::fs::write(folder.join("data/old.txt"), "").unwrap();
 
     // another version: data/ made again, the level installed again, to decompile again
-    version("v0.3.9-whozghiar.2", true);
+    version("v0.3.9-whozghiar.2");
     let og2 = launcher_level_edited(&install, "v0.3.9-whozghiar.2", "jak3");
     assert!(og2.stale());
     let s2 = og2.prepare().unwrap();
@@ -1021,7 +997,7 @@ mod tests {
   fn standalone_settings() {
     let r = StandaloneRuntime::default();
     let s = r.settings();
-    assert!(s.is_object() && s["marker"] == BUILDER_MARKER, "{s}");
+    assert!(s.is_object() && s.get("used").is_some(), "{s}");
     assert_eq!(r.info().games, ["jak3"]);
   }
 }

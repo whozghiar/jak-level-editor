@@ -217,7 +217,7 @@ which application hosts it: it uses what it is given and hides what it is not.
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
 | `extract_source` | none (the user's disc) | `<install>/active/jak3/data/iso_data/jak3`: the disc it already extracted |
 | `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version |
-| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (with the builder's fixes), else the OpenGOAL Launcher's game for the editor when the launcher's active version has the builder | the launcher's isolated game `<install>/features/jak3/level_edited/`, run with the programs of the launcher's active tooling version (`<install>/versions/official/<version>/`, from the release of `whozghiar/jak-project`; nothing else is downloaded) |
+| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (used as it is), else the OpenGOAL Launcher's game for the editor when the launcher's active version is a release of `whozghiar/jak-project` | the launcher's isolated game `<install>/features/jak3/level_edited/`, run with the programs of the launcher's active tooling version (`<install>/versions/official/<version>/`, from the release of `whozghiar/jak-project`; nothing else is downloaded) |
 
 **The library** (`crates/core/src/editor/library.rs`): until the user chose one (the preference
 `library_chosen`; preferences of before it whose library holds an extracted game count as chosen),
@@ -265,8 +265,9 @@ extracted. `prepare()` makes its `data/` again from that version's `data/` whene
 another version (`jle-runtime.json`: `{version, decompiled}`; `_settings/` is kept), then installs
 again the levels whose copies `apply_level` keeps in `packages/<name>/` (`remove_level_files`
 deletes the copy), and leaves it to decompile again (`decompile_command`: `extractor <iso_data>
---folder --decompile --game jak3 --proj-path <data>`). It plays only when the version's `data/`
-has the builder (`runtime.launcher_version` otherwise) and the launcher extracted the game
+--folder --decompile --game jak3 --proj-path <data>`). It plays only when the version is a
+release of `whozghiar/jak-project` (`is_fork_release`: a tag `vX.Y.Z-whozghiar.N`; its programs
+there; `runtime.launcher_version` otherwise) and the launcher extracted the game
 (`runtime.no_game_files`). Its `install_level`, `remove_level` and `launch` prepare, decompile and
 build it first when needed: the standalone app and the launcher use the same code. Both
 build with `extractor <iso_data> --folder --compile --game jak3 --proj-path <data>`
@@ -280,14 +281,13 @@ then, run once it listens, `(start 'play (get-continue-by-name *game-info* "<con
 its stdin held open (`repl_command`: a REPL that ends resets the game), and kills goalc once the
 game's output says `Displaying level <name>` (killed, it leaves the game as it is); a second launch
 stops the game started before (`stop_game`), as a build does. `run_logged` runs a tool, its lines
-and the make system's `[ 42%]` as `HostEvent`s. The launcher can use the same pieces. The builder a data folder has is its
-`custom_assets/<game>/jle-builder.json` (`{"builder": "jle-1"}`, written by the editor's
-jak-project branch), or, for a checkout of before it, the fixes' code. `StandaloneRuntime`, the
-standalone app's, reads the preferences at each call: the jak-project checkout chosen in File >
-Settings (`runtime_folder`, its programs in `runtime_bin` or its build's `out/build/Release/bin`),
-else the OpenGOAL Launcher's game for the editor (`installationDir` and `activeVersion` of
-`%APPDATA%/OpenGOAL-Launcher/settings.json`, then `features/jak3/level_edited/` with that version's
-programs, when its data has the builder). `GameRuntime::settings` (a default method answering null) is what the Settings window
+and the make system's `[ 42%]` as `HostEvent`s. The launcher can use the same pieces.
+`StandaloneRuntime`, the standalone app's, reads the preferences at each call: the jak-project
+checkout chosen in File > Settings (`runtime_folder`, its programs in `runtime_bin` or its build's
+`out/build/Release/bin`; the user's choice is trusted: only its sources, programs and game files
+are looked for), else the OpenGOAL Launcher's game for the editor (`installationDir` and
+`activeVersion` of `%APPDATA%/OpenGOAL-Launcher/settings.json`, then `features/jak3/level_edited/`
+with that version's programs, when the version is a release of `whozghiar/jak-project`). `GameRuntime::settings` (a default method answering null) is what the Settings window
 shows besides `info`. `info` is asked at each `get_state`: a runtime keeps it cheap.
 
 **Play** (`crates/core/src/editor/runtime.rs`): `get_state.runtime` is the runtime's `RuntimeInfo`
@@ -302,8 +302,10 @@ README and to File > Settings.
 
 **The level builder**: OpenGOAL's builder needs fixes for the editor's exports (a level without
 regions, nav meshes, flat collision fragments, translucent surfaces, collision on both sides per
-mesh, the list of everything visible). A runtime declares the builder it has; the manifest says
-`"builder": "jle-1"` when the level needs those fixes.
+mesh, the list of everything visible). They are in the user's fork `whozghiar/jak-project`, whose
+tooling releases are tagged `vX.Y.Z-whozghiar.N` (upstream's X.Y.Z, the fork's build N): the
+launcher's game plays with those releases only; a checkout chosen in the settings is the user's
+responsibility.
 
 ## 7. In the launcher
 

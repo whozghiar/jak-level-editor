@@ -49,9 +49,6 @@ pub struct LevelManifest {
   pub files: Vec<String>,
   /// the editor that wrote it
   pub editor_version: String,
-  /// what the level builder must support: "jle-1" for the fixes of the editor's exports
-  /// (docs/rust-architecture.md, "Game runtime")
-  pub builder: String,
 }
 
 /// A level exported for the game, ready to install: the folder of an export and its manifest.

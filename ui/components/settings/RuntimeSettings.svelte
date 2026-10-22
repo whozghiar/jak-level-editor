@@ -14,7 +14,6 @@
     folder: string;
     available: boolean;
     reason: string;
-    builder: string;
   };
   type Settings = {
     info: {

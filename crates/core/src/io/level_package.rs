@@ -27,8 +27,6 @@ use crate::host::LevelPackage;
 
 /// the record of the levels installed, at the root of the data folder
 pub const RECORD: &str = "jle-installed.json";
-/// the builder a data folder has: `custom_assets/<game>/jle-builder.json` ({"builder": "jle-1"})
-pub const BUILDER_MARKER: &str = "jle-builder.json";
 
 const MARK: &str = ";; jak-level-editor: ";
 
@@ -55,19 +53,6 @@ pub fn installed(data_dir: &Path) -> Vec<InstalledLevel> {
   std::fs::read(data_dir.join(RECORD))
     .ok()
     .and_then(|b| serde_json::from_slice(&b).ok())
-    .unwrap_or_default()
-}
-
-/// The builder a data folder has (its jle-builder.json), "" without one.
-pub fn builder_of(data_dir: &Path, game: &str) -> String {
-  let path = data_dir
-    .join("custom_assets")
-    .join(game)
-    .join(BUILDER_MARKER);
-  std::fs::read(path)
-    .ok()
-    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-    .and_then(|v| v["builder"].as_str().map(str::to_string))
     .unwrap_or_default()
 }
 
@@ -500,7 +485,6 @@ pub(crate) mod tests {
         String::new()
       },
       files: vec![format!("{level}/{name}.glb")],
-      builder: "jle-1".into(),
       ..Default::default()
     };
     LevelPackage {

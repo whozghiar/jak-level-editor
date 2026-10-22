@@ -2512,9 +2512,6 @@ pub fn export_level(
       .filter_map(|f| Path::new(f).strip_prefix(&top).ok().map(from_path))
       .collect(),
     editor_version: env!("CARGO_PKG_VERSION").into(),
-    // every export of the editor needs the fixes of its jak-project branch: a level without regions
-    // (it crashed the builder), the translucent tree, collision on both sides, the visible list
-    builder: "jle-1".into(),
   };
   let manifest_path = top.join(LevelPackage::MANIFEST);
   let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
@@ -3020,7 +3017,6 @@ mod tests {
         && m.replaces.is_empty()
         && m.continue_point == "my-test-start"
         && m.start == [1.0, 2.0, 3.0]
-        && m.builder == "jle-1"
         && m.level_info == "custom_assets/jak3/levels/my-test/level-info.gc"
         && m.files.len() == 5
         && m
