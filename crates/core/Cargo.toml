@@ -19,9 +19,5 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 # nav meshes: Recast's Rust port, and the vectors of its API
 rerecast = { version = "0.4.0", default-features = false, features = ["std"] }
 glam = "0.32"
-# the standalone app's OpenGOAL (tooling.rs): GitHub's releases, their archives; the OpenGOAL
-# Launcher's own crates and backends, so that its build gets nothing more
-reqwest = { version = "0.13", features = ["blocking"] }
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
-flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
-tar = "0.4.43"
+# the token of the remote control (editor/remote.rs)
+getrandom = "0.4"

@@ -17,6 +17,7 @@
   import { t } from "../../lib/i18n";
   import { call, onEngine, toast } from "../../lib/rpc";
   import type { Vec3 } from "../../render/math";
+  import { windows } from "../../lib/windows.svelte";
   import { viewport } from "../../render/viewport_api";
   import { check } from "../common/classes";
   import Tip from "../common/Tip.svelte";
@@ -338,7 +339,7 @@
         <Tip text={t("export.dense_go")} placement="left" />
       {/if}
       <p class="mt-1 text-neutral-300">{t("export.install")}</p>
-      <!-- with the host's game runtime the editor does it (Play); without, by hand -->
+      <!-- with the host's game runtime the editor does it (Play); without, by hand (the guide) -->
       {#if !engine.state.runtime?.available}<p class={muted}>
           {t(engine.state.runtime?.reason || "export.no_runtime")}
         </p>{/if}
@@ -351,9 +352,16 @@
           onclick={() => openIt(`${report!.dir}/README.md`)}
           >{t("export.open_readme")}</button
         >
-        {#if engine.state.runtime?.available || engine.state.runtime?.tooling}
+        {#if engine.state.runtime}
           <button class={button} disabled={busy} onclick={playLevel}
             >{t("menu.level.play")}</button
+          >
+        {:else}
+          <button
+            class={button}
+            onclick={() =>
+              windows.open("guide", { tab: 0, tutorial: "manual" })}
+            >{t("tuto.manual.open")}</button
           >
         {/if}
       </div>

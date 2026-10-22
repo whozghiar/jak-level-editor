@@ -5,9 +5,11 @@
 //! camera, save the project (src/app/mcp.cpp).
 //!
 //! It forwards each tool call to the editor running on this computer (its remote control,
-//! crates/core/src/editor/remote.rs), and starts the editor when none is running: everything
-//! happens in the window the user sees, and can be undone there. Nothing but the protocol goes to
-//! stdout.
+//! crates/core/src/editor/remote.rs), with the token the editor wrote to `remote.json` in its
+//! preferences' folder ($JLE_PREFS_DIR, else the standalone app's: for the OpenGOAL Launcher's
+//! editor, its `<launcher's config folder>/jak-level-editor`), and starts the editor when none
+//! listens: everything happens in the window the user sees, and can be undone there. Nothing but
+//! the protocol goes to stdout.
 
 use std::io::{BufRead, Read, Write};
 use std::net::TcpStream;
@@ -20,6 +22,27 @@ use serde_json::{Map, Value, json};
 
 /// the editor's remote control (jle_core::editor::remote::K_REMOTE_PORT)
 const K_REMOTE_PORT: u16 = 47821;
+
+/// The editor's `remote.json` ({"port", "token"}): in $JLE_PREFS_DIR, else in the standalone app's
+/// preferences' folder (jle_core::prefs::Prefs::dir)
+fn remote_file() -> PathBuf {
+  let env = |k: &str| {
+    std::env::var_os(k)
+      .filter(|v| !v.is_empty())
+      .map(PathBuf::from)
+  };
+  let dir = env("JLE_PREFS_DIR").unwrap_or_else(|| {
+    let base = if cfg!(windows) {
+      env("APPDATA")
+    } else if cfg!(target_os = "macos") {
+      env("HOME").map(|h| h.join("Library/Application Support"))
+    } else {
+      env("XDG_DATA_HOME").or_else(|| env("HOME").map(|h| h.join(".local/share")))
+    };
+    base.unwrap_or_default().join("OpenGOAL/jak-level-editor")
+  });
+  dir.join("remote.json")
+}
 
 fn vec3(description: &str) -> Value {
   json!({"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3,
@@ -1216,9 +1239,20 @@ struct Server {
   port: u16,
   client: RemoteClient,
   next_id: u64,
+  /// the editor's remote.json
+  remote_file: PathBuf,
 }
 
 impl Server {
+  /// the token the editor wrote when it started listening ("" none yet)
+  fn token(&self) -> String {
+    std::fs::read(&self.remote_file)
+      .ok()
+      .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+      .and_then(|j| j["token"].as_str().map(str::to_string))
+      .unwrap_or_default()
+  }
+
   fn call_tool(&mut self, name: &str, args: &Value) -> Value {
     if self.client.stream.is_none() && self.client.connect(self.port).is_err() {
       // no editor running: start one and wait for it
@@ -1238,10 +1272,26 @@ impl Server {
     } else {
       json!({})
     };
-    let request = json!({"id": self.next_id, "tool": name, "args": args});
+    let mut request =
+      json!({"id": self.next_id, "tool": name, "args": args, "token": self.token()});
     self.next_id += 1;
     let timeout = Duration::from_secs(if SLOW.contains(&name) { 300 } else { 60 });
-    match self.client.call(&request, timeout) {
+    let mut answer = self.client.call(&request, timeout);
+    // refused: an editor just started may not have written its token yet (it closed the
+    // connection): once more with the token read again
+    if answer.as_ref().is_ok_and(|a| {
+      a["error"]
+        .as_str()
+        .is_some_and(|e| e.starts_with("refused"))
+    }) {
+      std::thread::sleep(Duration::from_millis(300));
+      request["token"] = json!(self.token());
+      answer = self
+        .client
+        .connect(self.port)
+        .and_then(|_| self.client.call(&request, timeout));
+    }
+    match answer {
       Ok(answer) => tool_answer(&answer),
       Err(e) => tool_error(&e),
     }
@@ -1320,6 +1370,7 @@ fn main() {
     port,
     client: RemoteClient::default(),
     next_id: 1,
+    remote_file: remote_file(),
   };
   let stdin = std::io::stdin();
   let mut stdout = std::io::stdout().lock();
@@ -1351,6 +1402,7 @@ mod tests {
       port: 1,
       client: RemoteClient::default(),
       next_id: 1,
+      remote_file: PathBuf::new(),
     };
     let init = s
       .answer(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}"#)
@@ -1390,14 +1442,22 @@ mod tests {
 
   #[test]
   fn tools_call_forwards_to_the_editors_port() {
-    // a fake editor: answers each request with its tool and a picture
+    // a fake editor: answers each request carrying its token with its tool and a picture
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = listener.local_addr().unwrap().port();
+    let remote_file =
+      std::env::temp_dir().join(format!("jle-mcp-remote-{}.json", std::process::id()));
+    std::fs::write(
+      &remote_file,
+      json!({"port": port, "token": "t0k"}).to_string(),
+    )
+    .unwrap();
     let editor = std::thread::spawn(move || {
       let (stream, _) = listener.accept().unwrap();
       let mut out = stream.try_clone().unwrap();
       for line in BufReader::new(stream).lines().take(2) {
         let r: Value = serde_json::from_str(&line.unwrap()).unwrap();
+        assert_eq!(r["token"], "t0k");
         let answer = if r["tool"] == "capture_view" {
           json!({"id": r["id"], "ok": true, "result": {"width": 4}, "image": "iVBO"})
         } else {
@@ -1412,6 +1472,7 @@ mod tests {
       port,
       client: RemoteClient::default(),
       next_id: 1,
+      remote_file: remote_file.clone(),
     };
     let shot = s
       .answer(r#"{"jsonrpc":"2.0","id":"a","method":"tools/call","params":{"name":"capture_view","arguments":{}}}"#)
@@ -1433,5 +1494,6 @@ mod tests {
     assert_eq!(refused["result"]["isError"], true);
     assert_eq!(refused["result"]["content"][0]["text"], "no undo");
     editor.join().unwrap();
+    let _ = std::fs::remove_file(remote_file);
   }
 }

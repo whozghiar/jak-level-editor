@@ -9,18 +9,15 @@
 //                    [--hidden] [--open-level <name>]
 
 use tauri::Manager;
-use tauri_plugin_jak_level_editor::jle_core::runtime::StandaloneRuntime;
 use tauri_plugin_jak_level_editor::{Host, set_host};
 
 // what this app gives the editor (docs/rust-architecture.md §6): the library in Documents/Jak Level
-// Editor (known before the app, so the editor starts on it), the game runtime of the settings (a
-// jak-project checkout chosen, else its own OpenGOAL: the releases of whozghiar/jak-project it
-// installs in <library>/opengoal)
+// Editor (known before the app, so the editor starts on it). No game runtime: the standalone app
+// exports the levels; the guide tells how to add one to the game by hand.
 fn host() -> Host {
   Host {
     name: "standalone".into(),
     default_library: dirs::document_dir().map(|d| d.join("Jak Level Editor")),
-    runtime: Some(std::sync::Arc::new(StandaloneRuntime::default())),
     ..Default::default()
   }
 }

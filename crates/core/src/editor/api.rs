@@ -24,6 +24,7 @@ const QUERIES: &[&str] = &[
   "list_levels",
   "get_level_info",
   "get_prefs",
+  "remote_state",
   "weather_presets",
   "extract_state",
   "box_nodes",
@@ -40,7 +41,6 @@ const QUERIES: &[&str] = &[
   "export_state",
   "play_state",
   "runtime_levels",
-  "tooling_state",
   "export_check",
   "navmesh_state",
   "navmesh_data",
@@ -139,6 +139,9 @@ impl Editor {
         false => Err(format!("no language '{}'", s(a, "code"))),
       },
       "get_prefs" => Ok(json!(*Prefs::get())),
+      // an assistant's remote control (remote.rs): File > Settings
+      "remote_state" => Ok(self.remote_state()),
+      "set_remote_control" => Ok(self.set_remote_control(b(a, "on").unwrap_or(false))),
       "set_prefs" => {
         let p = merged(&*Prefs::get(), a);
         self.save_prefs(|old| *old = p.clone());
@@ -503,12 +506,6 @@ impl Editor {
       "runtime_levels" => self.runtime_levels(),
       "runtime_remove" => self.runtime_remove(s(a, "name"), b(a, "wait").unwrap_or(false)),
       "runtime_launch" => self.runtime_launch(s(a, "name"), b(a, "wait").unwrap_or(false)),
-      "runtime_settings" => Ok(self.runtime_settings()),
-      // ---- OpenGOAL's tooling, when the runtime installs it itself (runtime.rs, crate::tooling)
-      "tooling_state" => Ok(self.tooling_state(b(a, "check").unwrap_or(false))),
-      "tooling_install" => self.tooling_install(s(a, "version"), b(a, "wait").unwrap_or(false)),
-      "tooling_use" => self.tooling_use(s(a, "version")),
-      "tooling_remove" => self.tooling_remove(s(a, "version")),
       "generate_navmesh" => {
         self.generate_navmesh_call(a)?;
         Ok(self.navmesh_state())

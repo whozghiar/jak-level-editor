@@ -115,9 +115,9 @@ export type TourAction =
   | "save"
   | "navmeshes"
   | "settings"
-  | "tooling"
   | "game_window"
-  | "play";
+  | "play"
+  | "manual";
 
 // A step: its id, its animations, its button (the key <prefix><id>.action)
 export type TourStep = [id: string, demos: string[], action?: TourAction];
@@ -168,7 +168,12 @@ export const tutorials: { id: string; prefix: string; steps: TourStep[] }[] = [
   {
     id: "play",
     prefix: "tuto.play.",
-    steps: [["export", [], "export"], ["game", [], "tooling"], ["play", [], "play"], ["installed", []], ["launcher", []], ["hand", []]],
+    steps: [["export", [], "export"], ["play", [], "play"], ["installed", []], ["launcher", []]],
+  },
+  {
+    id: "manual",
+    prefix: "tuto.manual.",
+    steps: [["export", [], "export"], ["jakproject", []], ["copy", []], ["register", []], ["build", []], ["start", []]],
   },
   { id: "place", prefix: "tuto.place.", steps: [["click", ["place"], "catalog_tab"], ["hold", ["place"]], ["turn", ["free_rotate"]]] },
   { id: "topology", prefix: "tuto.topology.", steps: [["enter", []], ["points", []], ["faces", []], ["undo", []]] },

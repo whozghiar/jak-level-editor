@@ -235,7 +235,7 @@
   })}
   <!-- the level played in the game: only with a game runtime the host gives, that can play or
        install its OpenGOAL (the Play window offers it) -->
-  {#if s.runtime?.available || s.runtime?.tooling}
+  {#if s.runtime}
     <div class="mx-1 h-6 border-l border-neutral-800"></div>
     {@render button(IconPlay, t("toolbar.play"), playLevel, {
       enabled: s.document.open,

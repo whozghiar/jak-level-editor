@@ -2570,12 +2570,13 @@ fn readme(
 ## What is in this folder
 
 It is laid out like the jak-project checkout (OpenGOAL's source folder, the one with `goal_src` and
-`custom_assets`) it goes into:
+`custom_assets`) it goes into: a checkout of whozghiar/jak-project, whose level builder has the
+fixes these levels need (its releases are the OpenGOAL the OpenGOAL Launcher installs).
 
 - `{install_dir}`: the level for OpenGOAL's level builder: `{name}.glb` (its decor and collision), `{name}.jsonc` (its names and actors), `{name}.gd` (its DGO, {nick_upper}.DGO), `level-info.gc` (its definition in the game's code){}.
-- `jle-level.json`: what this README says to do, for a program: the editor's Play button and the
-  OpenGOAL Launcher install the level with it (the files, the lines of `game.gp` and `level-info.gc`)
-  and start the game on it.
+- `jle-level.json`: what this README says to do, for a program: the Level Editor of the OpenGOAL
+  Launcher (its Play button) installs the level with it (the files, the lines of `game.gp` and
+  `level-info.gc`) and starts the game on it.
 ",
     if rep.navmeshes > 0 {
       format!(", `{name}-nav.json` (its nav meshes)")
@@ -2622,9 +2623,11 @@ It is laid out like the jak-project checkout (OpenGOAL's source folder, the one 
    wherever it loads {rep_name}, and keeps everything else of {rep_name} (its continue points, its music,
    its missions, the levels around it). The game's own `{dgo}` is still built: put the nickname
    back to play the game's {rep_name} again.
-4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout), type `(mi)`, then
-   start the game (`gk`). Go there as in the game (from a level next to it), or in the REPL:
-   `(lt)` then `(start 'play (get-continue-by-name *game-info* \"{first}\"))`.
+4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout) and type `(mi)`.
+5. Start the game there: `gk -g jak3 -- -boot -fakeiso -debug -level {first}` (a gk of
+   whozghiar/jak-project newer than v0.3.9-whozghiar.1). Or start `gk` and go there as in the game
+   (from a level next to it), or in the REPL: `(lt)` then
+   `(start 'play (get-continue-by-name *game-info* \"{first}\"))`.
 
 ",
       old = r.nickname,
@@ -2636,8 +2639,9 @@ It is laid out like the jak-project checkout (OpenGOAL's source folder, the one 
       "3. In `goal_src/jak3/engine/level/level-info.gc`, add the definition of `{install_dir}level-info.gc`
    and give it an `:index` no other level has. The player starts at
    ({}, {}, {}) m.
-4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout), type `(mi)`, then
-   start the game (`gk`) and, in the REPL, `(lt)` then go there:
+4. Build the game: start the compiler (`goalc`, or `task repl` in the checkout) and type `(mi)`.
+5. Start the game there: `gk -g jak3 -- -boot -fakeiso -debug -level {name}-start` (a gk of
+   whozghiar/jak-project newer than v0.3.9-whozghiar.1). Or start `gk` and, in the REPL, `(lt)` then
    `(start 'play (get-continue-by-name *game-info* \"{name}-start\"))`.
    (`bg` loads it next to the levels already there: from the city, no memory is left.)
 
@@ -3645,14 +3649,9 @@ mod tests {
       scene.begin_frame();
       export_level(&scene, Some(&data), &o).expect("exported");
       let (theirs, mut ours) = (export_texts(&export), export_texts(&tmp.join(project)));
-      // the manifest (jle-level.json) and its lines in the README: new since
+      // the manifest (jle-level.json): new since
       if !theirs.contains_key(LevelPackage::MANIFEST) {
         ours.remove(LevelPackage::MANIFEST);
-        if let Some(md) = ours.get_mut("README.md") {
-          let at = md.find("- `jle-level.json`").unwrap_or(md.len());
-          let end = md[at..].find(".\n").map_or(at, |e| at + e + 2);
-          md.replace_range(at..end, "");
-        }
       }
       assert_eq!(
         theirs.keys().collect::<Vec<_>>(),
@@ -3660,7 +3659,11 @@ mod tests {
         "{project}: the files"
       );
       for (path, text) in &theirs {
-        // the editor's name in the comments and the README: renamed since
+        // the README: rewritten since (whozghiar/jak-project, gk -level, the launcher's Play)
+        if path == "README.md" {
+          continue;
+        }
+        // the editor's name in the comments: renamed since
         let text = text.replace("the OpenGOAL Level Editor", "Jak Level Editor");
         if let Some(d) = first_difference(&text, &ours[path]) {
           panic!("{project}/{path}: {d}");

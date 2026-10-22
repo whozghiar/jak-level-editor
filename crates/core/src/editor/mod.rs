@@ -345,6 +345,10 @@ pub struct Editor {
   pub write_prefs: bool,
   /// the assistants connected through the MCP server (remote.rs)
   pub remote_clients: usize,
+  /// the remote control while it listens, and the port the command line asked for (the MCP server
+  /// starting the editor: --remote-port)
+  pub remote: Option<remote::Remote>,
+  pub remote_session: Option<u16>,
   /// the interface's viewport listens (call `frontend_ready`): it can make the pictures of the view
   pub interface_ready: bool,
   /// what the application hosting the editor gives it (crate::host): the default library, a disc
@@ -413,6 +417,8 @@ impl Editor {
       gaps: None,
       write_prefs: true,
       remote_clients: 0,
+      remote: None,
+      remote_session: None,
       interface_ready: false,
     }
   }
@@ -500,8 +506,6 @@ impl Editor {
   pub fn tick(&mut self, dt: f32) -> bool {
     // the library's workers, the files the Place tool waits for (catalog.rs)
     self.poll_library_work();
-    // GitHub's answer about OpenGOAL's releases (runtime.rs)
-    self.poll_tooling();
     if !self.weather.time_passes && !self.weather.lightning {
       return false;
     }

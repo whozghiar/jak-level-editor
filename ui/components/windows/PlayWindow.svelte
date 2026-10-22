@@ -1,11 +1,9 @@
 <script lang="ts">
-  // Level > Play in the game (the toolbar's Play): the host's game runtime exports the level,
-  // installs it in the game, builds it and starts the game on it (play_level, on the "play" job).
-  // The steps, the progress, the tools' last lines, how it ended (play_state); the levels installed
-  // in that game, to play again or take out. Why it cannot play; what the runtime says besides (the
-  // launcher's game: a newer OpenGOAL to install from its header). A runtime that installs OpenGOAL
-  // itself (the standalone app's) without any installed yet: its latest release installed, then
-  // the level played, in one click.
+  // Level > Play in the game (the toolbar's Play): the host's game runtime (the OpenGOAL
+  // Launcher's isolated game) exports the level, installs it in the game, builds it and starts the
+  // game on it (play_level, on the "play" job). The steps, the progress, the tools' last lines, how
+  // it ended (play_state); the levels installed in that game, to play again or take out. Why it
+  // cannot play (an OpenGOAL too old: the launcher's header updates it).
   import { onMount } from "svelte";
   import IconCheck from "~icons/mdi/check";
   import IconClose from "~icons/mdi/close";
@@ -14,7 +12,6 @@
   import { t } from "../../lib/i18n";
   import { call, onEngine } from "../../lib/rpc";
   import { heading, muted, primary, small } from "../common/classes";
-  import type { ToolingState } from "../settings/ToolingSettings.svelte";
 
   type PlayState = {
     busy: boolean;
@@ -38,15 +35,8 @@
       available: boolean;
       reason: string;
       installed: string[];
-      notice: string;
-      notice_args: string[];
-      tooling?: { active: string; latest: string; update: boolean };
     } | null,
   );
-  // no OpenGOAL installed yet: the one to install (tooling_state)
-  const needsTooling = $derived(!!runtime?.tooling && !runtime.tooling.active);
-  let tooling = $state<ToolingState>();
-  let playAfter = $state(false);
 
   const refresh = async () =>
     (s = (await call<PlayState>("play_state", {}, true)) ?? s);
@@ -56,35 +46,11 @@
     // the steps come as jle:progress, the tools' lines are read while it works
     const timer = setInterval(() => s?.busy && refresh(), 400);
     const off = onEngine("jle:progress", (j) => j?.id === "play" && refresh());
-    // OpenGOAL installed: the level played
-    const offTooling = onEngine("jle:progress", async (j) => {
-      if (j?.id !== "tooling" || !j.finished) return;
-      tooling = await call<ToolingState>("tooling_state", {}, true);
-      if (playAfter && tooling?.active) run("play_level");
-      playAfter = false;
-    });
     return () => {
       clearInterval(timer);
       off();
-      offTooling();
     };
   });
-
-  $effect(() => {
-    if (needsTooling && !tooling)
-      call<ToolingState>("tooling_state", {}, true).then((r) => (tooling = r));
-  });
-  const latest = $derived(tooling?.releases[0]);
-
-  async function installTooling() {
-    if (!latest) return;
-    playAfter = true;
-    const r = await call<ToolingState>("tooling_install", {
-      version: latest.tag,
-    });
-    if (r) tooling = r;
-    else playAfter = false;
-  }
 
   $effect(() => {
     s?.log.length;
@@ -102,35 +68,8 @@
     {#if runtime.label}<p class="{muted} break-all">
         {t("play.runtime", runtime.label)}
       </p>{/if}
-    {#if needsTooling}
-      {#if latest}
-        <p class="text-neutral-300">
-          {t("play.no_tooling", latest.size / 1048576)}
-        </p>
-        <button
-          class="{primary} self-start"
-          disabled={!!engine.jobs.tooling || !engine.state.document.open}
-          onclick={installTooling}
-          >{t("play.install_tooling", latest.tag)}</button
-        >
-        {#if engine.jobs.tooling}
-          {@const j = engine.jobs.tooling}
-          <p class={muted}>{j.label}</p>
-          <div class="h-1.5 overflow-hidden rounded bg-white/10">
-            <div
-              class="h-full bg-green-500 transition-all"
-              style="width: {(100 * j.done) / j.total}%"
-            ></div>
-          </div>
-        {/if}
-      {:else if tooling}
-        <p class="text-amber-300">{t("play.no_release")}</p>
-      {/if}
-    {:else if !runtime.available && runtime.reason}
+    {#if !runtime.available && runtime.reason}
       <p class="text-amber-300">{t(runtime.reason)}</p>
-    {/if}
-    {#if runtime.notice}
-      <p class="text-sky-300">{t(runtime.notice, ...runtime.notice_args)}</p>
     {/if}
   {/if}
   {#if s && s.action}
@@ -186,15 +125,13 @@
     {/if}
   {/if}
 
-  {#if !needsTooling}
-    <button
-      class="{primary} mt-1 self-start"
-      disabled={!!s?.busy || !engine.state.document.open || !runtime?.available}
-      onclick={() => run("play_level")}
-    >
-      {s?.action ? t("play.again") : t("play.button")}
-    </button>
-  {/if}
+  <button
+    class="{primary} mt-1 self-start"
+    disabled={!!s?.busy || !engine.state.document.open || !runtime?.available}
+    onclick={() => run("play_level")}
+  >
+    {s?.action ? t("play.again") : t("play.button")}
+  </button>
 
   {#if runtime?.installed?.length}
     <h3 class={heading}>{t("play.levels")}</h3>

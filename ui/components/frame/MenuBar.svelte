@@ -309,7 +309,7 @@
           run: () => windows.open("export"),
         },
         // only with a game runtime the host gives (no runtime: the export and its README)
-        ...(s.runtime?.available || s.runtime?.tooling
+        ...(s.runtime
           ? [
               {
                 label: t("menu.level.play"),

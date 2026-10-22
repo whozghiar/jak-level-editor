@@ -90,7 +90,10 @@
   const s = $derived(tut.steps[si]);
   const k = $derived(tut.prefix + s[0]);
   const demos = $derived(s[1]);
-  const action = $derived(s[2]);
+  // Play where the host gives no game to play in (the standalone app): the tutorial on adding the
+  // level to the game by hand
+  const byHand = $derived(s[2] === "play" && !engine.state.runtime);
+  const action = $derived<TourAction | undefined>(byHand ? "manual" : s[2]);
   const needsDocument = $derived(
     action === "replace" ||
       action === "export" ||
@@ -98,16 +101,9 @@
       action === "navmeshes" ||
       action === "play",
   );
-  // why its button cannot be used: no level open, no game to play in (the host's runtime, as the
-  // toolbar's Play: one that installs its OpenGOAL itself can, its Play window offers it)
+  // why its button cannot be used: no level open
   const blocked = $derived(
-    needsDocument && !engine.state.document.open
-      ? "tour.needs_level"
-      : action === "play" &&
-          !engine.state.runtime?.available &&
-          !engine.state.runtime?.tooling
-        ? "runtime.none"
-        : "",
+    needsDocument && !engine.state.document.open ? "tour.needs_level" : "",
   );
 
   function go(i: number, j: number) {
@@ -130,9 +126,9 @@
     else if (a === "save") save(false);
     else if (a === "navmeshes") windows.open("navmesh");
     else if (a === "settings") windows.open("settings");
-    else if (a === "tooling") windows.open("settings", { section: "tooling" });
     else if (a === "game_window") windows.open("game");
     else if (a === "play") playLevel();
+    else if (a === "manual") selectTutorial("manual");
   }
 
   // its animations: one wide, two side by side, four in a square
@@ -268,7 +264,8 @@
               <button
                 class={button}
                 disabled={!!blocked}
-                onclick={() => run(action)}>{t(`${k}.action`)}</button
+                onclick={() => run(action)}
+                >{t(byHand ? "tuto.manual.open" : `${k}.action`)}</button
               >
             </span>
             {#if blocked}<Tip text={t(blocked)} placement="top" />{/if}

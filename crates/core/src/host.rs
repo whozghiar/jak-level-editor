@@ -2,7 +2,8 @@
 //! where the library goes by default, a disc already extracted to read the levels from, the
 //! extractor, and a game runtime that installs a level, removes it and starts the game on it.
 //! The editor never asks which application hosts it: it uses what it is given, and hides what it
-//! is not given (no runtime: no Play button, the export and its README instead).
+//! is not given (no runtime, as in the standalone app: no Play button, the export, its README and
+//! the guide's tutorial on adding it to the game by hand instead). The editor runs no game itself.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -72,10 +73,9 @@ impl LevelPackage {
   }
 }
 
-/// What a runtime is, for the interface (the Play button, the settings).
+/// What a runtime is, for the interface (the Play button and window).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct RuntimeInfo {
-  /// "jak-project" (a checkout of OpenGOAL's sources), "opengoal" (an installed OpenGOAL),
   /// "launcher" (the OpenGOAL Launcher's isolated game)
   pub kind: String,
   /// what the interface shows ("OpenGOAL Launcher", the folder of a checkout...)
@@ -87,10 +87,6 @@ pub struct RuntimeInfo {
   pub games: Vec<String>,
   /// the levels installed in it (their names)
   pub installed: Vec<String>,
-  /// what the Play window says besides, a translation key and its arguments ("" nothing): the
-  /// launcher's game says a newer release of the tooling is out
-  pub notice: String,
-  pub notice_args: Vec<String>,
 }
 
 /// What `play` did: the game is starting, or the host took the operation over in its own
@@ -120,18 +116,6 @@ pub trait GameRuntime: Send + Sync {
     let m = &package.manifest;
     self.launch(&m.game, &m.name, events)?;
     Ok(PlayOutcome::Started)
-  }
-  /// what the editor's settings show of it beyond `info` (the standalone app's: the OpenGOALs it
-  /// can use, which one it uses), null when nothing
-  fn settings(&self) -> serde_json::Value {
-    serde_json::Value::Null
-  }
-  /// where it installs OpenGOAL's tooling itself (the standalone app's
-  /// `<library>/opengoal/versions/`): the editor then offers its releases, their installation and
-  /// the one used (crate::tooling). None: the host does it (the OpenGOAL Launcher: its header, its
-  /// Versions page)
-  fn tooling_dir(&self) -> Option<PathBuf> {
-    None
   }
 }
 

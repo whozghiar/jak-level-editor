@@ -1,6 +1,6 @@
 //! Installs a level exported for the game (`host::LevelPackage`: an export and its
 //! `jle-level.json`) into an OpenGOAL data folder, and takes it out again: what the export's README
-//! tells a person to do. Every game runtime uses it (the standalone app's, the OpenGOAL Launcher's).
+//! tells a person to do, for a host's game runtime (the OpenGOAL Launcher's isolated game).
 //!
 //! The data folder holds `goal_src/<game>` and `custom_assets/<game>`: a jak-project checkout's
 //! root, or an OpenGOAL distribution's `data/`. `apply` copies the export's files there, adds its
@@ -16,44 +16,28 @@
 //!
 //! A line it replaces stays in the block as `;; jak-level-editor: was <line>`, put back by
 //! `remove`. Each file edited is backed up once (`<file>.jle-backup`, deleted when the file is back
-//! as it was). `<data_dir>/jle-installed.json` records what is installed (`InstalledLevel`), so that
-//! `remove` takes out exactly what `apply` put; applying again replaces the level's blocks and files.
+//! as it was). The blocks are the record of what is installed (`installed`); the level's files are
+//! in its own folders (`custom_assets/<game>/levels/<name>/`, `goal_src/<game>/levels/<name>/`),
+//! which `remove` deletes. Applying again replaces the level's blocks and files.
 
 use std::path::{Component, Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
-
 use crate::host::LevelPackage;
-
-/// the record of the levels installed, at the root of the data folder
-pub const RECORD: &str = "jle-installed.json";
 
 const MARK: &str = ";; jak-level-editor: ";
 
-/// A level installed in a data folder (its line of jle-installed.json).
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct InstalledLevel {
-  pub name: String,
-  pub game: String,
-  /// the level of the game it takes the place of, "" for a level of its own
-  pub replaces: String,
-  /// a hash of its files: another export of it is another version
-  pub version: String,
-  /// the files copied (relative to the data folder, '/')
-  pub files: Vec<String>,
-  /// where the game starts it (the manifest's)
-  pub continue_point: String,
-  /// the `:index` given to its definition (a level of its own)
-  pub index: u32,
-}
-
-/// The levels installed in a data folder (none when it has no record).
-pub fn installed(data_dir: &Path) -> Vec<InstalledLevel> {
-  std::fs::read(data_dir.join(RECORD))
-    .ok()
-    .and_then(|b| serde_json::from_slice(&b).ok())
-    .unwrap_or_default()
+/// The levels installed in a data folder for `game`: the names of the editor's blocks in its
+/// game.gp (none when it has none).
+pub fn installed(data_dir: &Path, game: &str) -> Vec<String> {
+  let begin = format!("{MARK}begin ");
+  let text = std::fs::read_to_string(game_gp(data_dir, game)).unwrap_or_default();
+  let mut names: Vec<String> = text
+    .lines()
+    .filter_map(|l| l.trim_end().strip_prefix(&begin))
+    .map(str::to_string)
+    .collect();
+  names.dedup();
+  names
 }
 
 fn game_gp(data_dir: &Path, game: &str) -> PathBuf {
@@ -182,44 +166,28 @@ fn is_name(s: &str) -> bool {
       .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-/// a path of the package: relative, inside the game's folders
-fn safe_path(f: &str, game: &str) -> bool {
+/// the level's own folders in the data folder (relative, '/')
+fn level_dirs(game: &str, name: &str) -> [String; 2] {
+  [
+    format!("custom_assets/{game}/levels/{name}/"),
+    format!("goal_src/{game}/levels/{name}/"),
+  ]
+}
+
+/// a path of the package: relative, inside the level's own folders
+fn safe_path(f: &str, game: &str, name: &str) -> bool {
   let p = Path::new(f);
   p.components().all(|c| matches!(c, Component::Normal(_)))
-    && (f.starts_with(&format!("custom_assets/{game}/levels/"))
-      || f.starts_with(&format!("goal_src/{game}/levels/")))
+    && level_dirs(game, name)
+      .iter()
+      .any(|d| f.starts_with(d.as_str()))
 }
 
-/// FNV-1a of the files' paths and bytes
-fn version_of(dir: &Path, files: &[String]) -> Result<String, String> {
-  let mut h: u64 = 0xcbf29ce484222325;
-  let mut eat = |bytes: &[u8]| {
-    for &b in bytes {
-      h = (h ^ b as u64).wrapping_mul(0x100000001b3);
-    }
-  };
-  for f in files {
-    eat(f.as_bytes());
-    eat(&std::fs::read(dir.join(f)).map_err(|e| format!("{f}: {e}"))?);
-  }
-  Ok(format!("{h:016x}"))
-}
-
-fn write_record(data_dir: &Path, levels: &[InstalledLevel]) -> Result<(), String> {
-  let path = data_dir.join(RECORD);
-  if levels.is_empty() {
-    let _ = std::fs::remove_file(path);
-    return Ok(());
-  }
-  let text = serde_json::to_string_pretty(levels).map_err(|e| e.to_string())?;
-  write(&path, &(text + "\n"))
-}
-
-/// deletes the files of a level, then its folders left empty
-fn delete_files(data_dir: &Path, files: &[String]) {
-  for f in files {
-    let p = data_dir.join(f);
-    let _ = std::fs::remove_file(&p);
+/// deletes the level's own folders, then the folders above them left empty
+fn delete_level_dirs(data_dir: &Path, game: &str, name: &str) {
+  for d in level_dirs(game, name) {
+    let p = data_dir.join(d);
+    let _ = std::fs::remove_dir_all(&p);
     let mut dir = p.parent();
     while let Some(d) = dir.filter(|d| d.starts_with(data_dir) && *d != data_dir) {
       // stops at the first folder that is not empty
@@ -229,6 +197,13 @@ fn delete_files(data_dir: &Path, files: &[String]) {
       dir = d.parent();
     }
   }
+}
+
+/// the `:index` of the level's block (the one it was given when installed)
+fn block_index(text: &str, name: &str) -> Option<u32> {
+  let begin = text.find(&format!("{MARK}begin {name}"))?;
+  let end = text[begin..].find(&format!("{MARK}end {name}"))? + begin;
+  indexes(&text[begin..end]).first().copied()
 }
 
 /// game.gp and level-info.gc without the blocks of `name`, where they were
@@ -243,8 +218,8 @@ fn texts_without(data_dir: &Path, game: &str, name: &str) -> Result<[Stripped; 2
 }
 
 /// Installs the level of `package` into `data_dir` (or installs its new version in place of the
-/// one installed). Returns its record.
-pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, String> {
+/// one installed).
+pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<(), String> {
   let m = &package.manifest;
   let (game, name) = (m.game.as_str(), m.name.as_str());
   if !is_name(game) || !is_name(name) || !is_name(&m.nickname) {
@@ -256,7 +231,7 @@ pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, 
   if !m.replaces.is_empty() && !is_name(&m.replaces) {
     return Err(format!("jle-level.json: bad replaces ({})", m.replaces));
   }
-  if let Some(f) = m.files.iter().find(|f| !safe_path(f, game)) {
+  if let Some(f) = m.files.iter().find(|f| !safe_path(f, game, name)) {
     return Err(format!(
       "jle-level.json: a file outside the level's folders ({f})"
     ));
@@ -271,21 +246,12 @@ pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, 
   if m.game_gp.is_empty() || !m.game_gp.iter().all(gp_ok) {
     return Err("jle-level.json: unexpected game.gp lines".into());
   }
-  let mut levels = installed(data_dir);
-  if let Some(other) = levels.iter().find(|l| {
-    l.game == game && l.name != name && !m.replaces.is_empty() && l.replaces == m.replaces
-  }) {
-    return Err(format!(
-      "{} already replaces {}: remove it first",
-      other.name, m.replaces
-    ));
-  }
-  let old = levels.iter().position(|l| l.game == game && l.name == name);
-  let version = version_of(&package.dir, &m.files)?;
+  let old_index = block_index(&read(&level_info_gc(data_dir, game))?, name);
 
   // the texts without this level's blocks (a version installed before)
   let [(gp, mut gp_text, gp_at), (info, mut info_text, info_at)] =
     texts_without(data_dir, game, name)?;
+  let was_installed = gp_at.is_some();
   if gp_text.contains(&format!("(build-custom-level \"{name}\"")) {
     return Err(format!(
       "{}: {name} is already there (not added by the editor)",
@@ -305,7 +271,6 @@ pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, 
   gp_text.insert_str(at, &gp_block);
 
   let info_nl = newline(&info_text);
-  let mut index = 0;
   if m.replaces.is_empty() {
     // a level of its own: its definition, with an index no other level has (the one it had)
     if find_define(&info_text, name).is_some() {
@@ -319,10 +284,8 @@ pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, 
       return Err(format!("{}: no (define {name} ...)", m.level_info));
     }
     let taken = indexes(&info_text);
-    let kept = old
-      .map(|i| levels[i].index)
-      .filter(|i| *i != 0 && !taken.contains(i));
-    index = kept.unwrap_or_else(|| taken.iter().max().map_or(0x128, |m| m + 1));
+    let kept = old_index.filter(|i| *i != 0 && !taken.contains(i));
+    let index = kept.unwrap_or_else(|| taken.iter().max().map_or(0x128, |m| m + 1));
     // from its define on (the export's comment above it left out)
     let lines: Vec<String> = def
       .lines()
@@ -365,7 +328,9 @@ pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, 
     let (start, end) = line_range(&info_text, nick);
     let line = &info_text[start..end];
     if line.starts_with(MARK) {
-      return Err(format!("{r} is already replaced"));
+      return Err(format!(
+        "{r} is already replaced by another level: remove it first"
+      ));
     }
     let indent = &line[..nick - start];
     let original = line.trim_end_matches(['\r', '\n']).to_string();
@@ -381,8 +346,8 @@ pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, 
   }
 
   // the files: the old version's first out
-  if let Some(i) = old {
-    delete_files(data_dir, &levels[i].files);
+  if was_installed {
+    delete_level_dirs(data_dir, game, name);
   }
   for f in &m.files {
     let (from, to) = (package.dir.join(f), data_dir.join(f));
@@ -392,41 +357,23 @@ pub fn apply(data_dir: &Path, package: &LevelPackage) -> Result<InstalledLevel, 
     std::fs::copy(&from, &to).map_err(|e| format!("{}: {e}", from.display()))?;
   }
   write_edited(&gp, &gp_text)?;
-  write_edited(&info, &info_text)?;
-  let record = InstalledLevel {
-    name: name.into(),
-    game: game.into(),
-    replaces: m.replaces.clone(),
-    version,
-    files: m.files.clone(),
-    continue_point: m.continue_point.clone(),
-    index,
-  };
-  match old {
-    Some(i) => levels[i] = record.clone(),
-    None => levels.push(record.clone()),
-  }
-  write_record(data_dir, &levels)?;
-  Ok(record)
+  write_edited(&info, &info_text)
 }
 
-/// Takes the level `name` out of `data_dir`: its files, its blocks (the lines they replaced put
-/// back), its record.
+/// Takes the level `name` out of `data_dir`: its blocks (the lines they replaced put back), its
+/// folders.
 pub fn remove(data_dir: &Path, game: &str, name: &str) -> Result<(), String> {
-  let mut levels = installed(data_dir);
-  let i = levels
-    .iter()
-    .position(|l| l.game == game && l.name == name)
-    .ok_or_else(|| format!("{name} is not installed"))?;
+  if !installed(data_dir, game).iter().any(|n| n == name) {
+    return Err(format!("{name} is not installed"));
+  }
   for (path, text, had) in texts_without(data_dir, game, name)? {
     if had.is_some() {
       write(&path, &text)?;
     }
     forget_backup(&path);
   }
-  delete_files(data_dir, &levels[i].files);
-  levels.remove(i);
-  write_record(data_dir, &levels)
+  delete_level_dirs(data_dir, game, name);
+  Ok(())
 }
 
 #[cfg(test)]
@@ -508,13 +455,13 @@ pub(crate) mod tests {
 
     // a level of its own
     let p = package(&tmp.join("export"), "my-test", "", "v1");
-    let r = apply(&data, &p).unwrap();
+    apply(&data, &p).unwrap();
     let (gp1, info1) = (read(&gp).unwrap(), read(&info).unwrap());
     assert!(
       gp1.contains(";; jak-level-editor: begin my-test")
         && gp1.find("(build-custom-level \"my-test\")") > gp1.find("(custom-level-cgo \"TSZ.DGO\"")
         && gp1.find("(build-custom-level \"my-test\")") < gp1.find("(group-list \"iso\"")
-        && r.index == max0 + 1
+        && block_index(&info1, "my-test") == Some(max0 + 1)
         // (jak-project's level-info.gc has the line endings of its checkout)
         && info1.replace("\r\n", "\n").contains(&format!(":index #x{:x}\n", max0 + 1))
         && find_define(&info1, "my-test") < find_define(&info1, "test-zone")
@@ -532,12 +479,13 @@ pub(crate) mod tests {
       "idempotent"
     );
     let p2 = package(&tmp.join("export"), "my-test", "", "v2");
-    let r2 = apply(&data, &p2).unwrap();
+    apply(&data, &p2).unwrap();
     assert!(
-      r2.version != r.version && r2.index == r.index && read(&info).unwrap() == info1,
-      "a new version"
+      read(&info).unwrap() == info1
+        && read(&data.join("custom_assets/jak3/levels/my-test/my-test.glb")).unwrap() == "v2",
+      "a new version, the same index kept"
     );
-    assert_eq!(installed(&data), vec![r2]);
+    assert_eq!(installed(&data, "jak3"), ["my-test"]);
 
     // in place of ctyindb; a second level in place of it is refused
     let q = package(&tmp.join("export-b"), "my-ctyb", "ctyindb", "b");
@@ -554,9 +502,10 @@ pub(crate) mod tests {
     );
     let q2 = package(&tmp.join("export-c"), "my-ctyc", "ctyindb", "c");
     assert!(apply(&data, &q2).is_err(), "one level in place of ctyindb");
-    assert_eq!(installed(&data).len(), 2);
+    // in game.gp's order: each new block goes next to the test-zone's lines
+    assert_eq!(installed(&data, "jak3"), ["my-ctyb", "my-test"]);
 
-    // removed: the files as they were, no backup nor record left
+    // removed: the files as they were, no backup nor folder left
     remove(&data, "jak3", "my-ctyb").unwrap();
     assert_eq!(read(&info).unwrap(), info1);
     remove(&data, "jak3", "my-test").unwrap();
@@ -565,7 +514,6 @@ pub(crate) mod tests {
         && std::fs::read(&info).unwrap() == info0
         && !backup_path(&gp).exists()
         && !backup_path(&info).exists()
-        && !data.join(RECORD).exists()
         && !data.join("custom_assets").exists(),
       "removed"
     );
@@ -575,6 +523,8 @@ pub(crate) mod tests {
     let mut bad = package(&tmp.join("export"), "my-test", "", "v1");
     bad.manifest.files = vec!["custom_assets/jak3/levels/../../../x".into()];
     assert!(apply(&data, &bad).is_err());
+    bad.manifest.files = vec!["custom_assets/jak3/levels/other/x.glb".into()];
+    assert!(apply(&data, &bad).is_err(), "another level's folder");
     let _ = std::fs::remove_dir_all(&tmp);
   }
 }

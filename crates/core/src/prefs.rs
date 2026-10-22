@@ -1,10 +1,11 @@
 //! The editor's preferences, kept between sessions in the user's settings folder
-//! (%APPDATA%/OpenGOAL/jak-level-editor on Windows, ~/.local/share/... on Linux): where the
-//! extracted game is, the disc it came from, the language, recent projects. Thumbnails are
-//! cached next to them.
+//! (%APPDATA%/OpenGOAL/jak-level-editor on Windows, ~/.local/share/... on Linux), or in the one its
+//! host gives (`Prefs::use_dir`: the OpenGOAL Launcher's own settings folder, so that the two apps
+//! never share a library): where the extracted game is, the disc it came from, the language,
+//! recent projects. Thumbnails and the catalog's index are cached next to them.
 //!
-//! The C++ editor kept them in OpenGOAL/open-goal-level-editor: while the new folder has no
-//! preferences, that one's are read (and written to the new folder at the next save).
+//! The C++ editor kept them in OpenGOAL/open-goal-level-editor: while the standalone app's folder
+//! has no preferences, that one's are read (and written to the new folder at the next save).
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +17,12 @@ use serde::{Deserialize, Serialize};
 pub static READ_ONLY: AtomicBool = AtomicBool::new(false);
 
 const K_FILE: &str = "prefs.json";
+
+static DIR: OnceLock<String> = OnceLock::new();
+
+fn slashed(dir: &str) -> String {
+  format!("{}/", dir.replace('\\', "/").trim_end_matches('/'))
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -32,13 +39,10 @@ pub struct Prefs {
   /// the user chose where the library goes (the first-run assistant); preferences of before it
   /// whose library holds an extracted game count as chosen
   pub library_chosen: bool,
-  /// the standalone app's game runtime: a jak-project checkout ("" none: its own OpenGOAL, below),
-  /// and the folder of its goalc and gk ("" its build's)
-  pub runtime_folder: String,
-  pub runtime_bin: String,
-  /// the standalone app's OpenGOAL: the tooling version it plays with, installed in
-  /// <library>/opengoal/versions/ ("" or not installed: the newest installed; tooling.rs)
-  pub tooling_version: String,
+  /// an assistant (the MCP server) may control the editor: its remote control listens on this
+  /// computer (editor/remote.rs); off unless the user turns it on, or the MCP server starts the
+  /// editor itself (--remote-port)
+  pub remote_control: bool,
 }
 
 /// The settings folder of an application, as SDL_GetPrefPath makes it ('/' separated, ending
@@ -62,23 +66,34 @@ fn pref_path(org: &str, app: &str) -> String {
 }
 
 impl Prefs {
-  /// folder of the preferences and of the thumbnail cache (created on demand), '/' separated;
-  /// $JLE_PREFS_DIR when set (tests of the application with fresh preferences)
+  /// folder of the preferences and of the thumbnail cache (created on demand), '/' separated:
+  /// $JLE_PREFS_DIR when set (tests of the application with fresh preferences), else the host's
+  /// (use_dir), else the standalone app's
   pub fn dir() -> String {
-    static DIR: OnceLock<String> = OnceLock::new();
     DIR
       .get_or_init(|| match std::env::var("JLE_PREFS_DIR") {
-        Ok(d) if !d.is_empty() => format!("{}/", d.replace('\\', "/").trim_end_matches('/')),
+        Ok(d) if !d.is_empty() => slashed(&d),
         _ => pref_path("OpenGOAL", "jak-level-editor"),
       })
       .clone()
   }
 
-  /// the C++ editor's folder (none with $JLE_PREFS_DIR: fresh preferences)
+  /// The host's folder for the preferences, given before they are first read (false after: the
+  /// folder stays); $JLE_PREFS_DIR still comes first.
+  pub fn use_dir(dir: &Path) -> bool {
+    if std::env::var_os("JLE_PREFS_DIR").is_some_and(|d| !d.is_empty()) {
+      return false;
+    }
+    DIR.set(slashed(&dir.to_string_lossy())).is_ok()
+  }
+
+  /// the C++ editor's folder, read for the standalone app's first preferences (none in another
+  /// folder: fresh preferences)
   pub fn old_dir() -> String {
-    match std::env::var_os("JLE_PREFS_DIR") {
-      Some(d) if !d.is_empty() => Self::dir(),
-      _ => pref_path("OpenGOAL", "open-goal-level-editor"),
+    if Self::dir() == pref_path("OpenGOAL", "jak-level-editor") {
+      pref_path("OpenGOAL", "open-goal-level-editor")
+    } else {
+      Self::dir()
     }
   }
 

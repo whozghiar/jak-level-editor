@@ -1,19 +1,27 @@
 <script lang="ts">
   // File > Settings: the library folder (another one is used as it is: nothing moved or deleted),
-  // the language, where ogle-extract was found (or the host's download), the game runtime and its
-  // OpenGOAL (section "tooling": shown at once).
+  // the language, where ogle-extract was found (or the host's download), whether an assistant (the
+  // MCP server) may control the editor (its remote control: remote_state, set_remote_control).
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import IconFolder from "~icons/mdi/folder-outline";
   import { changeLanguage } from "../../lib/actions.svelte";
   import { language, languages, t } from "../../lib/i18n";
   import { call, onEngine } from "../../lib/rpc";
-  import { button, heading, input, muted, primary } from "../common/classes";
-  import RuntimeSettings from "../settings/RuntimeSettings.svelte";
+  import {
+    button,
+    check,
+    heading,
+    input,
+    muted,
+    primary,
+  } from "../common/classes";
   import type { LibrarySetup } from "./WelcomeWindow.svelte";
 
-  let { section }: { section?: string } = $props();
+  type RemoteState = { on: boolean; port: number | null; session: boolean };
+
   let setup = $state<LibrarySetup>();
+  let remote = $state<RemoteState>();
   // the folder left for an empty one: what to do with it
   let left = $state("");
   let fetching = $state(false);
@@ -23,6 +31,7 @@
 
   onMount(() => {
     refresh();
+    call<RemoteState>("remote_state", {}, true).then((r) => (remote = r));
     // the host's download of ogle-extract ended
     return onEngine("jle:progress", (p) => {
       if (p?.id !== "extract_fetch") return;
@@ -43,6 +52,10 @@
     if (!r) return;
     setup = r;
     left = r.root_game || r.root === before ? "" : before;
+  }
+
+  async function setRemote(on: boolean) {
+    remote = (await call<RemoteState>("set_remote_control", { on })) ?? remote;
   }
 
   async function fetchExtractor() {
@@ -113,5 +126,29 @@
     {/if}
   {/if}
 
-  <RuntimeSettings tooling={section === "tooling"} />
+  <h3 class={heading}>{t("settings.remote")}</h3>
+  <p class="mb-2 {muted}">{t("settings.remote.help")}</p>
+  <label class="flex items-center gap-2 text-neutral-200">
+    <input
+      type="checkbox"
+      class={check}
+      checked={remote?.on}
+      onchange={(e) => setRemote(e.currentTarget.checked)}
+    />
+    {t("settings.remote.allow")}
+  </label>
+  {#if remote}
+    <p
+      class="mt-1.5 text-xs {remote.port
+        ? 'text-green-400'
+        : 'text-neutral-400'}"
+    >
+      {remote.port
+        ? t("settings.remote.listening", remote.port)
+        : t("settings.remote.off")}
+    </p>
+    {#if remote.session}<p class="mt-1 {muted}">
+        {t("settings.remote.session")}
+      </p>{/if}
+  {/if}
 </div>

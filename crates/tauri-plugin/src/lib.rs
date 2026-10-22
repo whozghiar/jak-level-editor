@@ -9,16 +9,16 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use jle_core::editor::protocol::{ProtocolState, content_type, encode_mesh, materials_json};
-use jle_core::editor::remote::{K_REMOTE_PORT, start_remote};
+use jle_core::editor::remote::K_REMOTE_PORT;
 use jle_core::editor::{Editor, Notify, SharedEditor};
 pub use jle_core::host::{
   ExtractorProvider, GameRuntime, Host, HostEvent, HostEvents, LevelManifest, LevelPackage,
   PlayOutcome, RuntimeInfo,
 };
-use jle_core::i18n::{i18n_init, i18n_select, i18n_system_language, lang_dir, set_lang_dir, tr};
+use jle_core::i18n::{i18n_init, i18n_select, i18n_system_language, lang_dir, set_lang_dir};
 use jle_core::io::game_data::set_data_dir;
 use jle_core::prefs::{Prefs, READ_ONLY};
-use jle_core::{log_error, log_info, log_warn};
+use jle_core::{log_error, log_info};
 use serde_json::Value;
 use tauri::http::{Request, Response, StatusCode};
 use tauri::plugin::TauriPlugin;
@@ -49,7 +49,8 @@ pub struct Options {
   pub library: String,
   /// the interface's language for this session
   pub language: String,
-  /// the MCP server's connection (None: the default port; 0: none)
+  /// the MCP server's connection for this session (it starts the editor with --remote-port);
+  /// None or 0: as the preferences say (Prefs::remote_control)
   pub remote_port: Option<u16>,
   /// no window shown, the preferences left unchanged (tests)
   pub hidden: bool,
@@ -61,6 +62,7 @@ pub struct Options {
 pub struct Builder {
   options: Options,
   host: Host,
+  prefs_in_app_config: bool,
 }
 
 impl Builder {
@@ -101,9 +103,18 @@ impl Builder {
     self
   }
 
+  /// The editor's preferences (its library, its caches) in `<the app's config folder>/
+  /// jak-level-editor/` rather than the standalone app's folder: a host application's editor
+  /// never shares them with the standalone app (jle_core::prefs::Prefs::use_dir).
+  pub fn prefs_in_app_config(mut self) -> Self {
+    self.prefs_in_app_config = true;
+    self
+  }
+
   pub fn build<R: Runtime>(self) -> TauriPlugin<R> {
     let options = self.options;
     let host = self.host;
+    let prefs_in_app_config = self.prefs_in_app_config;
     let hidden = options.hidden;
     tauri::plugin::Builder::new("jak-level-editor")
       .invoke_handler(tauri::generate_handler![call])
@@ -121,6 +132,9 @@ impl Builder {
         }
       })
       .setup(move |app, _api| {
+        if prefs_in_app_config && let Ok(dir) = app.path().app_config_dir() {
+          Prefs::use_dir(&dir.join("jak-level-editor"));
+        }
         setup(app, options, host);
         Ok(())
       })
@@ -224,12 +238,14 @@ fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options, host: Host) {
     }
   }
   log_info!("Jak Level Editor %s", env!("CARGO_PKG_VERSION"));
-  // the remote control of the MCP server (0: none)
-  let port = options.remote_port.unwrap_or(K_REMOTE_PORT);
-  if port != 0 {
-    match start_remote(&shared, port) {
-      Ok(()) => log_info!(tr("log.remote_ready"), port),
-      Err(e) => log_warn!(tr("log.remote_failed"), e),
+  // the remote control of the MCP server: for the session it started the editor for, else when the
+  // user lets an assistant control it
+  {
+    let mut ed = jle_core::editor::lock(&shared);
+    ed.remote_session = options.remote_port.filter(|p| *p != 0);
+    let wanted = Prefs::get().remote_control.then_some(K_REMOTE_PORT);
+    if let Some(port) = ed.remote_session.or(wanted) {
+      ed.start_remote_control(port);
     }
   }
   // the game view's hour passing, a storm's lightning (GameWeather::update)
