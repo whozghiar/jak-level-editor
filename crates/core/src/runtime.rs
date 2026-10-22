@@ -331,6 +331,19 @@ impl OpenGoal {
     self.folder.join("packages")
   }
 
+  /// the copies kept (packages/<name>/), by name
+  fn packages(&self) -> Vec<PathBuf> {
+    let mut packages: Vec<PathBuf> = std::fs::read_dir(self.packages_dir())
+      .into_iter()
+      .flatten()
+      .flatten()
+      .map(|e| e.path())
+      .filter(|p| p.join(LevelPackage::MANIFEST).is_file())
+      .collect();
+    packages.sort();
+    packages
+  }
+
   /// The launcher's game must be made again from its tooling version: its data/ was made from
   /// another one, or not yet
   pub fn stale(&self) -> bool {
@@ -364,15 +377,7 @@ impl OpenGoal {
     for p in ["gk", "goalc", "extractor"] {
       let _ = std::fs::remove_file(exe(&self.folder, p));
     }
-    let mut packages: Vec<PathBuf> = std::fs::read_dir(self.packages_dir())
-      .into_iter()
-      .flatten()
-      .flatten()
-      .map(|e| e.path())
-      .filter(|p| p.join(LevelPackage::MANIFEST).is_file())
-      .collect();
-    packages.sort();
-    for dir in packages {
+    for dir in self.packages() {
       level_package::apply(&self.data_dir, &LevelPackage::read(&dir)?)?;
     }
     // written last: a preparation stopped halfway starts again
@@ -486,11 +491,20 @@ impl OpenGoal {
       available: problem.is_none(),
       reason: problem.unwrap_or_default().into(),
       games: vec![game.into()],
-      installed: level_package::installed(&self.data_dir)
-        .into_iter()
-        .filter(|l| l.game == game)
-        .map(|l| l.name)
-        .collect(),
+      // the launcher's game of another version: the levels prepare installs again
+      installed: if self.stale() {
+        self
+          .packages()
+          .iter()
+          .filter_map(|p| Some(p.file_name()?.to_string_lossy().into_owned()))
+          .collect()
+      } else {
+        level_package::installed(&self.data_dir)
+          .into_iter()
+          .filter(|l| l.game == game)
+          .map(|l| l.name)
+          .collect()
+      },
     }
   }
 
@@ -968,6 +982,9 @@ mod tests {
     version("v0.3.9-whozghiar.2");
     let og2 = launcher_level_edited(&install, "v0.3.9-whozghiar.2", "jak3");
     assert!(og2.stale());
+    // the levels it will have, even with its data/ half gone
+    std::fs::remove_file(folder.join("data").join(level_package::RECORD)).unwrap();
+    assert_eq!(og2.info("jak3").installed, ["my-test"]);
     let s2 = og2.prepare().unwrap();
     let names = |og: &OpenGoal| -> Vec<String> {
       level_package::installed(&og.data_dir)
