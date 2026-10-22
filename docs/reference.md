@@ -28,9 +28,12 @@ jak-level-editor-mcp [--remote-port <port>]
 - `--library` chooses the library folder (instead of the one chosen at the first start, else the
   host's default: `Documents/Jak Level Editor`, `library/` of the repository when the program runs
   from it; no first-run assistant then), `--lang` the language, for one session.
-- `--remote-port` is the port of the editor's remote control (47821; `0` turns it off);
+- `--remote-port` starts the editor's remote control on that port for the session (what the MCP
+  server does when it starts the editor; without it, the remote control listens on 47821 only when
+  File > Settings lets an assistant control the editor; `0`: as the preferences say);
   `--hidden` runs the editor without a window and without touching the preferences (scripts).
-- `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones).
+- `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones; for
+  the MCP server, the folder of the editor's `remote.json`).
 - `jak-level-editor-mcp` is the MCP server ([7](#7-the-remote-control-and-the-mcp-server)).
 - Opened from the OpenGOAL Launcher, the editor has no command line: the library and the language
   are the preferences'.
@@ -38,11 +41,13 @@ jak-level-editor-mcp [--remote-port <port>]
   `cargo test -p jak-level-editor-core`, `--mcp` is `jak-level-editor-mcp`, and the pictures of
   `--screenshot` are taken through the remote control and the web view's DevTools
   ([captures](captures/README.md)).
-- The preferences, the panels' pictures (`thumbs/`) and what the catalog read of the levels
-  (`index/`) are in `%APPDATA%/OpenGOAL/jak-level-editor` on Windows
-  (`~/.local/share/OpenGOAL/jak-level-editor` on Linux, `~/Library/Application Support/...` on
-  macOS). While that folder has no preferences, the C++ editor's (`OpenGOAL/open-goal-level-editor`)
-  are read, and saved into the new folder the next time they change.
+- The preferences, the panels' pictures (`thumbs/`), what the catalog read of the levels
+  (`index/`) and, while the remote control listens, its `remote.json` are in
+  `%APPDATA%/OpenGOAL/jak-level-editor` on Windows (`~/.local/share/OpenGOAL/jak-level-editor` on
+  Linux, `~/Library/Application Support/...` on macOS); the OpenGOAL Launcher's editor keeps its own
+  in `<launcher's config folder>/jak-level-editor`. While the standalone app's folder has no
+  preferences, the C++ editor's (`OpenGOAL/open-goal-level-editor`) are read, and saved into the
+  new folder the next time they change.
 - The translations (`lang/`) and the game's tables (`data/`) are read from the application's
   resources (`bundle.resources` of `src-tauri/tauri.conf.json`; a build copies them next to the
   program in `target/<profile>/`: build again after changing them), else from the repository.
@@ -273,19 +278,26 @@ their actor; links between actors by id become links by name.
 
 **Into the game**: copy `custom_assets` and `goal_src` into jak-project, add the lines of
 `README.md` to `goal_src/jak3/game.gp` and `level-info.gc` (or the one `:nickname` to change for a
-replacement), build with `(mi)`, then `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
+replacement), build with `(mi)`, then start the game there with
+`gk -g jak3 -- -boot -fakeiso -debug -level <name>-start` (a gk of whozghiar/jak-project newer than
+`v0.3.9-whozghiar.1`), or in the REPL `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
+In the OpenGOAL Launcher, the editor's Play does all of it.
 
 ## 7. The remote control and the MCP server
 
-The editor listens on 127.0.0.1:47821 (`--remote-port`; one JSON line per request: `{"id", "tool",
-"args"}`, one per answer: `{"id", "ok", "result" | "error", "image"}`;
-`crates/core/src/editor/remote.rs`). Its tools are the MCP server's, carried out under the
+The editor listens on 127.0.0.1:47821 when File > Settings lets an assistant control it, or on the
+port the command line gives for the session (`--remote-port`); one JSON line per request:
+`{"id", "tool", "args", "token"}`, one per answer: `{"id", "ok", "result" | "error", "image"}`
+(`crates/core/src/editor/remote.rs`). `token` is the one the editor wrote into `remote.json`
+(`{"port", "token"}`, in its preferences' folder) when it started listening: a request without it is
+refused and its connection closed, and so is a line that is not a JSON object. Its tools are the MCP server's, carried out under the
 engine's lock like the user's actions: they show at once and can be undone. `capture_view` asks the
 interface for a picture of its 3D view (the event `jle:request`, answered with `frontend_reply`).
 
 `jak-level-editor-mcp` (`crates/mcp`) speaks MCP on its standard input and output and forwards each
-tool call to the editor, and starts `jak-level-editor` (found next to it, else in
-`target/release/` or `target/debug/`) when none runs. The tools, their arguments and the rules of
+tool call to the editor with the token of its `remote.json` (`$JLE_PREFS_DIR`, else the standalone
+app's preferences' folder), and starts `jak-level-editor --remote-port <port>` (found next to it,
+else in `target/release/` or `target/debug/`) when none listens. The tools, their arguments and the rules of
 an agent: [the guide for AI agents](mcp-agent-guide.md).
 
 The C++ editor's `ui_input` (mouse and key events, pictures of the whole window) is gone: the

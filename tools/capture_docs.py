@@ -15,8 +15,8 @@ The editor runs with preferences of its own (<work>/prefs: the library given, En
 already seen), never the user's; the first start's pictures with none at all (<work>/prefs-first).
 The paths the windows show are replaced in the pictures (`paths()`): the library is shown as
 C:/Users/you/Documents/Jak Level Editor, the folder the editor proposes. What the script writes goes
-to <work> (an export, an extraction), never into the library: it only reads it. The OpenGOAL
-settings' picture with a version installed reads another library (--opengoal-library) where one is.
+to <work> (an export, an extraction), never into the library: it only reads it. The remote
+control's requests carry the token the editor writes into <work>/prefs/remote.json.
 
 Needs Jak 3 (and Jak II for its pictures) extracted with the editor, the disc it came from for the
 extraction's picture (--disc, else the OpenGOAL Launcher's extracted disc), and the prefabs of yours
@@ -51,7 +51,6 @@ SIZE = (1600, 900)
 WORK = os.path.join(tempfile.gettempdir(), 'jle-captures')
 LIBRARY = os.path.join(REPO, 'library')
 DISC = ''  # --disc
-OPENGOAL_LIBRARY = ''  # --opengoal-library
 # the folder shown in the pictures for the library (the one the editor proposes)
 SHOWN_LIBRARY = 'C:/Users/you/Documents/Jak Level Editor'
 
@@ -73,7 +72,6 @@ def paths():
     first, each with / and with \\."""
     home = os.path.expanduser('~')
     pairs = [(DISC, 'C:/Users/you/jak-level-editor/iso_data/jak3')] if DISC else []
-    pairs += [(OPENGOAL_LIBRARY, SHOWN_LIBRARY)] if OPENGOAL_LIBRARY else []
     pairs += [(os.path.join(WORK, 'exports'), SHOWN_LIBRARY + '/exports'), (os.path.join(WORK, 'extract'), SHOWN_LIBRARY),
              (LIBRARY, SHOWN_LIBRARY), (os.path.join(REPO, 'build', 'bin'), 'C:/Users/you/AppData/Local/Jak Level Editor'),
              (REPO, 'C:/Users/you/jak-level-editor'), (WORK, 'C:/Users/you/Documents/Jak Level Editor'),
@@ -96,6 +94,7 @@ class Editor:
 
     def __init__(self, exe, port, devtools, prefs, prefs_json, wv2):
         os.makedirs(prefs, exist_ok=True)
+        self.prefs = prefs
         file = os.path.join(prefs, 'prefs.json')
         if prefs_json is None:
             if os.path.exists(file):
@@ -131,10 +130,21 @@ class Editor:
                 break
             time.sleep(0.5)
 
+    def token(self):
+        """The token of the remote control's requests: its remote.json, written when it listens."""
+        for _ in range(50):
+            try:
+                with open(os.path.join(self.prefs, 'remote.json'), encoding='utf-8') as f:
+                    return json.load(f)['token']
+            except (OSError, ValueError, KeyError):
+                time.sleep(0.1)
+        raise SystemExit('the editor wrote no remote.json')
+
     def call(self, tool, args=None, image=None, check=True):
         """A tool of the remote control (the MCP server's)."""
         self.n += 1
-        self.f.write((json.dumps({'id': self.n, 'tool': tool, 'args': args or {}}) + '\n').encode())
+        request = {'id': self.n, 'tool': tool, 'args': args or {}, 'token': self.token()}
+        self.f.write((json.dumps(request) + '\n').encode())
         self.f.flush()
         while True:
             a = json.loads(self.f.readline())
@@ -146,9 +156,7 @@ class Editor:
             return {'error': a.get('error')}
         if image and a.get('image'):
             os.makedirs(os.path.dirname(image), exist_ok=True)
-            with open(image, 'wb') as out:
-                out.write(base64.b64decode(a['image']))
-            optimize(image)
+            write_picture(image, base64.b64decode(a['image']))
         return a.get('result')
 
     def loaded(self):
@@ -343,20 +351,31 @@ class DevTools:
     def shot(self, path):
         self.anonymize()
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as out:
-            out.write(base64.b64decode(self.send('Page.captureScreenshot', format='png')['data']))
-        optimize(path)
+        png = base64.b64decode(self.send('Page.captureScreenshot', format='png')['data'])
+        write_picture(path, png)
 
 
-def optimize(path):
-    """The picture saved again smaller (RGB, the best compression), when Pillow is there."""
+def write_picture(path, png):
+    """The PNG written, smaller (RGB, the best compression) when Pillow is there; tried again a few
+    times: a picture just written may be held a moment (an antivirus, a synchronised folder)."""
     try:
+        import io
         from PIL import Image
+        with Image.open(io.BytesIO(png)) as im:
+            out = io.BytesIO()
+            im.convert('RGB').save(out, format='png', optimize=True)
+            png = out.getvalue()
     except ImportError:
-        return
-    with Image.open(path) as im:
-        im = im.convert('RGB')
-    im.save(path, optimize=True)
+        pass
+    for attempt in range(10):
+        try:
+            with open(path, 'wb') as f:
+                f.write(png)
+            return
+        except OSError:
+            if attempt == 9:
+                raise
+            time.sleep(0.5)
 
 
 def out(feature, name):
@@ -423,8 +442,10 @@ def getting_started(args, e):
     })()''')
     e.shot(out('getting-started', 'guide.png'), settle=2)
     e.web.close_windows()
-    # File > Settings: the library, the language, the extractor, the game Play uses
+    # File > Settings: the library, the language, the extractor, the assistant (let in: it already
+    # listens for this session)
     e.web.menu('File', 'Settings...')
+    e.web.click('Let an assistant control the editor')
     e.shot(out('getting-started', 'settings.png'))
     e.web.close_windows()
 
@@ -833,6 +854,13 @@ def exporting(args, e):
             break
         time.sleep(0.5)
     e.shot(out('export', 'export-window.png'), settle=1)
+    # no game to play in (the standalone app): the end of its report, the guide's tutorial on adding
+    # the level by hand offered
+    e.web.evaluate('''(() => {
+      const w = document.querySelector('%s');
+      for (const el of w.querySelectorAll("*")) if (el.scrollHeight > el.clientHeight + 4) el.scrollTop = el.scrollHeight;
+    })()''' % win)
+    e.shot(out('export', 'by-hand.png'), settle=1)
     e.web.close_windows()
     shutil.rmtree(os.path.join(WORK, 'exports'), ignore_errors=True)
     # made a replacement of ctyindb, the original shown in blue to compare
@@ -841,57 +869,6 @@ def exporting(args, e):
     e.loaded()
     e.call('select', {'ids': []})
     e.shot(out('export', 'replace.png'), settle=3)
-    # Play: its window the first time (OpenGOAL installed in one click), never played here (it would
-    # export into the library)
-    runtime = e.web.engine('get_state').get('runtime') or {}
-    if runtime.get('available'):
-        print('  a game to play in is ready: play.png not taken (Play would export into the library)')
-    elif runtime.get('tooling'):
-        e.web.click('Play')
-        e.shot(out('export', 'play.png'), settle=1.5)
-        e.web.close_windows()
-    if not OPENGOAL_LIBRARY:
-        opengoal_settings(e)
-
-
-def opengoal_settings(e):
-    """Settings > OpenGOAL: the releases, the one used; the title bar's version (and its download
-    icon, its tooltip, when one is out: a click on it opens the settings there)."""
-    icon = e.web.evaluate('''(() => {
-      const b = [...document.querySelectorAll("header button[aria-label]")].find((b) => b.getAttribute("aria-label").startsWith("OpenGOAL"));
-      if (!b) return null;
-      const r = b.getBoundingClientRect();
-      return [r.x + r.width / 2, r.y + r.height / 2];
-    })()''')
-    if icon:
-        e.web.mouse('moved', icon)
-        e.web.mouse('pressed', icon, 'left', LEFT, 0, 1)
-        e.web.mouse('released', icon, 'left', 0, 0, 1)
-        time.sleep(0.5)
-        e.web.mouse('moved', (icon[0] + 1, icon[1]))
-    else:
-        e.web.menu('File', 'Settings...')
-        e.web.evaluate('''(() => {
-          const h = [...document.querySelectorAll('[role=dialog][aria-label="Settings"] h3')].find((h) => h.textContent.trim() === "OpenGOAL");
-          h && h.scrollIntoView({block: "start"});
-        })()''')
-    e.shot(out('export', 'opengoal.png'), settle=1.5, mouse=bool(icon))
-    e.web.close_windows()
-
-
-def opengoal_library(args, exe):
-    """The OpenGOAL settings of a library where a version is installed (--opengoal-library: only
-    read; nothing is installed, used or removed)."""
-    e = Editor(exe, args.port + 2, args.devtools + 2, os.path.join(WORK, 'prefs-opengoal'),
-               {'library_root': OPENGOAL_LIBRARY.replace('\\', '/'), 'library_chosen': True, 'guide_seen': True,
-                'language': 'en'}, os.path.join(WORK, 'wv2-opengoal'))
-    try:
-        e.call('new_level', {'discard_changes': True})
-        e.loaded()
-        e.call('set_camera', {'position': [20, 18, 26], 'look_at': [0, 1, -2]})
-        opengoal_settings(e)
-    finally:
-        e.close()
 
 
 def assistant(args, e):
@@ -925,7 +902,7 @@ SECTIONS = (('getting-started', getting_started), ('levels', levels), ('selectin
 
 
 def main():
-    global OUT, WORK, LIBRARY, DISC, OPENGOAL_LIBRARY
+    global OUT, WORK, LIBRARY, DISC
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=47896, help="the editor's remote control (the first start's: +1)")
     ap.add_argument('--devtools', type=int, default=9333, help="its web view's DevTools (the first start's: +1)")
@@ -935,9 +912,6 @@ def main():
     ap.add_argument('--library', default=LIBRARY, help='the library to read (library/ of the repository)')
     ap.add_argument('--work', default=WORK, help='where the script writes (preferences, an export, an extraction)')
     ap.add_argument('--disc', default='', help="the Jak 3 disc folder or .iso the extraction's picture reads")
-    ap.add_argument('--opengoal-library', default='',
-                    help="a library where the editor's OpenGOAL is installed (opengoal/versions/), for the "
-                         "OpenGOAL settings' picture; else that picture shows none installed")
     args = ap.parse_args()
     OUT, WORK, LIBRARY = args.out, os.path.abspath(args.work), os.path.abspath(args.library)
     if not args.disc:
@@ -949,7 +923,6 @@ def main():
         except (OSError, ValueError):
             pass
     DISC = os.path.normpath(args.disc) if args.disc else ''
-    OPENGOAL_LIBRARY = os.path.normpath(args.opengoal_library) if args.opengoal_library else ''
     only = set(filter(None, args.only.split(',')))
     exe = os.path.abspath(args.editor) if args.editor else find_editor()
     if not only or 'first-start' in only:
@@ -967,9 +940,6 @@ def main():
                 f(args, e)
     finally:
         e.close()
-    if OPENGOAL_LIBRARY and (not only or 'export' in only):
-        print('export: OpenGOAL settings')
-        opengoal_library(args, exe)
 
 
 if __name__ == '__main__':

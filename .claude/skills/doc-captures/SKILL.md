@@ -50,10 +50,8 @@ Tips:
 - The terrain brush's window covers the right of the view: aim the mouse at the left.
 - Close the windows a section opened before the next one (`close_windows()`: Escape closes only
   the modal ones, and the first "Close" of the page is the editor's own).
-- Never let the script write into the library: exports and extractions go to `--work` (Play is not
-  pressed while an OpenGOAL is installed: it would export into the library). The OpenGOAL
-  settings' picture with a version installed: `--opengoal-library <a scratch library>` where one
-  is (never install one into the user's library: about 7 GB).
+- Never let the script write into the library: exports and extractions go to `--work`. The
+  remote control's requests carry the token of `<work>/prefs/remote.json` (`Editor.token`).
 - Look at every picture (a contact sheet of several helps) before using it in the docs; optimise
   the PNG files.
 - The pictures show the game's levels: never put the extracted files themselves in git, only the

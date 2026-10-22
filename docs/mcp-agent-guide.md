@@ -34,7 +34,9 @@ when they first appear. The user's guide of the editor itself is the [README](..
   take over at any moment. Every change is one step of the editor's history: the user (or you,
   with `undo`) can take it back.
 - The editor only listens on the computer itself (127.0.0.1): nothing is reachable from the
-  network.
+  network. It listens only when the user lets an assistant control it (**File > Settings >
+  Assistant (MCP)**), or when the MCP server started it itself; every request carries the key the
+  editor writes into its settings folder (`remote.json`), which the server reads there.
 
 The server tells your client its rules when it starts (its `instructions`): they are the
 [four rules](#4-the-four-rules) of this guide in short.
@@ -46,7 +48,9 @@ The server tells your client its rules when it starts (its `instructions`): they
    jak-level-editor-mcp`: both land in `target/release/`) and extract the game
    ([README, Extract your game](../README.md#extract-your-game)): without the extracted levels,
    there is nothing to build with. The MCP server starts the editor found next to it (else in
-   `target/debug/`), in its own window, when none is running; one already open is used.
+   `target/debug/`), in its own window, when none listens; one already open is used once **File >
+   Settings > Assistant (MCP) > Let an assistant control the editor** is ticked (else close it and
+   let the server start one).
 2. **Claude Code**: the repository has a `.mcp.json`. Start Claude Code in the repository's folder
    and accept the server `jak-level-editor` (its tools are then named
    `mcp__jak-level-editor__<tool>`). From another folder, add it once:
@@ -59,7 +63,9 @@ The server tells your client its rules when it starts (its `instructions`): they
    ```
 
 3. **Another client**: run `<repository>/target/release/jak-level-editor-mcp` as a stdio server
-   (`--remote-port <port>` if the editor was started with another port than 47821).
+   (`--remote-port <port>` if the editor was started with another port than 47821). For the editor
+   of the OpenGOAL Launcher, give the server the launcher's editor settings folder:
+   `JLE_PREFS_DIR=%APPDATA%/OpenGOAL-Launcher/jak-level-editor` (its `remote.json`).
 4. Check: ask the assistant to call `get_status` (*"call get_status of the level editor"*). Its
    answer gives the library and the document, for example
    `{"levels": 272, "document": {"open": true, "level": "ctysluma", "elements": 13193, ...}, ...}`. The

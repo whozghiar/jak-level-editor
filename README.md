@@ -184,21 +184,21 @@ the weathers, the terrain brush, the nav meshes.
 ### Your library
 
 The first time, the editor asks where to keep your **library**: the folder that holds the extracted
-game (`jak3/`, `jak2/`), your projects (`projects/`), your levels exported for the game (`exports/`),
-your prefabs (`prefabricated/`) and, once Play installed it, the editor's OpenGOAL (`opengoal/`).
-It offers `Documents/Jak Level Editor` (in the OpenGOAL Launcher: `jak-level-editor/` of its
-installation folder; the editor built and started from this folder: `library/` here, which git
-ignores); **Choose another folder...** takes any other, **Confirm** uses it.
+game (`jak3/`, `jak2/`), your projects (`projects/`), your levels exported for the game (`exports/`)
+and your prefabs (`prefabricated/`). It offers `Documents/Jak Level Editor` (in the OpenGOAL
+Launcher: `jak-level-editor/` of its installation folder, a library of its own; the editor built and
+started from this folder: `library/` here, which git ignores); **Choose another folder...** takes
+any other, **Confirm** uses it.
 
 ![The first start: what the library holds, the folder the editor offers](docs/captures/getting-started/welcome.png)
 
 **File > Settings...** shows it and changes it later: the editor then uses the new folder, and
 neither moves nor deletes anything in the old one (extract the game again there, or copy the old
 folder's content by hand). The same window has the language, where ogle-extract was found (or a
-button that downloads it, when the application can), the game Play uses and the OpenGOAL versions
-([15](#15-playing-it-in-the-game-export)).
+button that downloads it, when the application can), and whether an AI assistant may control the
+editor ([16](#16-building-with-an-ai-assistant)).
 
-![File > Settings: the library, the language, the extractor, the game Play uses and its OpenGOAL](docs/captures/getting-started/settings.png)
+![File > Settings: the library, the language, the extractor, the assistant](docs/captures/getting-started/settings.png)
 
 ### Extract your game
 
@@ -238,8 +238,7 @@ game: keep them on your computer, do not share them.
 +------------------------------------------------------------------------------+
 ```
 
-- The **title bar** names the level open (an orange dot: unsaved changes) and the OpenGOAL Play
-  uses (a green download icon: a newer one is out).
+- The **title bar** names the level open (an orange dot: unsaved changes).
 - The **bar of icons** on the left opens the panels, the steps of the work: **Levels** (the map) to
   open one, **Build** (the hammer) to make shapes, **Catalog** and **Prefabs** to place things,
   **Groups** to find the groups you made. Hover an icon for its name; drag a panel's edge to widen
@@ -681,55 +680,41 @@ blue ghost to compare), **Place it where the original is**, check where the game
 
 ![A level made the replacement of ctyindb: the inspector's section](docs/captures/export/replace.png)
 
-**Play** (the toolbar's button, **Level > Play in the game**) does the rest for you, in a game of
-the editor's own, apart from your Jak 3 and its saves:
+**Play it in the game.** The editor runs no game of its own.
 
-- **OpenGOAL**: the editor plays with the releases of
-  [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (`v0.3.X-whozghiar.N`: OpenGOAL
-  with the level builder's fixes the editor's levels need). The first Play offers to install the
-  latest one (a download of about 40 MB, into `<library>/opengoal/versions/`). The title bar shows
-  the version used and, when a newer one is out, a green download icon (as the OpenGOAL Launcher's
-  header); **File > Settings > OpenGOAL** lists the releases, installs, uses or removes one, and
-  asks GitHub again. Without network, the version installed is still used.
-- **The game's files**: the disc the OpenGOAL Launcher extracted when it is installed (read only),
-  else the disc you extract the levels from (**File > Extract game assets**): a folder is used as it
-  is, an `.iso` is extracted once into `<library>/opengoal/iso_data/`.
-- **Its game**, `<library>/opengoal/jak3/`: made from the version's data, decompiled once per
-  version (about ten minutes the first time), with its own settings and saves; another version
-  makes it again at the next Play, with the levels installed in it.
-- For advanced users, **File > Settings > Game** takes a **jak-project checkout** of your own
-  instead, built, with your Jak 3 extracted in it (used as it is).
-
-| The first Play: OpenGOAL installed and the level played, in one click | File > Settings > OpenGOAL: the releases, the one installed and used, also named in the title bar |
-|---|---|
-| ![play](docs/captures/export/play.png) | ![opengoal](docs/captures/export/opengoal.png) |
-
-In the OpenGOAL Launcher, Play uses the launcher's game for the editor
-(`<install>/features/jak3/level_edited/`), with the launcher's active OpenGOAL version: the
-launcher's header and its Settings > Versions install and choose it; the editor shows no OpenGOAL
-of its own there, and says when the active version cannot play or a newer release is out.
-
-It exports the level into `library/exports/<project>/`, installs it in that game (its files, and
+**In the OpenGOAL Launcher** (its *Level Editor* button), **Play** (the toolbar's button, **Level >
+Play in the game**) does the rest for you, in the launcher's game for the editor
+(`<install>/features/jak3/level_edited/`), apart from your Jak 3, its saves and your mods. It runs
+with the launcher's active OpenGOAL, a release of
+[whozghiar/jak-project](https://github.com/whozghiar/jak-project) newer than `v0.3.9-whozghiar.1`
+(OpenGOAL with the level builder's fixes the editor's levels need, and a `gk` that starts the game
+at a level): the launcher's header and its Settings > Versions install and choose it. Play exports
+the level into `exports/<project>/`, installs it in that game (its files in the level's own folders,
 its lines in `game.gp` and `level-info.gc` between `;; jak-level-editor: begin <name>` and `end`
-lines; each file edited is backed up once as `<file>.jle-backup`), builds the game (a few minutes)
-and starts it in your level. The Play window shows each step and the compiler's lines; **Remove**
-takes the level out of that game again and builds it: its files are as they were. In the OpenGOAL
-Launcher, the launcher does it in its own window. The export's `jle-level.json` is what Play reads:
-the same as its README, for a program.
+lines), builds the game and starts it at your level. The first Play with a version also decompiles
+the game (about ten minutes). The launcher shows each step in its own window; its **Edited Levels**
+page (Jak 3's **Advanced** menu) plays a level again or removes it. The export's `jle-level.json` is
+what Play reads: the same as its README, for a program.
 
-To play it by hand instead (the export's
-`README.md` gives the exact lines for your level):
+**In the standalone app**, export the level and add it to the game by hand: **Help > Guide**, the
+tutorial **Add your level to the game by hand** (the export window's **Add it by hand...** opens it),
+walks through it, and the export's `README.md` gives the exact lines for your level:
 
-1. Get **jak-project** (OpenGOAL's source code) and build it, as its own
-   [README](https://github.com/open-goal/jak-project#readme) explains, with your Jak 3 extracted in
-   it. You get `goalc` (the compiler of the game's language) and `gk` (the game).
+1. Get **jak-project** (OpenGOAL's source code) from
+   [whozghiar/jak-project](https://github.com/whozghiar/jak-project) (its level builder has the
+   fixes these levels need) and build it, as its own README explains, with your Jak 3 extracted and
+   decompiled in it. You get `goalc` (the compiler of the game's language) and `gk` (the game).
 2. Copy the export's two folders, `custom_assets` and `goal_src`, into the jak-project folder (they
    merge with the folders of the same names).
 3. Add the lines the export's `README.md` gives to `goal_src/jak3/game.gp` and
    `goal_src/jak3/engine/level/level-info.gc` (for a replacement: one word to change instead).
-4. Start `goalc`, type `(mi)` and wait for *Successfully built all*; start `gk`; in `goalc`, type
-   `(lt)` then `(start 'play (get-continue-by-name *game-info* "my-ctyslum-start"))`: Jak appears in
-   your level.
+4. Start `goalc`, type `(mi)` and wait for *Successfully built all*.
+5. Start the game in your level:
+   `gk -g jak3 -- -boot -fakeiso -debug -level my-ctyslum-start` (a `gk` of whozghiar/jak-project
+   newer than `v0.3.9-whozghiar.1`). With another `gk`: start it, then in `goalc` type `(lt)` and
+   `(start 'play (get-continue-by-name *game-info* "my-ctyslum-start"))`. Jak appears in your level.
+
+![The export's report in the standalone app: open its folder, its README, or add it to the game by hand](docs/captures/export/by-hand.png)
 
 ## 16. Building with an AI assistant
 
@@ -737,7 +722,12 @@ An AI assistant can build in the editor for you, through its **MCP server**
 (`jak-level-editor-mcp`; MCP is the protocol that lets an assistant use a program's tools):
 you describe the level, it opens it, places the decor and the prefabs, checks the holes, looks at the
 result and shows it to you, in your window, every change undoable. The server starts the editor
-when none is running.
+when none listens for it.
+
+The editor listens for an assistant only when you let it: **File > Settings > Assistant (MCP)**,
+**Let an assistant control the editor** (or when the MCP server started it itself). It then answers
+on this computer only, to requests carrying the key it writes into its settings folder
+(`remote.json`): nothing else, a web page for instance, can control it.
 
 - **Build it** with the editor: `npx vite build`, then
   `cargo build --release -p jak-level-editor -p jak-level-editor-mcp` (both land in
@@ -785,8 +775,6 @@ library/                 the library: everything made from your game (git ignore
   prefabricated/         the prefabs: yours, and the game's in prefabricated/game/
   projects/<name>/       your saved projects
   exports/<project>/     the levels exported for the game (older exports: export/<project>/)
-  opengoal/              the editor's OpenGOAL, installed by Play: versions/, its game jak3/, the
-                         disc's files iso_data/ when an .iso was extracted for it
 iso_data/                put your disc images here if you like (git ignores them)
 data/                    what the editor knows of the game: names and rules, no asset
 lang/                    the interface texts (en.json, fr.json)
@@ -802,10 +790,12 @@ tools/                   scripts that regenerate data/ and the screenshots
 Only `library/prefabricated/.gitkeep` of `library/` is in git: prefabs, projects and exports hold
 the game's data and stay on your computer.
 
-Your preferences (the library, the disc, the language, the recent projects), the pictures of the
-panels and what the catalog read of the levels are kept in `%APPDATA%/OpenGOAL/jak-level-editor`
-on Windows (`~/.local/share/OpenGOAL/jak-level-editor` on Linux). The first time, the editor takes
-the preferences of its previous version (`OpenGOAL/open-goal-level-editor`).
+Your preferences (the library, the disc, the language, the recent projects, whether an assistant
+may control the editor), the pictures of the panels and what the catalog read of the levels are
+kept in `%APPDATA%/OpenGOAL/jak-level-editor` on Windows (`~/.local/share/OpenGOAL/jak-level-editor`
+on Linux). The first time, the editor takes the preferences of its previous version
+(`OpenGOAL/open-goal-level-editor`). The OpenGOAL Launcher's editor keeps its own, in the
+launcher's settings folder (`%APPDATA%/OpenGOAL-Launcher/jak-level-editor` on Windows).
 
 ## 19. More
 

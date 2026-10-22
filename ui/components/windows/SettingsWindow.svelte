@@ -147,7 +147,7 @@
         ? t("settings.remote.listening", remote.port)
         : t("settings.remote.off")}
     </p>
-    {#if remote.session}<p class="mt-1 {muted}">
+    {#if remote.session && !remote.on}<p class="mt-1 {muted}">
         {t("settings.remote.session")}
       </p>{/if}
   {/if}

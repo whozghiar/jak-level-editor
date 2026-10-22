@@ -54,11 +54,8 @@ python tools/capture_docs.py --out <folder>                  # somewhere else, t
   as `C:/Users/you/Documents/Jak Level Editor`, the folder the editor proposes (the first start
   creates it when it is not there: the script deletes it again when it stays empty), the disc as
   `iso_data/jak3` of the editor's folder.
-- The Play window is taken only while no OpenGOAL is installed in the library (Play would export
-  into it otherwise): it offers to install one. The OpenGOAL settings are taken from another
-  library where a version is installed, `--opengoal-library <folder>` (only read: nothing is
-  installed, used or removed), else from the library given, with none installed. Never install
-  one into your library for the pictures: its game takes about 7 GB.
+- The standalone app has no Play: `export/by-hand.png` is the export's report with the guide's
+  tutorial on adding the level to the game by hand, opened from it.
 - Some pictures use prefabs of your own (`main-town-building-a` to `-d`, `small-fountain`,
   `haven-tree`, `ind-facade-60` in `library/prefabricated/`): use yours instead.
 

@@ -27,17 +27,13 @@ crates/
                                   fog, lights (mood.rs)
     src/navmesh.rs, navmesh/      nav mesh generation (rerecast, a Rust port of Recast; recast.rs:
                                   Recast's own steps where rerecast differs)
-    src/runtime.rs                the game runtimes: an OpenGOAL the editor drives, the standalone
-                                  app's (section 6)
-    src/tooling.rs                OpenGOAL's releases (whozghiar/jak-project) the standalone app
-                                  installs itself (section 6)
     src/editor/                   the application without its interface: the Editor (mod.rs), the
                                   dispatch of `call` (api.rs), get_state (state.rs), levels,
                                   project, selection, groups, placement, the tools (terrain_tool,
                                   topology_tool, preview), inspector, panels, catalog, thumbnails,
                                   export, extraction, effects, ocean, surfaces, behaviors, the
                                   jle:// encoders (protocol.rs), the remote control and its tools
-                                  (remote.rs, remote_tools.rs)
+                                  (remote.rs, remote_tools/)
     tests/                        tests of the whole engine
   tauri-plugin/                   tauri-plugin-jak-level-editor: the engine inside a Tauri app (its
                                   command, its events, the jle:// protocol, the remote control, the
@@ -203,23 +199,42 @@ The plugin keeps the engine in an `Arc<Mutex<Editor>>`. Long work (a level read,
 index, the game's prefabs, a nav mesh, an export, the extraction) runs on a worker thread that
 holds what it reads (`Arc`s of the library) and applies its result under the lock when done, then
 emits `jle:progress` while it goes and `jle:changed` when done (`Editor::run_job`). The remote
-control (MCP) listens on `127.0.0.1:47821` and runs its tools under the same lock: what an
+control (MCP, `crates/core/src/editor/remote.rs`) runs its tools under the same lock: what an
 assistant does shows at once and can be undone; a tool that waits (a level loading, a job, a
 picture of the view) is asked again every few milliseconds, the lock let go in between. A timer of
 the plugin calls `Editor::tick` every 50 ms (the game view's hour passing, a storm's lightning).
+
+The remote control listens on `127.0.0.1` only while the user lets an assistant control the editor
+(the preference `remote_control`, File > Settings: `remote_state`, `set_remote_control {on}`) or for
+the session the MCP server started the editor for (`--remote-port <port>`); its port is 47821 by
+default. When it starts listening it writes `remote.json` (`{"port", "token"}`, a random token of
+128 bits) into the preferences' folder, and deletes it when it stops. Every request carries that
+token (`{"id", "tool", "args", "token"}`): one without it, or with another, is answered "refused"
+and its connection closed, and a line that is not a JSON object (a web page's HTTP request sent to
+the port) closes the connection unanswered. The MCP server reads the token from that file
+(`$JLE_PREFS_DIR`, else the standalone app's preferences' folder).
 
 ## 6. What the host gives the editor
 
 The application that hosts the editor (its own app, the OpenGOAL Launcher) gives it a `Host`
 (`crates/core/src/host.rs`, `tauri_plugin_jak_level_editor::Builder::host`). The editor never asks
-which application hosts it: it uses what it is given and hides what it is not.
+which application hosts it: it uses what it is given and hides what it is not. It runs no game of
+its own: playing a level is the host's (a `GameRuntime`).
 
 | Field | Standalone app | OpenGOAL Launcher |
 |---|---|---|
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
 | `extract_source` | none (the user's disc) | `<install>/active/jak3/data/iso_data/jak3`: the disc it already extracted |
-| `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version |
-| `runtime` | `StandaloneRuntime`: the jak-project checkout chosen in the settings (used as it is), else its own OpenGOAL: the releases of `whozghiar/jak-project` it installs in `<library>/opengoal/` (`tooling_dir`) and its game there | the launcher's isolated game `<install>/features/jak3/level_edited/`, run with the programs of the launcher's active tooling version (`<install>/versions/official/<version>/`, from the release of `whozghiar/jak-project`; nothing else is downloaded); no `tooling_dir`: the launcher's header and Versions page install the tooling |
+| `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version, checked against GitHub's SHA-256 of it |
+| `runtime` | none: the app exports, the guide's tutorial "Add your level to the game by hand" and the export's README tell the rest | the launcher's isolated game `<install>/features/jak3/level_edited/` (its `level_edited/game.rs`), run with the programs of its active tooling version |
+
+**The preferences** (`crates/core/src/prefs.rs`) and the caches next to them (thumbnails, the
+catalog's index, `remote.json`) are in `Prefs::dir()`: `$JLE_PREFS_DIR` when set (tests), else the
+folder the host gave before they were first read (`Prefs::use_dir`; the plugin's
+`Builder::prefs_in_app_config()` gives `<the app's config folder>/jak-level-editor/`: the launcher's
+editor keeps its own library), else the standalone app's `%APPDATA%/OpenGOAL/jak-level-editor`
+(`~/.local/share/...` on Linux, `~/Library/Application Support/...` on macOS), which reads the C++
+editor's preferences the first time.
 
 **The library** (`crates/core/src/editor/library.rs`): until the user chose one (the preference
 `library_chosen`; preferences of before it whose library holds an extracted game count as chosen),
@@ -231,119 +246,50 @@ window's disc is `extract_source` while the user has chosen none; ogle-extract i
 first, and when it is missing the window offers `extractor_provider`'s download (`extract_fetch`,
 a job: `jle:progress` "extract_fetch").
 
-**The game runtime** (`GameRuntime`): `install_level` (copies a level exported for the game into the
-game's sources, registers it in `game.gp` and `level-info.gc`, builds the game), `remove_level`,
-`launch` (starts the game on the level's continue point), and `play` (both; a host may hand it to
-its own interface: the launcher runs it as one of its jobs, with its progress bar). The export
-writes `jle-level.json` (`LevelManifest`) next to its README: what the README tells a person to do,
-for a runtime to do it. Without a runtime the editor has no Play button: it exports and points to
-the README.
+**The game runtime** (`GameRuntime`): `info` (`RuntimeInfo`: can it play now, why not as a
+translation key, the levels installed; asked at each `get_state`, so kept cheap), `install_level`
+(copies a level exported for the game into the game's sources, registers it in `game.gp` and
+`level-info.gc`, builds the game), `remove_level`, `launch` (starts the game on the level's continue
+point), and `play` (both; a host may hand it to its own interface: the launcher runs it as one of
+its jobs, with its progress bar). The export writes `jle-level.json` (`LevelManifest`) next to its
+README: what the README tells a person to do, for a runtime to do it.
 
-**The level package** (`crates/core/src/io/level_package.rs`, used by every runtime, the launcher's
-too): `apply(data_dir, &LevelPackage)` and `remove(data_dir, game, name)` on an OpenGOAL data folder
-(the one holding `goal_src/<game>` and `custom_assets/<game>`: a jak-project checkout's root, an
-OpenGOAL distribution's `data/`). `apply` copies the export's files, adds its `game.gp` lines (next
-to the test-zone's) and its definition to `engine/level/level-info.gc` (with an `:index` no other
-level has), or, for a level replacing one of the game's, changes that level's `:nickname`; each
-inside `;; jak-level-editor: begin <name>` / `;; jak-level-editor: end <name>` lines, a line it
-replaces kept there as `;; jak-level-editor: was <line>`. Applying again changes nothing; another
-version of the level replaces its blocks in place. Each file edited is backed up once
-(`<file>.jle-backup`, deleted when the file is back as it was), and `<data_dir>/jle-installed.json`
-records what is installed (name, game, replaces, version: a hash of its files, files, continue
-point, index), so that `remove` takes out exactly what `apply` put. One level at a time may replace
-a given level. The manifest is checked first (names, files only under the level's folders, only the
-`game.gp` lines an export writes).
-
-**The runtimes** (`crates/core/src/runtime.rs`): `OpenGoal` is an OpenGOAL the editor drives, and a
-`GameRuntime`: `OpenGoal::checkout(root, bin, game)` (a jak-project checkout and its build's
-programs, its settings in `out/jle-settings`, the game's files from its `iso_data/jak3`, else the
-ones the launcher extracted) or `OpenGoal::distribution(kind, folder, iso_data)` (`extractor`, `gk`,
-`goalc` and `data/`, as the launcher installs them, its settings in `<folder>/_settings`), which
-`with_tooling(Tooling {version, dir})` runs with the programs of another distribution.
-`launcher_level_edited(install, version, game)` is the launcher's isolated game: its own `data/`,
-`_settings/` (its saves) and `packages/` in `<install>/features/<game>/level_edited/`, the programs
-of the launcher's tooling version `<install>/versions/official/<version>/`, the disc the launcher
-extracted. `prepare()` makes its `data/` again from that version's `data/` whenever it was made from
-another version (`jle-runtime.json`: `{version, decompiled}`; `_settings/` is kept), then installs
-again the levels whose copies `apply_level` keeps in `packages/<name>/` (`remove_level_files`
-deletes the copy), and leaves it to decompile again (`decompile_command`: `extractor <iso_data>
---folder --decompile --game jak3 --proj-path <data>`). It plays only when the version is a
-release of `whozghiar/jak-project` (`is_fork_release`: a tag `vX.Y.Z-whozghiar.N`; its programs
-there; `runtime.launcher_version` otherwise) and the launcher extracted the game
-(`runtime.no_game_files`). Its `install_level`, `remove_level` and `launch` prepare, decompile and
-build it first when needed: the standalone app and the launcher use the same code. Both
-build with `extractor <iso_data> --folder --compile --game jak3 --proj-path <data>`
-(`compile_command`: goalc's `(mi)`, what the launcher runs for mods; `goalc --cmd` ignores
-`--iso-path`). Every program gets `--proj-path`: without it they take the project from the last
-"jak-project" in their own path. Jak 3's kernel cannot start at a continue point, so `launch`
-writes `goal_src/user/jle/startup-jak3.gc` (`startup_code`: `(make-group "all-code")`, `(lt)`,
-then, run once it listens, `(start 'play (get-continue-by-name *game-info* "<continue>"))`), starts
-`gk -v --game jak3 --proj-path <data> --config-path <settings> -- -boot -fakeiso -debug`
-(`launch_command`; `-debug` opens its listener), then goalc's REPL as that user on free ports with
-its stdin held open (`repl_command`: a REPL that ends resets the game), and kills goalc once the
-game's output says `Displaying level <name>` (killed, it leaves the game as it is); a second launch
-stops the game started before (`stop_game`), as a build does. `run_logged` runs a tool, its lines
-and the make system's `[ 42%]` as `HostEvent`s. The launcher can use the same pieces.
-`StandaloneRuntime`, the standalone app's, reads the preferences at each call: the jak-project
-checkout chosen in File > Settings (`runtime_folder`, its programs in `runtime_bin` or its build's
-`out/build/Release/bin`; the user's choice is trusted: only its sources, programs and game files
-are looked for), else its own OpenGOAL (`StandaloneRuntime::own`, kind `opengoal`): under the
-library, `<library>/opengoal/` holds `versions/<tag>/` (the tooling it installed, below), `jak3/`
-(its game: `OpenGoal::distribution(...).with_tooling(...)`, made from the version used by the same
-`prepare` as the launcher's game: `data/`, `_settings/`, `packages/`, `jle-runtime.json`) and
-`iso_data/jak3` (the disc, when it extracts it). The game's files: the OpenGOAL Launcher's extracted
-disc when it is installed (`installationDir` of `%APPDATA%/OpenGOAL-Launcher/settings.json`, read
-only), else the disc folder the library is extracted from (`extract_source`), else that `.iso`
-extracted once before the first build (`extract_command`: `extractor <iso> --extract --validate
---extract-path <...>/iso_data --game jak3 --proj-path <data>`, the step `runtime.step.extract_disc`;
-`info` counts it as available, `runtime.no_disc` without any disc). Nothing installed:
-`runtime.no_tooling`. The standalone app no longer plays in the launcher's game for the editor (the
-launcher's tooling is the launcher's to update). `GameRuntime::settings` (a default method answering
-null) is what the Settings window shows besides `info`. `info` is asked at each `get_state`: a
-runtime keeps it cheap. `RuntimeInfo::notice` (and `notice_args`) is what the Play window says
-besides: the launcher's game (`OpenGoal::info`, kind `launcher`) says `runtime.launcher_update`
-when a release newer than the active version is out (`tooling::newer_than`), pointing to the
-launcher's header and Versions page.
-
-**OpenGOAL's tooling** (`crates/core/src/tooling.rs`): `GameRuntime::tooling_dir` (default None) is
-where a runtime installs the tooling itself (the standalone app's `<library>/opengoal/versions/`);
-the editor offers it only then (the launcher's runtime has none: its header and Versions page do
-it, no second update button). The releases of `whozghiar/jak-project` come from GitHub's API
-(`/repos/whozghiar/jak-project/releases`, `known`: asked on a thread of its own at the first call,
-an hour later or on request, never waiting; no network or GitHub's limit keeps what was known and
-the versions installed); a release's archive is the launcher's choice (`asset_for`: the system's
-name, not `lsp`, not `.bin`: `opengoal-windows-<tag>.zip`, `opengoal-linux-<tag>.tar.gz`); the
-newest is the highest X.Y.Z, then N, then the later date (`version_key`). `install` downloads it
-(reqwest, zip, tar and flate2, as the launcher: nothing more in its build) and unpacks it into
-`<tag>/`, marked complete last by `.jle-installed` (no folder is renamed: a cloud drive or an
-antivirus refuses it while they hold the new programs); the version used is the preference `tooling_version` when
-installed, else the newest installed. Calls: `tooling_state {check?}` (null without `tooling_dir`:
-`{dir, status, active, releases: [{tag, date, size, asset, installed}], checked, checking, error,
-installing}`), `tooling_install {version, wait?}` (the job `tooling`, `jle:progress`; then used),
-`tooling_use {version}`, `tooling_remove {version}`. `get_state.runtime.tooling` is
-`{active, latest, update}` (`update`: a newer release, not installed): the title bar shows the
-version and, on `update`, a pulsing green icon opening File > Settings at the OpenGOAL section; the
-editor's tick emits `jle:changed` when GitHub answered.
+**The level package** (`crates/core/src/io/level_package.rs`, for a host's runtime):
+`apply(data_dir, &LevelPackage)`, `remove(data_dir, game, name)` and `installed(data_dir, game)` on
+an OpenGOAL data folder (the one holding `goal_src/<game>` and `custom_assets/<game>`: a jak-project
+checkout's root, an OpenGOAL distribution's `data/`). `apply` copies the export's files (all of
+them in the level's own folders, `custom_assets/<game>/levels/<name>/` and
+`goal_src/<game>/levels/<name>/`), adds its `game.gp` lines (next to the test-zone's) and its
+definition to `engine/level/level-info.gc` (with an `:index` no other level has), or, for a level
+replacing one of the game's, changes that level's `:nickname`; each inside
+`;; jak-level-editor: begin <name>` / `;; jak-level-editor: end <name>` lines, a line it replaces
+kept there as `;; jak-level-editor: was <line>`. Those blocks are the record of what is installed
+(`installed`: the names of game.gp's blocks); applying again changes nothing, another version of the
+level replaces its blocks and its folders in place (its `:index` kept). `remove` takes the blocks
+out (the lines they replaced put back) and deletes the level's folders. Each file edited is backed
+up once (`<file>.jle-backup`, deleted when the file is back as it was). One level at a time may
+replace a given level. The manifest is checked first (names, files only under the level's folders,
+only the `game.gp` lines an export writes).
 
 **Play** (`crates/core/src/editor/runtime.rs`): `get_state.runtime` is the runtime's `RuntimeInfo`
 (null without one). `play_level {options?, wait?}` exports the document with the Export window's
 options into `<library>/exports/<project>/`, then calls `play` on the job `play` (`jle:progress` at
 each step); `play_state` answers `{busy, action, name, steps: [{key, args}], done, total, log,
 outcome: "started" | "handed_over" | null, error, seconds, generation}`; `runtime_levels` (the
-levels installed), `runtime_remove {name, wait?}`, `runtime_launch {name, wait?}`,
-`runtime_settings` (`{info, settings}`). The interface shows the toolbar's Play, Level > Play in the
-game and the Play window when `runtime.available`, or when the runtime installs its tooling
-(`runtime.tooling`): with none installed, the Play window offers the latest release (one click:
-installed, then the level played); otherwise it says `runtime.reason`, as the Export window does
-(without a runtime it points to the README and to File > Settings).
+levels installed), `runtime_remove {name, wait?}`, `runtime_launch {name, wait?}`. The interface
+shows the toolbar's Play, Level > Play in the game and the Play window when the host gives a
+runtime; when it cannot play now, the Play and Export windows say `runtime.reason`. Without a
+runtime the Export window and the guide's tour point to the tutorial "Add your level to the game by
+hand".
 
-**The level builder**: OpenGOAL's builder needs fixes for the editor's exports (a level without
-regions, nav meshes, flat collision fragments, translucent surfaces, collision on both sides per
-mesh, the list of everything visible). They are in the user's fork `whozghiar/jak-project`, whose
-tooling releases are tagged `vX.Y.Z-whozghiar.N` (upstream's X.Y.Z, the fork's build N): the
-launcher's game plays with those releases only; a checkout chosen in the settings is the user's
-responsibility. The standalone app installs those releases itself; the launcher lists and updates
-them from the same repository (its `TOOLING_REPOSITORY`).
+**The level builder and gk**: OpenGOAL's builder needs fixes for the editor's exports (a level
+without regions, nav meshes, flat collision fragments, translucent surfaces, collision on both
+sides per mesh, the list of everything visible), and a tool starts the game at a level with gk's
+`-level <continue point>` (`gk -- -boot -fakeiso -debug -level <continue>`: Jak 3's play boots
+there). Both are in the user's fork `whozghiar/jak-project`, whose tooling releases are tagged
+`vX.Y.Z-whozghiar.N` (upstream's X.Y.Z, the fork's build N); `-level` from the release after
+`v0.3.9-whozghiar.1` on. The launcher installs and updates those releases (its
+`TOOLING_REPOSITORY`) and plays with them only.
 
 ## 7. In the launcher
 
@@ -355,24 +301,25 @@ tauri-plugin-jak-level-editor = { path = "../level-editor/crates/tauri-plugin" }
 ```
 
 ```rust
-// src-tauri/src/main.rs
-.plugin(tauri_plugin_jak_level_editor::init())
+// src-tauri/src/main.rs: the editor's preferences in the launcher's config folder
+.plugin(tauri_plugin_jak_level_editor::Builder::new().prefs_in_app_config().build())
 ```
 
 ```svelte
-<!-- a route of the launcher -->
+<!-- App.svelte, in the window labelled level-editor -->
 <script> import LevelEditor from "$level-editor/LevelEditor.svelte"; </script>
-<LevelEditor embedded locale="fr-FR" />
+<LevelEditor locale="fr-FR" />
 ```
 
 with the capability `jak-level-editor:default` (the plugin's one command, `call`) and the alias
 `$level-editor` to `level-editor/ui` (vite's `resolve.alias` and tsconfig's `paths`, as this
-repository's own). Its sidebar's *Level Editor* button opens the editor in a window of its own.
-`embedded` leaves out the editor's own title bar (the launcher's window has its frame); `locale`
-is the launcher's language. `init()` takes no command line: the library and the language are the
-preferences', and the remote control listens on its default port. The editor's translations and
-tables go in the launcher's resources under `jak-level-editor/` (`lang/`, `data/`), apart from
-its own.
+repository's own). Its sidebar's *Level Editor* button (not on macOS for now) opens the editor in
+a window of its own, without a system frame: the editor draws its title bar (`embedded` would leave
+it out, for a host whose window has its frame); `locale` is the launcher's language. No command
+line: the library and the language are the preferences', and the remote control listens only when
+turned on in File > Settings. The editor's translations and tables go in the launcher's resources
+under `jak-level-editor/` (`lang/`, `data/`), apart from its own. The launcher gives its `Host` from
+`src-tauri/src/commands/features/level_edited/` (its isolated game in `game.rs`).
 
 The standalone app gives the plugin its command line instead:
 `tauri_plugin_jak_level_editor::Builder::new().args(std::env::args()).build()`, which reads
@@ -404,4 +351,7 @@ in the resources or in the repository's `build/bin/`: to ship it with the app, a
   modules and `crates/core/tests/`; those needing the extracted game skip themselves when
   `library/jak3/library.json` is missing), `cargo test -p jak-level-editor-mcp`, and for the
   interface `npx svelte-check --tsconfig ./tsconfig.json` and `npx vite build`.
+- The interface's calls: `ui/lib/api.ts` holds `CallName`, the names of `api.rs`'s calls, which
+  `call()` takes; the test `the_interfaces_calls_are_the_engines` fails when it is not `api.rs`'s
+  (`JLE_WRITE_API=1 cargo test -p jak-level-editor-core the_interfaces_calls` writes it again).
 - Formatting: `rustfmt.toml` (2 spaces), prettier for the interface (`npx yarn format`).
