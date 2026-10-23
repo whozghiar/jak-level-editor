@@ -99,7 +99,7 @@ after a fall.
 
 ### Download it
 
-Each [release](https://github.com/whozghiar/open-goal-level-builder/releases) has, for Windows
+Each [release](https://github.com/whozghiar/jak-level-editor/releases) has, for Windows
 (`windows-x64`) and Linux (`linux-x64`):
 
 - an **installer**: `..._x64-setup.exe` (Windows, for your user alone, no administrator rights) or

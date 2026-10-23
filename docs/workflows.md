@@ -100,7 +100,7 @@ The draft then holds, per platform:
 | `*_x64-setup.exe`, `*_x64_en-US.msi` | the Windows installers (NSIS, for the current user; MSI): the editor, `lang/`, `data/`, `ogle-extract.exe` and `ogle-extract-data/` in its folder |
 | `*_amd64.deb`, `*_amd64.AppImage` | the Linux packages, the same resources |
 | `jak-level-editor-portable-<platform>.zip` | at its root: `jak-level-editor(.exe)`, `lang/`, `data/`, `ogle-extract(.exe)`, `ogle-extract-data/` (the editor finds them next to itself) |
-| `ogle-extract-<platform>.zip` | at its root: `ogle-extract(.exe)` and `ogle-extract-data/`; the OpenGOAL Launcher downloads `https://github.com/whozghiar/open-goal-level-builder/releases/download/v<version>/ogle-extract-<platform>.zip` |
+| `ogle-extract-<platform>.zip` | at its root: `ogle-extract(.exe)` and `ogle-extract-data/`; the OpenGOAL Launcher downloads `https://github.com/whozghiar/jak-level-editor/releases/download/v<version>/ogle-extract-<platform>.zip` |
 | `jak-level-editor-mcp-<platform>.zip` | `jak-level-editor-mcp(.exe)`, the MCP server ([mcp.md](mcp.md)): it starts the editor found next to it |
 
 The workflow has the permission `contents: write` (to push the version's commit and its tag, create

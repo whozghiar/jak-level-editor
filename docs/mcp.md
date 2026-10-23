@@ -66,10 +66,10 @@ you ask it to.
    `mcp__jak-level-editor__<tool>`). From another folder, add it once:
 
    ```bash
-   # Windows, the repository in D:\levels\open-goal-level-builder
-   claude mcp add jak-level-editor -- "D:/levels/open-goal-level-builder/target/release/jak-level-editor-mcp.exe"
-   # Linux, the repository in ~/open-goal-level-builder
-   claude mcp add jak-level-editor -- ~/open-goal-level-builder/target/release/jak-level-editor-mcp
+   # Windows, the repository in D:\levels\jak-level-editor
+   claude mcp add jak-level-editor -- "D:/levels/jak-level-editor/target/release/jak-level-editor-mcp.exe"
+   # Linux, the repository in ~/jak-level-editor
+   claude mcp add jak-level-editor -- ~/jak-level-editor/target/release/jak-level-editor-mcp
    ```
 
 3. **Another client**: run `<repository>/target/release/jak-level-editor-mcp` as a stdio server

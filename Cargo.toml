@@ -6,7 +6,7 @@ members = ["crates/core", "crates/tauri-plugin", "crates/mcp", "src-tauri"]
 version = "1.0.0"
 edition = "2024"
 license = "ISC"
-repository = "https://github.com/whozghiar/open-goal-level-builder"
+repository = "https://github.com/whozghiar/jak-level-editor"
 rust-version = "1.89"
 
 [workspace.dependencies]

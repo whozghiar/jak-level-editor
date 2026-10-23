@@ -60,7 +60,7 @@ edit, and lists the others marked *Work in progress*.
 
 ## Get it
 
-- **Download it**: each [release](https://github.com/whozghiar/open-goal-level-builder/releases)
+- **Download it**: each [release](https://github.com/whozghiar/jak-level-editor/releases)
   has installers for Windows (`.exe`, `.msi`) and Linux (`.deb`, `.AppImage`), and a portable zip.
   Then follow [Install](docs/user-guide.md#2-install) in the user guide: you need your copy of
   Jak 3 (the disc image or its folder) and about 4 GB of disk.

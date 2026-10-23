@@ -58,7 +58,7 @@ Edit the release notes GitHub wrote if you like.
 ## 4. Publish
 
 **Edit** the draft, then **Publish release**. The OpenGOAL Launcher downloads
-`https://github.com/whozghiar/open-goal-level-builder/releases/download/vX.Y.Z/ogle-extract-<platform>.zip`:
+`https://github.com/whozghiar/jak-level-editor/releases/download/vX.Y.Z/ogle-extract-<platform>.zip`:
 it works once the release is published.
 
 A failed platform can be built again: **Re-run failed jobs** on the workflow's run (the assets
