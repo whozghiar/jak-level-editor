@@ -163,15 +163,14 @@ impl Builder {
   }
 }
 
-/// The editor's engine, for a host that needs more than the plugin (the launcher installs the
-/// levels exported for the game with `jle_core::io`).
+/// The editor's engine, for a host that needs more than the plugin.
 pub use jle_core;
 
-/// The version of the editor this plugin is: its release holds the ogle-extract a host downloads.
+/// The version of the editor this plugin is: its release's tag, without the `v`.
 pub const EDITOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// What the application gives the editor, changed while it runs (the launcher's installation
-/// folder is known once its settings are read, and the user can move it).
+/// What the application gives the editor, changed while it runs (a host may know some of it only
+/// once it runs, such as a folder the user can move).
 pub fn set_host<R: Runtime>(app: &tauri::AppHandle<R>, host: Host) {
   if let Some(state) = app.try_state::<EditorState>() {
     let mut ed = state.lock();
@@ -185,7 +184,7 @@ pub fn set_host<R: Runtime>(app: &tauri::AppHandle<R>, host: Host) {
   }
 }
 
-/// The plugin without options (the OpenGOAL Launcher's): the library and the language of the
+/// The plugin without options (a host application's): the library and the language of the
 /// preferences.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new().build()
@@ -197,7 +196,7 @@ fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options, host: Host) {
   }
   // the translations and the game's tables: the application's resources when it is bundled with
   // them (tauri.conf.json bundle.resources), else next to the executable or the repository's. In a
-  // host application (the launcher) they are under jak-level-editor/, apart from its own.
+  // host application they are under jak-level-editor/, apart from its own.
   let resources = app.path().resource_dir().ok().map(|dir| {
     let own = dir.join("jak-level-editor");
     if own.is_dir() { own } else { dir }
@@ -394,5 +393,37 @@ fn serve(
     }
     // tod/<node>: superseded by gameview
     _ => bytes(None),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn the_command_line_of_an_application_starting_the_editor() {
+    let args = [
+      "jak-level-editor",
+      "--lang",
+      "fr",
+      "--default-library=D:/OpenGOAL/jak-level-editor",
+      "--extract-source=jak3=D:/OpenGOAL/active/jak3/data/iso_data/jak3",
+      "--extract-source=jak2=D:/a=b/jak2",
+    ];
+    let o = Builder::new().args(args.map(String::from)).options;
+    assert_eq!(o.language, "fr");
+    assert_eq!(o.default_library, "D:/OpenGOAL/jak-level-editor");
+    assert_eq!(
+      o.extract_sources["jak3"],
+      "D:/OpenGOAL/active/jak3/data/iso_data/jak3"
+    );
+    assert_eq!(
+      o.extract_sources["jak2"], "D:/a=b/jak2",
+      "a '=' in the disc's path"
+    );
+    assert!(
+      o.open_path.is_empty(),
+      "no value taken for a project to open"
+    );
   }
 }
