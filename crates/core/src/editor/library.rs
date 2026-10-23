@@ -2,6 +2,7 @@
 //! choice, the settings' change of folder; the extraction's help from the host (its disc already
 //! extracted, its ogle-extract, its provider fetching one).
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
@@ -68,16 +69,17 @@ impl Editor {
     Ok(self.library_setup())
   }
 
-  /// File > Extract game assets' first values (Extraction::defaults): the disc chosen last, else the
-  /// one the host already extracted (the launcher's iso_data/jak3: `host_source`); the library,
-  /// else its default; `can_fetch` (the host can fetch ogle-extract when it is missing), `fetching`.
+  /// File > Extract game assets' first values (Extraction::defaults): the disc chosen last, else
+  /// Jak 3's the host already extracted; `host_sources`, the host's discs by game (the launcher's
+  /// iso_data/<game>), which the window takes when its game is chosen; the library, else its
+  /// default; `can_fetch` (the host can fetch ogle-extract when it is missing), `fetching`.
   pub(crate) fn extract_defaults(&self) -> Value {
-    let host_source = (self.host.extract_source.as_ref())
-      .map(|s| s.to_string_lossy().into_owned())
-      .unwrap_or_default();
+    let host_sources: BTreeMap<&str, String> = (self.host.extract_sources.iter())
+      .map(|(game, disc)| (game.as_str(), disc.to_string_lossy().into_owned()))
+      .collect();
     let mut source = Prefs::get().extract_source.clone();
     if source.is_empty() {
-      source = host_source.clone();
+      source = host_sources.get("jak3").cloned().unwrap_or_default();
     }
     let root = if self.library_root.is_empty() {
       self.default_library()
@@ -87,7 +89,7 @@ impl Editor {
     let mut d = self
       .extraction
       .defaults(&source, &root, self.library.levels().len());
-    d["host_source"] = json!(host_source);
+    d["host_sources"] = json!(host_sources);
     d["can_fetch"] = json!(self.host.extractor_provider.is_some());
     d["fetching"] = json!(self.busy("extract_fetch"));
     d
@@ -212,6 +214,7 @@ mod tests {
   fn extraction_helped_by_the_host() {
     let tmp = temp_dir("extract-host");
     let disc = tmp.join("active/jak3/data/iso_data/jak3");
+    let disc2 = tmp.join("active/jak2/data/iso_data/jak2");
     let fetched = tmp.join("fetched").join(if cfg!(windows) {
       "ogle-extract.exe"
     } else {
@@ -222,7 +225,10 @@ mod tests {
     let mut ed = editor(Host {
       name: "launcher".into(),
       default_library: Some(tmp.join("jak-level-editor")),
-      extract_source: Some(disc.clone()),
+      extract_sources: BTreeMap::from([
+        ("jak3".into(), disc.clone()),
+        ("jak2".into(), disc2.clone()),
+      ]),
       extractor_provider: Some(Arc::new(TestProvider(Ok(fetched.clone())))),
       ..Default::default()
     });
@@ -231,6 +237,11 @@ mod tests {
       d["source"],
       disc.to_string_lossy().as_ref(),
       "the host's disc"
+    );
+    assert_eq!(
+      d["host_sources"]["jak2"],
+      disc2.to_string_lossy().as_ref(),
+      "Jak II's too"
     );
     assert_eq!(d["output"], from_path(&tmp.join("jak-level-editor")));
     assert_eq!(d["can_fetch"], true);

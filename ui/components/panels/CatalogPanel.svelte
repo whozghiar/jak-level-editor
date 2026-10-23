@@ -23,6 +23,7 @@
   import type { ThumbRequest } from "../../render/thumbnails";
   import { check, input, muted } from "../common/classes";
   import Dropdown from "../common/Dropdown.svelte";
+  import Jak2Missing from "../common/Jak2Missing.svelte";
   import { panelDrag } from "../common/panelDrag";
   import Tip from "../common/Tip.svelte";
   import TextureBrowser from "../windows/TextureBrowser.svelte";
@@ -246,214 +247,217 @@
   {#if s.library_empty}
     <p class="text-neutral-300">{t("catalog.no_library")}</p>
   {:else}
-    <!-- the game: Jak 3's, or Jak II's when it was extracted too (its models, structures and
-         materials, brought in as decor: its objects' code is not in Jak 3) -->
-    {#if s.jak2_available}
-      <div class="flex items-center gap-3 border-b border-white/5 pb-2">
-        <span class="text-neutral-400">{t("catalog.game")}</span>
-        {#each [false, true] as two}
-          <label class="flex cursor-pointer items-center gap-1.5">
-            <input
-              type="radio"
-              class={check}
-              name="catalog-game"
-              checked={jak2 === two}
-              onchange={() => chooseGame(two)}
-            />
-            {two ? "Jak II" : "Jak 3"}
-          </label>
-        {/each}
-      </div>
-      <Tip guide="jak2" />
-    {/if}
-
-    <!-- its kinds -->
-    <div class="flex flex-wrap gap-x-3 gap-y-1">
-      {#each kinds as k}
+    <!-- the game: Jak 3's, or Jak II's (its models, structures and materials, brought in as decor:
+         its objects' code is not in Jak 3), extracted first -->
+    <div class="flex items-center gap-3 border-b border-white/5 pb-2">
+      <span class="text-neutral-400">{t("catalog.game")}</span>
+      {#each [false, true] as two}
         <label class="flex cursor-pointer items-center gap-1.5">
           <input
             type="radio"
             class={check}
-            name="catalog-tab"
-            checked={tab === k.tab}
-            onchange={() => (tab = k.tab)}
+            name="catalog-game"
+            checked={jak2 === two}
+            onchange={() => chooseGame(two)}
           />
-          {t(k.key)}
+          {two ? "Jak II" : "Jak 3"}
         </label>
-        <Tip guide={k.guide} />
       {/each}
     </div>
+    <Tip guide="jak2" />
 
-    {#if tab === "materials"}
-      <!-- the textures of the game chosen above, given to the selection (all its materials) -->
-      <p class={muted}>
-        {pieces.length
-          ? t("build.materials.count", pieces.length)
-          : t("build.materials.none")}
-      </p>
-      <div class="flex min-h-0 flex-1 flex-col">
-        <TextureBrowser ids={pieces} slot={-1} game={game2 ? "jak2" : ""} />
-      </div>
-    {:else if objectTab}
-      {#if tab === "effects"}<p class={muted}>
-          {t("catalog.effects.help")}
-        </p>{/if}
-      <Dropdown
-        items={[
-          { label: t("catalog.all_families"), value: "" },
-          ...((answer?.families ?? []) as string[]).map((f) => ({
-            label: t(f),
-            value: f,
-          })),
-        ]}
-        value={answer?.family ?? ""}
-        label={answer?.family ? t(answer.family) : t("catalog.all_families")}
-        onselect={(v) => (tab === "effects" ? (effectKind = v) : (family = v))}
-      />
-      <input
-        class={input}
-        placeholder={t("catalog.filter")}
-        bind:value={filter}
-      />
-      {#if answer?.items}
-        <p class={muted}>{t("catalog.count", answer.count, answer.total)}</p>
-        {#if answer.empty}<p class="text-neutral-400">
-            {t("catalog.empty")}
-          </p>{/if}
-        <ThumbGrid
-          items={answer.items as Obj[]}
-          reset={[tab, query, answer.family]}
-        >
-          {#snippet cell(o: Obj)}
-            <button
-              class="block w-full"
-              onclick={() => placeObject(o, false)}
-              onpointerdown={(e) =>
-                panelDrag(e, o.name, () => void placeObject(o, true))}
-            >
-              {@render cellBody(objectThumb(o), o.name, placingObject(o))}
-            </button>
-            <Tip
-              text={objectTip(o)}
-              effect={o.family === "effect" && o.art ? o.art : undefined}
-              placement="right"
-            />
-          {/snippet}
-        </ThumbGrid>
-      {/if}
-    {:else if tab === "models"}
-      {#if game2}<p class={muted}>{t("catalog.models.jak2.tip")}</p>{/if}
-      <!-- the level they come from, or every level -->
-      <Dropdown
-        items={[
-          { label: t("catalog.all_levels"), value: "" },
-          ...((answer?.levels ?? []) as string[]).map((l) => ({
-            label: l,
-            value: l,
-          })),
-        ]}
-        value={answer?.level ?? ""}
-        label={answer?.level || t("catalog.all_levels")}
-        filter={t("catalog.filter")}
-        onselect={(v) => (modelsLevel = v)}
-      />
-      <input
-        class={input}
-        placeholder={t("catalog.filter")}
-        bind:value={filter}
-      />
-      {#if answer?.items}
-        <p class={muted}>{t("catalog.count", answer.count, answer.total)}</p>
-        <ThumbGrid
-          items={answer.items as Model[]}
-          reset={[tab, game2, query, answer.level]}
-        >
-          {#snippet cell(m: Model)}
-            <button
-              class="block w-full"
-              onclick={() => placeModel(m, false)}
-              onpointerdown={(e) =>
-                panelDrag(e, m.name, () => void placeModel(m, true))}
-            >
-              {@render cellBody(
-                { kind: "model", path: m.path },
-                m.name,
-                placingModel(m),
-              )}
-            </button>
-            <Tip text={modelTip(m)} placement="right" />
-          {/snippet}
-        </ThumbGrid>
-      {/if}
+    {#if jak2 && !s.jak2_available}
+      <Jak2Missing />
     {:else}
-      <!-- the decor of a level, or of every level -->
-      <Dropdown
-        items={[
-          { label: t("catalog.all_levels"), value: "" },
-          ...((answer?.levels ?? []) as string[]).map((l) => ({
-            label: l,
-            value: l,
-          })),
-        ]}
-        value={decorLevel}
-        label={decorLevel || t("catalog.all_levels")}
-        filter={t("catalog.filter")}
-        onselect={(v) => (decorLevel = v)}
-      />
-      {#if answer?.indexing}
-        <!-- the levels are read once (then from the cache) -->
-        {@const done = indexing?.done ?? answer.indexing.done}
-        {@const total = indexing?.total ?? answer.indexing.total}
-        <p class={muted}>{t("catalog.indexing", done, total)}</p>
-        <div class="h-1.5 overflow-hidden rounded bg-white/10">
-          <div
-            class="h-full bg-orange-500"
-            style:width="{total ? (100 * done) / total : 0}%"
-          ></div>
+      <!-- its kinds -->
+      <div class="flex flex-wrap gap-x-3 gap-y-1">
+        {#each kinds as k}
+          <label class="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              class={check}
+              name="catalog-tab"
+              checked={tab === k.tab}
+              onchange={() => (tab = k.tab)}
+            />
+            {t(k.key)}
+          </label>
+          <Tip guide={k.guide} />
+        {/each}
+      </div>
+
+      {#if tab === "materials"}
+        <!-- the textures of the game chosen above, given to the selection (all its materials) -->
+        <p class={muted}>
+          {pieces.length
+            ? t("build.materials.count", pieces.length)
+            : t("build.materials.none")}
+        </p>
+        <div class="flex min-h-0 flex-1 flex-col">
+          <TextureBrowser ids={pieces} slot={-1} game={game2 ? "jak2" : ""} />
         </div>
-      {:else if answer?.loading}
-        <p class={muted}>{t("catalog.decor.loading", answer.level)}</p>
-      {:else if answer?.failed}
-        <p class="text-neutral-400">{t("catalog.decor.failed")}</p>
-      {:else if answer?.items}
+      {:else if objectTab}
+        {#if tab === "effects"}<p class={muted}>
+            {t("catalog.effects.help")}
+          </p>{/if}
+        <Dropdown
+          items={[
+            { label: t("catalog.all_families"), value: "" },
+            ...((answer?.families ?? []) as string[]).map((f) => ({
+              label: t(f),
+              value: f,
+            })),
+          ]}
+          value={answer?.family ?? ""}
+          label={answer?.family ? t(answer.family) : t("catalog.all_families")}
+          onselect={(v) =>
+            tab === "effects" ? (effectKind = v) : (family = v)}
+        />
         <input
           class={input}
-          placeholder={decorLevel
-            ? t("catalog.filter")
-            : t("catalog.decor.filter")}
+          placeholder={t("catalog.filter")}
           bind:value={filter}
         />
-        <p class={muted}>
-          {t("catalog.parts_count", answer.count, answer.total)}
-        </p>
-        {#if decorLevel && !answer.total}<p class="text-neutral-400">
-            {t("catalog.decor.none")}
-          </p>{/if}
-        <ThumbGrid
-          items={answer.items as Part[]}
-          reset={[tab, game2, query, decorLevel]}
-        >
-          {#snippet cell(p: Part)}
-            <button
-              class="block w-full"
-              onclick={() => placePart(p, false)}
-              onpointerdown={(e) =>
-                panelDrag(e, p.part.name, () => void placePart(p, true))}
-            >
-              {@render cellBody(
-                {
-                  kind: "part",
-                  path: p.background,
-                  node: p.part.mesh_node,
-                  stamp: p.stamp,
-                },
-                p.part.name,
-                placingPart(p),
-              )}
-            </button>
-            <Tip text={partTip(p, !decorLevel)} placement="right" />
-          {/snippet}
-        </ThumbGrid>
+        {#if answer?.items}
+          <p class={muted}>{t("catalog.count", answer.count, answer.total)}</p>
+          {#if answer.empty}<p class="text-neutral-400">
+              {t("catalog.empty")}
+            </p>{/if}
+          <ThumbGrid
+            items={answer.items as Obj[]}
+            reset={[tab, query, answer.family]}
+          >
+            {#snippet cell(o: Obj)}
+              <button
+                class="block w-full"
+                onclick={() => placeObject(o, false)}
+                onpointerdown={(e) =>
+                  panelDrag(e, o.name, () => void placeObject(o, true))}
+              >
+                {@render cellBody(objectThumb(o), o.name, placingObject(o))}
+              </button>
+              <Tip
+                text={objectTip(o)}
+                effect={o.family === "effect" && o.art ? o.art : undefined}
+                placement="right"
+              />
+            {/snippet}
+          </ThumbGrid>
+        {/if}
+      {:else if tab === "models"}
+        {#if game2}<p class={muted}>{t("catalog.models.jak2.tip")}</p>{/if}
+        <!-- the level they come from, or every level -->
+        <Dropdown
+          items={[
+            { label: t("catalog.all_levels"), value: "" },
+            ...((answer?.levels ?? []) as string[]).map((l) => ({
+              label: l,
+              value: l,
+            })),
+          ]}
+          value={answer?.level ?? ""}
+          label={answer?.level || t("catalog.all_levels")}
+          filter={t("catalog.filter")}
+          onselect={(v) => (modelsLevel = v)}
+        />
+        <input
+          class={input}
+          placeholder={t("catalog.filter")}
+          bind:value={filter}
+        />
+        {#if answer?.items}
+          <p class={muted}>{t("catalog.count", answer.count, answer.total)}</p>
+          <ThumbGrid
+            items={answer.items as Model[]}
+            reset={[tab, game2, query, answer.level]}
+          >
+            {#snippet cell(m: Model)}
+              <button
+                class="block w-full"
+                onclick={() => placeModel(m, false)}
+                onpointerdown={(e) =>
+                  panelDrag(e, m.name, () => void placeModel(m, true))}
+              >
+                {@render cellBody(
+                  { kind: "model", path: m.path },
+                  m.name,
+                  placingModel(m),
+                )}
+              </button>
+              <Tip text={modelTip(m)} placement="right" />
+            {/snippet}
+          </ThumbGrid>
+        {/if}
+      {:else}
+        <!-- the decor of a level, or of every level -->
+        <Dropdown
+          items={[
+            { label: t("catalog.all_levels"), value: "" },
+            ...((answer?.levels ?? []) as string[]).map((l) => ({
+              label: l,
+              value: l,
+            })),
+          ]}
+          value={decorLevel}
+          label={decorLevel || t("catalog.all_levels")}
+          filter={t("catalog.filter")}
+          onselect={(v) => (decorLevel = v)}
+        />
+        {#if answer?.indexing}
+          <!-- the levels are read once (then from the cache) -->
+          {@const done = indexing?.done ?? answer.indexing.done}
+          {@const total = indexing?.total ?? answer.indexing.total}
+          <p class={muted}>{t("catalog.indexing", done, total)}</p>
+          <div class="h-1.5 overflow-hidden rounded bg-white/10">
+            <div
+              class="h-full bg-orange-500"
+              style:width="{total ? (100 * done) / total : 0}%"
+            ></div>
+          </div>
+        {:else if answer?.loading}
+          <p class={muted}>{t("catalog.decor.loading", answer.level)}</p>
+        {:else if answer?.failed}
+          <p class="text-neutral-400">{t("catalog.decor.failed")}</p>
+        {:else if answer?.items}
+          <input
+            class={input}
+            placeholder={decorLevel
+              ? t("catalog.filter")
+              : t("catalog.decor.filter")}
+            bind:value={filter}
+          />
+          <p class={muted}>
+            {t("catalog.parts_count", answer.count, answer.total)}
+          </p>
+          {#if decorLevel && !answer.total}<p class="text-neutral-400">
+              {t("catalog.decor.none")}
+            </p>{/if}
+          <ThumbGrid
+            items={answer.items as Part[]}
+            reset={[tab, game2, query, decorLevel]}
+          >
+            {#snippet cell(p: Part)}
+              <button
+                class="block w-full"
+                onclick={() => placePart(p, false)}
+                onpointerdown={(e) =>
+                  panelDrag(e, p.part.name, () => void placePart(p, true))}
+              >
+                {@render cellBody(
+                  {
+                    kind: "part",
+                    path: p.background,
+                    node: p.part.mesh_node,
+                    stamp: p.stamp,
+                  },
+                  p.part.name,
+                  placingPart(p),
+                )}
+              </button>
+              <Tip text={partTip(p, !decorLevel)} placement="right" />
+            {/snippet}
+          </ThumbGrid>
+        {/if}
       {/if}
     {/if}
   {/if}

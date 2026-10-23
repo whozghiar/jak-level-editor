@@ -139,21 +139,24 @@ editor ([16](#16-building-with-an-ai-assistant)).
 
 ### Extract your game
 
-Then it asks for your game: **File > Extract game assets...** (when the folder holds no extracted
-game yet, the window opens by itself). ogle-extract, the extractor, comes with the installers; when
+Then it asks for your game: **File > Extract game assets... > Jak 3** (when the folder holds no
+extracted game yet, the window opens by itself). ogle-extract, the extractor, comes with the installers; when
 it is missing, the window says so and offers **Download ogle-extract** when the application can (the
 OpenGOAL Launcher does).
 
-1. **Your Jak 3 disc**: choose the `.iso` (**.iso file...**) or the folder (**Folder...**). The editor
-   tells which game and version it is (for example *Jak 3 - ntsc_v1 - SCUS-97330*). In the OpenGOAL
-   Launcher, the disc it already extracted is chosen for you.
+1. **Your disc**: the game (Jak 3 or Jak II; Jak and Daxter is marked *Work in progress*), then its
+   `.iso` (**.iso file...**) or its folder (**Folder...**). The editor tells which game and version
+   it is (for example *Jak 3 - ntsc_v1 - SCUS-97330*). In the OpenGOAL Launcher, the disc it already
+   extracted of each game installed there is chosen for you.
 2. **Where to write the levels**: your library.
 3. **Extract all the levels**: about a minute and a half for the 272 levels of Jak 3.
 
 ![The extraction window after Jak 3's 272 levels were extracted](captures/getting-started/extraction.png)
 
-A disc of Jak II is extracted the same way (to `library/jak2/`). The extracted files come from your
-game: keep them on your computer, do not share them.
+A disc of Jak II is extracted the same way (**File > Extract game assets... > Jak II**, to
+`library/jak2/`): its buildings and decor go into your Jak 3 levels today, and Jak II's own level
+editing, planned, will read the same files without extracting again. The extracted files come from
+your game: keep them on your computer, do not share them.
 
 ## 3. First steps
 
@@ -463,7 +466,8 @@ movement (an elevator), or shows it **breaking** (a fence of the factory thrown 
 
 ### Jak II's buildings
 
-With Jak II extracted, choose **Jak II** at the top of the Catalog or the Levels panel: its models,
+Choose **Jak II** at the top of the Catalog or the Levels panel (not extracted yet, the panel says
+so and offers **Extract Jak II...**): its models,
 its decor (Haven City as it was), its prefabs, or a whole level of Jak II opened as a level of Jak 3
 (with its collision). What could go wrong is checked when it comes in (textures renamed
 `jak2-<name>`, light compared with the level's: **Match the lighting** in the inspector).

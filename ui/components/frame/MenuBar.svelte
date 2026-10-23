@@ -73,7 +73,21 @@
     {
       label: t("menu.file"),
       items: [
-        { label: t("menu.file.extract"), run: () => windows.open("extract") },
+        {
+          label: t("menu.file.extract"),
+          items: games.map((g) => ({
+            label: g.name,
+            enabled: g.extractable,
+            badge: g.extractable ? undefined : t("wip"),
+            tip: t(
+              g.extractable
+                ? "menu.file.extract.tip"
+                : "menu.file.extract.wip_tip",
+              g.name,
+            ),
+            run: () => windows.open("extract", { game: g.id }),
+          })),
+        },
         null,
         { label: t("menu.file.new"), keys: "Ctrl+N", run: newLevel },
         { label: t("menu.file.open"), keys: "Ctrl+O", run: openProject },

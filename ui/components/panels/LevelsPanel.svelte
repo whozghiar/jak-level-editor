@@ -23,6 +23,7 @@
     small,
     wip,
   } from "../common/classes";
+  import Jak2Missing from "../common/Jak2Missing.svelte";
   import Tip from "../common/Tip.svelte";
   import Thumb from "./Thumb.svelte";
 
@@ -83,124 +84,130 @@
       <p class="text-xs break-all text-neutral-300">{s.library_root}</p>
     {/if}
   {:else}
-    {#if s.jak2_available}
-      <div class="flex items-center gap-3">
-        <span class="text-neutral-400">{t("levels.of")}</span>
-        {#each [false, true] as two}
-          <label class="flex cursor-pointer items-center gap-1.5">
-            <input
-              type="radio"
-              class={check}
-              name="levels-game"
-              checked={jak2 === two}
-              onchange={() => (jak2 = two)}
-            />
-            {two ? "Jak II" : "Jak 3"}
-          </label>
-        {/each}
-      </div>
-      <Tip text={t("levels.jak2.tip")} />
-    {/if}
-    <input class={input} placeholder={t("levels.filter")} bind:value={filter} />
-    <p class={muted}>{t("levels.count", shown.length, levels.length)}</p>
-
-    <div
-      class="h-[38vh] min-h-40 overflow-y-auto rounded border border-white/5 bg-[#0b0b0b] py-1"
-    >
-      {#each shown as l (l.name)}
-        <button
-          class="flex w-full items-center gap-2 px-2 py-0.5 text-left {l.name ===
-          selected
-            ? 'bg-orange-500/20 text-white'
-            : 'text-neutral-200 hover:bg-white/5'}"
-          onclick={() => (selected = l.name)}
-          ondblclick={() => !loading && load(l)}
-        >
-          <span class="min-w-0 truncate">{l.name}</span>
-          {#if l.in_document === "open"}
-            <span class="ml-auto shrink-0 text-xs text-green-400"
-              >{t("levels.open_mark")}</span
-            >
-          {:else if l.in_document}
-            <span class="ml-auto shrink-0 text-xs text-sky-400"
-              >{t("levels.added_mark")}</span
-            >
-          {:else}
-            <span class="ml-auto shrink-0 truncate text-xs text-neutral-500"
-              >{l.dgo}</span
-            >
-          {/if}
-        </button>
-      {:else}
-        <p class="px-2 {muted}">{t("levels.none_found")}</p>
+    <div class="flex items-center gap-3">
+      <span class="text-neutral-400">{t("levels.of")}</span>
+      {#each [false, true] as two}
+        <label class="flex cursor-pointer items-center gap-1.5">
+          <input
+            type="radio"
+            class={check}
+            name="levels-game"
+            checked={jak2 === two}
+            onchange={() => (jak2 = two)}
+          />
+          {two ? "Jak II" : "Jak 3"}
+        </label>
       {/each}
     </div>
-
-    <!-- the chosen level: a picture and the button that loads it -->
-    {#if chosen}
-      <div class="flex items-start gap-3">
-        <div class="shrink-0 rounded border border-white/5 bg-[#0b0b0b]">
-          <Thumb
-            req={{
-              kind: "level",
-              path: chosen.background,
-              stamp: chosen.mtime,
-            }}
-            size={96}
-          />
-        </div>
-        <div class="min-w-0">
-          <p class="truncate font-semibold">{chosen.name}</p>
-          <p class={muted}>{chosen.dgo}</p>
-        </div>
-      </div>
-    {/if}
-    {#if game2}
-      <p class={muted}>{t("levels.jak2.note")}</p>
-      <p class="flex items-center gap-2 {muted}">
-        <span class={wip}>{t("wip")}</span>{t("menu.game.wip_tip", "Jak II")}
-      </p>
+    <Tip text={t("levels.jak2.tip")} />
+    {#if jak2 && !s.jak2_available}
+      <Jak2Missing />
     {:else}
-      <label class="flex cursor-pointer items-center gap-2 self-start">
-        <input
-          type="checkbox"
-          class={check}
-          checked={s.load_actors}
-          onchange={(e) =>
-            call("set_load_actors", { actors: e.currentTarget.checked })}
-        />
-        {t("levels.with_actors")}
-      </label>
-      <Tip text={t("levels.with_actors.tip")} />
-    {/if}
-    <button
-      class="{primary} py-2"
-      disabled={!chosen || loading}
-      onclick={() => chosen && load(chosen)}
-    >
-      {t(opening ? "levels.loading" : "levels.load")}
-    </button>
-    <!-- or add it to the document, at its place in the game's world -->
-    <span class="flex">
-      <button
-        class="{button} flex-1"
-        disabled={!chosen ||
-          loading ||
-          !s.document.open ||
-          !!chosen.in_document}
-        onclick={() =>
-          chosen && call("add_level", { name: chosen.name, jak2: game2 })}
+      <input
+        class={input}
+        placeholder={t("levels.filter")}
+        bind:value={filter}
+      />
+      <p class={muted}>{t("levels.count", shown.length, levels.length)}</p>
+
+      <div
+        class="h-[38vh] min-h-40 overflow-y-auto rounded border border-white/5 bg-[#0b0b0b] py-1"
       >
-        {t(adding ? "levels.adding" : "levels.add")}
+        {#each shown as l (l.name)}
+          <button
+            class="flex w-full items-center gap-2 px-2 py-0.5 text-left {l.name ===
+            selected
+              ? 'bg-orange-500/20 text-white'
+              : 'text-neutral-200 hover:bg-white/5'}"
+            onclick={() => (selected = l.name)}
+            ondblclick={() => !loading && load(l)}
+          >
+            <span class="min-w-0 truncate">{l.name}</span>
+            {#if l.in_document === "open"}
+              <span class="ml-auto shrink-0 text-xs text-green-400"
+                >{t("levels.open_mark")}</span
+              >
+            {:else if l.in_document}
+              <span class="ml-auto shrink-0 text-xs text-sky-400"
+                >{t("levels.added_mark")}</span
+              >
+            {:else}
+              <span class="ml-auto shrink-0 truncate text-xs text-neutral-500"
+                >{l.dgo}</span
+              >
+            {/if}
+          </button>
+        {:else}
+          <p class="px-2 {muted}">{t("levels.none_found")}</p>
+        {/each}
+      </div>
+
+      <!-- the chosen level: a picture and the button that loads it -->
+      {#if chosen}
+        <div class="flex items-start gap-3">
+          <div class="shrink-0 rounded border border-white/5 bg-[#0b0b0b]">
+            <Thumb
+              req={{
+                kind: "level",
+                path: chosen.background,
+                stamp: chosen.mtime,
+              }}
+              size={96}
+            />
+          </div>
+          <div class="min-w-0">
+            <p class="truncate font-semibold">{chosen.name}</p>
+            <p class={muted}>{chosen.dgo}</p>
+          </div>
+        </div>
+      {/if}
+      {#if game2}
+        <p class={muted}>{t("levels.jak2.note")}</p>
+        <p class="flex items-center gap-2 {muted}">
+          <span class={wip}>{t("wip")}</span>{t("menu.game.wip_tip", "Jak II")}
+        </p>
+      {:else}
+        <label class="flex cursor-pointer items-center gap-2 self-start">
+          <input
+            type="checkbox"
+            class={check}
+            checked={s.load_actors}
+            onchange={(e) =>
+              call("set_load_actors", { actors: e.currentTarget.checked })}
+          />
+          {t("levels.with_actors")}
+        </label>
+        <Tip text={t("levels.with_actors.tip")} />
+      {/if}
+      <button
+        class="{primary} py-2"
+        disabled={!chosen || loading}
+        onclick={() => chosen && load(chosen)}
+      >
+        {t(opening ? "levels.loading" : "levels.load")}
       </button>
-    </span>
-    <Tip
-      text={t(
-        chosen?.in_document ? "levels.add.in_document" : "levels.add.tip",
-      )}
-    />
-    <button class="{small} self-start" onclick={() => windows.open("extract")}
-      >{t("levels.extract_more")}</button
-    >
+      <!-- or add it to the document, at its place in the game's world -->
+      <span class="flex">
+        <button
+          class="{button} flex-1"
+          disabled={!chosen ||
+            loading ||
+            !s.document.open ||
+            !!chosen.in_document}
+          onclick={() =>
+            chosen && call("add_level", { name: chosen.name, jak2: game2 })}
+        >
+          {t(adding ? "levels.adding" : "levels.add")}
+        </button>
+      </span>
+      <Tip
+        text={t(
+          chosen?.in_document ? "levels.add.in_document" : "levels.add.tip",
+        )}
+      />
+      <button class="{small} self-start" onclick={() => windows.open("extract")}
+        >{t("levels.extract_more")}</button
+      >
+    {/if}
   {/if}
 </div>

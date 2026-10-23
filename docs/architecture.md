@@ -713,7 +713,7 @@ game by hand" tell how to add it to the game.
 | Field | Standalone app | OpenGOAL Launcher |
 |---|---|---|
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
-| `extract_source` | none (the user's disc) | `<install>/active/jak3/data/iso_data/jak3`: the disc it already extracted |
+| `extract_sources` | none (the user's discs) | by game, `<install>/active/<game>/data/iso_data/<game>`: the discs it already extracted (Jak 3's, Jak II's...) |
 | `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version, checked against GitHub's SHA-256 of it |
 
 **The preferences** (`crates/core/src/prefs.rs`) and the caches next to them (thumbnails, the
@@ -730,7 +730,8 @@ the interface shows the first-run assistant (`library_setup`, `choose_library {p
 `default_library`; File > Settings changes it later (another folder is used as it is: nothing is
 moved or deleted). `default_library` falls back to `library/` of the editor's repository only when
 the program runs from it (a development build), never to the program's folder. The Extract
-window's disc is `extract_source` while the user has chosen none; ogle-extract is `extractor`
+window's disc is the host's of the game chosen (`extract_sources`, by game: `host_sources` of
+`extract_defaults`), else the one chosen last; ogle-extract is `extractor`
 first, and when it is missing the window offers `extractor_provider`'s download (`extract_fetch`,
 a job: `jle:progress` "extract_fetch").
 

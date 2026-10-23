@@ -3,6 +3,7 @@
 //! extractor. The editor never asks which application hosts it: it uses what it is given. It runs
 //! no game: a level is exported, its README and the guide's tutorial tell how to add it to the game.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -34,9 +35,9 @@ pub struct Host {
   pub name: String,
   /// where the library goes when the user has not chosen yet (the first-run assistant offers it)
   pub default_library: Option<PathBuf>,
-  /// a disc the host already extracted (the launcher's iso_data/jak3): the extraction's default
-  /// source, so the disc is not asked again
-  pub extract_source: Option<PathBuf>,
+  /// the discs the host already extracted, by game ("jak3": the launcher's iso_data/jak3): the
+  /// extraction's default source for that game, so the disc is not asked again
+  pub extract_sources: BTreeMap<String, PathBuf>,
   /// ogle-extract when the host has it at hand
   pub extractor: Option<PathBuf>,
   pub extractor_provider: Option<Arc<dyn ExtractorProvider>>,
@@ -47,7 +48,7 @@ impl std::fmt::Debug for Host {
     f.debug_struct("Host")
       .field("name", &self.name)
       .field("default_library", &self.default_library)
-      .field("extract_source", &self.extract_source)
+      .field("extract_sources", &self.extract_sources)
       .field("extractor", &self.extractor)
       .field("extractor_provider", &self.extractor_provider.is_some())
       .finish()

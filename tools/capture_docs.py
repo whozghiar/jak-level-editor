@@ -472,8 +472,12 @@ def first_start(args, exe):
         target = os.path.join(WORK, 'extract')
         shutil.rmtree(target, ignore_errors=True)
         os.makedirs(target)
-        e.web.menu('File', 'Extract game assets...')
-        e.web.type_into('[role=dialog][aria-label="Extract game assets"] input', disc)
+        # File > Extract game assets > Jak 3: a submenu, its item clicked without hovering it
+        e.web.click('File')
+        e.web.evaluate('''[...document.querySelectorAll('[class*="group/sub"] button')]
+          .find((b) => b.textContent.trim() === "Jak 3").click()''')
+        e.web.type_into('[role=dialog][aria-label="Extract game assets"] section:nth-of-type(1) input:not([type=radio])',
+                        disc)
         e.web.type_into('[role=dialog][aria-label="Extract game assets"] section:nth-of-type(2) input', target)
         for _ in range(120):
             if (e.web.engine('extract_state') or {}).get('detected', {}).get('game'):

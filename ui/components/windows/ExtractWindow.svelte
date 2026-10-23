@@ -6,15 +6,19 @@
 
 <script lang="ts">
   // File > Extract game assets (ui_extract_window, extract.cpp): ogle-extract reads the user's disc
-  // (an .iso or a disc folder) and writes its levels to <library>/jak3/. The engine runs it
+  // (an .iso or a disc folder) and writes its levels to <library>/<game>/. The engine runs it
   // (crates/core/src/editor/extract.rs); the window follows it with extract_state, on jle:progress
   // and every 500 ms while it runs.
   import { open } from "@tauri-apps/plugin-dialog";
   import { Progressbar } from "flowbite-svelte";
   import { onMount } from "svelte";
   import { has, t } from "../../lib/i18n";
+  import { games } from "../../lib/games";
   import { call, onEngine } from "../../lib/rpc";
-  import { wip } from "../common/classes";
+  import { check, wip } from "../common/classes";
+
+  // the game asked (File > Extract game assets > Jak II, a panel's Extract Jak II...)
+  let { game: asked }: { game?: string } = $props();
 
   // a text of the engine: its translation (then ": detail"), else as ogle-extract said it
   type Text = { key: string; args: number[]; detail: string; text: string };
@@ -45,7 +49,7 @@
     iso_dir: string;
     extractor_found: boolean;
     extractor_dirs: string[]; // where it is looked for
-    host_source: string; // the disc the host already extracted (the launcher's)
+    host_sources: Record<string, string>; // the discs the host already extracted, by game
     can_fetch: boolean; // the host downloads ogle-extract (extract_fetch)
     fetching: boolean;
     fetch_error: string;
@@ -78,6 +82,27 @@
   );
   // Jak and Daxter: recognized, planned (its levels are neither extracted nor edited yet)
   const jak1 = $derived(recognized && ex?.detected.game === "jak1");
+
+  // the game whose disc is read: the one asked, else the disc's; choosing one takes the host's
+  // disc of it (the launcher's iso_data/<game>) when it has one, else asks for its disc
+  let game = $state("jak3");
+  const gameName = $derived(games.find((g) => g.id === game)?.name ?? "");
+  $effect(() => {
+    if (recognized && ex) game = ex.detected.game;
+  });
+  function pick(g: string) {
+    game = g;
+    if (ex?.detected.source === source && ex.detected.game === g) return;
+    source = defaults?.host_sources[g] ?? "";
+    if (source) detect();
+  }
+  let picked = "";
+  $effect(() => {
+    if (defaults && asked && asked !== picked) {
+      picked = asked;
+      pick(asked);
+    }
+  });
 
   function show(s: Extraction | undefined) {
     if (s) ex = s;
@@ -142,7 +167,7 @@
       if (!defaults) return;
       if (!output) output = defaults.output;
       await refresh();
-      if (!source && !(ex?.running && !ex.detecting)) {
+      if (!source && !asked && !(ex?.running && !ex.detecting)) {
         // the disc chosen last
         source = defaults.source;
         detect();
@@ -217,6 +242,27 @@
     <!-- 1. the disc -->
     <section>
       <h3 class={heading}>{t("extract.disc")}</h3>
+      <div class="mb-2 flex flex-wrap items-center gap-3">
+        <span class="text-neutral-400">{t("catalog.game")}</span>
+        {#each games as g}
+          <label
+            class="flex items-center gap-1.5 {g.extractable
+              ? 'cursor-pointer'
+              : 'text-neutral-500'}"
+          >
+            <input
+              type="radio"
+              class={check}
+              name="extract-game"
+              checked={game === g.id}
+              disabled={!g.extractable || extracting}
+              onchange={() => pick(g.id)}
+            />
+            {g.name}
+            {#if !g.extractable}<span class={wip}>{t("wip")}</span>{/if}
+          </label>
+        {/each}
+      </div>
       <div class="flex gap-2">
         <input
           class={input}
@@ -269,9 +315,9 @@
         {:else if ex?.detected.error && ex.detected.source === source}
           <p class={bad}>{text(ex.detected.error)}</p>
         {:else if !source}
-          <p class={muted}>{t("extract.disc.choose")}</p>
+          <p class={muted}>{t("extract.disc.choose", gameName)}</p>
         {/if}
-        {#if source && source === defaults.host_source}
+        {#if source && Object.values(defaults.host_sources).includes(source)}
           <p class="mt-1 {muted}">{t("extract.host_disc")}</p>
         {/if}
       </div>
@@ -292,7 +338,7 @@
         >
       </div>
       {#if output}<p class="mt-1.5 {muted}">
-          {t("extract.destination.where", output)}
+          {t("extract.destination.where", output, game)}
         </p>{/if}
     </section>
 
