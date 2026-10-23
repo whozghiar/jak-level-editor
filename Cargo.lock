@@ -1934,7 +1934,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jak-level-editor"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "dirs",
  "serde_json",
@@ -1947,7 +1947,7 @@ dependencies = [
 
 [[package]]
 name = "jak-level-editor-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "getrandom 0.4.3",
  "glam",
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "jak-level-editor-mcp"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3842,7 +3842,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-jak-level-editor"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "jak-level-editor-core",
  "serde",
