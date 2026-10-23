@@ -51,10 +51,10 @@ edit, and lists the others marked *Work in progress*.
   extracts it once, with its own extractor (ogle-extract, made from OpenGOAL's decompiler).
 - **It needs nothing else to run**: not OpenGOAL, not the game. It does not run the game either:
   the export gives the files to add to OpenGOAL's sources.
-- **On its own or inside the OpenGOAL Launcher**: it is made like the
-  [OpenGOAL Launcher](https://github.com/open-goal/launcher), an engine in Rust and an interface in
-  Svelte in a Tauri window, so the same editor runs as its own program or opens from the launcher's
-  *Level Editor* button.
+- **On its own or from the OpenGOAL Launcher**: the
+  [OpenGOAL Launcher](https://github.com/whozghiar/open-goal-launcher) installs and updates the
+  editor's releases and opens it with its *Level Editor* button, giving it its library and the discs
+  it already extracted.
 
 [How it is built](docs/architecture.md) explains it from the start, with examples.
 

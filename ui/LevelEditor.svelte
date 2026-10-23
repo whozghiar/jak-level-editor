@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The whole editor (the C++ App's interface, draw_ui in panels.cpp): the standalone app and the
-  // launcher mount it. Title bar, menus, toolbar, the left panel's tabs, the viewport, the inspector,
+  // The whole editor (the C++ App's interface, draw_ui in panels.cpp): the app mounts it, as a host
+  // application could. Title bar, menus, toolbar, the left panel's tabs, the viewport, the inspector,
   // the status bar, the floating windows, the toasts, the keys.
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -45,12 +45,12 @@
   import Viewport from "$level-editor/render/Viewport.svelte";
 
   // embedded: a host that frames the window and gives the editor a box of a fixed height (no title
-  // bar of its own; the launcher's window has no frame: it mounts it without); locale: the host's
+  // bar of its own; a host whose window has no frame mounts it without); locale: the host's
   // ("fr-FR"), for the session only (the standalone editor's language stays the one chosen)
   let { embedded = false, locale }: { embedded?: boolean; locale?: string } =
     $props();
 
-  // the launcher's locale goes to the engine; else the engine's language wins (the session's --lang,
+  // a host's locale goes to the engine; else the engine's language wins (the session's --lang,
   // else the one chosen before, else the system's: apply_options), the one shown first only a guess
   $effect.pre(() => {
     const code = initLanguage(locale);
@@ -92,7 +92,7 @@
       win.onCloseRequested((e) => {
         e.preventDefault();
         confirmDiscard(async () => {
-          // "Don't save": the engine may outlive the window (the launcher): the changes go
+          // "Don't save": the engine may outlive the window (a host application): the changes go
           if (engine.state.document.unsaved) await call("close_document");
           await Promise.all(offs.map((off) => off()));
           offs.length = 0;

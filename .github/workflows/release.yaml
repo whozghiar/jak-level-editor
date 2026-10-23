@@ -4,8 +4,8 @@ name: Release
 # major. The version follows the last tag vX.Y.Z (v1.0.0 for the first release): the run writes it
 # into package.json, Cargo.toml, Cargo.lock and src-tauri/tauri.conf.json, commits that to the
 # branch, tags the commit, then makes a draft release with, per platform, the installers, a
-# portable zip, ogle-extract alone (the OpenGOAL Launcher downloads ogle-extract-<platform>.zip)
-# and the MCP server. RELEASING.md tells how to make one.
+# portable zip (the OpenGOAL Launcher downloads jak-level-editor-portable-<platform>.zip),
+# ogle-extract alone and the MCP server. RELEASING.md tells how to make one.
 
 on:
   workflow_dispatch:

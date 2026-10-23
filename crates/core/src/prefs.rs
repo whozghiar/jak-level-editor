@@ -1,7 +1,8 @@
 //! The editor's preferences, kept between sessions in the user's settings folder
-//! (%APPDATA%/OpenGOAL/jak-level-editor on Windows, ~/.local/share/... on Linux), or in the one its
-//! host gives (`Prefs::use_dir`: the OpenGOAL Launcher's own settings folder, so that the two apps
-//! never share a library): where the extracted game is, the disc it came from, the language,
+//! (%APPDATA%/OpenGOAL/jak-level-editor on Windows, ~/.local/share/... on Linux), in the one its
+//! host gives (`Prefs::use_dir`), or in $JLE_PREFS_DIR (the OpenGOAL Launcher gives its own
+//! settings folder, so that its editor never shares a library with the standalone app's): where
+//! the extracted game is, the disc it came from, the language,
 //! recent projects. Thumbnails and the catalog's index are cached next to them.
 //!
 //! The C++ editor kept them in OpenGOAL/open-goal-level-editor: while the standalone app's folder

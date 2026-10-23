@@ -106,7 +106,7 @@ Each [release](https://github.com/whozghiar/jak-level-editor/releases) has, for 
   the `.msi` (for all users); the `.deb` or the `.AppImage` on Linux;
 - a **portable** zip, `jak-level-editor-portable-<platform>.zip`: unzip it anywhere and run
   `jak-level-editor` (`.exe` on Windows); nothing is installed;
-- `ogle-extract-<platform>.zip`, the extractor alone (the OpenGOAL Launcher downloads it);
+- `ogle-extract-<platform>.zip`, the extractor alone;
 - `jak-level-editor-mcp-<platform>.zip`, the MCP server for an AI assistant (optional, see
   [16](#16-building-with-an-ai-assistant)): put it next to the editor's program.
 
@@ -114,6 +114,10 @@ The installers and the portable zip hold ogle-extract. The releases are numbered
 `vX.Y.Z` (v1.0.0, then v1.0.1 for fixes, v1.1.0 for new features, v2.0.0 for a change that breaks
 something): GitHub builds the editor on Windows and Linux and makes a draft release with these
 files, published by hand ([RELEASING.md](../RELEASING.md)). There is no macOS version.
+
+With the [OpenGOAL Launcher](https://github.com/whozghiar/open-goal-launcher), you download
+nothing by hand: its **Settings > Level Editor** installs a release (its portable zip), its header
+shows when a newer one is out, and its **Level Editor** button opens the editor.
 
 To build the editor yourself instead (to work on it, or a version not released yet), see
 [Build it yourself](architecture.md#10-build-it-yourself-and-test-it) in the architecture.
@@ -140,9 +144,9 @@ editor ([16](#16-building-with-an-ai-assistant)).
 ### Extract your game
 
 Then it asks for your game: **File > Extract game assets... > Jak 3** (when the folder holds no
-extracted game yet, the window opens by itself). ogle-extract, the extractor, comes with the installers; when
-it is missing, the window says so and offers **Download ogle-extract** when the application can (the
-OpenGOAL Launcher does).
+extracted game yet, the window opens by itself). ogle-extract, the extractor, comes with the
+installers and the portable zip; when it is missing, the window says so and offers **Download
+ogle-extract** when the application can.
 
 1. **Your disc**: the game (Jak 3 or Jak II; Jak and Daxter is marked *Work in progress*), then its
    `.iso` (**.iso file...**) or its folder (**Folder...**). The editor tells which game and version

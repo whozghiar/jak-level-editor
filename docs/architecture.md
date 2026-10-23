@@ -21,7 +21,7 @@ How to use the editor is the [user guide](user-guide.md); how an AI assistant us
   4. [The engine: the document and its history](#4-the-engine-the-document-and-its-history)
   5. [The interface: what you see and touch](#5-the-interface-what-you-see-and-touch)
   6. [How the two talk](#6-how-the-two-talk)
-  7. [On its own, or inside the OpenGOAL Launcher](#7-on-its-own-or-inside-the-opengoal-launcher)
+  7. [On its own, or from the OpenGOAL Launcher](#7-on-its-own-or-from-the-opengoal-launcher)
   8. [Long work, and the assistant's remote control](#8-long-work-and-the-assistants-remote-control)
   9. [From your disc to the game](#9-from-your-disc-to-the-game)
   10. [Build it yourself, and test it](#10-build-it-yourself-and-test-it)
@@ -107,8 +107,8 @@ Why split it in two?
 
 - **The engine can be tested without a window.** Its tests (`cargo test -p jak-level-editor-core`,
   more than a hundred) open levels, move things, undo, export, with nothing on screen.
-- **The same engine is used from three places**: the editor's own window, the OpenGOAL Launcher, and an
-  AI assistant through the MCP server. They all send the same calls.
+- **The same engine is used from two places**: the editor's window, opened on its own or from the
+  OpenGOAL Launcher, and an AI assistant through the MCP server. They both send the same calls.
 - **Each half does what its language is good at**: Rust for the heavy work (reading gigabytes of
   levels, casting rays, making nav meshes), the web for windows, buttons and drawing.
 
@@ -184,13 +184,13 @@ You do not need to learn these by heart: come back here when a word stops you.
 | `.agents/skills/` | the knowledge base for AI agents, [opengoal-modding-kb](https://github.com/whozghiar/opengoal-modding-kb) (a git submodule); the editor's own skills are in its `jak-level-editor-skills/`, and `npx yarn skills:link` links them all into `.claude/skills/` for Claude Code | change a skill of the editor (commit it in the submodule, on `main`) |
 
 Why so many pieces for one editor? The engine knows nothing of windows, and it must not: it also
-runs in its tests and inside the launcher. `crates/tauri-plugin` connects it to a Tauri
-window, and the standalone app (`src-tauri/`) and the OpenGOAL Launcher both load that same plugin:
-the launcher adds it with two lines of Rust, without a copy of the engine's code.
+runs in its tests and behind the MCP server. `crates/tauri-plugin` connects it to a Tauri window,
+which the app (`src-tauri/`) opens. The OpenGOAL Launcher starts that same app, downloaded from
+its releases, without a copy of the editor's code.
 
 ```mermaid
 flowchart LR
-  subgraph Window["A window: the standalone app or the OpenGOAL Launcher"]
+  subgraph Window["The editor's window (src-tauri/), on its own or started by the OpenGOAL Launcher"]
     UI["Interface<br/>ui/"]
     Plugin["Plugin<br/>crates/tauri-plugin"]
     Engine["Engine<br/>crates/core"]
@@ -304,19 +304,21 @@ numbers ready for the graphics card. The scene itself comes the same way, and on
 since the last time**: after the crate moved, the answer holds one node (84 bytes: its id, its
 mesh, its 16 numbers), not every node of the level.
 
-## 7. On its own, or inside the OpenGOAL Launcher
+## 7. On its own, or from the OpenGOAL Launcher
 
-The same editor lives in two homes. The application that holds it (the **host**) gives it a few
-things, and the editor uses what it is given without asking who holds it:
+The same program opens two ways: on its own, or from the OpenGOAL Launcher, which installs the
+editor's releases and starts the active one with what it already knows. The editor uses what it is
+given without asking who started it:
 
-| | On its own (*Jak Level Editor*) | In the OpenGOAL Launcher |
+| | On its own (*Jak Level Editor*) | From the OpenGOAL Launcher |
 |---|---|---|
 | How you open it | its program | the *Level Editor* button of the sidebar (not on macOS for now) |
-| The library, at first | `Documents/Jak Level Editor` | `<the launcher's install folder>/jak-level-editor` |
-| Its preferences | `%APPDATA%/OpenGOAL/jak-level-editor` | `%APPDATA%/OpenGOAL-Launcher/jak-level-editor` |
-| The disc to extract | the one you choose (an `.iso` or a folder) | the one the launcher already extracted |
-| ogle-extract | installed with the editor | downloaded the first time it is needed, checked against the SHA-256 GitHub publishes for it |
-| Command line | yes ([19](#19-command-line)) | none |
+| Installed and updated | by you: an installer or the portable zip of a release | by the launcher: its *Settings > Level Editor* downloads a release's portable zip, and its header shows when a newer release is out |
+| The library, at first | `Documents/Jak Level Editor` | `<the launcher's install folder>/jak-level-editor` (`--default-library`) |
+| Its preferences | `%APPDATA%/OpenGOAL/jak-level-editor` | `%APPDATA%/OpenGOAL-Launcher/jak-level-editor` (`JLE_PREFS_DIR`) |
+| The disc to extract | the one you choose (an `.iso` or a folder) | the one the launcher already extracted, for each game (`--extract-source`) |
+| ogle-extract | installed with the editor | the same: the portable zip holds it |
+| Command line | yes ([19](#19-command-line)) | the launcher's ([17](#17-in-the-launcher)) |
 
 (The folders are Windows'; Linux and macOS have theirs: [16](#16-what-the-host-gives-the-editor).)
 
@@ -325,10 +327,9 @@ both. Neither runs the game: the export writes the files to copy into a jak-proj
 sources), with a README giving the exact lines; the user guide's
 [export](user-guide.md#15-playing-it-in-the-game-export) goes through it.
 
-How the launcher holds the editor: its repository keeps this one as a **git submodule** (a folder
-pinned to one exact version of the editor), adds the plugin with two lines of Rust and shows the
-component with one Svelte import ([17](#17-in-the-launcher)). When the editor changes, the launcher
-moves its submodule to the new version ([RELEASING.md](../RELEASING.md#5-the-opengoal-launcher)).
+The launcher keeps no copy of the editor's code: a published release of this repository reaches its
+users without a release of the launcher ([17](#17-in-the-launcher),
+[RELEASING.md](../RELEASING.md#5-the-opengoal-launcher)).
 
 ## 8. Long work, and the assistant's remote control
 
@@ -520,7 +521,7 @@ crates/
                                   command line)
   mcp/                            jak-level-editor-mcp: the MCP server (stdio) for AI assistants
 ui/                               the interface module: <LevelEditor/> and everything under it
-  LevelEditor.svelte              the root component the standalone app and the launcher mount
+  LevelEditor.svelte              the root component the app mounts
   lib/                            rpc.ts (calls to the engine, jleUrl), engine.svelte.ts (its state
                                   and events), i18n.ts, actions, shortcuts, windows
   render/                         the WebGL2 viewport: renderer, camera and controls, the game view,
@@ -704,23 +705,29 @@ the port) closes the connection unanswered. The MCP server reads the token from 
 
 ## 16. What the host gives the editor
 
-The application that hosts the editor (its own app, the OpenGOAL Launcher) gives it a `Host`
-(`crates/core/src/host.rs`, `tauri_plugin_jak_level_editor::Builder::host`). The editor never asks
-which application hosts it: it uses what it is given and hides what it is not. It runs no game of
-its own: a level is exported, the export's README and the guide's tutorial "Add your level to the
-game by hand" tell how to add it to the game.
+The application that hosts the editor (`src-tauri/`, the app) gives it a `Host`
+(`crates/core/src/host.rs`, `tauri_plugin_jak_level_editor::Builder::host`); an application
+starting the app fills the same fields with the command line's `--default-library` and
+`--extract-source` ([19](#19-command-line)), as the OpenGOAL Launcher does. The editor never asks
+who gave them: it uses what it is given and hides what it is not. It runs no game of its own: a
+level is exported, the export's README and the guide's tutorial "Add your level to the game by
+hand" tell how to add it to the game.
 
-| Field | Standalone app | OpenGOAL Launcher |
+| Field | The app on its own | Started by the OpenGOAL Launcher |
 |---|---|---|
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
 | `extract_sources` | none (the user's discs) | by game, `<install>/active/<game>/data/iso_data/<game>`: the discs it already extracted (Jak 3's, Jak II's...) |
-| `extractor`, `extractor_provider` | ogle-extract installed with the app | downloaded on demand from the editor's release of its version, checked against GitHub's SHA-256 of it |
+| `extractor` | none: ogle-extract is found next to the program or in its resources | the same, from the portable zip |
+
+`extractor_provider` lets a host that has no ogle-extract fetch one when the Extract window asks
+(the window's **Download ogle-extract**); the app has no provider, since it ships ogle-extract.
 
 **The preferences** (`crates/core/src/prefs.rs`) and the caches next to them (thumbnails, the
-catalog's index, `remote.json`) are in `Prefs::dir()`: `$JLE_PREFS_DIR` when set (tests), else the
-folder the host gave before they were first read (`Prefs::use_dir`; the plugin's
-`Builder::prefs_in_app_config()` gives `<the app's config folder>/jak-level-editor/`: the launcher's
-editor keeps its own library), else the standalone app's `%APPDATA%/OpenGOAL/jak-level-editor`
+catalog's index, `remote.json`) are in `Prefs::dir()`: `$JLE_PREFS_DIR` when set (tests; the
+OpenGOAL Launcher gives `<its config folder>/jak-level-editor/`, so its editor keeps its own
+library), else the folder a host gave before they were first read (`Prefs::use_dir`; the plugin's
+`Builder::prefs_in_app_config()` gives `<the app's config folder>/jak-level-editor/`), else the
+standalone app's `%APPDATA%/OpenGOAL/jak-level-editor`
 (`~/.local/share/...` on Linux, `~/Library/Application Support/...` on macOS), which reads the C++
 editor's preferences the first time.
 
@@ -743,35 +750,26 @@ the fork's build N). The launcher installs and updates those releases (its `TOOL
 
 ## 17. In the launcher
 
-The launcher keeps the editor as a git submodule in `level-editor/`, and:
+The launcher installs the editor the way it installs OpenGOAL's tools, and keeps no copy of its
+code. Its *Settings > Level Editor* lists this repository's releases, downloads a release's
+`jak-level-editor-portable-<platform>.zip` (checked against GitHub's SHA-256 of it) into
+`<install>/versions/level-editor/<version>/`, and makes one version active; its header shows an
+icon when a newer release is out. Its sidebar's *Level Editor* button (not on macOS for now)
+starts the active version:
 
-```toml
-# src-tauri/Cargo.toml
-tauri-plugin-jak-level-editor = { path = "../level-editor/crates/tauri-plugin" }
+```text
+JLE_PREFS_DIR=<launcher's config folder>/jak-level-editor
+jak-level-editor --lang fr --default-library=<install>/jak-level-editor
+                 --extract-source=jak3=<install>/active/jak3/data/iso_data/jak3 ...
 ```
 
-```rust
-// src-tauri/src/main.rs: the editor's preferences in the launcher's config folder
-.plugin(tauri_plugin_jak_level_editor::Builder::new().prefs_in_app_config().build())
-```
+`--lang` is the launcher's language; there is one `--extract-source` per game the launcher
+installed. A version of the editor that does not know an option written `--name=value` skips it
+whole (v1.0.0 does), so the launcher can start any release. The launcher's side is
+`src-tauri/src/commands/features/level_editor.rs` of
+[whozghiar/open-goal-launcher](https://github.com/whozghiar/open-goal-launcher).
 
-```svelte
-<!-- App.svelte, in the window labelled level-editor -->
-<script> import LevelEditor from "$level-editor/LevelEditor.svelte"; </script>
-<LevelEditor locale="fr-FR" />
-```
-
-with the capability `jak-level-editor:default` (the plugin's one command, `call`) and the alias
-`$level-editor` to `level-editor/ui` (vite's `resolve.alias` and tsconfig's `paths`, as this
-repository's own). Its sidebar's *Level Editor* button (not on macOS for now) opens the editor in
-a window of its own, without a system frame: the editor draws its title bar (`embedded` would leave
-it out, for a host whose window has its frame); `locale` is the launcher's language. No command
-line: the library and the language are the preferences', and the remote control listens only when
-turned on in File > Settings. The editor's translations and tables go in the launcher's resources
-under `jak-level-editor/` (`lang/`, `data/`), apart from its own. The launcher gives its `Host` from
-`src-tauri/src/commands/features/level_editor.rs`.
-
-The standalone app gives the plugin its command line instead:
+The app gives the plugin its command line:
 `tauri_plugin_jak_level_editor::Builder::new().args(std::env::args()).build()`, which reads
 `[project.glb] --library <folder> --lang <code> --remote-port <port> --hidden --open-level <name>`
 (`--hidden`: no window, the preferences left unchanged; `--open-level`: a level of the library
@@ -832,11 +830,12 @@ jak-level-editor-mcp [--remote-port <port>]
   are what an application starting the editor gives it, as a host does
   ([16](#16-what-the-host-gives-the-editor)): the library the first-run assistant offers, the discs
   it already extracted, which the Extract window takes for their game.
-- `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones; for
-  the MCP server, the folder of the editor's `remote.json`).
+- `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones; the
+  OpenGOAL Launcher's own folder for its editor; for the MCP server, the folder of the editor's
+  `remote.json`).
 - `jak-level-editor-mcp` is the MCP server ([25](#25-the-remote-control-and-the-mcp-server)).
-- Opened from the OpenGOAL Launcher, the editor has no command line: the library and the language
-  are the preferences'.
+- The OpenGOAL Launcher starts the editor with `--lang`, `--default-library`, `--extract-source`
+  and `JLE_PREFS_DIR` ([17](#17-in-the-launcher)).
 - The C++ editor's other modes have their equivalents: `--selftest` is
   `cargo test -p jak-level-editor-core`, `--mcp` is `jak-level-editor-mcp`, and the pictures of
   `--screenshot` are taken through the remote control and the web view's DevTools
@@ -873,8 +872,8 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build      # build/bin/ogle-extract(.exe) and its tables, build/bin/ogle-extract-data/
 ```
 
-The editor runs the first it finds: the one its host gives (the OpenGOAL Launcher downloads it on
-demand: **Download ogle-extract** in the Extract window), next to its own program, in its
+The editor runs the first it finds: the one its host gives (or fetches on demand: **Download
+ogle-extract** in the Extract window, for a host with an `extractor_provider`), next to its own program, in its
 resources, in `build/bin/` of the repository it was built from, else the file `$JLE_EXTRACTOR` names; its tables
 (`ogle-extract-data/`) next to it. The installers ship it when they are built with
 `src-tauri/tauri.release.conf.json`, which adds `build-release/bin/` (ogle-extract and its tables)
@@ -892,9 +891,8 @@ redistributable; the releases build the editor the same way, `RUSTFLAGS=-C
 target-feature=+crt-static`.) Without that file, `tauri build` makes installers without the
 extractor (a build for working on the editor).
 
-The releases put it in the installers, in the portable zip, and alone in
-`ogle-extract-<platform>.zip`, which the OpenGOAL Launcher downloads:
-[workflows.md, Release](workflows.md#release).
+The releases put it in the installers, in the portable zip (which the OpenGOAL Launcher
+downloads), and alone in `ogle-extract-<platform>.zip`: [workflows.md, Release](workflows.md#release).
 
 ## 21. Files
 

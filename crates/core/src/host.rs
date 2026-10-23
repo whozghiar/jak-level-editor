@@ -1,7 +1,8 @@
-//! What the application hosting the editor gives it (the standalone app, the OpenGOAL Launcher):
-//! where the library goes by default, a disc already extracted to read the levels from, the
-//! extractor. The editor never asks which application hosts it: it uses what it is given. It runs
-//! no game: a level is exported, its README and the guide's tutorial tell how to add it to the game.
+//! What the application hosting the editor gives it (the app, completed by the command line of an
+//! application starting it, as the OpenGOAL Launcher does): where the library goes by default, the
+//! discs already extracted to read the levels from, the extractor. The editor never asks who gave
+//! them: it uses what it is given. It runs no game: a level is exported, its README and the guide's
+//! tutorial tell how to add it to the game.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -21,8 +22,8 @@ pub enum HostEvent {
 
 pub type HostEvents = Arc<dyn Fn(HostEvent) + Send + Sync>;
 
-/// A host that can fetch ogle-extract when it is missing (the launcher downloads the one of the
-/// editor's version from its release).
+/// A host that can fetch ogle-extract when it is missing (the Extract window's **Download
+/// ogle-extract**).
 pub trait ExtractorProvider: Send + Sync {
   /// the path of the executable, its tables (ogle-extract-data/) next to it
   fn fetch(&self, events: HostEvents) -> Result<PathBuf, String>;
