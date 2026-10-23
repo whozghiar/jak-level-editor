@@ -815,7 +815,7 @@ in the resources or in the repository's `build/bin/`: to ship it with the app, a
 
 ```text
 jak-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>] [--hidden]
-                 [--open-level <name>]
+                 [--open-level <name>] [--default-library=<folder>] [--extract-source=<game>=<disc>]...
 jak-level-editor-mcp [--remote-port <port>]
 ```
 
@@ -828,6 +828,10 @@ jak-level-editor-mcp [--remote-port <port>]
   server does when it starts the editor; without it, the remote control listens on 47821 only when
   File > Settings lets an assistant control the editor; `0`: as the preferences say);
   `--hidden` runs the editor without a window and without touching the preferences (scripts).
+- `--default-library=<folder>` and `--extract-source=<game>=<disc>` (once per game: `jak3`, `jak2`)
+  are what an application starting the editor gives it, as a host does
+  ([16](#16-what-the-host-gives-the-editor)): the library the first-run assistant offers, the discs
+  it already extracted, which the Extract window takes for their game.
 - `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones; for
   the MCP server, the folder of the editor's `remote.json`).
 - `jak-level-editor-mcp` is the MCP server ([25](#25-the-remote-control-and-the-mcp-server)).

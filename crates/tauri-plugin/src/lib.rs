@@ -4,6 +4,7 @@
 //! The interface (ui/) calls the engine through the `call` command and reads the viewport's data
 //! on the `jle://` protocol (docs/architecture.md).
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -51,6 +52,10 @@ pub struct Options {
   pub remote_port: Option<u16>,
   /// no window shown, the preferences left unchanged (tests)
   pub hidden: bool,
+  /// what an application starting the editor gives it, as a host does (the OpenGOAL Launcher):
+  /// the library by default, the discs it already extracted by game (Host::extract_sources)
+  pub default_library: String,
+  pub extract_sources: BTreeMap<String, String>,
 }
 
 /// The plugin with the application's options: `Builder::new().args(std::env::args()).build()`,
@@ -69,11 +74,22 @@ impl Builder {
 
   /// The editor's command line (the first argument is the program):
   /// `[project.glb] --library <folder> --lang <code> --remote-port <port> --hidden
-  /// --open-level <name>`
+  /// --open-level <name> --default-library=<folder> --extract-source=<game>=<disc>` (the last two
+  /// from an application starting the editor: the OpenGOAL Launcher)
   pub fn args(mut self, args: impl IntoIterator<Item = String>) -> Self {
     let mut args = args.into_iter().skip(1);
     let o = &mut self.options;
     while let Some(a) = args.next() {
+      if let Some(folder) = a.strip_prefix("--default-library=") {
+        o.default_library = folder.into();
+        continue;
+      }
+      if let Some((game, disc)) =
+        (a.strip_prefix("--extract-source=")).and_then(|v| v.split_once('='))
+      {
+        o.extract_sources.insert(game.into(), disc.into());
+        continue;
+      }
       let mut next = || args.next().unwrap_or_default();
       match a.as_str() {
         "--library" => o.library = next(),
@@ -110,7 +126,15 @@ impl Builder {
 
   pub fn build<R: Runtime>(self) -> TauriPlugin<R> {
     let options = self.options;
-    let host = self.host;
+    let mut host = self.host;
+    if !options.default_library.is_empty() {
+      host.default_library = Some(PathBuf::from(&options.default_library));
+    }
+    for (game, disc) in &options.extract_sources {
+      host
+        .extract_sources
+        .insert(game.clone(), PathBuf::from(disc));
+    }
     let prefs_in_app_config = self.prefs_in_app_config;
     let hidden = options.hidden;
     tauri::plugin::Builder::new("jak-level-editor")

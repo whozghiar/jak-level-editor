@@ -7,6 +7,8 @@
 // button (crates/tauri-plugin, ui/), with its command line:
 //   jak-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>]
 //                    [--hidden] [--open-level <name>]
+//                    [--default-library=<folder>] [--extract-source=<game>=<disc>]...
+// (the last two from an application starting it, as the OpenGOAL Launcher does)
 
 use tauri::Manager;
 use tauri_plugin_jak_level_editor::{Host, set_host};
