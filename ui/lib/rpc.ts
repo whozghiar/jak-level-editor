@@ -67,8 +67,7 @@ const windows = /Windows/.test(navigator.userAgent);
 /** The URL of a path of the jle:// protocol (`scene?full=1`, `mesh/12`...). */
 export function jleUrl(path: string): string {
   path = path.replace(/^\//, "");
-  // WebView2 serves custom protocols as http(s)://<scheme>.localhost, https with useHttpsScheme
-  return windows
-    ? `${location.protocol === "https:" ? "https" : "http"}://jle.localhost/${path}`
-    : `jle://localhost/${path}`;
+  // WebView2 serves custom protocols as https://<scheme>.localhost (useHttpsScheme), whatever the
+  // page's own origin: http://localhost:3001 under `tauri dev`
+  return windows ? `https://jle.localhost/${path}` : `jle://localhost/${path}`;
 }
