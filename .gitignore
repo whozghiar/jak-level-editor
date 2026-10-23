@@ -25,3 +25,5 @@ target/
 node_modules/
 dist/
 src-tauri/gen/
+# Claude Code's skills: links to the knowledge base in .agents/skills/, made by `yarn skills:link`
+.claude/skills/

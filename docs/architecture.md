@@ -181,7 +181,7 @@ You do not need to learn these by heart: come back here when a word stops you.
 | `tools/` | Python scripts: `data/` made again, the documentation's pictures | |
 | `docs/` | this documentation and its pictures | |
 | `.github/workflows/` | the checks GitHub runs ([workflows.md](workflows.md)) | |
-| `.claude/skills/`, `.agents/skills/` | instructions for AI agents working on the repository | |
+| `.agents/skills/` | the knowledge base for AI agents, [opengoal-modding-kb](https://github.com/whozghiar/opengoal-modding-kb) (a git submodule); the editor's own skills are in its `jak-level-editor-skills/`, and `npx yarn skills:link` links them all into `.claude/skills/` for Claude Code | change a skill of the editor (commit it in the submodule, on `main`) |
 
 Why so many pieces for one editor? The engine knows nothing of windows, and it must not: it also
 runs in its tests and inside the launcher. `crates/tauri-plugin` connects it to a Tauri
@@ -424,7 +424,9 @@ On **Windows**, step by step:
    with [Scoop](https://scoop.sh) in a PowerShell window `scoop install git cmake ninja llvm python`
    (or with `winget`: `Kitware.CMake`, `Ninja-build.Ninja`, `LLVM.LLVM`, `Git.Git`).
 2. Get this repository (`git clone ...`, or the ZIP of the repository's page) and open a terminal
-   in its folder.
+   in its folder. For an AI agent working on the editor, also `git submodule update --init` (the
+   knowledge base and the editor's skills, in `.agents/skills/`), then `npx yarn skills:link`
+   (Claude Code's links to them, in `.claude/skills/`).
 3. Build the extractor, then the editor. The last line builds the editor and starts it (the first
    time takes a few minutes).
 
@@ -540,7 +542,9 @@ tools/                            Python: data/ made again from the game's code,
 docs/                             this documentation: user-guide.md, mcp.md, architecture.md (this
                                   page), workflows.md, captures/ (the pictures)
 third-party/                      where the third-party code is, and its licenses
-.claude/skills/, .agents/skills/  skills for AI agents working on this repository
+.agents/skills/                   the knowledge base for AI agents (submodule opengoal-modding-kb):
+                                  the editor's skills in jak-level-editor-skills/; .claude/skills/
+                                  holds links to them (npx yarn skills:link), never committed
 .mcp.json                         the MCP server, for Claude Code started in this folder
 .github/workflows/                lint.yaml, build.yaml, release.yaml (workflows.md)
 ```

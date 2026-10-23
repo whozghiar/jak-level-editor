@@ -10,7 +10,8 @@ This document has two parts:
 - **[Part 1, for you](#part-1-for-you)**: what it is, how to set it up, what to ask, what it can do.
 - **[Part 2, for the assistant](#part-2-for-the-assistant)**: what an AI agent needs to know to build
   well (what a level is made of, the four rules, recipes, every tool). Claude Code reads it through
-  the repository's skill `.claude/skills/level-building-mcp/`; you can read it too, to know what
+  the skill `level-building-mcp` of the editor's repository (in the knowledge base mounted at
+  `.agents/skills/`: `jak-level-editor-skills/level-building-mcp/`); you can read it too, to know what
   to expect.
 
 ![What an assistant built and saw, at the height of the player's eyes: a street of Jak II's Main Town, a fountain, trees](captures/mcp/assistant-view.png)
@@ -83,8 +84,10 @@ you ask it to.
    list your client shows, the editor is older than the guide: build it again and restart the
    client.
 
-The repository also has a skill for Claude Code, `.claude/skills/level-building-mcp/`, which
-reminds an agent of these rules whenever it builds.
+The repository also has a skill for AI agents, `level-building-mcp` (in the knowledge base mounted
+at `.agents/skills/`, `jak-level-editor-skills/level-building-mcp/`; `git submodule update --init`,
+then `npx yarn skills:link` for Claude Code), which reminds an agent of these rules whenever it
+builds.
 
 ## 3. Your first requests
 

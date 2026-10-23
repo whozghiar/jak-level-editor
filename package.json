@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "check-format": "npx prettier --plugin prettier-plugin-svelte --check .",
-    "format": "npx prettier --plugin prettier-plugin-svelte --write ."
+    "format": "npx prettier --plugin prettier-plugin-svelte --write .",
+    "skills:link": "node ./tools/link-skills.mjs"
   },
   "devDependencies": {
     "@iconify-json/mdi": "^1.2.3",

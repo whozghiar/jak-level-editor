@@ -697,7 +697,7 @@ src/, src-tauri/         the editor as a program of its own: its page and its Ta
 extractor/               ogle-extract, the extractor (C++)
 docs/                    this documentation: guides, architecture, workflows, screenshots
 tools/                   scripts that regenerate data/ and the screenshots
-.claude/skills/          skills for Claude Code working on this repository
+.agents/skills/          the knowledge base for AI agents working on the editor (a submodule)
 ```
 
 Only `library/prefabricated/.gitkeep` of `library/` is in git: prefabs, projects and exports hold
