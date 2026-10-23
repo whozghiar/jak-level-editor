@@ -83,8 +83,10 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "$TAG" --draft --verify-tag --generate-notes --title "Jak Level Editor $TAG"
-          id=$(gh api "repos/$GH_REPO/releases" --paginate --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n 1)
+          # the id from the answer itself: a draft just made may not be listed yet
+          id=$(gh api -X POST "repos/$GH_REPO/releases" -f tag_name="$TAG" -f name="Jak Level Editor $TAG" \
+            -F draft=true -F generate_release_notes=true --jq .id)
+          echo "release $id"
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
   build:
@@ -157,7 +159,8 @@ jobs:
       - name: Make the zips and upload them
         shell: bash
         env:
-          PLATFORM: ${{ matrix.platform }}
+          # not PLATFORM: Windows' names ignore case, and msvc-dev-cmd sets Platform=x64
+          ASSET_PLATFORM: ${{ matrix.platform }}
         run: |
           exe=""; [ "$RUNNER_OS" = Windows ] && exe=.exe
           zip_dir() { # zip_dir <folder> <zip>: the folder's content at the zip's root
@@ -169,8 +172,8 @@ jobs:
           cp -r build-release/bin/. stage/ogle-extract/
           cp -r build-release/bin/. lang data "target/release/jak-level-editor$exe" stage/portable/
           cp "target/release/jak-level-editor-mcp$exe" stage/mcp/
-          zip_dir stage/portable "$out/jak-level-editor-portable-$PLATFORM.zip"
-          zip_dir stage/ogle-extract "$out/ogle-extract-$PLATFORM.zip"
-          zip_dir stage/mcp "$out/jak-level-editor-mcp-$PLATFORM.zip"
+          zip_dir stage/portable "$out/jak-level-editor-portable-$ASSET_PLATFORM.zip"
+          zip_dir stage/ogle-extract "$out/ogle-extract-$ASSET_PLATFORM.zip"
+          zip_dir stage/mcp "$out/jak-level-editor-mcp-$ASSET_PLATFORM.zip"
           ls -l stage/dist
           gh release upload "$TAG" stage/dist/*.zip --clobber
