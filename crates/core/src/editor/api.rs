@@ -42,7 +42,6 @@ const QUERIES: &[&str] = &[
   "export_check",
   "navmesh_state",
   "navmesh_data",
-  "gaps_report",
   "replace_info",
   "project_save_path",
   "catalog",
@@ -484,7 +483,7 @@ impl Editor {
       "preview_options" | "start_preview" | "stop_preview" | "preview_frame" => {
         self.preview_call(name, a)
       }
-      // ---- the export for the game, nav meshes, holes (export.rs)
+      // ---- the export for the game, nav meshes (export.rs)
       "export_defaults" => Ok(self.export_defaults()),
       "export_check" => {
         let o = get(a, "options").ok_or("options: the export's")?;
@@ -512,8 +511,6 @@ impl Editor {
         let first = a.get("first_aid").and_then(Value::as_u64).map(|v| v as u32);
         self.export_navmeshes_call(s(a, "path"), first)
       }
-      "find_gaps" => Ok(self.find_gaps_call(a)),
-      "gaps_report" => Ok(self.gaps_report()),
       // ---- the Place tool, prefabs, the catalog, the textures of the games (placement.rs,
       // catalog.rs, thumbs.rs)
       "start_shape_placement"
@@ -529,7 +526,6 @@ impl Editor {
       | "placement_preview"
       | "place_at"
       | "place_here"
-      | "relight_selection"
       | "create_prefab"
       | "prefab_dialog"
       | "delete_prefab"

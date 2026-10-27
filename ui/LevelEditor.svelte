@@ -73,13 +73,6 @@
     if (!tauri) return stop;
     let alive = true;
     const offs: (() => void)[] = [];
-    // the remote control's search for holes shows in the Holes window (show_gaps_window = true)
-    offs.push(
-      onEngine(
-        "jle:changed",
-        (p) => p?.show_gaps && !windows.isOpen("gaps") && windows.open("gaps"),
-      ),
-    );
     // an extraction finished: the Levels panel shows what was written (left_tab_request = 0)
     offs.push(
       onEngine("jle:changed", (p) => p?.extracted && (ui.leftTab = "levels")),

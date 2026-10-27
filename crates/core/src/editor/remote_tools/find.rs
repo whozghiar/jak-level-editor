@@ -1,5 +1,5 @@
-//! The MCP server's tools that find things: elements by name or kind, an element, a ray, holes
-//! in the ground, assemblies.
+//! The MCP server's tools that find things: elements by name or kind, an element, a ray,
+//! assemblies.
 
 use super::*;
 
@@ -196,70 +196,6 @@ impl Editor {
       j["node"] = self.node_json(hit.node);
     }
     Ok(j)
-  }
-
-  pub(super) fn tool_find_gaps(&mut self, a: &Value) -> R {
-    // where the player would see the void: from the ground every few meters, rays around and down
-    if !self.document_open() {
-      return Err("no document".into());
-    }
-    let region = if let Some(b) = a
-      .get("box")
-      .filter(|b| b.as_array().is_some_and(|l| l.len() == 2))
-    {
-      box_arg(b).ok_or("box: [[x, y, z], [x, y, z]]")?
-    } else if a.get("ids").is_some() {
-      let mut r = AABB::default();
-      for id in ids_arg(a, "ids") {
-        r.add_box(&self.subtree_bounds(id).0);
-      }
-      r.expanded(num(a, "margin", 12.0))
-    } else {
-      self.own_level_bounds()
-    };
-    if !region.valid() {
-      return Err("no region: box, ids, or a document with decor".into());
-    }
-    let mut o = GapOptions {
-      region,
-      spacing: num(a, "spacing", 0.0).max(0.0),
-      eye: num(a, "eye", 1.6),
-      ..Default::default()
-    };
-    if let Some(h) = self.ocean_height().filter(|_| self.view.ocean) {
-      o.ocean = h;
-    }
-    let r = find_gaps(&self.scene, &o);
-    let limit = int(a, "limit", 40).clamp(1, 500) as usize;
-    let gaps = r.spots.iter().filter(|s| !s.edge).count();
-    let spots: Vec<Value> = r
-      .spots
-      .iter()
-      .take(limit)
-      .map(|s| {
-        json!({
-          "kind": if s.edge { "edge" } else { "gap" },
-          "at": v3(s.at),
-          "seen_from": v3(s.seen_from),
-          "direction": v3(s.direction),
-          "rays": s.rays,
-        })
-      })
-      .collect();
-    let answer = json!({
-      "gaps": gaps,
-      "edges": r.spots.len() - gaps,
-      "viewpoints": r.viewpoints,
-      "rays": r.rays,
-      "region": [v3(region.lo), v3(region.hi)],
-      "spots": spots,
-    });
-    // listed and drawn in the editor too: the Holes window, opened unless show is false (its spots
-    // are drawn while it is open, in the captures too)
-    self.gaps = Some(GapsFound { report: r, region });
-    let show = flag(a, "show", true);
-    self.emit("jle:changed", json!({"gaps": true, "show_gaps": show}));
-    Ok(answer)
   }
 
   pub(super) fn tool_list_assemblies(&mut self, a: &Value) -> R {

@@ -9,7 +9,6 @@ import DiscardWindow from "../components/windows/DiscardWindow.svelte";
 import ExportWindow from "../components/windows/ExportWindow.svelte";
 import ExtractWindow from "../components/windows/ExtractWindow.svelte";
 import GameWindow from "../components/windows/GameWindow.svelte";
-import GapsWindow from "../components/windows/GapsWindow.svelte";
 import GuideWindow from "../components/windows/GuideWindow.svelte";
 import LogWindow from "../components/windows/LogWindow.svelte";
 import NavMeshWindow from "../components/windows/NavMeshWindow.svelte";
@@ -41,7 +40,6 @@ export const registry: Record<string, WindowDef> = {
     fresh: true,
   }, // Level > Export for the game
   navmesh: { title: "navmesh.title", component: NavMeshWindow, width: 430 }, // Level > Nav meshes
-  gaps: { title: "gaps.title", component: GapsWindow, width: 460 }, // Level > Find holes (building_tools.cpp)
   game: {
     title: "game.title",
     component: GameWindow,

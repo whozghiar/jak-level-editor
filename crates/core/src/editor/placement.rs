@@ -3,7 +3,7 @@
 //! into the document once, where it goes (placement_matrix: the surface under the cursor, the
 //! snap, its yaw, the tilt the right button gives it), placing it lit like the level around it;
 //! the prefabs made of the selection (without their small pieces: building_tools.cpp), read once;
-//! "Light like here"; the floors and walls in the style of a level (guide_panel.cpp,
+//! the floors and walls in the style of a level (guide_panel.cpp,
 //! terrain_tool.cpp). The viewport draws the preview see-through at `placement_preview`'s matrix
 //! and calls `place_at` when the button is let go (ui/render/place_tool.ts).
 
@@ -540,25 +540,6 @@ impl Editor {
     placed.len()
   }
 
-  /// the inspector's Light like here: the selection lit like the level around it (undoable)
-  pub fn relight_selection(&mut self) -> usize {
-    let roots = self.selection_roots();
-    if roots.is_empty() {
-      return 0;
-    }
-    let mut c = NodeChange::new(&self.scene);
-    c.save_subtrees(&self.scene, &roots);
-    let lit = light_like_surroundings(&mut self.scene, &roots, K_LIGHT_MAX_VERTICES);
-    if lit > 0 {
-      self.scene.begin_frame();
-      self
-        .history
-        .push(c.commit(&self.scene, tr("undo.relight"), None));
-    }
-    log_info!(tr("log.relit"), lit);
-    lit
-  }
-
   // ----------------------------------------------------------------------------------------------
   // prefabs
   // ----------------------------------------------------------------------------------------------
@@ -950,7 +931,6 @@ impl Editor {
         }
         Ok(json!({"roots": roots}))
       }
-      "relight_selection" => Ok(json!({"lit": self.relight_selection()})),
       "create_prefab" => {
         let min = a.get("min_size").and_then(Value::as_f64).unwrap_or(0.0) as f32;
         let mut left_out = Vec::new();

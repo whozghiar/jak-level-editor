@@ -15,7 +15,6 @@
 
 pub mod assemblies;
 pub mod bvh;
-pub mod gaps;
 mod ground;
 pub mod level_style;
 pub mod particles;
@@ -409,7 +408,9 @@ impl TodColors {
 
 /// How much of a lit color each palette gives on average (the colors of the extracted levels are
 /// the brightest of their 8): new geometry, which has one color, gets its palettes this way. From
-/// the nodes of the scene that have their lighting, else a district of the city's (ctyindb).
+/// the nodes of the scene that have the lighting of their level (not what was placed, lit like the
+/// level around it or keeping the light of another level: relight::K_LIT_HERE), else a district of
+/// the city's (ctyindb), the light of a new level in the game (its export: update-mood-ctyindb).
 pub fn tod_ratios(scene: &Scene, nodes: &[u32]) -> [f32; 8] {
   // a district of the city (ctyindb): the ambient light gives almost all of the brightest color
   let mut ratios = [0.986, 0.117, 0.17, 0.164, 0.135, 0.007, 0.043, 0.037];
@@ -420,7 +421,7 @@ pub fn tod_ratios(scene: &Scene, nodes: &[u32]) -> [f32; 8] {
     let (Some(mesh), Some(tod)) = (&n.mesh, &n.tod) else {
       continue;
     };
-    if !tod.fits(mesh) {
+    if !tod.fits(mesh) || n.extras.get(relight::K_LIT_HERE).and_then(Value::as_bool) == Some(true) {
       continue;
     }
     let rgba = &tod.palette.as_ref().unwrap().rgba;

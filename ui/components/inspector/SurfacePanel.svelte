@@ -8,7 +8,6 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { engine } from "../../lib/engine.svelte";
   import { t } from "../../lib/i18n";
-  import { call } from "../../lib/rpc";
   import { windows } from "../../lib/windows.svelte";
   import Tip from "../common/Tip.svelte";
   import DragNumber from "./DragNumber.svelte";
@@ -342,11 +341,6 @@
 {#if hasMesh && matQ.value}
   {@const m = matQ.value}
   <h3 class={heading}>{t("inspector.material")}</h3>
-  <!-- its light: the game's palettes of where it stands (done when it is placed or moved, or asked) -->
-  <button class="{button} w-full" onclick={() => call("relight_selection")}
-    >{t("inspector.relight")}</button
-  >
-  <Tip guide="relight" />
   <div class="mt-1.5 flex flex-col divide-y divide-white/10 text-sm">
     {#each m.slots as s, slot}
       {@const on = texturesOpen(slot, m.targets)}

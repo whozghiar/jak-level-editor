@@ -1,10 +1,10 @@
 //! What goes to the game (actions.cpp, building_tools.cpp): the export of the level for OpenGOAL's
 //! level builder (io::game_export), its nav meshes generated on a worker (navmesh) and written for
-//! the game (io::nav_export), the holes through which the player would see the void (scene::gaps).
+//! the game (io::nav_export).
 //!
 //! Calls (api.rs): export_defaults, export_check, export_start_point, check_continues,
 //! export_for_game, export_state; generate_navmesh, set_navmesh, navmesh_state, navmesh_data,
-//! export_navmeshes; find_gaps, gaps_report.
+//! export_navmeshes.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -26,7 +26,6 @@ use crate::navmesh::{
   NavBuildStats, NavMeshData, NavParams, build_navmeshes, navmesh_nodes, navmesh_of_node,
   navmesh_problem, navmesh_surfaces, replace_navmeshes, world_navmeshes,
 };
-use crate::scene::gaps::{GapOptions, GapReport, find_gaps};
 use crate::scene::{NodeKind, Scene};
 use crate::{log_error, log_info, log_warn};
 
@@ -78,30 +77,6 @@ impl Default for NavState {
       last: None,
       generation: 0,
     }
-  }
-}
-
-/// The last search for holes (m_gaps), and where it looked
-pub struct GapsFound {
-  pub report: GapReport,
-  pub region: AABB,
-}
-
-impl GapsFound {
-  pub fn to_json(&self) -> Value {
-    let r = &self.report;
-    let gaps = r.spots.iter().filter(|s| !s.edge).count();
-    let spots: Vec<Value> = r
-      .spots
-      .iter()
-      .map(|s| {
-        json!({"at": s.at, "seen_from": s.seen_from, "direction": s.direction, "rays": s.rays,
-          "edge": s.edge})
-      })
-      .collect();
-    json!({"spots": spots, "gaps": gaps, "edges": r.spots.len() - gaps,
-      "viewpoints": r.viewpoints, "rays": r.rays, "escaped": r.escaped,
-      "region": {"lo": self.region.lo, "hi": self.region.hi}})
   }
 }
 
@@ -586,57 +561,6 @@ impl Editor {
       }
     }
   }
-
-  // ----------------------------------------------------------------------------------------------
-  // holes in the decor (building_tools.cpp)
-  // ----------------------------------------------------------------------------------------------
-
-  /// the selection's, else the document's own level
-  pub fn gaps_region(&self) -> AABB {
-    let r = self.selection_bounds();
-    if r.valid() {
-      r
-    } else {
-      self.own_level_bounds()
-    }
-  }
-
-  /// find_gaps {region?: {lo, hi}, spacing?, eye?}: the holes through which the player would see
-  /// the void (run_find_gaps), around `region`, else gaps_region(); kept for the Holes window
-  /// (gaps_report), which is told by a jle:changed {gaps: true}.
-  pub fn find_gaps_call(&mut self, a: &Value) -> Value {
-    let mut o = GapOptions {
-      region: a.get("region").and_then(box_of).unwrap_or_default(),
-      ..Default::default()
-    };
-    if !o.region.valid() {
-      o.region = self.gaps_region();
-    }
-    if let Some(s) = a.get("spacing").and_then(Value::as_f64) {
-      o.spacing = s.max(0.0) as f32;
-    }
-    if let Some(e) = a.get("eye").and_then(Value::as_f64) {
-      o.eye = e as f32;
-    }
-    if let Some(h) = self.ocean_height().filter(|_| self.view.ocean) {
-      o.ocean = h;
-    }
-    self.scene.begin_frame();
-    let report = find_gaps(&self.scene, &o);
-    log_info!(tr("log.gaps"), report.spots.len(), report.viewpoints);
-    let found = GapsFound {
-      report,
-      region: o.region,
-    };
-    let answer = found.to_json();
-    self.gaps = Some(found);
-    self.emit("jle:changed", json!({"gaps": true}));
-    answer
-  }
-
-  pub fn gaps_report(&self) -> Value {
-    self.gaps.as_ref().map_or(Value::Null, GapsFound::to_json)
-  }
 }
 
 #[cfg(test)]
@@ -817,26 +741,6 @@ mod tests {
     );
     assert!(ed.scene.find(id).is_none());
     let _ = std::fs::remove_dir_all(&tmp);
-  }
-
-  #[test]
-  fn holes_in_a_small_scene() {
-    let mut ed = editor();
-    small_level(&mut ed);
-    assert!(ed.call("gaps_report", &json!({})).unwrap().is_null());
-    // a floor of 100 m alone: its edges are open, seen from the ground near them
-    let r = ed.call("find_gaps", &json!({})).unwrap();
-    assert!(
-      r["viewpoints"].as_u64().unwrap() > 0
-        && r["edges"].as_u64().unwrap() > 0
-        && r["spots"][0]["seen_from"].is_array(),
-      "gaps: the floor's open edges ({r})"
-    );
-    assert_eq!(
-      ed.call("gaps_report", &json!({})).unwrap(),
-      r,
-      "gaps: kept for the window"
-    );
   }
 
   /// a level of the game exported with its own collision: the level as extracted read once (the

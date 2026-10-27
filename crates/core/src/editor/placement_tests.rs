@@ -201,12 +201,6 @@ fn placing_and_prefabs() {
   ed.call("escape", &Value::Null).unwrap();
   assert!(ed.tool == ToolMode::Select && ed.selection.contains(&shape));
 
-  // Light like here: one undo step when something is lit
-  let lit = ed.call("relight_selection", &Value::Null).unwrap();
-  if lit["lit"].as_u64().unwrap() > 0 {
-    assert_eq!(ed.history.undo_label(), tr("undo.relight"));
-  }
-
   // an object of the catalog: an actor named like the game's, its model under it
   let model = root
     .join("jak3/lev/models/crate-krimson-lod0.glb")

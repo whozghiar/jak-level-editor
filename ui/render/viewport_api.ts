@@ -32,7 +32,7 @@ import {
 
 // where a pass draws in the frame (app.cpp frame()): "opaque" after the grid and before the scene
 // (the game view's decor), "translucent" after the scene (the game view's translucent decor),
-// "overlay" after the ocean (effects, nav meshes, holes, the tools' overlays, previews)
+// "overlay" after the ocean (effects, nav meshes, the tools' overlays, previews)
 export type PassStage = "opaque" | "translucent" | "overlay";
 export type Pass = (r: Renderer, rs: RenderSettings) => void;
 
@@ -72,7 +72,7 @@ class ViewportApi {
   waterLook: ((look: WaterLook, rs: RenderSettings) => WaterLook) | null = null;
   // a capture is being drawn (its passes may draw it otherwise: the game view at its hour)
   capturing = false;
-  // what a capture waits for (the game view at its hour, the holes read...): each made ready
+  // what a capture waits for (the game view at its hour...): each made ready
   // before, put back by what it returns
   captureHooks: ((
     hour: number | undefined,
@@ -217,7 +217,7 @@ class ViewportApi {
   }
 
   // a pass of the frame: `capture` false leaves it out of capture() (the C++ capture draws the
-  // effects, nav meshes and holes, not the tools)
+  // effects and nav meshes, not the tools)
   addPass(
     stage: PassStage,
     fn: Pass,

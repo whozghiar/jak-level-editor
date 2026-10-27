@@ -888,40 +888,6 @@ fn tools() -> Value {
       &[],
     ),
     tool(
-      "find_gaps",
-      "Finds where a player walking the level would see the void (nothing drawn: a visual bug in \
-       the game): from points of the ground every few meters, at the height of Jak's eyes, rays \
-       around and downward; a ray that meets nothing is a view into the void. Each spot: kind \
-       'gap' (a hole between pieces, the void right behind it: fill it) or 'edge' (where the \
-       ground ends, seen directly or through a passage: close it unless the player cannot go \
-       near), where it is (at), where it is seen from (seen_from, direction: give them to \
-       set_camera to look at it) and how many rays went through. Run it after building and fix \
-       every gap (rule 1 of the guide). Shown in the editor too.",
-      vec![
-        (
-          "box",
-          json!({"type": "array",
-                 "description": "[[x, y, z], [x, y, z]]: the region the player can walk"}),
-        ),
-        (
-          "ids",
-          ids("or around these elements (their box and a margin)")
-        ),
-        ("margin", num("meters around ids, 12 by default")),
-        (
-          "spacing",
-          num("meters between the points looked from (0 by default: about 400 points)"),
-        ),
-        ("eye", num("meters above the ground, 1.6 by default")),
-        ("limit", integer("spots returned, 40 by default")),
-        (
-          "show",
-          boolean("listed and drawn in the editor (true by default)")
-        ),
-      ],
-      &[],
-    ),
-    tool(
       "list_assemblies",
       "The assemblies of the document's decor, the most elements first: the elements touching \
        each other (a house with its facades, roof and windows; a bridge with its pillars; a tower \
@@ -1026,7 +992,7 @@ fn tools() -> Value {
       "create_prefab",
       "Saves elements as a prefab (in library/prefabricated/), to place again with place (kind \
        'prefab'). The elements smaller than min_size are left out (bolts, debris, stains: a \
-       prefab is a structure; rule 2 of the guide). Answers its name: the one given, spaces and \
+       prefab is a structure; rule 1 of the guide). Answers its name: the one given, spaces and \
        signs made '_', with -2, -3... when a prefab has it already, and the names of the \
        elements left out.",
       vec![
@@ -1083,16 +1049,14 @@ const K_INSTRUCTIONS: &str = "Tools of Jak Level Editor (levels of Jak 3), actin
   session: get_status; open_level (or new_level); find_nodes / raycast to know where things are; \
   list_catalog, list_decor and list_prefabs to choose what to put; place; capture_view to check; \
   save_project. Every change can be undone. Rules for what you build (docs/mcp.md \
-  explains them): 1. No holes: pieces must touch or overlap (by 5 to 10 cm), floors reach the \
-  walls, walls reach the ground and each other; a gap lets the player see the void, a visual bug \
-  in the game. Run find_gaps on what you built and fix every 'gap' (and every 'edge' the player \
-  can reach) before you say it is done. 2. Prefabs hold structures, not crumbs: create_prefab \
+  explains them): 1. Prefabs hold structures, not crumbs: create_prefab \
   leaves out elements under 0.5 m (min_size); never save loose bolts, debris, stains or tiny \
-  props in a prefab. 3. Facades are not buildings: most buildings of the game are only a front, \
+  props in a prefab. 2. Facades are not buildings: most buildings of the game are only a front, \
   open behind. Place a facade so that only its front can be seen (against a wall, the edge of the \
   level, other buildings, back to back with another facade); never in the middle of a place the \
-  player can walk around. Look at it from the back and the sides with set_camera and \
-  capture_view: what the player can reach must never show its back. 4. Look before you report: \
+  player can walk around. Look at it from the back and \
+  the sides with set_camera and capture_view: what the player can reach must never show its \
+  back. 3. Look before you report: \
   capture_view from the player's height (1.6 m above the ground) around what you built.";
 
 /// the tools that may wait for a level to load or for the editor to read the levels
@@ -1107,7 +1071,6 @@ const SLOW: &[&str] = &[
   "generate_navmesh",
   "add_level",
   "export_level",
-  "find_gaps",
   "replace_level",
   "list_prefabs",
 ];
@@ -1413,7 +1376,7 @@ mod tests {
       init["result"]["instructions"]
         .as_str()
         .unwrap()
-        .contains("4. Look before you report")
+        .contains("3. Look before you report")
     );
     assert!(
       s.answer(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
@@ -1423,7 +1386,7 @@ mod tests {
       .answer(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
       .unwrap();
     let tools = list["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 48);
+    assert_eq!(tools.len(), 47);
     let place = tools.iter().find(|t| t["name"] == "place").unwrap();
     assert_eq!(
       place["inputSchema"]["required"],

@@ -28,7 +28,6 @@ export const guideDemos: Record<string, string | null> = {
   ingame: null,
   surface: null,
   event: null,
-  relight: null,
   levels: "story",
   story: "story",
   replace: "replace",
@@ -80,7 +79,6 @@ export const guideSections: { key: string; ids: string[] }[] = [
       "jak2",
       "prefab",
       "game_prefabs",
-      "relight",
     ],
   },
   {

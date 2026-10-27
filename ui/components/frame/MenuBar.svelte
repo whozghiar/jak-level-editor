@@ -318,12 +318,6 @@
           checked: windows.isOpen("navmesh"),
           run: () => windows.toggle("navmesh"),
         },
-        {
-          label: t("menu.level.gaps"),
-          checked: windows.isOpen("gaps"),
-          tip: t("menu.level.gaps.tip"),
-          run: () => windows.toggle("gaps"),
-        },
         null,
         {
           label: t("menu.file.export_game"),

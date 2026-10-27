@@ -12,7 +12,8 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::{Mesh, NodeKind, Scene, TodColors, TodPalette};
+use super::{Mesh, NodeKind, Scene, TodColors, TodPalette, tod_from_color, tod_ratios};
+use crate::game::mood::{MoodSettings, game_mood};
 use crate::math::{AABB, Mat4, Vec3, Vec4, dot, length, length2};
 
 /// Marks a node lit where it stands: moved, it is lit again where it goes (the level's own pieces
@@ -42,13 +43,18 @@ fn cell_of(q: Vec3) -> (i32, i32, i32) {
 }
 
 /// a lit vertex of the level: where it is, the way it faces, its 8 palettes
-struct Sample<'a> {
+struct Sample {
   p: Vec3,
   n: Vec3,
-  rgba: &'a [u8],
+  rgba: [u8; 32],
 }
 
-/// the targets: the Render nodes among ids and under them, not an actor's model
+/// A piece that keeps the light it has in its level (a structure's parts of the game: its level's
+/// buildings' own light), never lit again
+pub const K_KEEP_LIGHT: &str = "og_keep_light";
+
+/// the targets: the Render nodes among ids and under them, not an actor's model, not a piece that
+/// keeps its light
 fn target_indices(scene: &Scene, ids: &[u32]) -> Vec<usize> {
   let cache = scene.cache();
   let mut out = Vec::new();
@@ -59,7 +65,10 @@ fn target_indices(scene: &Scene, ids: &[u32]) -> Vec<usize> {
     }
     let Some(i) = scene.index_of(id) else { return };
     let n = &scene.nodes[i];
-    if n.kind != NodeKind::Render || n.mesh.is_none() || cache.actor.get(i).is_some_and(|&a| a != 0)
+    if n.kind != NodeKind::Render
+      || n.mesh.is_none()
+      || cache.actor.get(i).is_some_and(|&a| a != 0)
+      || n.extras.get(K_KEEP_LIGHT).and_then(Value::as_bool) == Some(true)
     {
       return;
     }
@@ -108,18 +117,82 @@ fn world_normal(w: &Mat4, nrm: Option<&Vec3>) -> Vec3 {
 /// Lights the Render nodes among `ids` and under them (not the actors' models: the game lights them
 /// itself) like the level around them, and marks them K_LIT_HERE. Returns how many got it: a node
 /// with no lit vertex of the level within 16 m keeps its light, as does a selection too large to
-/// light at once (`max_vertices`, K_LIGHT_MAX_VERTICES by default).
+/// light at once (`max_vertices`, K_LIGHT_MAX_VERTICES by default); unless an outdoor level's
+/// light would leave it in the dark (`dark_outdoors`): it is then lit from its colors, as new
+/// geometry.
 pub fn light_like_surroundings(scene: &mut Scene, ids: &[u32], max_vertices: usize) -> usize {
   scene.begin_frame(); // the world matrices after the last changes
   let lit = lights(scene, ids, max_vertices);
-  let count = lit.len();
+  let mut done = HashSet::new();
   for (t, mesh, tod) in lit {
     let n = &mut scene.nodes[t];
     n.mesh = Some(mesh);
     n.tod = Some(tod);
     n.extras[K_LIT_HERE] = Value::Bool(true);
+    done.insert(t);
   }
-  count
+  let weights = outdoor_weights();
+  for t in target_indices(scene, ids) {
+    if done.contains(&t) {
+      continue;
+    }
+    let Some(mesh) = dark_outdoors(scene, t, &weights) else {
+      // its own light kept: still not the level's (tod_ratios), lit again where it is moved
+      if scene.nodes[t].tod.is_some() {
+        scene.nodes[t].extras[K_LIT_HERE] = Value::Bool(true);
+      }
+      continue;
+    };
+    let n = &mut scene.nodes[t];
+    n.mesh = Some(mesh);
+    n.tod = None;
+    n.extras[K_LIT_HERE] = Value::Bool(true);
+    done.insert(t);
+  }
+  done.len()
+}
+
+/// how much an outdoor level lights each of the 8 palettes at noon (the editor's mood, the city's
+/// lights: what a new level gets in the game, update-mood-ctyindb)
+fn outdoor_weights() -> [f32; 8] {
+  let m = game_mood(&MoodSettings::default());
+  std::array::from_fn(|k| m.times[k][3] * (m.times[k][0] + m.times[k][1] + m.times[k][2]) / 3.0)
+}
+
+/// A piece keeping its own light whose light an outdoor level leaves in the dark: its colors as the
+/// editor's own view shows them (each channel's brightest palette), to be lit from them. A piece of
+/// an indoor level is lit by its lamps (the palettes its level's mood keeps on: Onin's tent by its
+/// flames), which an outdoor level drives as the sun of other hours or leaves off; the pieces lit
+/// by the ambient light and the sun, as outdoor levels light them, keep their own.
+fn dark_outdoors(scene: &Scene, t: usize, weights: &[f32; 8]) -> Option<Arc<Mesh>> {
+  let n = &scene.nodes[t];
+  let (mesh, tod) = (n.mesh.as_ref()?, n.tod.as_ref()?);
+  if !tod.fits(mesh) {
+    return None;
+  }
+  let rgba = &tod.palette.as_ref()?.rgba;
+  // each vertex: lit at noon, against its brightest palette
+  let (mut lit, mut brightest) = (0f64, 0f64);
+  for prim in &tod.index {
+    for &color in prim {
+      let Some(c) = rgba.get(color as usize * 32..color as usize * 32 + 32) else {
+        continue;
+      };
+      let mut best = 0f32;
+      for k in 0..8 {
+        let v = (c[k * 4] as f32 + c[k * 4 + 1] as f32 + c[k * 4 + 2] as f32) / 3.0;
+        lit += (v * weights[k]) as f64;
+        best = best.max(v);
+      }
+      brightest += best as f64;
+    }
+  }
+  // ponytail: one hour (noon) and half of its brightest as the line; a piece lit by palettes 1..4
+  // only at other hours (an indoor lamp stored there) would need the day averaged
+  if brightest <= 0.0 || lit >= 0.5 * brightest {
+    return None;
+  }
+  Some(Arc::new(shown_colors(scene, mesh, rgba, &tod.index)))
 }
 
 /// the targets lit: their index, their mesh with its new colors, their lighting
@@ -149,17 +222,26 @@ fn lights(
     return out;
   }
   let region = region.expanded(K_RADII[3]);
+  // what is being lit is never its own surroundings, its pieces that keep their light included (a
+  // prefab's parts of a level, a structure's): they would light all of it like themselves
+  let mut placed: HashSet<usize> = ids.iter().filter_map(|&id| scene.index_of(id)).collect();
+  for below in scene.descendants_of(ids) {
+    placed.extend(below.into_iter().filter_map(|id| scene.index_of(id)));
+  }
 
-  // the lit vertices of the level around them
+  // the lit vertices of the level around them: the game's light of its decor, and the light the
+  // new geometry (the terrain, the shapes) gets from its color in the game view and the export
+  // (game_export's): a new level's own light
+  let ratios = std::cell::OnceCell::new();
   let mut samples: Vec<Sample> = Vec::new();
   let mut grid: HashMap<u64, Vec<u32>> = HashMap::new();
   let count = scene.nodes.len().min(cache.visible.len());
   for i in 0..count {
-    if is_target.contains(&i) {
+    if is_target.contains(&i) || placed.contains(&i) {
       continue;
     }
     let n = &scene.nodes[i];
-    let (Some(mesh), Some(tod)) = (&n.mesh, &n.tod) else {
+    let Some(mesh) = &n.mesh else {
       continue;
     };
     if n.kind != NodeKind::Render || !cache.visible[i] || cache.actor[i] != 0 {
@@ -171,20 +253,46 @@ fn lights(
     if i >= cache.bounds.len() || !cache.bounds[i].valid() || !cache.bounds[i].overlaps(&region) {
       continue;
     }
-    if !tod.fits(mesh) {
-      continue;
-    }
+    let tod = n.tod.as_ref().filter(|t| t.fits(mesh));
     let w = &cache.worlds[i];
-    let rgba = &tod.palette.as_ref().unwrap().rgba;
     for (pi, p) in mesh.prims.iter().enumerate() {
+      let base = usize::try_from(p.material)
+        .ok()
+        .and_then(|m| scene.materials.get(m))
+        .map(|m| m.base_color);
       for (v, &pos) in p.pos.iter().enumerate() {
         let q = w.point(pos);
         if !region.contains(q) {
           continue;
         }
-        let color = tod.index[pi][v] as usize * 32;
-        let Some(rgba) = rgba.get(color..color + 32) else {
-          continue;
+        let rgba: [u8; 32] = match tod {
+          Some(tod) => {
+            let color = tod.index[pi][v] as usize * 32;
+            let rgba = &tod.palette.as_ref().unwrap().rgba;
+            let Some(c) = rgba.get(color..color + 32) else {
+              continue;
+            };
+            c.try_into().unwrap()
+          }
+          None => {
+            let mut shown = p
+              .col
+              .get(v)
+              .copied()
+              .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0));
+            if let Some(b) = base {
+              shown = Vec4::new(shown.x * b.x, shown.y * b.y, shown.z * b.z, shown.w);
+            }
+            // the level's (what is being lit is not the level's)
+            let ratios = ratios.get_or_init(|| {
+              let ids: Vec<u32> = (0..scene.nodes.len())
+                .filter(|i| !is_target.contains(i))
+                .map(|i| scene.nodes[i].id)
+                .collect();
+              tod_ratios(scene, &ids)
+            });
+            tod_from_color(shown, ratios)
+          }
         };
         let (x, y, z) = cell_of(q);
         grid
@@ -294,42 +402,48 @@ fn lights(
         }
       }
     }
-    // its colors in the editor's own view, as the extracted levels': each channel's brightest
-    // palette (the editor's materials, at 1 where the game's are at 2, twice that)
-    let mut mesh = (**src).clone();
-    for (pi, p) in mesh.prims.iter_mut().enumerate() {
-      let mat = usize::try_from(p.material)
-        .ok()
-        .and_then(|m| scene.materials.get(m));
-      let k = if mat.is_some_and(|m| m.base_color.x <= 1.5) {
-        2.0
-      } else {
-        1.0
-      };
-      let had = p.col.len() == p.pos.len();
-      p.col.resize(p.pos.len(), Vec4::new(1.0, 1.0, 1.0, 0.5));
-      for v in 0..p.pos.len() {
-        let c = &palette.rgba[tod.index[pi][v] as usize * 32..][..32];
-        let mut best = [0f32; 3];
-        for pal in 0..8 {
-          for ch in 0..3 {
-            best[ch] = best[ch].max(c[pal * 4 + ch] as f32);
-          }
-        }
-        let shown = |ch: usize| (best[ch] / 255.0 * k).min(1.0);
-        p.col[v] = Vec4::new(
-          shown(0),
-          shown(1),
-          shown(2),
-          if had { p.col[v].w } else { 0.5 },
-        );
-      }
-    }
-    mesh.touch();
+    let mesh = shown_colors(scene, src, &palette.rgba, &tod.index);
     tod.palette = Some(Arc::new(palette));
     out.push((t, Arc::new(mesh), Arc::new(tod)));
   }
   out
+}
+
+/// `src` with its colors in the editor's own view, as the extracted levels': each channel's
+/// brightest palette of its colors (`index` into `rgba`; the editor's materials, at 1 where the
+/// game's are at 2, twice that)
+fn shown_colors(scene: &Scene, src: &Mesh, rgba: &[u8], index: &[Vec<u16>]) -> Mesh {
+  let mut mesh = src.clone();
+  for (pi, p) in mesh.prims.iter_mut().enumerate() {
+    let mat = usize::try_from(p.material)
+      .ok()
+      .and_then(|m| scene.materials.get(m));
+    let k = if mat.is_some_and(|m| m.base_color.x <= 1.5) {
+      2.0
+    } else {
+      1.0
+    };
+    let had = p.col.len() == p.pos.len();
+    p.col.resize(p.pos.len(), Vec4::new(1.0, 1.0, 1.0, 0.5));
+    for v in 0..p.pos.len() {
+      let c = &rgba[index[pi][v] as usize * 32..][..32];
+      let mut best = [0f32; 3];
+      for pal in 0..8 {
+        for ch in 0..3 {
+          best[ch] = best[ch].max(c[pal * 4 + ch] as f32);
+        }
+      }
+      let shown = |ch: usize| (best[ch] / 255.0 * k).min(1.0);
+      p.col[v] = Vec4::new(
+        shown(0),
+        shown(1),
+        shown(2),
+        if had { p.col[v].w } else { 0.5 },
+      );
+    }
+  }
+  mesh.touch();
+  mesh
 }
 
 /// a color's index in the palette, added when new
@@ -410,6 +524,164 @@ mod tests {
         && b.tod.is_none()
         && lit_here_nodes(&s, &[near_id, far_id]) == vec![near_id],
       "placing: an element takes the light of the level around it, one far from it keeps its own"
+    );
+  }
+
+  #[test]
+  fn a_placed_prefab_is_not_its_own_surroundings() {
+    // a prefab placed alone: a part of it that keeps its light (a level's piece of a structure)
+    // does not light the rest of it; outside of it, the same lit piece does
+    let mut s = Scene::new();
+    let quad = |y: f32| {
+      let mut m = Mesh::new();
+      m.prims.push(Primitive {
+        pos: vec![
+          Vec3::new(-2.0, y, -2.0),
+          Vec3::new(2.0, y, -2.0),
+          Vec3::new(2.0, y, 2.0),
+          Vec3::new(-2.0, y, 2.0),
+        ],
+        nrm: vec![Vec3::new(0.0, 1.0, 0.0); 4],
+        idx: vec![0, 2, 1, 0, 3, 2],
+        ..Default::default()
+      });
+      Arc::new(m)
+    };
+    let mut palette = TodPalette::default();
+    for _ in 0..8 {
+      palette.rgba.extend([20, 20, 20, 128]);
+    }
+    let kept = Node {
+      kind: NodeKind::Render,
+      name: "kept".into(),
+      mesh: Some(quad(0.0)),
+      tod: Some(Arc::new(TodColors {
+        palette: Some(Arc::new(palette)),
+        index: vec![vec![0, 0, 0, 0]],
+      })),
+      extras: serde_json::json!({ K_KEEP_LIGHT: true }),
+      ..Default::default()
+    };
+    let wall = Node {
+      kind: NodeKind::Render,
+      name: "wall".into(),
+      mesh: Some(quad(0.5)),
+      ..Default::default()
+    };
+    let (k, w) = (s.add(kept.clone()), s.add(wall.clone()));
+    assert_eq!(
+      light_like_surroundings(&mut s, &[k, w], K_LIGHT_MAX_VERTICES),
+      0
+    );
+    assert!(s.find(w).unwrap().tod.is_none());
+    let mut s = Scene::new();
+    s.add(kept);
+    let w = s.add(wall);
+    assert_eq!(
+      light_like_surroundings(&mut s, &[w], K_LIGHT_MAX_VERTICES),
+      1
+    );
+  }
+
+  #[test]
+  fn a_piece_on_new_geometry_takes_its_light() {
+    // a new level: a floor made in the editor (lit from its color, no palettes) under a piece of
+    // an indoor level: the piece takes the floor's light, as the game view and the export give it
+    let mut s = Scene::new();
+    let mut floor = Mesh::new();
+    floor.prims.push(Primitive {
+      pos: vec![
+        Vec3::new(-6.0, 0.0, -6.0),
+        Vec3::new(6.0, 0.0, -6.0),
+        Vec3::new(6.0, 0.0, 6.0),
+        Vec3::new(-6.0, 0.0, 6.0),
+      ],
+      nrm: vec![Vec3::new(0.0, 1.0, 0.0); 4],
+      col: vec![Vec4::new(0.5, 0.5, 0.5, 1.0); 4],
+      idx: vec![0, 2, 1, 0, 3, 2],
+      ..Default::default()
+    });
+    s.add(Node {
+      kind: NodeKind::Render,
+      mesh: Some(Arc::new(floor)),
+      ..Default::default()
+    });
+    let mut m = Mesh::new();
+    m.prims.push(Primitive {
+      pos: vec![
+        Vec3::new(0.0, 0.5, 0.0),
+        Vec3::new(1.0, 0.5, 0.0),
+        Vec3::new(0.0, 0.5, 1.0),
+      ],
+      nrm: vec![Vec3::new(0.0, 1.0, 0.0); 3],
+      idx: vec![0, 2, 1],
+      ..Default::default()
+    });
+    let mut palette = TodPalette::default();
+    palette.rgba = vec![0; 32];
+    palette.rgba[20..24].copy_from_slice(&[25, 25, 25, 128]); // a lamp of its level, dim
+    let id = s.add(Node {
+      kind: NodeKind::Render,
+      mesh: Some(Arc::new(m)),
+      tod: Some(Arc::new(TodColors {
+        palette: Some(Arc::new(palette)),
+        index: vec![vec![0, 0, 0]],
+      })),
+      ..Default::default()
+    });
+    let lit = light_like_surroundings(&mut s, &[id], K_LIGHT_MAX_VERTICES);
+    let n = s.find(id).unwrap();
+    let rgba = &n.tod.as_ref().unwrap().palette.as_ref().unwrap().rgba;
+    let floor_ambient = tod_from_color(Vec4::new(0.5, 0.5, 0.5, 1.0), &tod_ratios(&s, &[]))[0];
+    assert!(
+      lit == 1 && rgba[0] == floor_ambient && rgba[0] > 25,
+      "placed on new geometry: the piece takes its light ({} against {floor_ambient})",
+      rgba[0]
+    );
+  }
+
+  #[test]
+  fn an_indoor_piece_is_lit_from_its_colors_outdoors() {
+    // nothing lit around: a piece lit by a lamp of its indoor level (palette 5, which an outdoor
+    // level lights at night only) is lit from its colors; one lit by the ambient light keeps its
+    // own
+    let mut s = Scene::new();
+    let piece = |s: &mut Scene, pal: usize| {
+      let mut m = Mesh::new();
+      m.prims.push(Primitive {
+        pos: vec![
+          Vec3::new(0.0, 0.0, 0.0),
+          Vec3::new(1.0, 0.0, 0.0),
+          Vec3::new(0.0, 1.0, 0.0),
+        ],
+        nrm: vec![Vec3::new(0.0, 0.0, 1.0); 3],
+        idx: vec![0, 1, 2],
+        ..Default::default()
+      });
+      let mut palette = TodPalette::default();
+      palette.rgba = vec![0; 32];
+      palette.rgba[pal * 4..pal * 4 + 4].copy_from_slice(&[200, 150, 100, 128]);
+      s.add(Node {
+        kind: NodeKind::Render,
+        mesh: Some(Arc::new(m)),
+        tod: Some(Arc::new(TodColors {
+          palette: Some(Arc::new(palette)),
+          index: vec![vec![0, 0, 0]],
+        })),
+        ..Default::default()
+      })
+    };
+    let indoor = piece(&mut s, 5);
+    let outdoor = piece(&mut s, 0);
+    let lit = light_like_surroundings(&mut s, &[indoor, outdoor], K_LIGHT_MAX_VERTICES);
+    let (a, b) = (s.find(indoor).unwrap(), s.find(outdoor).unwrap());
+    assert!(
+      lit == 1
+        && a.tod.is_none()
+        && a.extras[K_LIT_HERE] == true
+        && (a.mesh.as_ref().unwrap().prims[0].col[0].x - 200.0 / 255.0).abs() < 0.01
+        && b.tod.is_some(),
+      "an indoor piece outdoors: lit from its colors; an outdoor one keeps its light"
     );
   }
 }

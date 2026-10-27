@@ -349,9 +349,6 @@ fn levels_of_the_real_library() {
   assert!(node["game_data"]["etype"].is_string());
   let asm = ok(&ed, "list_assemblies", json!({"limit": 3}));
   assert!(asm["count"].as_u64().unwrap() > 0);
-  let gaps = ok(&ed, "find_gaps", json!({"ids": [id], "margin": 6}));
-  assert!(gaps["spots"].is_array() && gaps["region"].is_array());
-  assert!(ed.lock().unwrap().gaps.is_some()); // shown in the Holes window
   // an object of the catalog on the ground, a level's decor (read by the store's workers)
   // above an actor of the level: something is under it
   let at = &crates["nodes"][0]["position"];

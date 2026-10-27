@@ -19,7 +19,6 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value, json};
 
-use super::export::GapsFound;
 use super::levels::{LevelRole, copy_nodes, paste_nodes};
 use super::placement::PlacementKind;
 use super::remote::Reply;
@@ -38,7 +37,6 @@ use crate::io::nav_export::export_navmeshes;
 use crate::math::{AABB, Mat4, Quat, Ray, Vec3, length, normalize, radians};
 use crate::navmesh::{navmesh_nodes, navmesh_of_node, navmesh_problem};
 use crate::scene::assemblies::find_assemblies;
-use crate::scene::gaps::{GapOptions, find_gaps};
 use crate::scene::pick::{PickFilter, covered_below, pick};
 use crate::scene::shapes::{
   ShapeParams, edit_material, node_shape, reshape, shape_preset, texture_from_image,
@@ -200,7 +198,6 @@ impl Editor {
       "set_view" => self.tool_set_view(a).into(),
       "set_camera" => self.tool_set_camera(a).into(),
       "capture_view" => self.tool_capture_view(a),
-      "find_gaps" => self.tool_find_gaps(a).into(),
       "group" => self.tool_group(a).into(),
       "ungroup" => {
         let gid = uint(a, "group");

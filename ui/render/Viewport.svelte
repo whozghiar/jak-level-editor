@@ -4,7 +4,6 @@
   import { onMount } from "svelte";
   import { engine } from "../lib/engine.svelte";
   import { gameView } from "./game_view";
-  import { attachGapsOverlay } from "./gaps_overlay.svelte";
   import { attachNavmeshOverlay } from "./navmesh_overlay";
   import { effects } from "./particles";
   import { attachPlaceTool } from "./place_tool.svelte";
@@ -31,7 +30,6 @@
       attachTerrainTool(),
       attachTopologyTool(),
       attachPreview(),
-      attachGapsOverlay(),
     ];
     const fit = () => {
       const r = box.getBoundingClientRect();

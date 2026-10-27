@@ -335,10 +335,9 @@ pub struct Editor {
   pub terrain: terrain_tool::TerrainState,
   pub(crate) topology: topology_tool::TopologyState,
   pub(crate) preview: preview::PreviewState,
-  // ---- the export for the game, the nav meshes, the holes found (export.rs)
+  // ---- the export for the game, the nav meshes (export.rs)
   pub export: export::ExportState,
   pub nav: export::NavState,
-  pub gaps: Option<export::GapsFound>,
   /// the preferences changed are written (not in the tests)
   pub write_prefs: bool,
   /// the assistants connected through the MCP server (remote.rs)
@@ -409,7 +408,6 @@ impl Editor {
       preview: Default::default(),
       export: Default::default(),
       nav: Default::default(),
-      gaps: None,
       write_prefs: true,
       remote_clients: 0,
       remote: None,
