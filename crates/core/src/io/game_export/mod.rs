@@ -54,7 +54,7 @@ use crate::io::behaviors::{
   Condition, ConditionKind, behavior_code, behavior_type_name, condition_of,
 };
 use crate::io::decor_behaviors::{
-  bounce_code, checkpoint_code, collision_extras, decor_behavior_of, launch_code,
+  DecorCollision, bounce_code, checkpoint_code, collision_extras, decor_behavior_of, launch_code,
 };
 use crate::io::game_data::{GameData, LevelInfo};
 use crate::io::gltf::{ExportMode, ExportOptions, ImportOptions, export_glb, import_gltf};

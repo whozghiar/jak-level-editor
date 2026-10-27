@@ -2,9 +2,10 @@
 //! in its node's extras "og_decor" and written by the export for the game (the appendix of docs/user-guide.md):
 //!
 //!   collision  how it collides, through the level builder's own fields (nothing generated):
-//!              "shape" (the default: by its shape, made by the builder), "none" (Jak goes through
-//!              it: cables, light shafts) or "invisible" (not drawn, it collides: an invisible
-//!              wall); its surface (stone, ice, sand, wood, metal, grass...: the sound of the
+//!              "shape" (the default: by its shape, made by the builder), "box" (the box around
+//!              it, invisible: a detailed model Jak would fall through, as OpenRAC makes a
+//!              model's collision of its box), "none" (Jak goes through it: cables, light shafts)
+//!              or "invisible" (not drawn, it collides: an invisible wall); its surface (stone, ice, sand, wood, metal, grass...: the sound of the
 //!              steps, ice slides), what it does to Jak (deadly, burn, endless fall, melt), its
 //!              mode (ground, wall, obstacle; walls are found from the slope anyway) and its flags
 //!              (Jak cannot hang from its edges, the camera and the creatures go through it, it
@@ -27,7 +28,7 @@ use serde_json::{Value, json};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecorCollision {
-  /// shape, none, invisible
+  /// shape, box, none, invisible
   pub kind: String,
   /// the builder's surfaces: stone, ice, quicksand, waterbottom, tar, sand, wood, grass, pcmetal,
   /// snow, deepsnow, hotcoals, lava, crwood, gravel, dirt, metal, straw, tube, swamp, stopproj,
@@ -209,7 +210,7 @@ pub fn decor_behavior_of(extras: &Value) -> DecorBehavior {
     let k = &mut b.collision;
     k.set = true;
     k.kind = text(c, "kind", &k.kind);
-    if k.kind != "none" && k.kind != "invisible" {
+    if !["none", "invisible", "box"].contains(&k.kind.as_str()) {
       k.kind = "shape".into();
     }
     k.material = text(c, "material", &k.material);

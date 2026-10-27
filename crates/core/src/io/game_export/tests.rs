@@ -575,6 +575,11 @@ fn the_decors_behaviors() {
       json!({"collision": {"material": "ice", "event": "deadly", "noedge": true}}),
     ),
     ("cable", 5.0, json!({"collision": {"kind": "none"}})),
+    (
+      "statue",
+      20.0,
+      json!({"collision": {"kind": "box", "material": "metal"}}),
+    ),
     ("pad", 10.0, json!({"bounce": {"height": 15}})),
     (
       "ramp",
@@ -608,6 +613,10 @@ fn the_decors_behaviors() {
   let ice = &extras["ice-slab"];
   assert!(ice["collide_material"] == 1 && ice["collide_event"] == 1 && ice["noedge"] == 1);
   assert_eq!(extras["cable"]["ignore"], 1);
+  // collision by the box around it: none of its own, an invisible box of metal in its place
+  assert_eq!(extras["statue"]["ignore"], 1);
+  let b = &extras["statue-collision-box"];
+  assert!(b["set_invisible"] == 1 && b["collide_material"] == 16 && b["double_sided"] == 1);
   let pad = actors["pad-bounce"];
   assert!(
     pad["etype"] == "my-decor-pad-bounce"

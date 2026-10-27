@@ -111,9 +111,22 @@
             ? "decor.collision.off"
             : c.kind === "invisible"
               ? "decor.collision.invisible_on"
-              : "decor.collision.on",
+              : c.kind === "box"
+                ? "decor.collision.box_on"
+                : "decor.collision.on",
       )}
     </p>
+    {#if on && c.kind !== "invisible"}
+      <!-- its own shape, or the box around it (a detailed model Jak would fall through) -->
+      <p>{t("decor.shape")}</p>
+      <Tip text={t("decor.shape.tip")} />
+      <Choice
+        prefix="decor.shape."
+        value={c.set && c.kind === "box" ? "box" : "shape"}
+        groups={[[null, ["shape", "box"]]]}
+        onchange={(kind) => setCollision({ kind })}
+      />
+    {/if}
     {#if on}
       <!-- what Jak walks on: the sound of his steps and their dust, and for a few how he moves -->
       <p>{t("decor.material")}</p>

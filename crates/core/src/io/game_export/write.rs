@@ -188,6 +188,8 @@ pub fn export_level(
   let mut decor_actions = Vec::new();
   // the elements whose collision the builder makes from their shape
   let mut by_shape = Vec::new();
+  // the elements colliding by the box around them (their collision set to "box")
+  let mut boxes = Vec::new();
   let mut bounds = AABB::default();
   for i in 0..count {
     let n = &scene.nodes[i];
@@ -216,7 +218,13 @@ pub fn export_level(
     // makes the collision of the others from their shape; a collision set in the editor (its
     // surface, an invisible wall, none) where the game's does not already hold it
     let decor = decor_behavior_of(&n.extras);
-    if decor.collision.set && !(o.game_collision && covered) {
+    if decor.collision.set && decor.collision.kind == "box" && !(o.game_collision && covered) {
+      // none of its own: an invisible box around it collides in its place
+      eo.node_extras
+        .insert(n.id, json!({"set_collision": 1, "ignore": 1}));
+      rep.collision_from_decor += 1;
+      boxes.push((i, decor.collision.clone()));
+    } else if decor.collision.set && !(o.game_collision && covered) {
       let mut e = collision_extras(&decor.collision);
       if decor.collision.kind != "none" {
         rep.collision_from_decor += 1;
@@ -382,6 +390,21 @@ pub fn export_level(
         notes.add("export.note.collision_taken_out", "", taken_out - 1);
       }
     }
+  }
+
+  // the boxes of the elements colliding by them: invisible, with their collision's settings
+  for (i, c) in boxes {
+    let n = &scene.nodes[i];
+    let mut mesh = box_around(&cache.worlds[i], &n.mesh.as_ref().unwrap().bounds());
+    mesh.name = format!("{}-collision-box", n.name);
+    let mesh = Arc::new(mesh);
+    let mut e = collision_extras(&DecorCollision {
+      kind: "invisible".into(),
+      ..c
+    });
+    e["double_sided"] = 1.into();
+    game_collision.push(mesh.clone());
+    eo.extra_meshes.push((mesh, e));
   }
 
   // --- where Jak would meet more collision than the game gathers at once -----------------------
@@ -1166,4 +1189,32 @@ pub fn export_level(
 
   rep.files.push(from_path(&md_path));
   Ok(rep)
+}
+
+/// The box `local` (a mesh's own bounds) where `world` puts it: 12 triangles facing out
+fn box_around(world: &Mat4, local: &AABB) -> Mesh {
+  let (l, h) = (local.lo, local.hi);
+  let c = |x: f32, y: f32, z: f32| world.point(Vec3::new(x, y, z));
+  let mut p = Primitive {
+    pos: vec![
+      c(l.x, l.y, l.z),
+      c(h.x, l.y, l.z),
+      c(h.x, l.y, h.z),
+      c(l.x, l.y, h.z),
+      c(l.x, h.y, l.z),
+      c(h.x, h.y, l.z),
+      c(h.x, h.y, h.z),
+      c(l.x, h.y, h.z),
+    ],
+    // counter-clockwise seen from outside: bottom, top, front, right, back, left
+    idx: vec![
+      0, 1, 2, 0, 2, 3, 4, 7, 6, 4, 6, 5, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3,
+      7, 4, 3, 4, 0,
+    ],
+    ..Default::default()
+  };
+  p.compute_normals();
+  let mut m = Mesh::new();
+  m.prims.push(p);
+  m
 }
