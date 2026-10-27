@@ -640,12 +640,14 @@ fn merge_contours(contours: &mut [Contour], ca: usize, cb: usize, ia: usize, ib:
 /// outline where they did.
 fn crt_qsort<T>(v: &mut [T], cmp: impl Fn(&T, &T) -> std::cmp::Ordering) {
   use std::cmp::Ordering::{Equal, Greater};
-  const CUTOFF: usize = 8;
+  const CUTOFF: isize = 8;
   if v.len() < 2 {
     return;
   }
-  let mut stack: Vec<(usize, usize)> = Vec::new();
-  let (mut lo, mut hi) = (0usize, v.len() - 1);
+  // signed indices, as the C runtime's pointers: the partition's may go one step past its ends
+  let c = |v: &[T], a: isize, b: isize| cmp(&v[a as usize], &v[b as usize]);
+  let mut stack: Vec<(isize, isize)> = Vec::new();
+  let (mut lo, mut hi) = (0isize, v.len() as isize - 1);
   loop {
     let size = hi - lo + 1;
     if size <= CUTOFF {
@@ -654,30 +656,30 @@ fn crt_qsort<T>(v: &mut [T], cmp: impl Fn(&T, &T) -> std::cmp::Ordering) {
       while h > lo {
         let mut max = lo;
         for p in lo + 1..=h {
-          if cmp(&v[p], &v[max]) == Greater {
+          if c(v, p, max) == Greater {
             max = p;
           }
         }
-        v.swap(max, h);
+        v.swap(max as usize, h as usize);
         h -= 1;
       }
     } else {
       let mut mid = lo + size / 2;
-      if cmp(&v[lo], &v[mid]) == Greater {
-        v.swap(lo, mid);
+      if c(v, lo, mid) == Greater {
+        v.swap(lo as usize, mid as usize);
       }
-      if cmp(&v[lo], &v[hi]) == Greater {
-        v.swap(lo, hi);
+      if c(v, lo, hi) == Greater {
+        v.swap(lo as usize, hi as usize);
       }
-      if cmp(&v[mid], &v[hi]) == Greater {
-        v.swap(mid, hi);
+      if c(v, mid, hi) == Greater {
+        v.swap(mid as usize, hi as usize);
       }
       let (mut loguy, mut higuy) = (lo, hi);
       loop {
         if mid > loguy {
           loop {
             loguy += 1;
-            if !(loguy < mid && cmp(&v[loguy], &v[mid]) != Greater) {
+            if !(loguy < mid && c(v, loguy, mid) != Greater) {
               break;
             }
           }
@@ -685,21 +687,21 @@ fn crt_qsort<T>(v: &mut [T], cmp: impl Fn(&T, &T) -> std::cmp::Ordering) {
         if mid <= loguy {
           loop {
             loguy += 1;
-            if !(loguy <= hi && cmp(&v[loguy], &v[mid]) != Greater) {
+            if !(loguy <= hi && c(v, loguy, mid) != Greater) {
               break;
             }
           }
         }
         loop {
           higuy -= 1;
-          if !(higuy > mid && cmp(&v[higuy], &v[mid]) == Greater) {
+          if !(higuy > mid && c(v, higuy, mid) == Greater) {
             break;
           }
         }
         if higuy < loguy {
           break;
         }
-        v.swap(loguy, higuy);
+        v.swap(loguy as usize, higuy as usize);
         if mid == higuy {
           mid = loguy;
         }
@@ -708,7 +710,7 @@ fn crt_qsort<T>(v: &mut [T], cmp: impl Fn(&T, &T) -> std::cmp::Ordering) {
       if mid < higuy {
         loop {
           higuy -= 1;
-          if !(higuy > mid && cmp(&v[higuy], &v[mid]) == Equal) {
+          if !(higuy > mid && c(v, higuy, mid) == Equal) {
             break;
           }
         }
@@ -716,7 +718,7 @@ fn crt_qsort<T>(v: &mut [T], cmp: impl Fn(&T, &T) -> std::cmp::Ordering) {
       if mid >= higuy {
         loop {
           higuy -= 1;
-          if !(higuy > lo && cmp(&v[higuy], &v[mid]) == Equal) {
+          if !(higuy > lo && c(v, higuy, mid) == Equal) {
             break;
           }
         }
@@ -1177,5 +1179,22 @@ mod tests {
     // a short one, sorted already
     crt_qsort(&mut v[..7], |a, b| a.0.cmp(&b.0));
     assert_eq!(ids(&v[..7]), [32, 3, 1, 37, 16, 6, 28]);
+    // keys nearly all alike (the C runtime's indices go one step past the ends there): sorted,
+    // nothing lost
+    let mut seed = 1u32;
+    for n in [9usize, 10, 17, 33, 64, 200, 1000] {
+      for range in [1u32, 2, 3] {
+        let mut v: Vec<u32> = (0..n)
+          .map(|_| {
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            (seed >> 16) % range
+          })
+          .collect();
+        let mut want = v.clone();
+        want.sort();
+        crt_qsort(&mut v, |a, b| a.cmp(b));
+        assert_eq!(v, want, "{n} keys among {range}");
+      }
+    }
   }
 }

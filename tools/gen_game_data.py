@@ -571,14 +571,31 @@ def actor_params(paths, lineage, actor_types):
     return out
 
 
+def level_needs(paths):
+    """The levels of the game a type's code gets by their name, (level-get *level* '<name>) in its
+    methods, states and behaviors: born in a level where that one is not loaded, it reads #f (the
+    volcano's breaking ground dies on it)."""
+    out = {}
+    form = re.compile(r'^\((?:defmethod|defstate|defbehavior)\s+\S+\s+\(\(?(?:this\s+)?([a-z0-9-]+)', re.M)
+    for path in paths:
+        text = read(path)
+        for m in form.finditer(text):
+            nxt = re.search(r'^\(def', text[m.end():], re.M)
+            body = text[m.start():m.end() + (nxt.start() if nxt else len(text))]
+            for level in re.findall(r"\(level-get \*level\* '([a-z0-9-]+)\)", body):
+                out.setdefault(m.group(1), set()).add(level)
+    return {t: sorted(v) for t, v in sorted(out.items())}
+
+
 def type_code(root, paths):
     """The code file (its .o stem) each type of the game's code is defined in, and each particle
-    group (what a part-spawner draws), when it is not in the common code (GAME.CGO); for each such
+    group (what a part-spawner draws), when it is not in the common code (KERNEL.CGO, GAME.CGO); for each such
     file the code files before it in the first DGO that has it (what it needs)."""
     dgos = {}
     for gd in sorted(glob.glob(os.path.join(root, 'dgos', '*.gd'))):
         dgos[os.path.basename(gd)] = re.findall(r'"([^"]+)\.o"', read(gd))
-    common = set(dgos.get('game.gd', []))
+    # the code always loaded: the kernel (KERNEL.CGO) and the game (GAME.CGO)
+    common = set(dgos.get('game.gd', [])) | set(dgos.get('kernel.gd', []))
     defined, groups = {}, {}
     for path in paths:
         stem = os.path.splitext(os.path.basename(path))[0]
@@ -592,7 +609,7 @@ def type_code(root, paths):
     needs = {}
     for stem in sorted(set(defined.values()) | set(groups.values())):
         for name, files in dgos.items():
-            if name != 'game.gd' and stem in files:
+            if name not in ('game.gd', 'kernel.gd') and stem in files:
                 needs[stem] = [f for f in files[:files.index(stem)] if f not in common]
                 break
     return ({t: s for t, s in sorted(defined.items()) if s in needs},
@@ -770,8 +787,15 @@ def game_data(goal_src):
         for up in lineage(t)[:-1]:
             if up in parent:
                 parents[up] = parent[up]
-    out['actors']['parents'] = dict(sorted(parents.items()))
     out['actors']['code'], out['actors']['effect_code'], out['code_needs'] = type_code(root, everything)
+    out['actors']['needs_level'] = level_needs(everything)
+    # and of each type defined outside the common code: a level's DGO brings the file defining a
+    # type's parent before the type's (another level's code that it loads beside: the city's squads)
+    for t in out['actors']['code']:
+        for up in lineage(t)[:-1]:
+            if up in parent:
+                parents[up] = parent[up]
+    out['actors']['parents'] = dict(sorted(parents.items()))
     # the enums of those parameters (option bits, pickups), by name: [[name, value or bit], ...]
     enum_names = {k[5:] for ps in out['actors']['params'].values() for k, _ in ps.values() if k.startswith('enum:')}
     enum_names.add('pickup-type')

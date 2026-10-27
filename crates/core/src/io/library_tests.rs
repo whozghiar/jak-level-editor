@@ -585,8 +585,16 @@ fn builder_export() {
   let glb = read_glb_json(&path);
   let nodes = glb["nodes"].as_array().unwrap();
   assert_eq!(nodes.len(), 3);
-  // each at its world matrix, the builder's extras only
-  assert_eq!(nodes[0]["translation"], json!([5.0, 0.0, 0.0]));
+  // each in the game's space (its vertices at their world place, the node without a matrix), the
+  // builder's extras only
+  assert!(nodes[0].get("translation").is_none());
+  let pos = &glb["accessors"][glb["meshes"][nodes[0]["mesh"].as_u64().unwrap() as usize]
+    ["primitives"][0]["attributes"]["POSITION"]
+    .as_u64()
+    .unwrap() as usize];
+  let local = &s.find(floor).unwrap().mesh.as_ref().unwrap().prims[0].pos;
+  let low = local.iter().map(|v| v.x).fold(f32::MAX, f32::min);
+  assert_eq!(pos["min"][0].as_f64().unwrap() as f32, low + 5.0);
   assert_eq!(nodes[0]["extras"], json!({"set_collision": 1}));
   assert!(nodes[1].get("extras").is_none());
   assert_eq!(nodes[2]["extras"], json!({"kind": "x"}));

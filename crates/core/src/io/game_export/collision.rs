@@ -69,7 +69,7 @@ pub(super) fn closest_on_triangle(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
 
 /// Triangles of the game's space hashed on a grid of `cell` meters: the distance from a point to the
 /// nearest, how many meet a box.
-pub(super) struct TriGrid {
+pub(crate) struct TriGrid {
   cell: f32,
   tris: Vec<[Vec3; 3]>,
   boxes: Vec<AABB>,
@@ -80,7 +80,7 @@ pub(super) struct TriGrid {
 }
 
 impl TriGrid {
-  pub(super) fn new(cell: f32) -> Self {
+  pub(crate) fn new(cell: f32) -> Self {
     Self {
       cell,
       tris: Vec::new(),
@@ -114,7 +114,7 @@ impl TriGrid {
     })
   }
 
-  pub(super) fn add(&mut self, a: Vec3, b: Vec3, c: Vec3) {
+  pub(crate) fn add(&mut self, a: Vec3, b: Vec3, c: Vec3) {
     let mut bx = AABB::default();
     bx.add(a);
     bx.add(b);
@@ -169,7 +169,7 @@ impl TriGrid {
   }
 
   /// the distance to the nearest triangle, `limit` when none is nearer
-  pub(super) fn distance(&self, p: Vec3, limit: f32) -> f32 {
+  pub(crate) fn distance(&self, p: Vec3, limit: f32) -> f32 {
     let mut best = limit;
     let mut bx = AABB::default();
     bx.add(p - Vec3::new(limit, limit, limit));
@@ -201,7 +201,7 @@ impl TriGrid {
 /// The level whose decor a node is part of: <level> of its outermost ancestor <level>-tfrag-*,
 /// -tie-* or -shrub-* (the draw groups of an extracted level), and that group's parent (which copy
 /// of the level, in a document); "" for none
-pub(super) fn piece_level(scene: &Scene, n: &Node) -> (u32, String) {
+pub(crate) fn piece_level(scene: &Scene, n: &Node) -> (u32, String) {
   let mut found = (0, String::new());
   let mut guard = 0;
   let mut p = if n.parent != 0 {
@@ -231,7 +231,7 @@ pub(super) fn piece_level(scene: &Scene, n: &Node) -> (u32, String) {
 }
 
 /// "<level>" of a group "<level>-collision" (the game's collision of a level)
-pub(super) fn collision_group_level(name: &str) -> Option<&str> {
+pub(crate) fn collision_group_level(name: &str) -> Option<&str> {
   name.strip_suffix("-collision").filter(|l| !l.is_empty())
 }
 

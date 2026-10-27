@@ -239,12 +239,13 @@ pub(super) fn level_info(o: &LevelExportOptions, bottom: f32) -> String {
     :taskname 'default
     :index #x128 ;; the test-zone's: give it a number no other level has
     :master-level #f
+    :level-flags (level-flags sky)
     :packages '()
     :run-packages '(\"common\")
     :memory-mode (level-memory-mode large)
     :music-bank #f
     :extra-sound-bank #f
-    :mood-func 'update-mood-default
+    :mood-func 'update-mood-ctyindb ;; the city's: the level's lights lit as the editor shows them
     :special-mood #f
     :ocean #f
     :ocean-alpha 1.0

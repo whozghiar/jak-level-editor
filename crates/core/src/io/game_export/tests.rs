@@ -373,6 +373,13 @@ fn a_small_level() {
       && install.contains("(get-continue-by-name *game-info* \"my-test-start\")"),
     "export: the behaviors as the level's code, its DGO with the game's code its objects need"
   );
+  // without the sky flag the game draws no sky around a new level: a black void; with the default
+  // mood its lights (palettes 5 to 7, lit in the editor) stay off: the pieces of indoor levels black
+  let info = read_text(&dir.join("level-info.gc"));
+  assert!(
+    info.contains(":level-flags (level-flags sky)")
+      && info.contains(":mood-func 'update-mood-ctyindb")
+  );
   let glb = read_glb_json(&dir.join("my-test.glb"));
   let extras = glb_extras(&glb);
   let surfaces = extras.values().filter(|e| e["set_invisible"] == 1).count();
@@ -917,7 +924,19 @@ fn the_projects_exported_like_the_cpp_editor() {
       }
       // the editor's name in the comments: renamed since
       let text = text.replace("the OpenGOAL Level Editor", "Jak Level Editor");
-      if let Some(d) = first_difference(&text, &ours[path]) {
+      // the bounce on foot: Jak standing still goes up a hair, allowed since
+      let text = text.replace("(>= 0.0 (vector-dot", "(>= 2048.0 (vector-dot");
+      // the sky and the city's mood of a new level: added since
+      let text = text.replace(
+        ":mood-func 'update-mood-default",
+        ":mood-func 'update-mood-ctyindb ;; the city's: the level's lights lit as the editor shows them",
+      );
+      let ours: String = ours[path]
+        .lines()
+        .filter(|l| !l.contains(":level-flags (level-flags sky)"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+      if let Some(d) = first_difference(&text, &ours) {
         panic!("{project}/{path}: {d}");
       }
     }
@@ -935,4 +954,87 @@ fn the_projects_exported_like_the_cpp_editor() {
     compared += 1;
   }
   eprintln!("projects compared with the C++ editor's exports: {compared}");
+}
+
+#[test]
+fn objects_needing_their_own_level() {
+  // the volcano's breaking ground gets the level volcanoa by its name: in a level of its own it
+  // is left out with a note (the game would die of it); a level replacing volcanoa keeps it
+  let data = real_data();
+  assert_eq!(data.needs_levels("vol-break-ground"), ["volcanoa"]);
+  let tmp = temp_dir("game-export-needs-level");
+  let mut s = Scene::new();
+  s.add(render("floor", make_floor(-1), 0, Vec3::new(0.0, 0.0, 0.0)));
+  s.add(Node {
+    name: "vol-break-ground-1".into(),
+    kind: NodeKind::Actor,
+    extras: json!({"etype": "vol-break-ground"}),
+    ..Default::default()
+  });
+  // and a battle (its creatures' models not in the level): always left out
+  s.add(Node {
+    name: "battle-92".into(),
+    kind: NodeKind::Actor,
+    extras: json!({"etype": "battle", "lump": {"extra-id": ["int32", 7]}}),
+    ..Default::default()
+  });
+  s.begin_frame();
+  for (replaces, kept) in [("", false), ("volcanoa", true)] {
+    let out = tmp.join(format!("export-{kept}"));
+    let o = LevelExportOptions {
+      name: "my-lava".into(),
+      nickname: default_nickname("my-lava"),
+      iso_name: default_iso_name("my-lava"),
+      folder: from_path(&out),
+      replaces: replaces.into(),
+      ..Default::default()
+    };
+    let r = export_level(&s, Some(&data), &o).expect("exported");
+    let jsonc = read_jsonc(&out.join("custom_assets/jak3/levels/my-lava/my-lava.jsonc"));
+    let there = jsonc["actors"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .any(|a| a["etype"] == "vol-break-ground");
+    assert_eq!(there, kept, "{:?}", r.notes);
+    assert!(
+      !jsonc["actors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["etype"] == "battle")
+        && format!("{:?}", r.notes).contains("battle-92"),
+      "{:?}",
+      r.notes
+    );
+    assert_eq!(
+      format!("{:?}", r.notes).contains("export.note.needs_level"),
+      !kept
+    );
+  }
+  let _ = std::fs::remove_dir_all(&tmp);
+}
+
+// the decor's coordinates as the level builder packs them: within 4.4 km of the origin all kept;
+// farther, the ones its check (in float) would stop the build on moved by a few units to ones it
+// packs, never more than 2 mm within 25 km
+#[test]
+fn coordinates_the_builder_packs() {
+  use crate::io::gltf::{packable, packs};
+  let (mut far, mut moved) = (0, 0);
+  for i in 0..400_000 {
+    let x = -4000.0 + i as f32 * 0.0725;
+    let y = packable(x);
+    assert!(packs(y), "{x} m cannot be packed (moved to {y})");
+    if x.abs() < 4380.0 {
+      assert_eq!(x, y);
+    }
+    if x > 4400.0 {
+      far += 1;
+      moved += (x != y) as usize;
+      assert!((y - x).abs() <= 8.0 / 4096.0 + 1e-3, "{x} moved to {y}");
+    }
+  }
+  // the check fails often enough there that it matters (the temple of Jak 3 stopped its build)
+  assert!(moved * 100 > far, "{moved} of {far}");
 }

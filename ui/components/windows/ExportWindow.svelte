@@ -142,6 +142,15 @@
       );
   });
 
+  // the ISO name made from the level's name (default_iso_name, game_export/mod.rs): it follows the
+  // name until it is typed in itself
+  const isoOf = (name: string) =>
+    name.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase() || "CUSTOM";
+  function setName(v: string) {
+    if (o!.iso_name === isoOf(o!.name)) o!.iso_name = isoOf(v);
+    o!.name = v;
+  }
+
   const muted = "text-xs text-neutral-500";
   const warn = "text-orange-400";
   const heading =
@@ -176,7 +185,7 @@
     <p class="text-neutral-300">{t("export.help")}</p>
 
     <h3 class={heading}>{t("export.names")}</h3>
-    {@render text("export.name", o.name, 10, (v) => (o!.name = v))}
+    {@render text("export.name", o.name, 10, setName)}
     {@render text("export.nickname", o.nickname, 3, (v) => (o!.nickname = v))}
     {@render text("export.iso_name", o.iso_name, 8, (v) => (o!.iso_name = v))}
     <label class="flex items-center gap-2">

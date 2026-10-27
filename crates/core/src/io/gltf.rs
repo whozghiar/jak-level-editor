@@ -4,8 +4,9 @@
 //!   Project : the editor's document. Keeps the hierarchy, every node kind and the editor's extras
 //!             (og_kind, the surface of each collision triangle, actor data).
 //!   Prefab  : some nodes and their descendants, placed around a pivot (a prefab file).
-//!   Builder : for OpenGOAL's level builder (io/game_export): some nodes alone, each at its world
-//!             matrix, with the builder's extras and none of the editor's, and more meshes.
+//!   Builder : for OpenGOAL's level builder (io/game_export): some nodes alone, their vertices in
+//!             world space (no matrix), with the builder's extras and none of the editor's, and
+//!             more meshes.
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -1712,6 +1713,33 @@ impl<'a> ExportContext<'a> {
           jp
         }
       };
+      // in the game's space: the builder's own product of the node's matrix by each vertex
+      // rounds them its own way (in float), and a coordinate far from the origin (beyond 4.4 km)
+      // can fail the check of its packing; each one written where it packs (packable)
+      let w = self.scene.world(n);
+      let pos: Vec<Vec3> = p
+        .pos
+        .iter()
+        .map(|&v| w.point(v))
+        .map(|v| Vec3::new(packable(v.x), packable(v.y), packable(v.z)))
+        .collect();
+      let nrm = if p.nrm.len() == p.pos.len() {
+        let nm = w.inverse().transposed();
+        p.nrm
+          .iter()
+          .map(|&d| crate::math::normalize(nm.dir(d)))
+          .collect()
+      } else {
+        let mut tmp = Primitive {
+          pos: pos.clone(),
+          idx: p.idx.clone(),
+          ..Default::default()
+        };
+        tmp.compute_normals();
+        tmp.nrm
+      };
+      jp["attributes"]["POSITION"] = json!(self.w.add_floats(&pos, |v| (*v).into(), "VEC3", true));
+      jp["attributes"]["NORMAL"] = json!(self.w.add_floats(&nrm, |v| (*v).into(), "VEC3", false));
       let nv = p.pos.len();
       let mut pal: [Vec<u8>; 8] = std::array::from_fn(|_| vec![0u8; nv * 4]);
       let mat = usize::try_from(p.material)
@@ -1797,6 +1825,30 @@ impl<'a> ExportContext<'a> {
   }
 }
 
+/// Whether OpenGOAL's level builder packs a coordinate of the decor (meters): its
+/// position_to_cluster_and_offset (common/custom_data/pack_helpers.cpp), in float as it computes
+/// it, gets it back within the 7 units (4096 a meter) it checks, else stops the build
+pub(crate) fn packs(x: f32) -> bool {
+  const CLUSTER: f32 = 4096.0 * 40.0;
+  const MASTER: f32 = 12000.0 * 4096.0;
+  let i = x * 4096.0 + MASTER;
+  let cell = (i / CLUSTER) as i32;
+  let left = i - cell as f32 * CLUSTER;
+  let offset = ((left / CLUSTER) * 65535.0) as u16;
+  let back = (cell as f32 + offset as f32 / 65535.0) * CLUSTER;
+  (back - i).abs() < 7.0
+}
+
+/// `x` moved by the fewest units (4096 a meter: 2 mm at most within 25 km of the origin) that let
+/// the level builder pack it (packs; within 4.4 km of the origin every coordinate does)
+pub(crate) fn packable(x: f32) -> f32 {
+  (0..=32)
+    .flat_map(|k| [k, -k])
+    .map(|k| x + k as f32 / 4096.0)
+    .find(|&y| packs(y))
+    .unwrap_or(x)
+}
+
 fn trs_json(jn: &mut Value, t: &Transform) {
   jn["translation"] = json!([t.t.x, t.t.y, t.t.z]);
   jn["rotation"] = json!([t.r.x, t.r.y, t.r.z, t.r.w]);
@@ -1830,9 +1882,10 @@ pub fn export_glb(
     for &id in &opts.only {
       let Some(n) = scene.find(id) else { continue };
       let mut jn = json!({"name": n.name});
-      trs_json(&mut jn, &Transform::from_matrix(&scene.world(n)));
-      if let Some(mesh) = &n.mesh {
-        jn["mesh"] = json!(ctx.builder_mesh(n, mesh));
+      match &n.mesh {
+        // its vertices in the game's space, the node without a matrix (builder_mesh)
+        Some(mesh) => jn["mesh"] = json!(ctx.builder_mesh(n, mesh)),
+        None => trs_json(&mut jn, &Transform::from_matrix(&scene.world(n))),
       }
       if let Some(e) = opts.node_extras.get(&id)
         && !json_empty(e)

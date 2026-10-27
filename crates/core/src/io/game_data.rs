@@ -240,6 +240,8 @@ pub struct GameData {
   code: HashMap<String, String>,
   effect_code: HashMap<String, String>,
   code_needs: HashMap<String, Vec<String>>,
+  /// the levels a type's code gets by their name (#f where they are not loaded)
+  needs_level: HashMap<String, Vec<String>>,
   params: HashMap<String, Vec<Param>>,
   enums: HashMap<String, Enum>,
   levels: BTreeMap<String, LevelInfo>,
@@ -427,6 +429,9 @@ impl GameData {
     d.effect_code = string_map(at(actors, "effect_code"));
     d.code_needs = items(at(j, "code_needs"))
       .map(|(stem, files)| (stem.clone(), strings(files)))
+      .collect();
+    d.needs_level = items(at(actors, "needs_level"))
+      .map(|(t, levels)| (t.clone(), strings(levels)))
       .collect();
     for (t, ps) in items(at(actors, "params")) {
       let mut list: Vec<Param> = items(ps)
@@ -815,10 +820,104 @@ impl GameData {
     out
   }
 
+  /// the levels of the game the code of `etype` gets by their name: a level that is not one of
+  /// them, they not loaded, gives it #f (the volcano's breaking ground dies of it)
+  pub fn needs_levels(&self, etype: &str) -> &[String] {
+    self.needs_level.get(etype).map_or(&[], Vec::as_slice)
+  }
+
   /// the code files (.o stems, in their order) a type needs beyond the common code: the file it
   /// is defined in, after the files before it in its level's DGO; empty for the common code
   pub fn code_files(&self, etype: &str) -> Vec<String> {
     self.needs_then(self.code.get(etype))
+  }
+
+  /// The code files `files` (taken from the lists of `lists`: each one the files a type needs, in
+  /// its level's DGO order) in an order the game can load them in: each list's order kept, and a
+  /// file after the ones defining the parents of its types. A list comes from one DGO, whose level
+  /// the game loads beside others (the city's squads, the vehicles): the files of those parents
+  /// are added when missing, with what they need (not those of `skip`, already loaded around).
+  pub fn order_code(
+    &self,
+    files: &[String],
+    lists: &[Vec<String>],
+    skip: &HashSet<String>,
+  ) -> Vec<String> {
+    let mut defines: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (t, f) in &self.code {
+      defines.entry(f.as_str()).or_default().push(t.as_str());
+    }
+    let mut order: Vec<String> = files.to_vec();
+    let mut lists: Vec<Vec<String>> = lists.to_vec();
+    // the parents' files: before each file, added when missing
+    let mut after: Vec<(String, String)> = Vec::new();
+    let mut k = 0;
+    while k < order.len() {
+      let f = order[k].clone();
+      for t in defines.get(f.as_str()).into_iter().flatten() {
+        let mut up = self.parents.get(*t);
+        for _ in 0..64 {
+          let Some(p) = up else { break };
+          if let Some(g) = self.code.get(p)
+            && *g != f
+            && !skip.contains(g)
+          {
+            after.push((g.clone(), f.clone()));
+            if !order.contains(g) {
+              let needed: Vec<String> = self
+                .needs_then(Some(g))
+                .into_iter()
+                .filter(|n| !skip.contains(n))
+                .collect();
+              for n in &needed {
+                if !order.contains(n) {
+                  order.push(n.clone());
+                }
+              }
+              lists.push(needed);
+            }
+          }
+          up = self.parents.get(p);
+        }
+      }
+      k += 1;
+    }
+    // each list's neighbors in its order, the parents' files first; then the first file free
+    // in the order they came (a list's order kept as it was)
+    let index: HashMap<&str, usize> = order
+      .iter()
+      .enumerate()
+      .map(|(i, f)| (f.as_str(), i))
+      .collect();
+    let mut before: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); order.len()];
+    let mut edge = |a: &str, b: &str| {
+      if let (Some(&i), Some(&j)) = (index.get(a), index.get(b))
+        && i != j
+      {
+        before[j].insert(i);
+      }
+    };
+    for l in &lists {
+      for w in l.windows(2) {
+        edge(&w[0], &w[1]);
+      }
+    }
+    for (a, b) in &after {
+      edge(a, b);
+    }
+    let mut done = vec![false; order.len()];
+    let mut out = Vec::with_capacity(order.len());
+    while out.len() < order.len() {
+      // the first one whose files before it are all placed; a cycle (two DGOs ordering two files
+      // the other way): the first one left
+      let next = (0..order.len())
+        .find(|&i| !done[i] && before[i].iter().all(|&b| done[b]))
+        .or_else(|| (0..order.len()).find(|&i| !done[i]))
+        .unwrap();
+      done[next] = true;
+      out.push(order[next].clone());
+    }
+    out
   }
 
   /// the same for a particle group a part-spawner draws (its art-name, "group-...")
@@ -1105,6 +1204,57 @@ pub(crate) mod tests {
 
   pub(crate) fn real_data() -> GameData {
     GameData::load(&game_data_path()).expect("data/jak3/game-data.json")
+  }
+
+  #[test]
+  fn code_in_an_order_the_game_loads() {
+    // the market's objects (their DGO has the city's squads without their base, loaded beside it)
+    // and a spydroid (a squad member of the city): every file after the ones defining its types'
+    // parents, those added; nothing loaded around brought again
+    let data = real_data();
+    let market = data
+      .code
+      .iter()
+      .find(|(_, f)| *f == "ctymark-obs-h")
+      .map(|(t, _)| t.clone())
+      .expect("a type of ctymark-obs-h");
+    let (mut files, mut lists) = (Vec::new(), Vec::new());
+    for t in [market.as_str(), "spydroid"] {
+      let l = data.code_files(t);
+      for f in &l {
+        if !files.contains(f) {
+          files.push(f.clone());
+        }
+      }
+      lists.push(l);
+    }
+    let order = data.order_code(&files, &lists, &HashSet::new());
+    let at = |f: &str| order.iter().position(|x| x == f);
+    for (t, f) in &data.code {
+      let Some(i) = at(f) else { continue };
+      let mut up = data.parents.get(t);
+      while let Some(p) = up {
+        if let Some(g) = data.code.get(p).filter(|g| *g != f) {
+          assert!(
+            at(g).is_some_and(|j| j < i),
+            "{g} (defining {p}) before {f} ({t})"
+          );
+        }
+        up = data.parents.get(p);
+      }
+    }
+    assert!(
+      at("squad-control-h") < at("squad-control-city-h"),
+      "{order:?}"
+    );
+    assert!(order.len() > files.len(), "the parents' files added");
+    // what the level replaced already has around it: not brought again
+    let skip: HashSet<String> = ["squad-control-h".to_string()].into();
+    assert!(
+      !data
+        .order_code(&files, &lists, &skip)
+        .contains(&"squad-control-h".to_string())
+    );
   }
 
   #[test]

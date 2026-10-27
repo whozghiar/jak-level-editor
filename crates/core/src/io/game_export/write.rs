@@ -474,6 +474,27 @@ pub fn export_level(
         k += 1;
       }
       names.insert(name.clone());
+      // a battle: its creatures come from a table of the game's code (by its extra-id), their
+      // models with the levels that have them; spawned in a level of its own, the first one kills
+      // the game (left out: "A creature appears here" places them)
+      if etype == "battle" {
+        notes.add("export.note.battle", &n.name, 1);
+        continue;
+      }
+      // an object whose code gets a level of the game by its name (its own): in a level of another
+      // name, that one not loaded, the game dies of it (left out)
+      if let Some(level) = data.and_then(|d| {
+        d.needs_levels(etype)
+          .iter()
+          .find(|l| **l != o.name && **l != o.replaces)
+      }) {
+        notes.add(
+          "export.note.needs_level",
+          &format!("{} ({level})", n.name),
+          1,
+        );
+        continue;
+      }
       if !n.name.is_empty() {
         name_of_node
           .entry(n.name.clone())
@@ -499,6 +520,8 @@ pub fn export_level(
   let mut generated = String::new();
   // the code of the game the level needs, in order
   let mut code_files: Vec<String> = Vec::new();
+  // the lists it is made of, each in its DGO's order (ordered together at the end)
+  let mut code_lists: Vec<Vec<String>> = Vec::new();
   // The code the game already has around the level replaced: the levels it shows with it (its
   // neighbors, the levels of its continue points; an alias of a level, as ctywide-kg, is that
   // level, ctywide). The DGO does not bring it again (the effects of the city draw particle
@@ -526,6 +549,7 @@ pub fn export_level(
     }
   }
   let mut need = |files: &[String]| {
+    code_lists.push(files.to_vec());
     for f in files {
       if !loaded_around.contains(f) && !code_files.contains(f) {
         code_files.push(f.clone());
@@ -981,6 +1005,10 @@ pub fn export_level(
   }
 
   // the DGO
+  // in an order the game can load: the parents of the types first, from whichever DGO
+  if let Some(data) = data {
+    code_files = data.order_code(&code_files, &code_lists, &loaded_around);
+  }
   let nick_upper = o.nickname.to_ascii_uppercase();
   let mut gd = format!(
     ";; DGO definition file for {}, exported by Jak Level Editor for Jak 3.\n(\"{nick_upper}.DGO\"\n (\n",

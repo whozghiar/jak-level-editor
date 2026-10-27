@@ -295,6 +295,14 @@ fn walkable_surfaces_of_the_document() {
   let floor = scene.add(quad(0.0, -1));
   scene.add(quad(1.0, water));
   scene.find_mut(floor).unwrap().local.t = Vec3::new(100.0, 0.0, 0.0);
+  // a death zone (an invisible fall) and decor Jak goes through: no creature walks on them
+  let mut zone = quad(-20.0, -1);
+  zone.extras =
+    serde_json::json!({"og_decor": {"collision": {"kind": "invisible", "event": "endlessfall"}}});
+  scene.add(zone);
+  let mut ghost = quad(3.0, -1);
+  ghost.extras = serde_json::json!({"og_decor": {"collision": {"kind": "none"}}});
+  scene.add(ghost);
   let (v, t, r) = navmesh_surfaces(&scene, &AABB::default(), &NavParams::default());
   assert_eq!((v.len(), t.len()), (4, 6));
   assert!(v.iter().all(|p| p.x >= 95.0) && r.lo.x >= 95.0 - 1e-3);
@@ -305,6 +313,43 @@ fn walkable_surfaces_of_the_document() {
     &NavParams::default(),
   );
   assert!(t.is_empty());
+  // a level of the game with its collision: a roof of its decor the game gave no collision (or one
+  // of a wall's mode) is no ground; its collision's street is; the collision of a platform deleted
+  // from its decor is not
+  let mut scene = Scene::new();
+  let group = |scene: &mut Scene, name: &str, parent: u32| {
+    scene.add(Node {
+      name: name.into(),
+      kind: NodeKind::Group,
+      parent,
+      ..Default::default()
+    })
+  };
+  let level = group(&mut scene, "ctysluma", 0);
+  let decor = group(&mut scene, "ctysluma-tfrag-0", level);
+  for y in [10.0, 0.0] {
+    let mut drawn = quad(y, -1);
+    drawn.parent = decor;
+    scene.add(drawn);
+  }
+  let collision = group(&mut scene, "ctysluma-collision", level);
+  for y in [0.0, 5.0] {
+    let mut floor = quad(y, -1);
+    floor.kind = NodeKind::Collision;
+    floor.parent = collision;
+    scene.add(floor);
+  }
+  // the roof's flat top in the collision, but of a wall's mode (pat mode 1): no floor in the game
+  let mut top = quad(10.0, -1);
+  top.kind = NodeKind::Collision;
+  top.parent = collision;
+  let mut m = (**top.mesh.as_ref().unwrap()).clone();
+  m.prims[0].tri_pat = vec![1 << 7, 1 << 7];
+  top.mesh = Some(Arc::new(m));
+  scene.add(top);
+  let (v, t, _) = navmesh_surfaces(&scene, &AABB::default(), &NavParams::default());
+  assert_eq!(t.len(), 6);
+  assert!(t.iter().all(|&i| v[i as usize].y.abs() < 1e-3), "{v:?}");
 }
 
 #[test]

@@ -1346,6 +1346,8 @@
   "undo.terrain.new": "Terrain créé",
   "build.style.terrain": "Pinceau de terrain dans ce style",
   "build.style.terrain.tip": "Peint du sol à main levée avec le sol de ce niveau (et ses murs et pentes avec sa texture de mur), le monte et le creuse : le pinceau de terrain (B) dans ce style.",
+  "export.note.battle": "%zu combats laissés de côté : ils font apparaître les créatures du jeu d'après ses propres tables, dont le niveau n'a pas les modèles, et le jeu plante à la première (posez plutôt des créatures avec Une créature apparaît ici) : %s",
+  "export.note.needs_level": "%zu objets laissés de côté : leur code a besoin de leur propre niveau du jeu chargé, par son nom, et le jeu plante sans lui (remplacez ce niveau pour les garder) : %s",
   "guide.terrain.title": "Pinceau de terrain",
   "guide.terrain.keys": "B",
   "guide.terrain.text": "Dessine un sol naturel à main levée : Terrain (B) dans la barre d'outils ouvre le pinceau et sa fenêtre (B à nouveau, Échap ou sa croix le ferment). Un carré suit la souris sur le niveau ; Ctrl + molette ou [ et ] changent sa taille. Son style de niveau (au départ celui du niveau ouvert) donne au sol sa texture de sol et aux murs et pentes sa texture de mur, case par case : changez-le entre deux coups pour mélanger les sols. Le clic gauche maintenu peint du sol, élève des murs, efface, adoucit ou aplanit, montré en transparence avant d'être fait (Maj : l'inverse) ; le pinceau libre pose le sol à la hauteur où le coup commence, le pinceau aimanté (M) au niveau du sol voisin. Le clic droit maintenu et la souris montée font monter le sol là, descendue le creusent. Générer des collines crée d'un coup un sol naturel. Chaque coup s'annule avec Ctrl+Z.",

@@ -644,7 +644,8 @@ fn tools() -> Value {
     tool(
       "generate_navmesh",
       "Generates nav meshes (where the creatures of the game walk) from the walkable surfaces of \
-       the decor shown, in the game's limits (convex polygons of 3 or 4 corners, at most 255 per \
+       the decor shown (a level of the game: its collision, where the game collides), in the \
+       game's limits (convex polygons of 3 or 4 corners, at most 255 per \
        mesh, each mesh in one piece), replacing the nav meshes of the region. Waits until they \
        are made; returns them (polygons, area, problem if the game could not use one); with \
        from, only the ground connected to given points. Undoable.",

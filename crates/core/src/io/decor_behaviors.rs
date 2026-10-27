@@ -308,7 +308,8 @@ pub fn collision_extras(c: &DecorCollision) -> Value {
 pub fn bounce_code(ty: &str, radius: f32, comment: &str) -> String {
   // the game's bouncer without a model (as the industrial zone's board vents, ctyinda-obs.gc): a
   // sphere over the element that Jak overlaps. On the board and in a dive the bouncer's own events
-  // throw him; on foot, touching it from above while not going up does
+  // throw him; on foot, touching it from above while not going up does (standing, Jak 3's transv
+  // still goes up a hair, 2 units a second: up to 0.5 m/s counts as not going up)
   let mut o = String::new();
   if !comment.is_empty() {
     let _ = writeln!(o, ";; {comment}");
@@ -351,7 +352,7 @@ pub fn bounce_code(ty: &str, radius: f32, comment: &str) -> String {
       (('touch)
        (when (and (= proc *target*)
                   (< (- (-> self root trans y) 1228.8) (-> *target* control trans y))
-                  (>= 0.0 (vector-dot (-> *target* control transv) (-> *target* control dynam gravity-normal)))
+                  (>= 2048.0 (vector-dot (-> *target* control transv) (-> *target* control dynam gravity-normal)))
                   (send-event proc 'jump (-> self spring-height) (-> self spring-height) (-> self mods))
                   )
          (play-sound self)

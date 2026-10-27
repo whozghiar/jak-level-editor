@@ -1346,6 +1346,8 @@
   "undo.terrain.new": "Terrain made",
   "build.style.terrain": "Terrain brush in this style",
   "build.style.terrain.tip": "Paints ground freehand with this level's floor (and its walls and slopes with its wall texture), raises and digs it: the terrain brush (B) with this style.",
+  "export.note.battle": "%zu battles left out: they spawn the game's creatures from its own tables, whose models the level does not have, and the game dies at the first one (place creatures with A creature appears here instead): %s",
+  "export.note.needs_level": "%zu objects left out: their code needs their own level of the game loaded, by its name, and the game dies without it (replace that level to keep them): %s",
   "guide.terrain.title": "Terrain brush",
   "guide.terrain.keys": "B",
   "guide.terrain.text": "Draws natural ground freehand: Terrain (B) in the toolbar opens the brush and its window (B again, Esc or its cross close it). A square follows the mouse over the level; Ctrl + wheel or [ and ] change its size. Its level style (the open level's at first) gives the ground its floor texture and the walls and slopes its wall texture, cell by cell: change it between strokes to mix grounds. The left button held paints ground, raises walls, erases, smooths or flattens, shown see-through before it is done (Shift: the other way); the free brush lays ground at the height where the stroke starts, the magnet brush (M) at the level of the ground beside it. The right button held and the mouse moved up raises the ground there, down digs it. Generate hills makes natural ground at once. Each stroke is undone with Ctrl+Z.",

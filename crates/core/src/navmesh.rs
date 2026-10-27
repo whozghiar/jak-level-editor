@@ -429,6 +429,17 @@ pub fn build_navmeshes(
       dead[i] = true;
     }
   }
+  // Recast's polygons all wind one way: one wound the other way is a sliver folded over its
+  // neighbors (turned up on its own, it would run their shared edge the same way as they do)
+  let up = (0..npolys)
+    .filter(|&i| !dead[i] && signed_area2(&all_verts, &all[i]) > 0.0)
+    .count();
+  let most_up = up * 2 >= (0..npolys).filter(|&i| !dead[i]).count();
+  for i in 0..npolys {
+    if !dead[i] && (signed_area2(&all_verts, &all[i]) > 0.0) != most_up {
+      dead[i] = true;
+    }
+  }
   for i in 0..npolys {
     if dead[i] {
       continue;
@@ -449,6 +460,26 @@ pub fn build_navmeshes(
       s += 1;
     }
     all[i] = q;
+  }
+
+  // a neighbor that does not share the edge back (the game needs both ways): no passage there
+  let one_way: Vec<(usize, usize)> = (0..npolys)
+    .filter(|&i| !dead[i])
+    .flat_map(|i| (0..all[i].count).map(move |k| (i, k)))
+    .filter(|&(i, k)| {
+      let (p, j) = (&all[i], all[i].adj[k]);
+      j >= 0 && {
+        let q = &all[j as usize];
+        !(0..q.count).any(|e| {
+          q.adj[e] == i as i32
+            && q.v[e] == p.v[(k + 1) % p.count]
+            && q.v[(e + 1) % q.count] == p.v[k]
+        })
+      }
+    })
+    .collect();
+  for (i, k) in one_way {
+    all[i].adj[k] = -1;
   }
 
   // the pieces: connected groups, cut in halves (along their longest side) until each has at most
@@ -834,7 +865,8 @@ pub fn navmesh_nodes(scene: &Scene) -> Vec<u32> {
 
 /// The walkable surfaces of a generation in `region` (invalid: the whole level), App::
 /// start_navmesh_generation's: the decor shown, in world space, without the see-through surfaces
-/// (water, glows: navmesh_ignores) nor the objects (their models move, open, break). Returns their
+/// (water, glows: navmesh_ignores), the objects (their models move, open, break), the decor Jak
+/// goes through and the deadly (a death zone). Returns their
 /// vertices, triangles, and the region to generate in (the one given, else the surfaces' box); no
 /// triangle: the document has nothing to walk on ("navmesh.nothing").
 pub fn navmesh_surfaces(
@@ -851,9 +883,71 @@ pub fn navmesh_surfaces(
   let mut verts = Vec::new();
   let mut tris = Vec::new();
   let mut all = AABB::default();
+  // the levels whose collision is the game's (their "<level>-collision" group, shown with the
+  // level): the game collides with it, not with their decor (a roof Jak never reached in the game
+  // has none: a creature would fall through it)
+  let index: std::collections::HashMap<u32, usize> = scene
+    .nodes
+    .iter()
+    .enumerate()
+    .map(|(i, n)| (n.id, i))
+    .collect();
+  let mut with_collision: HashSet<(u32, String)> = HashSet::new();
+  let mut game_collision = HashSet::new();
+  for (i, n) in scene.nodes.iter().enumerate() {
+    if n.kind != NodeKind::Collision || n.mesh.is_none() {
+      continue;
+    }
+    let Some(g) = scene.find(n.parent) else {
+      continue;
+    };
+    let Some(level) = crate::io::game_export::collision_group_level(&g.name) else {
+      continue;
+    };
+    if g.parent == 0 || index.get(&g.parent).is_some_and(|&p| cache.visible[p]) {
+      with_collision.insert((g.parent, level.to_string()));
+      game_collision.insert(i);
+    }
+  }
+  // the decor of those levels still shown: the game's collision counts where it lies on it (a
+  // piece deleted, moved or hidden takes its collision with it, as the export does)
+  let mut decor = crate::io::game_export::TriGrid::new(4.0);
+  if !with_collision.is_empty() {
+    for (i, n) in scene.nodes.iter().enumerate() {
+      let Some(mesh) = &n.mesh else { continue };
+      if n.kind != NodeKind::Render
+        || !cache.visible[i]
+        || !with_collision.contains(&crate::io::game_export::piece_level(scene, n))
+      {
+        continue;
+      }
+      let w = &cache.worlds[i];
+      for p in &mesh.prims {
+        for t in p.idx.chunks_exact(3) {
+          let [a, b, c] = [0, 1, 2].map(|k| w.point(p.pos[t[k] as usize]));
+          decor.add(a, b, c);
+        }
+      }
+    }
+  }
+  const K_ON_DECOR: f32 = 2.0;
   for (i, n) in scene.nodes.iter().enumerate() {
     let Some(mesh) = &n.mesh else { continue };
-    if n.kind != NodeKind::Render || !cache.visible[i] || cache.actor[i] != 0 || cache.reference[i]
+    let shown =
+      n.kind == NodeKind::Render && cache.visible[i] && cache.actor[i] == 0 && !cache.reference[i];
+    if !shown && !game_collision.contains(&i) {
+      continue;
+    }
+    // what no creature walks on: decor Jak goes through, a death zone, what burns
+    let c = crate::io::decor_behaviors::decor_behavior_of(&n.extras).collision;
+    if c.set && (c.kind == "none" || c.event != "none") {
+      continue;
+    }
+    // decor whose collision is the game's (unless given one of its own)
+    if shown
+      && !c.set
+      && !with_collision.is_empty()
+      && with_collision.contains(&crate::io::game_export::piece_level(scene, n))
     {
       continue;
     }
@@ -878,7 +972,28 @@ pub fn navmesh_surfaces(
       }
       let base = verts.len() as u32;
       verts.extend(p.pos.iter().map(|&v| w.point(v)));
-      tris.extend(p.idx.iter().map(|&ix| base + ix));
+      if game_collision.contains(&i) {
+        for (k, t) in p.idx.chunks_exact(3).enumerate() {
+          // ground of the game's: not a wall's or an obstacle's mode (a flat top marked wall is
+          // no floor in the game), not one creatures go through, nothing that kills, burns,
+          // shocks, slides or is hung from (pat-h.gc's pat-event: an edge, ice, water are ground)
+          let pat = p.tri_pat.get(k).copied().unwrap_or(0);
+          let event = (pat >> 18) & 63;
+          if (pat >> 7) & 7 != 0 || pat & 1 != 0 || matches!(event, 1..=7 | 10 | 11 | 13 | 17..=19)
+          {
+            continue;
+          }
+          let mid = (verts[(base + t[0]) as usize]
+            + verts[(base + t[1]) as usize]
+            + verts[(base + t[2]) as usize])
+            * (1.0 / 3.0);
+          if decor.distance(mid, K_ON_DECOR) < K_ON_DECOR {
+            tris.extend(t.iter().map(|&ix| base + ix));
+          }
+        }
+      } else {
+        tris.extend(p.idx.iter().map(|&ix| base + ix));
+      }
       all.add_box(nb);
     }
   }
@@ -924,6 +1039,40 @@ pub fn replace_navmeshes(
   (added, entry)
 }
 
+/// The nav mesh (its index) a point stands on: inside one of its polygons seen from above, 3 m
+/// above it at most and 1 m under
+pub fn navmesh_under(meshes: &[NavMeshData], p: Vec3) -> Option<usize> {
+  meshes.iter().position(|m| {
+    m.polys.iter().any(|poly| {
+      let corners: Vec<Vec3> = (0..poly.count)
+        .map(|i| m.origin + m.verts[poly.v[i]])
+        .collect();
+      if corners.len() < 3 {
+        return false;
+      }
+      let y = corners.iter().map(|c| c.y).sum::<f32>() / corners.len() as f32;
+      if p.y < y - 1.0 || p.y > y + 3.0 {
+        return false;
+      }
+      // inside a convex polygon: on the same side of each edge
+      let mut sign = 0.0f32;
+      for k in 0..corners.len() {
+        let (a, b) = (corners[k], corners[(k + 1) % corners.len()]);
+        let c = (b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x);
+        if c.abs() < 1e-6 {
+          continue;
+        }
+        if sign == 0.0 {
+          sign = c.signum();
+        } else if c.signum() != sign {
+          return false;
+        }
+      }
+      true
+    })
+  })
+}
+
 /// The document's nav meshes for the game, App::world_navmeshes's: each where it is now (moved,
 /// turned), relative to the center of its corners; and their names.
 pub fn world_navmeshes(scene: &Scene) -> (Vec<NavMeshData>, Vec<String>) {
@@ -947,4 +1096,98 @@ pub fn world_navmeshes(scene: &Scene) -> (Vec<NavMeshData>, Vec<String>) {
     names.push(n.name.clone());
   }
   (meshes, names)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// The nav meshes made on levels of the game (JLE_NAV_LEVELS: names separated by commas, the slums
+  /// by default) lie on the game's ground: each polygon's middle within 1 m of a ground triangle of
+  /// its collision (a creature stands there in the game); the share that does, printed
+  #[test]
+  fn navmeshes_on_the_games_ground() {
+    let Some(root) = crate::io::test_library::real_library() else {
+      eprintln!("skipped: no library/jak3/library.json");
+      return;
+    };
+    let levels = std::env::var("JLE_NAV_LEVELS").unwrap_or_else(|_| "ctysluma".into());
+    for level in levels.split(',').filter(|l| !l.is_empty()) {
+      let bg = root.join(format!("jak3/{level}/decor/{level}-background.glb"));
+      let Ok(mut s) = crate::io::game_export::read_original(&bg) else {
+        eprintln!("{level}: no background");
+        continue;
+      };
+      s.begin_frame();
+      // the game's ground, as navmesh_surfaces keeps it
+      let cache = s.cache();
+      let mut ground = crate::io::game_export::TriGrid::new(4.0);
+      for (i, n) in s.nodes.iter().enumerate() {
+        let Some(m) = &n.mesh else { continue };
+        if n.kind != NodeKind::Collision {
+          continue;
+        }
+        let w = &cache.worlds[i];
+        for p in &m.prims {
+          for (k, t) in p.idx.chunks_exact(3).enumerate() {
+            let pat = p.tri_pat.get(k).copied().unwrap_or(0);
+            if (pat >> 7) & 7 == 0 && pat & 1 == 0 {
+              let [a, b, c] = [0, 1, 2].map(|j| w.point(p.pos[t[j] as usize]));
+              ground.add(a, b, c);
+            }
+          }
+        }
+      }
+      let params = NavParams::default();
+      let (v, t, region) = navmesh_surfaces(&s, &AABB::default(), &params);
+      if t.is_empty() {
+        eprintln!("{level}: no walkable surface");
+        continue;
+      }
+      let meshes = match build_navmeshes(&v, &t, &region, &params) {
+        Ok((m, _)) => m,
+        Err(e) => {
+          println!("{level}: not made: {e}");
+          continue;
+        }
+      };
+      // and each one the game can use
+      let problems: Vec<(usize, &str)> = meshes
+        .iter()
+        .enumerate()
+        .filter_map(|(k, m)| navmesh_problem(m).map(|p| (k, p)))
+        .collect();
+      if !problems.is_empty() {
+        println!("{level}: PROBLEM {problems:?}");
+      }
+      if std::env::var("JLE_NAV_ALL").is_err() {
+        assert!(problems.is_empty(), "{level}: {problems:?}");
+      }
+      let (mut on, mut all) = (0, 0);
+      let mut off = Vec::new();
+      for m in &meshes {
+        for poly in &m.polys {
+          let c = (0..poly.count)
+            .map(|k| m.origin + m.verts[poly.v[k]])
+            .fold(Vec3::default(), |a, q| a + q)
+            * (1.0 / poly.count as f32);
+          all += 1;
+          if ground.distance(c, 1.0) <= 1.0 {
+            on += 1;
+          } else if off.len() < 5 {
+            off.push(c);
+          }
+        }
+      }
+      println!(
+        "{level}: {} meshes, {on} of {all} polygons on the game's ground ({:.1} %) {off:?}",
+        meshes.len(),
+        100.0 * on as f32 / all.max(1) as f32
+      );
+      // (JLE_NAV_ALL: every level reported, none stops the others)
+      if std::env::var("JLE_NAV_ALL").is_err() {
+        assert!(on as f32 >= 0.99 * all as f32, "{level}: {on} of {all}");
+      }
+    }
+  }
 }
