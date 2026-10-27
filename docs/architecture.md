@@ -225,9 +225,30 @@ know whether it is up to date.
 
 **The tools are the engine's.** Each tool has its file in `crates/core/src/editor/`: placing
 (`placement.rs`), the terrain brush (`terrain_tool.rs`), the topology tool (`topology_tool.rs`),
-groups, prefabs, the export. The terrain brush, for example: the interface sends the stroke's
-points, the engine raises the ground under them and answers with the new ground; the interface only
-shows the brush's circle.
+the structures in a level's style (`structures.rs`: its building kit read from its decor, walls,
+floors and houses planned from it and made again when resized, prefab sets), arranging, repeating, the history list, the gameplay
+markers (start, checkpoints, creatures' spawn points, death zones) and the routes of moving objects
+(`arrange.rs`), groups, prefabs, the export. The terrain brush, for example: the interface sends
+the stroke's points, the engine raises the ground under them and answers with the new ground; the
+interface only shows the brush's circle.
+
+**Structures that grow.** A structure is one group of pieces (the level's parts and shapes in its
+textures) whose anchor (`og_structure` in its extras: kind, level, size, look) says how it was made:
+a size changed in the inspector, `set_structure`, or the scale gizmo let go on it, and the engine
+plans it again (`plan_wall`, `plan_floor`, `plan_house`) and replaces its pieces in one undo step.
+The plans draw each bay's and cell's details from its number (`draw(seed, bay, ...)`), so a longer
+wall keeps the bays it had. The game's parts keep their level's light (`og_keep_light`); the anchor
+survives a prefab, so a placed structure prefab still grows. Their boxes are placed in segments
+(`box_segments`: no longer than 24 m across, 12 m high or six times their middle size): the game's
+level builder cannot split a collision fragment much longer than it is thick.
+
+**A level's building kit** (`building_kit`) sorts the parts of its decor by role from their names
+(`role_of`: windows, doors, pillars, pipes, beams, relief, roof plates). A kit with no relief named
+so takes the level's most used flat solid pieces hung on its walls, not glowing nor see-through
+(the nav meshes' rule), no lamp, sign, window or prop (`K_NOT_RELIEF`); a level of Jak II is named
+`jak2/<level>` (`kit_background`). `plan_wall` puts the kit's relief on each floor of each bay, a
+panel of 2.5 m or more in a grid of up to 3 x 3 when it fits several times (a taller wall gets more
+modules, not larger ones), and a kit without relief raised panels.
 
 **Finding what a ray meets** has to be fast: the interface asks at every move of the mouse what is
 under it, to light it up. Testing the ray against every triangle of a level would be far too slow.
@@ -325,7 +346,7 @@ given without asking who started it:
 The two never step on each other: their preferences and libraries are separate, so you can use
 both. Neither runs the game: the export writes the files to copy into a jak-project (OpenGOAL's
 sources), with a README giving the exact lines; the user guide's
-[export](user-guide.md#15-playing-it-in-the-game-export) goes through it.
+[export](user-guide.md#14-playing-it-in-the-game-export) goes through it.
 
 The launcher keeps no copy of the editor's code: a published release of this repository reaches its
 users without a release of the launcher ([17](#17-in-the-launcher),
@@ -462,8 +483,7 @@ npx yarn check-format                                        # the interface's f
 
 The engine's tests need no game data (those that read the extracted levels skip themselves when
 `library/jak3/library.json` is missing) and check, among others: the scene, glTF round trips,
-prefabs and groups, the export for the game, the translations, the game view, the holes finder,
-the weathers, the terrain brush, the nav meshes.
+prefabs and groups, the export for the game, the translations, the game view, the weathers, the terrain brush, the nav meshes.
 
 GitHub runs the same checks at every push: [workflows.md](workflows.md).
 
@@ -496,10 +516,10 @@ crates/
     src/math.rs                   vectors, quaternions, matrices, boxes, rays
     src/history.rs, log.rs,       the undo history, the log, the translations (printf arguments),
       i18n.rs, prefs.rs           the preferences
-    src/scene/                    the document: nodes, meshes, materials, the BVH and picking, holes
-                                  (gaps), the ground, the terrain, topology, shapes, the story,
-                                  assemblies, the light of what is placed (relight), particles,
-                                  skeletons, a level's style
+    src/scene/                    the document: nodes, meshes, materials, the BVH and picking, the
+                                  ground, the terrain, topology, shapes, the story, assemblies, the
+                                  light of what is placed (relight), particles, skeletons, a level's
+                                  style
     src/io/                       glTF, the library and its index, the catalog, prefabs and the
                                   game's prefab recipes, the game's data, the texture palette,
                                   behaviors, the export for the game and its nav meshes, Jak II's
@@ -507,11 +527,15 @@ crates/
     src/game/                     the game view's chunks (view.rs), the game's mood: hour, weather,
                                   fog, lights (mood.rs)
     src/navmesh.rs, navmesh/      nav mesh generation (rerecast, a Rust port of Recast; recast.rs:
-                                  Recast's own steps where rerecast differs)
+                                  Recast's own steps where rerecast differs); its ground: the
+                                  decor shown, a game level's collision of ground mode instead of
+                                  its decor (navmesh_surfaces)
     src/editor/                   the application without its interface: the Editor (mod.rs), the
                                   dispatch of `call` (api.rs), get_state (state.rs), levels,
                                   project, selection, groups, placement, the tools (terrain_tool,
-                                  topology_tool, preview), inspector, panels, catalog, thumbnails,
+                                  topology_tool, preview), structures (a level's building kit and
+                                  its houses), arrange (arrange, repeat, the history, the gameplay
+                                  markers), inspector, panels, catalog, thumbnails,
                                   export, extraction, effects, ocean, surfaces, behaviors, the
                                   jle:// encoders (protocol.rs), the remote control and its tools
                                   (remote.rs, remote_tools/)
@@ -560,7 +584,7 @@ looks for it (after the program's own folder and its resources; `$JLE_EXTRACTOR`
 
 - **The engine (Rust, `jle_core`)** owns the document and everything computed from it: nodes,
   meshes, materials, textures, history, selection, tools, picking (BVH ray casts), the catalog,
-  prefabs, levels, story, nav meshes, holes, export, extraction, the remote tools of the MCP
+  prefabs, levels, story, nav meshes, export, extraction, the remote tools of the MCP
   server. It never draws. It is tested with `cargo test -p jak-level-editor-core`.
 - **The interface (Svelte + TypeScript)** shows the engine's state and sends the user's actions.
   Its viewport draws with WebGL2 what the engine gives it (the meshes, their world matrices, the
@@ -746,7 +770,8 @@ a job: `jle:progress` "extract_fetch").
 without regions, nav meshes, flat collision fragments, translucent surfaces, collision on both
 sides per mesh, the list of everything visible). They are in the user's fork
 `whozghiar/jak-project`, whose tooling releases are tagged `vX.Y.Z-whozghiar.N` (upstream's X.Y.Z,
-the fork's build N). The launcher installs and updates those releases (its `TOOLING_REPOSITORY`).
+the fork's build N): build the exported levels with it. The OpenGOAL Launcher plays the games with
+the official tooling and does not install the fork.
 
 ## 17. In the launcher
 
@@ -1044,11 +1069,18 @@ What **Export for the game...** and `export_level` write, in `library/exports/<p
 
 | File | What it is |
 |---|---|
-| `custom_assets/jak3/levels/<name>/<name>.glb` | the decor in the game's space, lit with the 8 palettes, the builder's extras (collision); the game's collision, a node per surface |
+| `custom_assets/jak3/levels/<name>/<name>.glb` | the decor in the game's space (its vertices at their world place, the nodes without a matrix: each coordinate one the builder can pack, `packable`), lit with the 8 palettes, the builder's extras (collision); the game's collision, a node per surface |
 | `.../<name>.jsonc` | the level for the builder: names, `base_id`, art groups, actors (typed lumps), regions of a level replaced |
 | `goal_src/jak3/levels/<name>/<name>-obs.gc` | the level's code: the behaviors set in the editor |
 | `.../<name>.gd`, `<name>-nav.json`, `level-info.gc` | its DGO, its nav meshes, its definition for `level-info.gc` |
 | `README.md` | how to bring it into the game, what the export changed |
+
+**Far from the origin.** The builder packs each vertex of the decor in float around a fixed
+offset, then checks it gets it back within 7 units (4096 a meter); beyond 4.4 km from the origin
+(the temple of Jak 3 reaches 4384.4 m) the rounding fails that check now and then, and the build
+stops. The export writes the vertices where the builder reads them (no node matrix for it to
+multiply, in its own rounding), each coordinate moved by the few units, 2 mm at most, that let it
+pass (`gltf::packable`, the builder's computation done again).
 
 **Collision.** Jak 3 gathers the collision around Jak in a cache of 461 triangles; the decor's
 shape is far denser than the game's collision. So the export writes the game's collision where the
@@ -1057,7 +1089,18 @@ to a piece taken out goes with it), and a collision made from the shape for the 
 across or more, and every shape of the editor); the report lists the places still too dense.
 
 **Lighting.** Each piece's 8 palettes as the game has them; the pieces made in the editor get
-palettes made from their color, in the proportions of the level's.
+palettes made from their color, in the proportions of the level's. A new level is lit by the city's
+mood (`:mood-func 'update-mood-ctyindb`, in the game's common code) and has the sky
+(`:level-flags (level-flags sky)`): its palettes 5 to 7 (the lamps at night, the lights always on,
+the flickering ones) are lit as the editor shows them. With the default mood they stay off, and the
+pieces of indoor levels, lit by them alone, are black.
+
+**Gameplay.** The editor's start flag (an actor of type `jak-start`) gives the start; each
+checkpoint flag (type `checkpoint`) becomes a continue point `<name>-checkpoint-<n>` in
+`level-info.gc` and an actor of the level's code that calls `set-continue!` with it when Jak passes
+within 4 m (a level replacing one of the game's keeps the game's continue points: the report says
+so). The flags themselves are never written. A death zone is a shape whose collision is invisible,
+with the event `endlessfall`.
 
 **What changes**: Jak 3's surfaces are written with the first game's fields the builder reads
 (the nearest material; rails, slides and shocks lost and counted); the actor types the game lacks
@@ -1102,9 +1145,6 @@ the engine ([captures](captures/README.md)).
   ocean (waves of its own), the effects and the sky are the editor's: the sky imitates the game's
   colors and clouds, not its textures, its sun's exact orbit nor its cloud mesh. The weather stays
   where it is set (the game moves it slowly on its own); the desert's sandstorms are not offered.
-- **Holes** are looked for from points of walkable ground every few meters, at one height: a hole
-  seen only from a ledge, or narrower than the rays' spacing far away, can be missed; a surface
-  seen through (glass, water, glows) counts as a hole.
 - **Effects**: what a particle's own code does (`birth-func`, `func`) is not done; some effects of
   the game come from an object's code rather than from a part-spawner.
 - **Scale**: the game draws decor at any scale, but gives most of its objects their own size.
@@ -1125,5 +1165,8 @@ the engine ([captures](captures/README.md)).
 - **Jak II's structures** have no collision of their own (made from their shape) and no behavior.
 - **The light of what you place** is copied from the nearest lit surfaces facing the same way, not
   baked like the artists' (no shadows).
-- **The export**: the code of objects that live in a level's own files is not added to the DGO;
-  the cameras and ambient sounds of levels are not exported.
+- **The export**: the cameras and ambient sounds of levels are not exported; objects whose code
+  gets their own level by its name (`GameData::needs_levels`, from `level-get`) are left out of a
+  level of another name, and battles always (their creatures' models are not in the level). The code files of the DGO are ordered by `GameData::order_code`: each
+  original DGO's order kept, every type after its parent's file (game data `actors.parents`, all the
+  types outside KERNEL.CGO and GAME.CGO).

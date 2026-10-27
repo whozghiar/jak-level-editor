@@ -582,6 +582,31 @@ def selecting(args, e):
     e.web.key('Escape')
     e.web.mouse('released', to, 'left', 0, 0, 1)
     e.call('select', {'ids': []})
+    arranging(args, e)
+
+
+def arranging(args, e):
+    # a pillar of the slums repeated in a row: the copies shown while the window is open
+    new_street(e)
+    p = e.call('place', {'kind': 'shape', 'name': 'pillar', 'style': 'ctysluma', 'position': [-30, 0.5, 0],
+                         'size': [1.5, 7, 1.5]})
+    e.call('select', {'ids': [p['nodes'][0]['id']]})
+    e.call('set_camera', {'position': [-2, 14, 34], 'look_at': [-6, 3, 0]})
+    e.web.menu('Edit', 'Repeat the selection...')
+    dialog = '[role=dialog][aria-label="Repeat the selection"] input[type=number]'
+    e.web.type_into(dialog, '6')
+    e.web.evaluate("""(() => {
+      const i = document.querySelectorAll(%s)[1];
+      i.value = "6"; i.dispatchEvent(new Event("change", {bubbles: true}));
+    })()""" % json.dumps(dialog))
+    e.shot(out('selecting', 'repeat.png'), settle=2)
+    e.web.click('Keep', within='Repeat the selection')
+    e.web.engine('arrange_selection', {'how': 'ground'})
+    # every step, the last ones undone: greyed
+    e.call('undo')
+    e.web.menu('Edit', 'History...')
+    e.shot(out('selecting', 'history.png'), settle=1.5)
+    e.web.close_windows()
 
 
 def groups_(args, e):
@@ -660,6 +685,8 @@ def building(args, e):
     })()""")
     e.call('set_camera', {'position': [14, 9, 17], 'look_at': [0, 1.5, -1]})
     e.shot(out('building', 'style.png'), settle=3)
+    structures(args, e)
+    gameplay(args, e)
     terrain(args, e)
     topology(args, e)
     preview(args, e)
@@ -670,6 +697,95 @@ def building(args, e):
         e.call('set_view', {'game_view': True, 'hour': 11, 'weather': 'few_clouds'}, check=False)
         e.call('set_camera', {'all': True})
         e.shot(out('building', 'jak2-level.png'), settle=4)
+
+
+def scroll_to(e, heading):
+    """The left panel scrolled to its section `heading` (its title as shown, in capitals)."""
+    e.web.evaluate("""(() => {
+      const h = [...document.querySelectorAll("aside h3")].find((h) => h.textContent.trim().toLowerCase() === %s);
+      h && h.scrollIntoView({block: "start"});
+    })()""" % json.dumps(heading.lower()))
+
+
+def structures(args, e):
+    # the same button in three levels: a house of Spargus, of the slums, of Haven City
+    new_street(e)
+    e.call('set_view', {'game_view': True, 'hour': 11, 'weather': 'few_clouds'})
+    for x, level in ((-48, 'wascitya'), (0, 'ctysluma'), (48, 'ctygenb')):
+        e.call('build_house', {'level': level, 'position': [x, 2, -10], 'seed': 3})
+    e.call('select', {'ids': []})
+    e.call('set_camera', {'position': [0, 22, 88], 'look_at': [0, 12, -10]})
+    e.call('capture_view', {'width': 1600, 'height': 700}, image=out('building', 'houses.png'))
+    # solid walls and floors of four levels, then the industrial wall made longer and higher
+    new_street(e)
+    e.call('set_view', {'game_view': True, 'hour': 11, 'weather': 'few_clouds'})
+    walls = []
+    for i, level in enumerate(('ctyinda', 'ctysluma', 'wascitya', 'ctygenb')):
+        x = -66 + i * 44
+        walls.append(e.call('build_structure', {'kind': 'wall', 'level': level, 'position': [x, 2, -20],
+                                                'size': [30, 0, 0], 'seed': 2}))
+        e.call('build_structure', {'kind': 'floor', 'level': level, 'position': [x, 2, 12],
+                                   'size': [30, 0, 24], 'seed': 2})
+    e.call('select', {'ids': []})
+    e.call('set_camera', {'position': [0, 34, 70], 'look_at': [0, 4, -6]})
+    e.call('capture_view', {'width': 1600, 'height': 700}, image=out('building', 'walls.png'))
+    e.call('set_camera', {'position': [-56, 12, -46], 'look_at': [-66, 6, -20]})
+    e.call('capture_view', {'width': 800, 'height': 450}, image=out('building', 'wall-back.png'))
+    grown = e.call('set_structure', {'id': walls[0]['ids'][0], 'size': [60, 22, 0]})
+    e.call('select', {'ids': [grown['ids'][0]]})
+    e.web.tab('Build')
+    e.call('set_camera', {'position': [-66, 20, 40], 'look_at': [-66, 10, -20]})
+    e.shot(out('building', 'wall-grown.png'), settle=4)
+    # a house of the slums in the slums, the Build panel at its house
+    open_level(e, 'ctysluma')
+    e.call('set_view', {'game_view': True, 'hour': 11, 'weather': 'few_clouds'})
+    e.call('build_house', {'level': 'ctysluma', 'position': [1142, 12, 198], 'seed': 1})
+    e.call('select', {'ids': []})
+    e.call('set_camera', {'position': [1124, 12.6, 229], 'look_at': [1142, 20, 198]})
+    e.web.tab('Build')
+    for _ in range(2):
+        e.web.engine('level_style', {'level': 'ctysluma'})
+        time.sleep(2)
+    scroll_to(e, "Structures like this level's")
+    e.shot(out('building', 'house.png'), settle=10)
+
+
+def gameplay(args, e):
+    # a jumping course: where Jak starts, a checkpoint halfway, a death zone under it all
+    e.call('new_level', {'discard_changes': True})
+    e.loaded()
+    e.call('set_view', {'game_view': False})
+    for i, (x, y) in enumerate(((0, 0), (8, 1), (16, 2), (24, 3), (32, 3))):
+        e.call('place', {'kind': 'shape', 'name': 'box', 'style': 'ctyport', 'position': [x, y, 0],
+                         'size': [4, 1, 4]})
+    e.call('place', {'kind': 'gameplay', 'name': 'start', 'position': [0, 1, 0], 'yaw_deg': 90})
+    e.call('place', {'kind': 'gameplay', 'name': 'checkpoint', 'position': [16, 3, 0], 'yaw_deg': 90})
+    e.call('place', {'kind': 'gameplay', 'name': 'death_zone', 'position': [16, -12, 0], 'size': [60, 1, 30]})
+    e.call('place', {'kind': 'gameplay', 'name': 'creature', 'creature': 'grunt', 'position': [32, 4, 0], 'yaw_deg': -90})
+    e.call('select', {'ids': []})
+    e.call('set_camera', {'position': [12, 14, 30], 'look_at': [16, -2, 0]})
+    e.web.tab('Build')
+    scroll_to(e, 'Gameplay')
+    e.shot(out('building', 'gameplay.png'), settle=6)
+    # a moving platform between the second and third steps, its route drawn: selected, the
+    # inspector's route
+    plat = e.call('place', {'kind': 'object', 'name': 'plat', 'position': [8, 2.5, 6]})['nodes'][0]['id']
+    e.call('set_route', {'id': plat, 'points': [[8, 2.5, 6], [16, 4, 6], [24, 5, 6]]})
+    e.call('select', {'ids': [plat]})
+    e.call('set_camera', {'position': [14, 12, 28], 'look_at': [16, 3, 3]})
+    e.shot(out('building', 'route.png'), settle=4)
+    # where creatures walk, made in one click for Jak's size: a square of the slums, three crates
+    new_street(e)
+    for x, z in ((-12, -6), (6, 4), (14, -10)):
+        e.call('place', {'kind': 'shape', 'name': 'box', 'position': [x, 0.5, z], 'size': [4, 3, 4]})
+    e.call('select', {'ids': []})
+    e.web.tab('Build')
+    scroll_to(e, 'Gameplay')
+    e.web.click('Make it for the whole level')
+    time.sleep(8)
+    e.call('select', {'ids': []})
+    e.call('set_camera', {'position': [0, 34, 48], 'look_at': [0, 0, -4]})
+    e.shot(out('building', 'walk.png'), settle=3)
 
 
 def brush(e, **settings):
@@ -779,29 +895,6 @@ def preview(args, e):
     e.web.click('Stop', check=False, wait=0)
 
 
-def holes(args, e):
-    # a yard whose floor has a slit and whose wall stops short of the corner
-    e.call('new_level', {'discard_changes': True})
-    e.loaded()
-    style = {'kind': 'shape', 'style': 'ctyport'}
-    e.call('place', dict(style, name='floor', position=[-10.6, 0, 0], size=[20, 0.5, 30]))
-    e.call('place', dict(style, name='floor', position=[10.6, 0, 0], size=[20, 0.5, 30]))
-    e.call('place', dict(style, name='wall', position=[0, 0.5, -15], size=[42, 6, 0.5]))
-    e.call('place', dict(style, name='wall', position=[-20.8, 0.5, 0], size=[30, 6, 0.5], yaw_deg=90))
-    e.call('place', dict(style, name='wall', position=[20.8, 0.5, 3], size=[24, 6, 0.5], yaw_deg=90))
-    e.call('set_view', {'game_view': True, 'hour': 10, 'weather': 'clear'})
-    r = e.call('find_gaps', {'box': [[-20, -1, -14], [20, 6, 14]], 'spacing': 3})
-    print('  gaps:', {k: r.get(k) for k in ('gaps', 'edges', 'viewpoints')})
-    e.call('select', {'ids': []})
-    e.web.tab('Levels')
-    e.call('set_camera', {'position': [30, 26, 40], 'look_at': [0, 0, 0]})
-    x, y, w, h = e.web.view()
-    e.web.move_window('Holes in the decor', (x + 8, y + 8))
-    e.shot(out('holes', 'window.png'), settle=3)
-    e.call('capture_view', {'width': 960, 'height': 560}, image=out('holes', 'assistant-view.png'))
-    e.web.close_windows()
-
-
 def game_rendering(args, e):
     open_level(e, 'ctysluma')
     status = e.call('get_status')['document']
@@ -905,7 +998,7 @@ def assistant(args, e):
 
 
 SECTIONS = (('getting-started', getting_started), ('levels', levels), ('selecting', selecting), ('groups', groups_),
-            ('catalog', catalog), ('prefabs', prefabs), ('building', building), ('holes', holes),
+            ('catalog', catalog), ('prefabs', prefabs), ('building', building),
             ('game-rendering', game_rendering), ('behaviors', behaviors), ('export', exporting), ('mcp', assistant))
 
 

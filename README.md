@@ -16,14 +16,19 @@ make a door open only once a crate is broken, then export the result for the gam
   the story, and shows them with the game's own rendering: its light at every hour, its fog, its
   sky and its weather.
 - **Changes them**: select, move, turn, scale, copy, delete and group anything, from a single crate
-  to a whole district; every change can be undone.
+  to a whole district; put things in order (onto the ground, in a line) and repeat them in a row,
+  a circle or scattered; every change can be undone, and the history goes back to any step.
 - **Places what the game has**: its objects (doors, crates, elevators, jump pads), its visual
   effects, its models and decor parts, and whole buildings as prefabs, Jak II's Haven City among
   them.
 - **Builds new pieces**: floors, walls, doorways, stairs and roofs, natural ground with a terrain
-  brush, your own prefabs.
-- **Checks the result**: finds the holes through which the player would see the void, makes the
-  nav meshes creatures walk on.
+  brush, your own prefabs, and solid walls, floors and houses in the style of a level, made of its
+  own pieces, that grow with more of them when resized (never stretched), and sets of them as
+  prefabs.
+- **Makes a level playable**: where Jak starts, checkpoints he comes back to, death zones he falls
+  into, the routes of moving platforms, the creatures that appear, where they walk (nav meshes) in
+  one click.
+- **Makes the nav meshes** the game's creatures walk on.
 - **Sets what objects do**: a door that opens once a crate is broken, an elevator, decor Jak bounces
   on.
 - **Exports a level for the game**: the files to copy into a jak-project (OpenGOAL's sources), with

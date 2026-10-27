@@ -16,16 +16,15 @@ idea is explained the first time it appears, with an example, and each tool is s
 6. [The catalog: everything you can place](#6-the-catalog-everything-you-can-place)
 7. [Prefabs](#7-prefabs)
 8. [Building your own pieces](#8-building-your-own-pieces)
-9. [Holes in the decor](#9-holes-in-the-decor)
-10. [Seeing it as the game does: sky, hour, weather](#10-seeing-it-as-the-game-does-sky-hour-weather)
-11. [Levels side by side, and the story](#11-levels-side-by-side-and-the-story)
-12. [What objects do](#12-what-objects-do)
-13. [Where creatures walk: nav meshes](#13-where-creatures-walk-nav-meshes)
-14. [Saving](#14-saving)
-15. [Playing it in the game: export](#15-playing-it-in-the-game-export)
-16. [Building with an AI assistant](#16-building-with-an-ai-assistant)
-17. [Keys and mouse](#17-keys-and-mouse)
-18. [Files and folders](#18-files-and-folders)
+9. [Seeing it as the game does: sky, hour, weather](#9-seeing-it-as-the-game-does-sky-hour-weather)
+10. [Levels side by side, and the story](#10-levels-side-by-side-and-the-story)
+11. [What objects do](#11-what-objects-do)
+12. [Where creatures walk: nav meshes](#12-where-creatures-walk-nav-meshes)
+13. [Saving](#13-saving)
+14. [Playing it in the game: export](#14-playing-it-in-the-game-export)
+15. [Building with an AI assistant](#15-building-with-an-ai-assistant)
+16. [Keys and mouse](#16-keys-and-mouse)
+17. [Files and folders](#17-files-and-folders)
 - [Appendix: what the decor can do in the game](#appendix-what-the-decor-can-do-in-the-game)
 
 ## 1. The ideas in five minutes
@@ -75,10 +74,11 @@ facades where their back can never be seen (against a wall, at the edge of the l
 with another facade), and walk around them in the view to check.
 
 **The void** is what is behind everything: nothing. A gap between two pieces lets the player see
-it, a visual bug. The editor **finds those holes** ([9](#9-holes-in-the-decor)).
+it, a visual bug: make pieces touch or overlap a little, and look around what you build from the
+height of Jak's eyes.
 
 **Exporting** writes your level in the files OpenGOAL's level builder reads: you copy them into
-jak-project, build, and play ([15](#15-playing-it-in-the-game-export)). In the game, the
+jak-project, build, and play ([14](#14-playing-it-in-the-game-export)). In the game, the
 **continue points** are the places where it puts Jak when he arrives in a level or starts again
 after a fall.
 
@@ -108,7 +108,7 @@ Each [release](https://github.com/whozghiar/jak-level-editor/releases) has, for 
   `jak-level-editor` (`.exe` on Windows); nothing is installed;
 - `ogle-extract-<platform>.zip`, the extractor alone;
 - `jak-level-editor-mcp-<platform>.zip`, the MCP server for an AI assistant (optional, see
-  [16](#16-building-with-an-ai-assistant)): put it next to the editor's program.
+  [15](#15-building-with-an-ai-assistant)): put it next to the editor's program.
 
 The installers and the portable zip hold ogle-extract. The releases are numbered
 `vX.Y.Z` (v1.0.0, then v1.0.1 for fixes, v1.1.0 for new features, v2.0.0 for a change that breaks
@@ -137,7 +137,7 @@ any other, **Confirm** uses it.
 neither moves nor deletes anything in the old one (extract the game again there, or copy the old
 folder's content by hand). The same window has the language, where ogle-extract was found (or a
 button that downloads it, when the application can), and whether an AI assistant may control the
-editor ([16](#16-building-with-an-ai-assistant)).
+editor ([15](#15-building-with-an-ai-assistant)).
 
 ![File > Settings: the library, the language, the extractor, the assistant](captures/getting-started/settings.png)
 
@@ -309,7 +309,32 @@ and the player needs a double jump.
 
 **Ctrl+C / Ctrl+V** copy and paste (the copies appear where the originals were, selected: move
 them), **Ctrl+D** duplicates, **Del** deletes, **Ctrl+Z / Ctrl+Y** undo and redo. Everything can be
-undone.
+undone. **Edit > History...** lists every step done: click one to go back to just after it (the
+steps after it stay, greyed, until you change something).
+
+### Arrange and repeat
+
+**Edit > Arrange** puts the selection in order, in one step to undo:
+
+| Entry | What it does |
+|---|---|
+| Drop onto the ground | each element goes down until it rests on what is under it: nothing floats |
+| Same height as the first | all at the height of the first element clicked |
+| In a line, evenly spaced | from the first clicked to the farthest, the others evenly spaced between them (3 or more) |
+| Facing the way of the first | all turned the way the first clicked is |
+
+**Edit > Repeat the selection...** makes copies of the selection **in a row** (along X or Z, a
+spacing in meters, 0: touching), **in a circle** (the selection on a circle of the radius given,
+each copy turned with it) or **scattered** around it (on the ground, each turned and sized a little
+differently; **Other places** draws again). The copies show in the view while the window is open
+and change with its numbers; **Keep** makes them one step to undo, **Cancel** takes them away.
+
+| Repeat: a pillar of the slums in a row of 6, 6 m apart, shown before it is kept | The history: the last step undone, greyed |
+|---|---|
+| ![repeat](captures/selecting/repeat.png) | ![history](captures/selecting/history.png) |
+
+Example: one lamp post, Repeat in a row of 8 along X, 6 m apart, **Keep**: a lit street. A rock,
+Repeat scattered with 20 copies within 15 m: a rocky field.
 
 ## 5. Groups
 
@@ -340,7 +365,7 @@ place it (or drag it into the view). Hovering an entry shows what it is.
   hellcat), doors and airlocks, water, dark eco and lava.
 - **Interactive**: the objects that do something: crates, platforms and elevators, jump pads and
   board vents, buttons, breakable walls and fences, hazards. Their behavior is set in the
-  inspector ([12](#12-what-objects-do)), and its **Preview** shows them moving in place (a door
+  inspector ([11](#11-what-objects-do)), and its **Preview** shows them moving in place (a door
   opening, a fence breaking).
 - **Effects**: the game's **visual effects** in a category of their own, sorted by kind: **fire and
   flames**, **smoke, steam and dust**, **lights and glows**, **sparks and electricity**, **water**
@@ -425,6 +450,108 @@ floor or a wall that looks like it (its textures, their size, its light, how une
 |---|---|
 | ![shapes](captures/building/shapes.png) | ![style](captures/building/style.png) |
 
+### Structures that grow: walls, floors, houses
+
+Many buildings of the game are only a front: seen from behind they are flat as a sheet of paper,
+because the game was made for the angles the player can reach. The prefabs taken from the levels
+have the same problem. The editor's **structures** are solid instead, made of the chosen level's own
+pieces, and they grow when you resize them, the way the modular kits of game studios do: more bays
+and more pieces, never a stretched texture.
+
+Below the style, **Structures like this level's**: **Make** a **Wall**, a **Floor** or a **House**,
+choose how it looks, then **Place a solid wall**, **Place a solid floor** or **Place a house** and
+click in the view (its box follows the mouse, **R** turns it).
+
+| Structure | What it is made of |
+|---|---|
+| Wall | the level's buildings' texture on both faces and on top; pillars and a plinth standing out of both faces, bands between its floors, a coping; on each floor of each bay the level's own relief, a panel repeated as many times as it fits (the industrial zone's bulges and joints, Spargus' panels, the slums' beams), wear, pipes, lamps; windows in some bays if asked |
+| Floor | a slab of the level's ground, closed on its sides and underneath; a curb around it, the seams of its paving, the level's dirt patches and vents in its cells |
+| House | the walls, the level's windows and door, a pipe, wear and a roof of its plates (below) |
+
+**Resize it** in the inspector (its **Length**, **Height**, **Thickness**, a house's **Width**,
+**Depth** and **Floors**) or with the scale tool (**R**): when you let go it is made again at its new
+size, with more or fewer of its pieces. Its first bays keep their details: a longer wall only gets
+new bays. **Another look** draws other details with the same rules.
+
+A level whose pieces have no telling name gives the panels its walls are dressed with, known by
+their shape (the Precursor core's plates, the throne room's wall blocks): solid ones, never a lit
+window, a lamp or a sign. A level with no relief at all gets a raised panel on each floor of each
+bay, on both faces.
+
+| Walls and floors of the industrial zone, the slums, Spargus and Haven City | A wall seen from behind: as finished as its front |
+|---|---|
+| ![walls](captures/building/walls.png) | ![back](captures/building/wall-back.png) |
+
+![The industrial wall made 60 m long and two floors high in the inspector: more bays, joints and pipes](captures/building/wall-grown.png)
+
+**Make a set of prefabs** saves nine structures of the level with your prefabs (walls of two and
+four bays, a high wall, a wall with windows, floors of 16 m and 32 m, houses of one, two and three
+floors), named after the level. Placed from the Prefabs panel, they grow the same way.
+
+#### A house like a level's
+
+**Make: House** builds a whole house with the chosen level's own pieces. Choose its **floors** (1 to
+4), its **roof** (like the level, two slopes, four slopes, flat) and its **wear** (new, worn,
+run-down), click **Place a house**, then click in the view: its door faces you at first.
+
+| What the house takes from the level | Where it comes from |
+|---|---|
+| Walls | the texture and light of the level's buildings (their facades), with a plinth, a band between the floors and pillars at the corners (relief) |
+| Windows, door | the level's own window frames, glass, door and door frame, in openings their size |
+| Pipe | the level's pipes and rings, down one side from the roof to the ground |
+| Wear | the level's stains, streaks, bullet holes, scorch marks and broken plaster, between the openings |
+| Roof | the level's roof texture under rows of its own plates, overlapping like tiles; flat with a low wall in Spargus, whose roofs are |
+| Details | the level's chimney, awning over the door, lamp beside it, sign at the corner |
+
+The game's buildings are large (a floor of the slums is about 11 m high): the house is sized from
+the level's windows and doors. It is one group (a double click selects it all) and one step to
+undo; each house placed is a little different. A level without windows of its own (the industrial
+zone) borrows Haven City's, keeping its own walls.
+
+| The same button in three levels: Spargus, the slums, Haven City | A house of the slums placed in the slums |
+|---|---|
+| ![houses](captures/building/houses.png) | ![house](captures/building/house.png) |
+
+### Gameplay: start, checkpoints, creatures, death zones
+
+The Build panel's **Gameplay** places what makes a level playable:
+
+| Button | In the editor | In the game |
+|---|---|---|
+| Jak starts here | a blue flag (one per level: placing another moves it) | Jak appears there, facing the way of the flag |
+| Checkpoint | a green flag | once Jak passes by it, he comes back there when he dies or falls |
+| Death zone | a red box (stretch it in the inspector) | not drawn: Jak touching it falls to his death and comes back at his last checkpoint |
+| A creature appears here | an orange flag, the creature chosen in the list beside it (a grunt, a guard, a flitter, a roboguard: those the game lets a level place) | the creature appears there when the level is loaded and walks the nav mesh under it |
+
+Put the death zone under the level, below every edge Jak can fall from. The flags and the red are
+the editor's only. The export writes them: the start and the checkpoints become the level's continue
+points (a level of its own: a level replacing one of the game's keeps the game's), each checkpoint
+with a little code that makes it Jak's when he passes by. A creature needs ground it can walk on
+under its flag (**Where creatures walk**, below): the export links it to that nav mesh, or leaves it
+out and says so in its notes.
+
+**In this level** lists the start, the checkpoints, the creatures, the death zones and the moving
+objects with a route: a click selects one and shows it in the view. A creature with no ground in
+color under its flag says **no ground** there, before any export.
+
+![A jumping course: the start on the first platform, a checkpoint halfway, a death zone under it all](captures/building/gameplay.png)
+
+**Routes of moving objects.** A moving platform or an elevator (Catalog, Interactive) goes along a
+route. Select it, then in the inspector **Draw its route** and click in the view, point after
+point: the route starts where it is and shows in yellow (**Esc** stops; each point is one step to
+undo). In the game it goes along it and back; moved, it takes its route with it; **Clear the route**
+takes it away.
+
+![A moving platform between two steps of the course, its route in yellow](captures/building/route.png)
+
+**Where creatures walk.** Under Gameplay, choose the size of the creatures (**Small**, **Jak's
+size**, **Large**) and **Make it for the whole level**: the ground they can walk on shows in color
+over the level, around the walls and the crates (see [Where creatures walk](#12-where-creatures-walk-nav-meshes)).
+Death zones and decor Jak goes through are left out.
+
+The guide (**F1**) has the whole example as a tutorial with its animations: **Make a level
+playable**, a jumping course over the roofs of the slums.
+
 ### The terrain brush
 
 **Terrain (B)** draws natural ground freehand, in its own small window: a square follows the mouse,
@@ -481,31 +608,14 @@ its decor (Haven City as it was), its prefabs, or a whole level of Jak II opened
 ### The light of what you place
 
 What you place, paste or move **takes the light of the level around it**: each of its corners
-borrows the light of the level's nearby surfaces facing the same way. A piece from a dark cave
-placed in a sunny street does not stay dark. **Light it like here** (inspector) does it again.
+borrows the light of the level's nearby surfaces facing the same way, the ground and the walls made
+in the editor included. A piece from a dark cave placed in a sunny street does not stay dark, and a
+piece lit by the lamps of an indoor level (Onin's tent) placed on the ground of a new level gets the
+light of that ground. What you place is never its own surroundings: a prefab placed alone keeps
+the light its pieces had, rather than taking that of one of its own parts. A new level is lit as
+Haven City is: the sun of the hour, the lamps on at night.
 
-## 9. Holes in the decor
-
-**Why.** Behind the decor there is nothing. A floor that stops 30 cm short of a wall, two slabs not
-quite touching, a wall that misses the corner: through each gap the player sees the void, the
-screen's background. It is the most common visual bug of a level made by hand.
-
-**Find them.** **Level > Find holes in the decor...** looks from the ground every few meters, at the
-height of Jak's eyes, all around and downward (the whole level, or around the selection), and lists
-what it found, drawn in the view:
-
-- **red**: a **gap** between pieces, to fill;
-- **orange**: an **open edge**, where the ground ends in the void: close it (a wall, a railing,
-  buildings) unless the player can never get near it.
-
-Click a line of the list: the camera goes where the player would see it from.
-
-![A yard: the slit between two floor slabs and the corner the side wall misses (red), its open front (orange)](captures/holes/window.png)
-
-**Fix them**: stretch a piece over the gap (scale), move it to overlap its neighbor by a few
-centimeters, or place a floor or a wall over it, then look again.
-
-## 10. Seeing it as the game does: sky, hour, weather
+## 9. Seeing it as the game does: sky, hour, weather
 
 **The game rendering** (View > Game rendering, **G**), on from the start, draws the level with the
 game's own renderer: its light at the hour and in the weather you choose, its fog, its sky. **G**
@@ -538,7 +648,7 @@ The **effects** (steam, sparks, smoke, fire, lights) run in the view (View > Eff
 
 ![The effects of the industrial zone: the labels name the objects that make them (part-spawner is the game's name for an effect); their steam and sparks run around them](captures/game-rendering/effects.png)
 
-## 11. Levels side by side, and the story
+## 10. Levels side by side, and the story
 
 **Several levels.** With a level open, choose another in Levels and **Add to the document**: it
 comes at its place in the world. To work on the junction between two levels, or to build a new
@@ -558,7 +668,7 @@ tower's destruction). **Story** unchecked shows every state at once.
 
 ![The city walls at their last state: the step of the story after the Metal Head tower's destruction](captures/levels/story.png)
 
-## 12. What objects do
+## 11. What objects do
 
 Select an object: the inspector's **Behavior** says what it does, and you can change it.
 
@@ -583,25 +693,33 @@ a way to break it first.
 metal under Jak's feet, hurt or burn him, **bounce** him up, **launch** him along an arc.
 [the appendix](#appendix-what-the-decor-can-do-in-the-game) explains what the game allows.
 
-## 13. Where creatures walk: nav meshes
+## 12. Where creatures walk: nav meshes
 
 The game's creatures walk on **nav meshes**: flat shapes laid over the ground that tell them where
-they can go. The editor leaves creatures out, so you only need them if you add creatures to your
-level later (in jak-project); you can skip this part otherwise. **Level > Nav meshes**
+they can go. You need them under each creature you place (Build panel, Gameplay, **A creature
+appears here**); you can skip this part otherwise. The quickest way: the Build panel's
+**Where creatures walk** (a creature's size, then **Make it for the whole level**). **Level > Nav meshes**
 makes them from the level's walkable surfaces, for a creature of the size you set, for the whole
 level or around the selection; they are drawn over the level, one color each, and saved with the
-project and the export.
+project and the export. On a level of the game, the walkable surfaces are those of its collision,
+as the export gives it to the game, not every roof drawn: a roof Jak could never reach in the game
+has no collision, and a creature placed there would fall through it. Only its ground counts (a
+flat top the game marks as a wall, a deadly, burning or sliding surface does not), and only where
+the level's decor is still shown (a piece deleted or hidden takes its collision with it, as in the
+export).
 
-![The nav meshes of the slums](captures/nav-meshes/navmesh.png)
+| The nav meshes of the slums | Made in one click around three crates (Jak's size) |
+|---|---|
+| ![slums](captures/nav-meshes/navmesh.png) | ![walk](captures/building/walk.png) |
 
-## 14. Saving
+## 13. Saving
 
 **File > Save** (Ctrl+S) saves your work as a **project**, only when you ask, in its own folder:
 `library/projects/<name>/<name>.glb` (a standard 3D file Blender opens too) and its nav meshes.
 **File > Open project** (Ctrl+O) and **Recent projects** open it again. Nothing is saved behind
 your back.
 
-## 15. Playing it in the game: export
+## 14. Playing it in the game: export
 
 **Level > Export for the game...** writes the level as a **custom level of OpenGOAL**, in
 `library/exports/<project>/`, laid out like jak-project, with a `README.md` that gives the exact lines
@@ -618,10 +736,18 @@ Its window, field by field:
 - **With the actors** (its objects), and the **collision**: **The game's collision** (the default:
   the game's own collision where its decor is still in place, a collision made from the shape of
   what you placed or moved) or **Made from the decor** (everything from the shape: heavier).
-- **Start**: where the player starts (a continue point of the level by default).
+- **Start**: where the player starts (a continue point of the level by default; the **Jak starts
+  here** flag of the Build panel's Gameplay, when there is one, wins).
 - **Folder**: where it is written.
 - The **behaviors** you set are written as the level's own code.
-- The **report** says what changed and where the collision might be too dense for the game.
+- The **report** says what changed and where the collision might be too dense for the game. It
+  also lists the objects left out because the game would die of them: those whose code gets their
+  own level of the game by its name (the volcano's breaking ground needs `volcanoa` loaded); replace
+  that level to keep them. The battles too (their creatures come from the game's own tables, whose
+  models the level does not have): place creatures with **A creature appears here** instead.
+- The **code** the objects need goes into the level's DGO in an order the game can load: a type's
+  parent first, even from the code of another level loaded beside it in the game (the city's
+  squads under Spargus' cars).
 
 **Replace a level of the game**: a level made from one of the game's (say `ctyindb`) can take its
 place, so that the game loads yours wherever it loaded the original, with its continue points,
@@ -653,10 +779,10 @@ export's `README.md` gives the exact lines for your level:
 
 ![The export's report: open its folder, its README, or add it to the game by hand](captures/export/by-hand.png)
 
-## 16. Building with an AI assistant
+## 15. Building with an AI assistant
 
 An AI assistant (Claude, or any program that speaks MCP) can build in the editor for you: you
-describe the level, it opens it, places the decor and the prefabs, checks the holes, looks at the
+describe the level, it opens it, places the decor and the prefabs, looks at the
 result and shows it to you, in your window, every change undoable. It needs your permission:
 **File > Settings > Assistant (MCP)**, **Let an assistant control the editor**.
 
@@ -664,7 +790,7 @@ result and shows it to you, in your window, every change undoable. It needs your
 
 ![What an assistant built and saw, at the height of the player's eyes: a street of Jak II's Main Town, a fountain, trees](captures/mcp/assistant-view.png)
 
-## 17. Keys and mouse
+## 16. Keys and mouse
 
 | Key | Action |
 |---|---|
@@ -687,7 +813,7 @@ result and shows it to you, in your window, every change undoable. It needs your
 | Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S | New level, open, save, save as |
 | F1 | The guide |
 
-## 18. Files and folders
+## 17. Files and folders
 
 ```text
 library/                 the library: everything made from your game (git ignores it; installed,

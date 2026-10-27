@@ -7,12 +7,11 @@ The pictures of the [user guide](../user-guide.md), of the [MCP tutorial](../mcp
 |---|---|
 | `getting-started/` | the editor's window, the Game menu, the guide (F1), the first-run assistant, the settings, the extraction of a disc |
 | `levels/` | the Levels panel, the story, several levels side by side, a level selected whole, the ocean |
-| `selecting/` | a selection and its gizmo, what the cursor tells, a box being drawn, the button held on a prefab, a prefab dragged, the scale tool |
+| `selecting/` | a selection and its gizmo, what the cursor tells, a box being drawn, the button held on a prefab, a prefab dragged, the scale tool, a repeat being shown, the history |
 | `groups/` | the Groups panel, a group being named |
 | `catalog/` | the objects, the interactive objects, the visual effects and their kinds, the models, the decor searched, the materials |
 | `prefabs/` | the game's prefabs, searched, a tower selected by its assembly, a prefab being made (the small pieces left out) |
-| `building/` | the shapes, a level's style, the terrain brush, the ground it raises, the magnet brush, the topology tool, the preview of an object, a level of Jak II |
-| `holes/` | the holes of a yard found, in the editor and as an assistant sees them |
+| `building/` | the shapes, a level's style, houses in the style of three levels, a house of the slums in the slums, walls and floors of four levels, a wall from behind, a wall grown, the gameplay markers, a platform's route, where creatures walk, the terrain brush, the ground it raises, the magnet brush, the topology tool, the preview of an object, a level of Jak II |
 | `game-rendering/` | the Sky, hour and weather window: noon, dusk, storm, night, haze; the effects |
 | `behaviors/` | an airlock that opens once a crate is broken |
 | `nav-meshes/` | the nav meshes of a level |
@@ -28,7 +27,7 @@ temporary folder), and drives it two ways:
 
 - its **remote control** (the MCP server's tools) sets up each scene: open a level, place prefabs
   and shapes, draw a terrain, set the camera, the hour and the weather; `capture_view` gives the
-  pictures of the 3D view alone (the holes, the assistant's pictures);
+  pictures of the 3D view alone (the assistant's pictures);
 - the **DevTools protocol of its web view** (WebView2, so Windows) gives the pictures of the whole
   window at 1600 x 900, clicks tabs, menus and buttons by their English labels, types in fields,
   presses keys, and moves the mouse over the 3D view (`Input.dispatchMouseEvent`): the cursor's
@@ -40,7 +39,7 @@ pictures):
 
 ```bash
 python tools/capture_docs.py                                 # all of them
-python tools/capture_docs.py --only groups,holes             # some folders (and first-start)
+python tools/capture_docs.py --only groups,catalog           # some folders (and first-start)
 python tools/capture_docs.py --out <folder>                  # somewhere else, to compare first
 ```
 

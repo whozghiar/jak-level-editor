@@ -1,8 +1,7 @@
 # The MCP server: building levels with an AI assistant
 
 An AI assistant can use Jak Level Editor for you: you tell it what you want, in your own words, and
-it opens the level, places the buildings and the decor, checks for holes, looks at the result and
-shows it to you. It works in the editor's window, under your eyes, and every change it makes can be
+it opens the level, places the buildings and the decor, looks at the result and shows it to you. It works in the editor's window, under your eyes, and every change it makes can be
 undone like yours.
 
 This document has two parts:
@@ -97,9 +96,15 @@ what it does with them:
 | You ask | What the assistant does |
 |---|---|
 | *"Open the slums and show me a picture of the tower at dusk."* | `open_level ctysluma`, `set_camera` on the tower, `capture_view` at 18:00 with the game rendering: you get the picture in the conversation |
-| *"Build a little square with a fountain and two trees in front of the tower."* | finds the ground with `raycast`, places the prefabs `small-fountain` and `haven-tree` with `place`, looks for holes with `find_gaps`, then shows you a picture |
+| *"Build a little square with a fountain and two trees in front of the tower."* | finds the ground with `raycast`, places the prefabs `small-fountain` and `haven-tree` with `place`, looks at them from where the player walks with `capture_view`, then shows you a picture |
 | *"Make this door open only once the crate in front of it is broken."* | finds the door and the crate with `find_nodes`, sets the door's behavior with `set_actor` |
 | *"Put a street of Haven City's Main Town in the desert."* | opens a desert level, lists Jak II's prefabs, places the buildings so that their backs face away from the player, matches their light with `match_lighting` |
+| *"Build a house of the slums on the empty square, two floors, worn."* | `build_house` with `level: "ctysluma"`: walls of the slums' plaster with relief, its wooden windows and door, a pipe, stains and holes, a roof of its planks and metal plates; then pictures from the street |
+| *"Make it a jumping course: Jak starts on the first platform, a checkpoint halfway, falling kills him."* | `place` with `kind: "gameplay"`: a `start`, a `checkpoint`, a `death_zone` under the platforms |
+| *"Close this street with a wall of the industrial zone, 60 m long, then make it twice as high."* | `build_structure` with `kind: "wall"`, `level: "ctyinda"`, `size: [60, 0, 0]`: a solid wall of the zone's metal, its joints, bulges and pipes on both faces; then `set_structure` with `height`: built again, not stretched |
+| *"Give this platform a route to the other roof."* | `set_route` with its points: in the game it goes along them and back |
+| *"Put two guards on the roofs."* | `generate_navmesh` (the ground they walk on), then `place` with `kind: "gameplay"`, `name: "creature"`, `creature: "kg-grunt"` at each spot |
+| *"Put a row of eight lamp posts along the street."* | one lamp post placed, then `repeat` in a `row` of 7 copies, and `arrange` `ground` so that none floats |
 | *"Save it as my-square, then export it for the game."* | `save_project my-square`, then `export_level`: the files to copy into a jak-project, and their README |
 
 Good habits:
@@ -117,9 +122,10 @@ Good habits:
 |---|---|
 | **Look around** | list the levels, open one or several side by side, show the level at a point of the story, find elements by name or near a point, read an element's settings |
 | **Place** | the game's objects (doors, crates, lamps, effects), its models, its decor parts, the prefabs (yours and the game's whole buildings), up to 2,000 at once |
-| **Build** | shapes (floors, walls, doorways, stairs, roofs, pillars), natural ground with the terrain brush, textures |
-| **Change** | move, turn, scale, copy, delete, group; what an object does (doors, jump pads, elevators, crates); what the game does with decor (collision, ground material, bounce, launch) |
-| **Check** | find the holes through which the player would see the void, look from any point, take pictures at any hour and weather with the game rendering |
+| **Build** | whole houses in the style of a level (its own windows, doors, pipes, wear and roof plates), any structure from a level's building kit, shapes (floors, walls, doorways, stairs, roofs, pillars), natural ground with the terrain brush, textures |
+| **Make it playable** | where Jak starts, checkpoints he continues from, death zones he falls into: written by the export |
+| **Change** | move, turn, scale, copy, delete, group; put in order (drop onto the ground, line up), repeat in a row, a circle or scattered; what an object does (doors, jump pads, elevators, crates); what the game does with decor (collision, ground material, bounce, launch) |
+| **Check** | look from any point, take pictures at any hour and weather with the game rendering |
 | **Save and export** | save the project, export it for the game, make nav meshes, undo and redo |
 
 The complete list, tool by tool, is [Every tool](#9-every-tool).
@@ -204,65 +210,25 @@ The game's buildings are made to be seen **from where the player can go**. Most 
 panels open at the back. In the game this never shows, because the player can never get behind.
 Placed in a new level where the player can walk around, the same facade shows **its back**: the
 void, the inside of its panels, pieces floating. That is the most common mistake of a level built
-from the game's pieces. [Rule 3](#rule-3-facades-are-not-buildings) is about it.
+from the game's pieces. [Rule 2](#rule-2-facades-are-not-buildings) is about it.
 
 | From the street: what it was made for | From behind: what the player must never see |
 |---|---|
 | ![front](captures/mcp/facade-front.png) | ![back](captures/mcp/facade-back.png) |
-
-### The void and the holes
-
-Behind the decor there is **nothing**: the game draws the sky above the horizon, and below it, where
-the decor should be, the screen's background. A gap between two pieces (a floor that does not reach
-a wall, two slabs 50 cm apart, a wall that stops short of the corner) lets the player see that
-void: a **visual bug**, ugly and obvious in the game. [Rule 1](#rule-1-no-holes) is about it.
 
 ### Light, hour and weather
 
 The game lights its levels with colors baked into every corner of their triangles (each corner
 has 8 colors, the game's *palettes*: one for the ambient light, four for the sun coming from four
 directions, three for the level's own lamps), mixed according to the hour and the weather. What you
-place **takes the light of the level around it** automatically. The **game rendering** draws the
+place **takes the light of the level around it** automatically; a new level is lit as Haven City
+is (its lamps on at night). The **game rendering** draws the
 level with the game's own renderer: what the level will look like in the game. Set its hour and
 weather with `set_view`, and see it with `capture_view`.
 
 ## 7. The four rules
 
-### Rule 1: no holes
-
-Pieces must **touch or overlap** (by 5 to 10 cm): floors reach the walls, walls reach the ground
-and each other, nothing floats in the air. Snap sizes and positions to round values (0.5 m) so
-that pieces meet exactly.
-
-**Check it, always**, after building: `find_gaps` looks from the ground every few meters, at the
-height of Jak's eyes, all around and downward. A ray that meets nothing is a view into the void.
-
-```json
-{"tool": "find_gaps", "args": {"box": [[-20, -1, -14], [20, 6, 14]]}}
-```
-
-```json
-{"gaps": 19, "edges": 30, "viewpoints": 108, "rays": 31104,
- "spots": [{"kind": "gap", "at": [20.06, 0.53, -11.17], "seen_from": [-18.5, 2.1, -3.5],
-            "direction": [0.98, -0.04, -0.195], "rays": 77}, "..."]}
-```
-
-- `kind: "gap"`: a hole between pieces (surfaces on both sides of it, the void right behind it).
-  **Fix every one.**
-- `kind: "edge"`: an open edge, where the ground ends in the void (seen directly, or through a
-  passage between pieces: then `at` is where that ground ends): close it with a wall, a building, a
-  railing, unless the player can never get near it.
-- `seen_from` and `direction`: where the player would see it from. Look there:
-  `set_camera` with `position: seen_from` and `look_at: at`, then `capture_view`.
-- `rays`: how many rays went through: the larger, the more visible.
-
-To fix a gap: move or stretch a piece to cover it (`transform_nodes` with `scale_by`), or place a
-shape over it (`place` with `kind: "shape"`, a `floor` or a `wall` in the `style` of the level).
-Run `find_gaps` again until none is left that matters.
-
-![find_gaps in a yard: red, the slit between two floor slabs and the corner the side wall misses; orange, the open front edge](captures/holes/assistant-view.png)
-
-### Rule 2: prefabs hold structures, not crumbs
+### Rule 1: prefabs hold structures, not crumbs
 
 A prefab is **a structure**: a building, a bridge, a fountain. Small loose pieces (bolts, debris,
 stains, papers, tiny props) clutter it and make it look careless once placed elsewhere.
@@ -280,7 +246,7 @@ things (a shelf of bottles), and check what was left out.
 
 The objects of the game (actors: a door, a crate) are always kept, whatever their size.
 
-### Rule 3: facades are not buildings
+### Rule 2: facades are not buildings
 
 When a building comes from the game (a prefab of the game, an assembly, decor parts), it is most
 often a front only. Decide **where the player will see it from** before placing it:
@@ -291,14 +257,14 @@ often a front only. Decide **where the player will see it from** before placing 
 - Check from every place the player can reach: `set_camera` behind and beside it, at 1.6 m above
   the ground, then `capture_view`. If its back shows, move it, turn it, or hide its back behind
   other pieces (another building, a wall in the level's style: `place` a `wall` shape with
-  `style`), touching it so that no hole is left (rule 1).
+  `style`), touching it.
 
 Example: a shop front of the industrial zone (the left picture of
 [the notions above](#facades-what-the-player-sees-and-what-he-must-not)) goes at the end of a
 street, its back against the level's outer wall; a building of Main Town, closed all round, can
 stand in the middle of a square.
 
-### Rule 4: look before you report
+### Rule 3: look before you report
 
 Never say a level is done without looking at it. At least:
 
@@ -308,6 +274,28 @@ Never say a level is done without looking at it. At least:
    streets, in front of and behind what you built.
 3. `capture_view` from above, to see that nothing floats and nothing is missing.
 4. Describe what you see to the user, problems included.
+
+### Rule 4: build like the level
+
+A structure must look like it belongs to the level it is in: its materials, its colors, its kind of
+windows, its wear. Never a bare flat wall of one texture.
+
+- **A house, a wall, a floor**: `build_structure` makes them whole and solid from the level's own
+  pieces (`build_house` for a house; see [the recipe](#build-a-house-like-a-levels)). The game's
+  facades are flat behind: prefer these wherever the player could get behind. To resize one,
+  `set_structure` (never `transform_nodes` with a scale: it would stretch it).
+- **Any other structure** (a wall, a tower, a gate, a floor, a ceiling): `building_kit` gives the
+  level's parts by role (window, glass, shade, door, doorframe, pipe, pipe_ring, wear, roof,
+  chimney, awning, sign, lamp, vine) with their size and the rotation that turns them to face +z,
+  and the textures of its buildings. Make the masses with shapes in the level's style
+  (`style` + `surface`: `building` for a building's walls, `roof`, `trim` for frames and bands,
+  `wall` and `floor` for the level's own walls and ground), with **relief**: a plinth, bands
+  between the floors and pillars at the corners a little out of the wall, overhangs under the
+  roof. Then put the level's own parts on them: windows in openings their size, a door in a
+  doorway, wear on the walls between the openings, pipes down them, plates on the roofs (see
+  [the recipe](#build-any-structure-from-a-levels-kit)).
+- **Its scale**: the game's buildings are large. A floor is about as high as two of the level's
+  windows (11 m in the slums); size the masses from the kit, not from real-life houses.
 
 ## 8. Recipes
 
@@ -332,7 +320,7 @@ The example the first picture of this guide comes from: a street of Jak II's Mai
 pavement in the style of Haven's slums, a fountain and two trees. The buildings are the user's own
 prefabs made from Jak II's Main Town (`main-town-building-a`, `-c`, `-d`: Jak II extracted, prefabs
 made with `create_prefab`); use any prefab `list_prefabs` gives. They are whole buildings, closed all
-round: they can stand where the player walks around them (rule 3).
+round: they can stand where the player walks around them (rule 2).
 
 ```text
 new_level
@@ -349,16 +337,13 @@ list_groups                                                  -> {"groups": [{"gr
 place {"kind": "prefab", "name": "small-fountain", "position": [0, 0.5, 18], "on_ground": true}
 place {"kind": "prefab", "name": "haven-tree", "position": [-25, 0.5, 30], "on_ground": true}
 place {"kind": "prefab", "name": "haven-tree", "position": [25, 0.5, 30], "on_ground": true}
-find_gaps {"box": [[-80, -1, -60], [80, 10, 60]]}           (rule 1)
 set_view {"game_view": true, "hour": 16, "weather": "few_clouds"}
 set_camera {"position": [8, 2.1, 48], "look_at": [-4, 10, -10]}
-capture_view                                                 (rule 4)
+capture_view                                                 (rule 3)
 ```
 
 ![The street from above](captures/mcp/street-above.png)
 
-Here `find_gaps` finds the edges of the pavement (the street ends in the void on every side): a
-real level would close them with buildings, walls or the edge of the game's world.
 
 ### Take a building out of a level as a prefab
 
@@ -372,18 +357,6 @@ set_camera {"frame": [4210], "yaw_deg": 30, "pitch_deg": -25}
 capture_view                                  -> check it is the whole house, nothing else
 create_prefab {"ids": [4210, 4211, ..., 4302], "name": "spargus-house"}
                                               -> {"name": "spargus-house", "left_out": [...]}
-```
-
-### Fix a hole
-
-```text
-find_gaps {"ids": [...what you built...]}
-  -> {"kind": "gap", "at": [20.06, 0.53, -11.17], "seen_from": [-18.5, 2.1, -3.5], ...}
-set_camera {"position": [-18.5, 2.1, -3.5], "look_at": [20.06, 0.53, -11.17]}
-capture_view                                  -> see it
-find_nodes {"near": [20.06, 0.53, -11.17], "radius": 4}   -> the pieces around it
-transform_nodes {"ids": [the wall], "scale_by": [1.05, 1, 1]}   or   place a floor/wall shape over it
-find_gaps {"ids": [...]}                      -> again, until it is gone
 ```
 
 ### Set the mood
@@ -422,6 +395,115 @@ terrain {"mode": "generate", "position": [0, 0, 0], "area": [96, 96], "hills": 1
 terrain {"id": 88, "mode": "dig", "position": [-40, 0, -10], "to": [40, 0, 15], "size": 10, "amount": 3}
 terrain {"id": 88, "mode": "flatten", "position": [20, 6, -25], "size": 22, "height": 6}
 ```
+
+### Build a house like a level's
+
+```text
+build_house {"level": "ctysluma", "position": [1142, 12, 198], "yaw_deg": 0,
+             "floors": 2, "wear": 0.5}
+  -> {"group": "house-ctysluma", "elements": 88, "size": [28.4, 26, 19.8],
+      "parts": {"window": "city-slum-window-01.mb", "door": "city-slum-door-01.mb",
+                "roof": "city-slum-roof-metalplates-damaged-02.mb", "pipe": "...", "wear": "12"}}
+set_camera {"position": [1124, 12.6, 229], "look_at": [1142, 20, 198]}
+capture_view {"game_hour": 11}
+```
+
+It stands on the highest ground under it (its foundation goes down where the ground is lower); its
+door faces `yaw_deg` (0: +z). `roof`: `auto` (the level's: flat in Spargus, sloped elsewhere),
+`gable`, `hip` or `flat`; `width` and `depth` in meters; another `seed`, other windows and wear. A
+level without windows or doors of its own (the industrial zone) borrows Haven City's.
+
+![The same call in three levels: Spargus, the slums, Haven City](captures/building/houses.png)
+
+### Walls and floors that grow
+
+```text
+build_structure {"kind": "wall", "level": "ctyinda", "position": [0, 0, -20], "size": [36, 0, 0]}
+  -> {"group": "wall-ctyinda", "elements": 53, "size": [...],
+      "parts": {"column": "city-ind-joint-BOT-01.mb", "relief": "...", "pipe": "...", "wear": "8"},
+      "ids": [412, ...]}
+set_structure {"id": 412, "length": 60, "height": 22}   -> built again: more bays, two floors
+build_structure {"kind": "floor", "level": "ctysluma", "position": [0, 0, 10], "size": [32, 0, 24]}
+```
+
+A wall runs along x before its turn (`yaw_deg`), its front towards +z; it is solid (the level's
+texture on both faces and its top), its bays and their details drawn from their number, so a longer
+wall keeps the bays it had. `size: 0` takes the level's: a floor as high as two of its windows.
+`windows: true` puts the level's windows in some bays. `create_prefab_set {"level": "wascitya"}`
+saves nine of them as the user's prefabs (only when asked): placed, they still grow.
+
+![Walls and floors of four levels: the industrial zone, the slums, Spargus, Haven City](captures/building/walls.png)
+
+### Build any structure from a level's kit
+
+A wall of the slums with a window, relief and wear (its front towards +z; for a wall turned by a
+yaw, turn every position around it and add the yaw to each part's `rotation_deg` y):
+
+```text
+building_kit {"level": "ctysluma"}
+  -> {"kit": {"wall": {"texture": "city-slumwall-06", "tile": 5.93}, "flat_roofs": false,
+      "parts": {"window": [{"name": "city-slum-window-01", "size": [3.83, 4.95, 1.0],
+                            "rotation_deg": [0, 180, 0]}],
+                "wear": [{"name": "city-ind-bullet-hole-01", "size": [2.12, 1.96, 0], ...}], ...}}}
+place_many {"items": [
+  {"kind": "shape", "name": "wall", "style": "ctysluma", "surface": "building",
+   "position": [-8, 0.5, 0], "size": [8, 11, 0.6]},
+  {"kind": "shape", "name": "window", "style": "ctysluma", "surface": "building",
+   "position": [0, 0.5, 0], "size": [8, 11, 0.6], "opening": [3.5, 4.55]},
+  {"kind": "shape", "name": "wall", "style": "ctysluma", "surface": "building",
+   "position": [8, 0.5, 0], "size": [8, 11, 0.6]},
+  {"kind": "shape", "name": "box", "style": "ctysluma", "surface": "trim",
+   "position": [0, 0.5, 0], "size": [25, 0.8, 1.2]},                       <- the plinth
+  {"kind": "shape", "name": "box", "style": "ctysluma", "surface": "trim",
+   "position": [0, 11, 0], "size": [25, 0.5, 1.4]},                        <- the band under the roof
+  {"kind": "decor", "level": "ctysluma", "name": "city-slum-window-01",
+   "position": [0, 3.5, 0.15], "rotation_deg": [0, 180, 0]},               <- in its opening
+  {"kind": "decor", "level": "ctysluma", "name": "city-ind-bullet-hole-01",
+   "position": [-8, 3.5, 0.32], "rotation_deg": [0, 0, 0]}]}               <- on the wall's face
+```
+
+- A window shape's opening is in the middle of its height: the window part goes at
+  `(height - window height) / 2` above the wall's base, its opening about 0.92 of its size (its frame
+  covers the edges).
+- A part whose `rotation_deg` is a yaw alone (all but some pipes) has its `position` at the middle
+  of its bottom. Decals (`size` depth 0) go 2 cm in front of the wall's face.
+- A part a little larger than the room for it: `scale` it down, never stretch one way only.
+
+### Make it playable
+
+```text
+place {"kind": "gameplay", "name": "start", "position": [0, 1, 0], "yaw_deg": 90}
+place {"kind": "gameplay", "name": "checkpoint", "position": [16, 3, 0]}
+place {"kind": "gameplay", "name": "death_zone", "position": [16, -12, 0], "size": [60, 1, 30]}
+```
+
+The start (one per level: a second moves it) and the checkpoints become the level's continue points
+at the export, a death zone an invisible box Jak falls to his death in, back at his last checkpoint.
+Put the death zone below every edge Jak can fall from.
+
+### Routes of moving objects
+
+```text
+place {"kind": "object", "name": "plat", "position": [8, 2.5, 6]}       -> {"nodes": [{"id": 77}]}
+set_route {"id": 77, "points": [[8, 2.5, 6], [16, 4, 6], [24, 5, 6]]}
+  -> {"tag": "path", "points": [[8, 2.5, 6], [16, 4, 6], [24, 5, 6]]}
+```
+
+A platform or an elevator (an object whose type has a path) goes along its route in the game, and
+back. Its own place first; moved later, it takes its route with it; `points: []` takes it away.
+
+### Repeat and arrange
+
+```text
+place {"kind": "decor", "level": "ctygenb", "name": "city-street-lamp-overhead-01",
+       "position": [0, 0.5, 0]}                       -> {"nodes": [{"id": 412, ...}]}
+repeat {"ids": [412], "mode": "row", "count": 7, "axis": "x", "spacing": 8}
+                                                      -> {"copies": 7, "ids": [...]}
+arrange {"ids": [412, ...], "how": "ground"}          -> each on the ground under it
+```
+
+`repeat` `circle` puts the copies around a circle of `radius` the elements are on, `scatter` at
+random within `radius` on the ground, each turned and sized a little differently (`vary`).
 
 ### Save and export (only when the user asks)
 
@@ -470,12 +552,18 @@ export_level {"name": "mtstreet", "nickname": "mts"}
 
 | Tool | What it does |
 |---|---|
-| `place`, `place_many` | put a `prefab`, an `object`, a `model`, a `decor` part or a new `shape` (box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip, cylinder, ground) at a position, turned, scaled, `on_ground`; `place_many` up to 2,000 at once, one undo |
+| `place`, `place_many` | put a `prefab`, an `object`, a `model`, a `decor` part, a new `shape` (box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip, cylinder, ground; `style` and `surface` a level's look) or a `gameplay` element (`start`, `checkpoint`, `death_zone`) at a position, turned, scaled, `on_ground`; `place_many` up to 2,000 at once, one undo |
+| `build_house` | a whole house in the style of a level, from its own pieces (rule 4) |
+| `build_structure`, `set_structure` | a solid wall, floor or house of a level's pieces; built again at another size or look (more pieces, not stretched) |
+| `create_prefab_set` | nine structures of a level saved as the user's prefabs, still growing once placed |
+| `set_route` | the route a moving platform or an elevator goes along |
+| `building_kit` | a level's building parts by role, their size and turn, its buildings' textures |
 | `transform_nodes`, `duplicate_nodes`, `delete_nodes` | move, turn, scale; copy; delete |
+| `arrange`, `repeat` | put elements in order (`ground`, `height`, `line`, `face`); copies in a `row`, a `circle` or `scatter`ed |
 | `set_shape`, `set_material` | a shape's size, bends, corners; a texture for elements |
 | `terrain` | natural ground: paint, raise, dig, smooth, flatten, walls, generated hills, in a level's style |
 | `group`, `ungroup` | name a group of elements, or undo one |
-| `create_prefab` | save elements as a prefab (`min_size`: [rule 2](#rule-2-prefabs-hold-structures-not-crumbs)) |
+| `create_prefab` | save elements as a prefab (`min_size`: [rule 1](#rule-1-prefabs-hold-structures-not-crumbs)) |
 | `match_lighting` | bring a structure of Jak II to the brightness of the level |
 | `set_actor` | what an object does (doors, bouncers, elevators, crates, presence) and its parameters |
 | `set_decor` | what the game does with decor: collision, ground material, bounce, launch |
@@ -486,7 +574,6 @@ export_level {"name": "mtstreet", "nickname": "mts"}
 
 | Tool | What it does |
 |---|---|
-| `find_gaps` | the holes through which the player would see the void ([rule 1](#rule-1-no-holes)) |
 | `set_camera` | look from a position at a point, or frame elements |
 | `set_view` | the game rendering, the hour, the weather, the rain, the lightning, the lamps, the effects |
 | `capture_view` | a picture of the view (`game_hour`: the game rendering at that hour; `only`: some elements alone) |
@@ -511,6 +598,5 @@ The complete description of each argument is what your client receives from `too
 | `no document` | `open_level` or `new_level` first |
 | An element's id is not found | ids change when elements are deleted and undone; find them again with `find_nodes` or `list_groups` |
 | A tool of this guide is missing | the editor is older than the guide: build it again, then restart your client |
-| A building shows its back | move it or turn it so that its back faces a wall or the edge of the level, or hide its back with other pieces ([rule 3](#rule-3-facades-are-not-buildings)) |
-| `find_gaps` finds edges everywhere | the region given is larger than the level: give the box the player can really walk, or close those edges |
+| A building shows its back | move it or turn it so that its back faces a wall or the edge of the level, or hide its back with other pieces ([rule 2](#rule-2-facades-are-not-buildings)) |
 | A piece is too dark or too bright | it took the light of the level around it; a structure of Jak II: `match_lighting` |
