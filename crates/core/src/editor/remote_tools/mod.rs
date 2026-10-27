@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value, json};
 
+use super::arrange::RepeatOptions;
 use super::levels::{LevelRole, copy_nodes, paste_nodes};
 use super::placement::PlacementKind;
 use super::structures::{K_STRUCTURE_KINDS, StructureParams};
@@ -192,7 +193,10 @@ impl Editor {
       "build_house" => self.tool_build_house(a),
       "build_structure" => self.tool_build_structure(a),
       "set_structure" => self.tool_set_structure(a),
+      "set_route" => self.tool_set_route(a).into(),
       "create_prefab_set" => self.tool_create_prefab_set(a),
+      "arrange" => self.tool_arrange(a).into(),
+      "repeat" => self.tool_repeat(a).into(),
       "building_kit" => self.tool_building_kit(a),
       "generate_navmesh" => self.tool_generate_navmesh(a),
       "export_navmesh" => self.tool_export_navmesh(a).into(),

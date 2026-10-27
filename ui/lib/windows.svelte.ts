@@ -13,6 +13,8 @@ import GuideWindow from "../components/windows/GuideWindow.svelte";
 import LogWindow from "../components/windows/LogWindow.svelte";
 import NavMeshWindow from "../components/windows/NavMeshWindow.svelte";
 import NewGroupWindow from "../components/windows/NewGroupWindow.svelte";
+import HistoryWindow from "../components/windows/HistoryWindow.svelte";
+import RepeatWindow from "../components/windows/RepeatWindow.svelte";
 import NewPrefabWindow from "../components/windows/NewPrefabWindow.svelte";
 import SaveAsWindow from "../components/windows/SaveAsWindow.svelte";
 import SettingsWindow from "../components/windows/SettingsWindow.svelte";
@@ -85,6 +87,19 @@ export const registry: Record<string, WindowDef> = {
     modal: true,
   }, // groups.cpp
   discard: { title: "discard.title", component: DiscardWindow, modal: true }, // confirm_discard
+  // Edit > Repeat the selection: its copies shown while it is open, taken away when closed
+  repeat: {
+    title: "repeat.title",
+    component: RepeatWindow,
+    width: 340,
+    anchor: "top-right",
+  },
+  history: {
+    title: "history.title",
+    component: HistoryWindow,
+    width: 360,
+    anchor: "top-right",
+  }, // Edit > History
   log: { title: "log.title", component: LogWindow, width: 760, height: 360 }, // View > Log
   settings: { title: "settings.title", component: SettingsWindow, width: 520 }, // File > Settings
   welcome: {

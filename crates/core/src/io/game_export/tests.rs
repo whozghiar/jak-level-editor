@@ -957,6 +957,162 @@ fn the_projects_exported_like_the_cpp_editor() {
 }
 
 #[test]
+fn gameplay_markers_exported() {
+  // a floor, Jak's start, a checkpoint facing +x with its flag (the editor's only), a death zone
+  let tmp = temp_dir("game-export-gameplay");
+  let mut s = Scene::new();
+  s.add(render("floor", make_floor(-1), 0, Vec3::new(0.0, 0.0, 0.0)));
+  let marker = |s: &mut Scene, name: &str, etype: &str, at: Vec3, yaw: f32| {
+    let mut a = Node {
+      name: name.into(),
+      kind: NodeKind::Actor,
+      extras: json!({"etype": etype}),
+      ..Default::default()
+    };
+    a.local.t = at;
+    a.local.r = Quat::axis_angle(Vec3::new(0.0, 1.0, 0.0), yaw);
+    let id = s.add(a);
+    s.add(render(
+      &format!("{name}-flag"),
+      make_box("flag", -1),
+      id,
+      Vec3::default(),
+    ));
+  };
+  marker(&mut s, "jak-start", K_START, Vec3::new(3.0, 1.0, 4.0), 0.0);
+  marker(
+    &mut s,
+    "checkpoint",
+    K_CHECKPOINT,
+    Vec3::new(20.0, 1.0, 0.0),
+    std::f32::consts::FRAC_PI_2,
+  );
+  let mut zone = render(
+    "death-zone",
+    make_box("zone", -1),
+    0,
+    Vec3::new(0.0, -30.0, 0.0),
+  );
+  zone.extras = json!({"og_decor": {"collision": {"kind": "invisible", "event": "endlessfall"}}});
+  s.add(zone);
+  // the start the export proposes (its README, its answer): the flag's
+  assert_eq!(export_start_point(&mut s, None), Vec3::new(3.0, 1.0, 4.0));
+  s.begin_frame();
+  let out = tmp.join("export");
+  let o = LevelExportOptions {
+    name: "my-cp".into(),
+    nickname: default_nickname("my-cp"),
+    iso_name: default_iso_name("my-cp"),
+    folder: from_path(&out),
+    start: Vec3::new(100.0, 100.0, 100.0),
+    ..Default::default()
+  };
+  let r = export_level(&s, None, &o).expect("exported");
+  let dir = out.join("custom_assets/jak3/levels/my-cp");
+  let info = read_text(&dir.join("level-info.gc"));
+  let code = read_text(&out.join("goal_src/jak3/levels/my-cp/my-cp-obs.gc"));
+  let jsonc = read_text(&dir.join("my-cp.jsonc"));
+  // the start where its flag is, a continue point for the checkpoint, Jak facing +x there
+  assert!(
+    info.contains(":name \"my-cp-start\"")
+      && info.contains("(static-vectorm 3.0 1.0 4.0)")
+      && info.contains(":name \"my-cp-checkpoint-1\"")
+      && info.contains("(static-vectorm 20.0 1.5 0.0)")
+      && info.contains("4 0 #x5a82 0 #x5a82"),
+    "{info}"
+  );
+  // its actor makes it Jak's continue point when he passes by
+  assert!(
+    code.contains("(set-continue! *game-info* \"my-cp-checkpoint-1\" #f)")
+      && jsonc.contains("my-cp-checkpoint-continue")
+      && r.behaviors == 1,
+    "{code}"
+  );
+  // the flags are not in the level; the death zone is, invisible, an endless fall (event 2)
+  let extras = glb_extras(&read_glb_json(&dir.join("my-cp.glb")));
+  assert!(
+    !extras.keys().any(|k| k.contains("flag"))
+      && extras
+        .get("death-zone")
+        .is_some_and(|e| e["collide_event"] == 2 && e["set_invisible"] == 1),
+    "{extras:?}"
+  );
+  let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn creatures_on_their_nav_mesh() {
+  // a grunt on the nav mesh of a floor, another off it: the first written with its nav mesh's id,
+  // the second left out with a note
+  let data = real_data();
+  let tmp = temp_dir("game-export-creatures");
+  let mut s = Scene::new();
+  s.add(render("floor", make_floor(-1), 0, Vec3::new(0.0, 0.0, 0.0)));
+  for (name, at) in [
+    ("grunt-1", Vec3::new(0.0, 0.0, 0.0)),
+    ("grunt-2", Vec3::new(50.0, 0.0, 0.0)),
+  ] {
+    let mut a = Node {
+      name: name.into(),
+      kind: NodeKind::Actor,
+      extras: json!({"etype": "grunt", K_SPAWN: true}),
+      ..Default::default()
+    };
+    a.local.t = at;
+    s.add(a);
+  }
+  s.begin_frame();
+  let mesh = crate::navmesh::NavMeshData {
+    origin: Vec3::default(),
+    verts: vec![
+      Vec3::new(-5.0, 0.0, -5.0),
+      Vec3::new(5.0, 0.0, -5.0),
+      Vec3::new(5.0, 0.0, 5.0),
+      Vec3::new(-5.0, 0.0, 5.0),
+    ],
+    polys: vec![crate::navmesh::NavPoly {
+      count: 4,
+      v: [0, 3, 2, 1],
+      ..Default::default()
+    }],
+  };
+  let out = tmp.join("export");
+  let o = LevelExportOptions {
+    name: "my-ai".into(),
+    nickname: default_nickname("my-ai"),
+    iso_name: default_iso_name("my-ai"),
+    folder: from_path(&out),
+    navmeshes: vec![mesh],
+    ..Default::default()
+  };
+  let r = export_level(&s, Some(&data), &o).expect("exported");
+  let jsonc = read_jsonc(&out.join("custom_assets/jak3/levels/my-ai/my-ai.jsonc"));
+  let actors = jsonc["actors"].as_array().unwrap();
+  let grunts: Vec<&Value> = actors.iter().filter(|a| a["etype"] == "grunt").collect();
+  assert_eq!(grunts.len(), 1, "{actors:?}");
+
+  let base = if o.base_id != 0 {
+    o.base_id
+  } else {
+    K_DEFAULT_BASE_ID
+  };
+
+  assert_eq!(
+    grunts[0]["lump"]["nav-mesh-actor"],
+    json!(["uint32", base + 9000])
+  );
+  assert!(
+    format!("{:?}", r.notes).contains("grunt-2"),
+    "{:?}",
+    r.notes
+  );
+  // its code and its model's art group in the level's DGO
+  let gd = read_text(&out.join("custom_assets/jak3/levels/my-ai/my-ai.gd"));
+  assert!(gd.contains("grunt-ag.go"), "{gd}");
+  let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn objects_needing_their_own_level() {
   // the volcano's breaking ground gets the level volcanoa by its name: in a level of its own it
   // is left out with a note (the game would die of it); a level replacing volcanoa keeps it

@@ -23,6 +23,7 @@ impl Editor {
     self.primary = 0;
     self.hovered = 0;
     self.edit_before = None;
+    self.repeating = None;
     self.stop_placement();
     self.game_chunks.reset();
     self.ocean = Default::default();

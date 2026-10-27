@@ -136,6 +136,12 @@
           tip: s.history.redo_label,
           run: () => call("redo"),
         },
+        // every step, to go back to any of them
+        {
+          label: t("menu.edit.history"),
+          tip: t("menu.edit.history.tip"),
+          run: () => windows.open("history"),
+        },
         null,
         {
           label: t("menu.edit.copy"),
@@ -154,6 +160,23 @@
           keys: "Ctrl+D",
           enabled: sel,
           run: () => call("duplicate_selection"),
+        },
+        // copies in a row, in a circle or scattered, shown as they change
+        {
+          label: t("menu.edit.repeat"),
+          enabled: sel,
+          tip: t("menu.edit.repeat.tip"),
+          run: () => windows.open("repeat"),
+        },
+        // the selection put in order
+        {
+          label: t("menu.edit.arrange"),
+          enabled: sel,
+          items: (["ground", "height", "line", "face"] as const).map((how) => ({
+            label: t(`menu.edit.arrange.${how}`),
+            tip: t(`menu.edit.arrange.${how}.tip`),
+            run: () => call("arrange_selection", { how }),
+          })),
         },
         {
           label: t("menu.edit.delete"),

@@ -600,7 +600,7 @@ impl Editor {
 
   /// The inspector's section (ui_preview_inspector): `section` false for a model of the catalog
   /// that does nothing (a piece of decor neither)
-  fn preview_options_json(&mut self, id: u32) -> Value {
+  pub(crate) fn preview_options_json(&mut self, id: u32) -> Value {
     let Some(kind) = self.scene.find(id).map(|n| n.kind) else {
       return Value::Null;
     };
@@ -625,8 +625,16 @@ impl Editor {
         })
         .collect()
     });
+    // the editor's gameplay flags (where Jak starts, a checkpoint, a creature's spawn point):
+    // nothing of theirs to preview
+    let marker = self.scene.children(id).into_iter().any(|c| {
+      self
+        .scene
+        .find(c)
+        .is_some_and(|n| n.extras.get("og_marker").is_some())
+    });
     json!({
-      "section": kind == NodeKind::Actor || o.any(),
+      "section": !marker && (kind == NodeKind::Actor || o.any()),
       "any": o.any(),
       "icon": o.icon,
       "motion": MOTION_KEYS[o.motion.clamp(0, 13) as usize],

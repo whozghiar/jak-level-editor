@@ -5,6 +5,7 @@
   import { engine } from "../lib/engine.svelte";
   import { gameView } from "./game_view";
   import { attachNavmeshOverlay } from "./navmesh_overlay";
+  import { attachRouteOverlay } from "./route_overlay";
   import { effects } from "./particles";
   import { attachPlaceTool } from "./place_tool.svelte";
   import { attachPreview } from "./preview.svelte";
@@ -24,6 +25,7 @@
     const offGame = gameView.attach();
     const offEffects = effects.attach();
     const offNavmesh = attachNavmeshOverlay();
+    const offRoute = attachRouteOverlay();
     const offSelect = selectTool.attach();
     const offPlace = attachPlaceTool();
     const offTools = [
@@ -46,6 +48,7 @@
       offGame();
       offEffects();
       offNavmesh();
+      offRoute();
       offSelect();
       offPlace();
       offTools.forEach((f) => f());

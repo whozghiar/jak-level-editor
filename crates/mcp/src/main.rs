@@ -361,14 +361,23 @@ fn tools() -> Value {
        shape (kind 'shape', name box, floor, wall, doorway, window, pillar, ramp, stairs, roof, \
        roof-hip, cylinder or ground, with size, and opening [width, height] for a doorway or a \
        window; its base's middle at the position; ramps and stairs rise towards +z before the \
-       turn, a roof's ridge runs along z), at a position in meters (Y is up). Returns the new \
-       elements with their id. Undoable in the editor.",
+       turn, a roof's ridge runs along z), or what makes the level playable (kind 'gameplay': \
+       'start' where Jak starts, one per level; 'checkpoint' where he continues from once he \
+       passed by; 'creature' where a creature of the game appears, its type in `creature`, on a \
+       nav mesh (generate_navmesh) or the export leaves it out; 'death_zone' an invisible box he \
+       falls to his death in, `size` like a shape's, under the level: the export writes them), at a position in meters (Y is up). Returns the \
+       new elements with their id. Undoable in the editor.",
       vec![
         (
           "kind",
-          json!({"type": "string", "enum": ["object", "model", "decor", "prefab", "shape"]}),
+          json!({"type": "string",
+                 "enum": ["object", "model", "decor", "prefab", "shape", "gameplay"]}),
         ),
         ("name", str("the object, part, prefab or shape")),
+        (
+          "creature",
+          str("kind 'gameplay', name 'creature': its type: grunt, kg-grunt, flitter or roboguard")
+        ),
         (
           "path",
           str("kind 'model': a .glb or .gltf file instead of a model of the game")
@@ -512,6 +521,54 @@ fn tools() -> Value {
       &["level", "position"],
     ),
     tool(
+      "arrange",
+      "Puts elements in order (one undo entry): 'ground' drops each onto the surface below it \
+       (nothing floats), 'height' sets all at the height of the first, 'line' lines them up \
+       evenly from the first to the farthest (3 or more), 'face' turns all the way the first \
+       faces.",
+      vec![
+        (
+          "ids",
+          ids("the elements, the first the reference; omitted: the selection"),
+        ),
+        (
+          "how",
+          json!({"type": "string", "enum": ["ground", "height", "line", "face"]}),
+        ),
+      ],
+      &["how"],
+    ),
+    tool(
+      "repeat",
+      "Copies elements (one undo entry): 'row' one after the other along x or z (spacing in \
+       meters, 0: touching), 'circle' around a circle of `radius` the elements are on (each \
+       turned with it), 'scatter' at random within `radius` on the ground, turned and sized a \
+       little differently (vary). Returns the copies' ids.",
+      vec![
+        (
+          "ids",
+          ids("the elements copied together; omitted: the selection")
+        ),
+        (
+          "mode",
+          json!({"type": "string", "enum": ["row", "circle", "scatter"]}),
+        ),
+        ("count", integer("copies, 1 to 200 (4)")),
+        (
+          "axis",
+          json!({"type": "string", "enum": ["x", "z"], "description": "row: its way (x)"}),
+        ),
+        (
+          "spacing",
+          num("row: meters from one to the next; 0 (default): touching"),
+        ),
+        ("radius", num("circle, scatter: meters (10)")),
+        ("vary", num("scatter: how much sizes vary, 0 to 0.5 (0.2)")),
+        ("seed", integer("scatter: another number, other places")),
+      ],
+      &["mode"],
+    ),
+    tool(
       "build_structure",
       "Builds a structure of a level's own pieces that grows when it is resized (set_structure): \
        a 'wall' (solid: the level's texture on both faces and its top, pillars and a plinth \
@@ -590,6 +647,23 @@ fn tools() -> Value {
         ("seed", integer("another look")),
       ],
       &["id"],
+    ),
+    tool(
+      "set_route",
+      "Gives a moving object (a platform, an elevator: an object whose type has a path) its \
+       route: the points it goes through, in meters in the world, from where it is; in the game \
+       it goes along them and back. Moved later, it takes its route with it. No points: its route \
+       taken away. Returns its route.",
+      vec![
+        ("id", integer("the moving object")),
+        (
+          "points",
+          json!({"type": "array", "items": {"type": "array", "items": {"type": "number"},
+                 "minItems": 3, "maxItems": 3},
+                 "description": "[[x, y, z], ...] in meters; its own place first"}),
+        ),
+      ],
+      &["id", "points"],
     ),
     tool(
       "create_prefab_set",
@@ -1565,7 +1639,7 @@ mod tests {
       .answer(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
       .unwrap();
     let tools = list["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 52);
+    assert_eq!(tools.len(), 55);
     let place = tools.iter().find(|t| t["name"] == "place").unwrap();
     assert_eq!(
       place["inputSchema"]["required"],

@@ -226,9 +226,66 @@ pub(super) fn vectorm(v: Vec3) -> String {
   )
 }
 
-pub(super) fn level_info(o: &LevelExportOptions, bottom: f32) -> String {
-  let (s, c) = (o.start, o.start + Vec3::new(0.0, 3.0, -6.0));
+/// A continue point of the level's (where Jak starts or continues): `yaw` the way he faces, the
+/// camera 6 m behind him and 3 m up
+fn continue_point(name: &str, level: &str, nick: &str, at: Vec3, yaw: f32) -> String {
+  let q = (
+    ((yaw / 2.0).sin() * 32767.0).round() as i32,
+    ((yaw / 2.0).cos() * 32767.0).round() as i32,
+  );
+  let cam = at + Quat::axis_angle(Vec3::new(0.0, 1.0, 0.0), yaw).rotate(Vec3::new(0.0, 3.0, -6.0));
+  // as the game writes them: 0, #x7fff; a negative one in decimal
+  let hex = |v: i32| {
+    if v <= 0 {
+      format!("{v}")
+    } else {
+      format!("#x{v:x}")
+    }
+  };
+  format!(
+    "(new 'static 'continue-point
+        :name \"{name}\"
+        :level '{level}
+        :trans (static-vectorm {})
+        :camera-trans (static-vectorm {})
+        :quat (new 'static 'vector4h :data (new 'static 'array int16 4 0 {} 0 {}))
+        :camera-rot (new 'static 'array int16 9 #x7fff 0 0 0 #x7fff 0 0 0 #x7fff)
+        :on-goto #f
+        :vis-nick '{nick}
+        :vehicle-type #x1b
+        :want-count 1
+        :want (new 'static 'inline-array level-buffer-state-small 1
+          (new 'static 'level-buffer-state-small :name '{level} :display? 'display)
+          )
+        :want-sound (new 'static 'array symbol 3 #f #f #f)
+        )",
+    vectorm(at),
+    vectorm(cam),
+    hex(q.0),
+    hex(q.1),
+  )
+}
+
+/// The level's definition: `start` where Jak starts and his yaw, `checkpoints` (their name in the
+/// editor, where, their yaw) continue points named <level>-checkpoint-<n>
+pub(super) fn level_info(
+  o: &LevelExportOptions,
+  start: (Vec3, f32),
+  bottom: f32,
+  checkpoints: &[(String, Vec3, f32)],
+) -> String {
   let (name, nick) = (&o.name, &o.nickname);
+  let mut continues = continue_point(&format!("{name}-start"), name, nick, start.0, start.1);
+  for (k, (_, p, yaw)) in checkpoints.iter().enumerate() {
+    continues += "\n      ";
+    continues += &continue_point(
+      &format!("{name}-checkpoint-{}", k + 1),
+      name,
+      nick,
+      *p + Vec3::new(0.0, 0.5, 0.0),
+      *yaw,
+    );
+  }
   format!(
     "(define {name}
   (new 'static 'level-load-info
@@ -253,22 +310,7 @@ pub(super) fn level_info(o: &LevelExportOptions, bottom: f32) -> String {
     :draw-priority 10.0
     :base-task-mask (task-mask task0)
     :bigmap-id (bigmap-id none)
-    :continues '((new 'static 'continue-point
-        :name \"{name}-start\"
-        :level '{name}
-        :trans (static-vectorm {})
-        :camera-trans (static-vectorm {})
-        :quat (new 'static 'vector4h :data (new 'static 'array int16 4 0 0 0 #x7fff))
-        :camera-rot (new 'static 'array int16 9 #x7fff 0 0 0 #x7fff 0 0 0 #x7fff)
-        :on-goto #f
-        :vis-nick '{nick}
-        :vehicle-type #x1b
-        :want-count 1
-        :want (new 'static 'inline-array level-buffer-state-small 1
-          (new 'static 'level-buffer-state-small :name '{name} :display? 'display)
-          )
-        :want-sound (new 'static 'array symbol 3 #f #f #f)
-        )
+    :continues '({continues}
       )
     :callback-list '()
     :borrow #f
@@ -284,8 +326,6 @@ pub(super) fn level_info(o: &LevelExportOptions, bottom: f32) -> String {
   (cons! *level-load-list* '{name})
   )
 ",
-    vectorm(s),
-    vectorm(c),
     meters(bottom)
   )
 }

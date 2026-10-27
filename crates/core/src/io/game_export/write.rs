@@ -19,6 +19,11 @@ pub(super) struct Exported {
   name: String,
 }
 
+/// the id of the level's first nav mesh entity, far after its actors' and regions'
+fn nav_first_aid(base_id: u32) -> u32 {
+  base_id + 9000
+}
+
 /// Writes the level (see the module's doc). `data`: the game's data (None: the actor types are not
 /// checked). The scene's cache must be the current one (Scene::begin_frame after the last changes).
 /// The error is a text to show (a translation, or "cannot write <file>").
@@ -424,6 +429,10 @@ pub fn export_level(
   // the name in the editor -> in the level
   let mut name_of_node: HashMap<String, String> = HashMap::new();
   let mut absent = 0;
+  // the gameplay markers placed in the editor (editor/arrange): where Jak starts, the checkpoints
+  // (their name, where, their yaw)
+  let mut start_marker: Option<(Vec3, f32)> = None;
+  let mut checkpoints: Vec<(String, Vec3, f32)> = Vec::new();
   {
     let mut names = HashSet::new();
     for i in 0..count {
@@ -436,6 +445,18 @@ pub fn export_level(
         .get("etype")
         .and_then(Value::as_str)
         .unwrap_or_default();
+      if etype == K_START || etype == K_CHECKPOINT {
+        if exported_part(i) && cache.visible[i] {
+          let t = Transform::from_matrix(&cache.worlds[i]);
+          let f = t.r.rotate(Vec3::new(0.0, 0.0, 1.0));
+          if etype == K_START {
+            start_marker = Some((t.t, f.x.atan2(f.z)));
+          } else {
+            checkpoints.push((n.name.clone(), t.t, f.x.atan2(f.z)));
+          }
+        }
+        continue;
+      }
       // without actors: decor alone, but the platforms and bridges needed to get around stay
       // (the same rule the document itself loads a level by)
       if !o.actors && !data.is_some_and(|d| d.object_family(etype) == "platform") {
@@ -493,6 +514,13 @@ pub fn export_level(
           &format!("{} ({level})", n.name),
           1,
         );
+        continue;
+      }
+      // a creature's spawn point: on a nav mesh, or the creature could not walk (left out)
+      if n.extras.get(K_SPAWN).is_some()
+        && navmesh_under(&o.navmeshes, cache.worlds[i].col3(3)).is_none()
+      {
+        notes.add("export.note.spawn_no_navmesh", &n.name, 1);
         continue;
       }
       if !n.name.is_empty() {
@@ -663,6 +691,15 @@ pub fn export_level(
     // its data (res lumps)
     let mut lump = Map::new();
     lump.insert("name".into(), e.name.clone().into());
+    // a creature: the nav mesh it walks on (its entity's id, written with the nav meshes)
+    if n.extras.get(K_SPAWN).is_some()
+      && let Some(k) = navmesh_under(&o.navmeshes, pos)
+    {
+      lump.insert(
+        "nav-mesh-actor".into(),
+        json!(["uint32", nav_first_aid(base_id) + k as u32]),
+      );
+    }
     let types = n.extras.get("lump_types").filter(|t| t.is_object());
     if let Some(Value::Object(lj)) = n.extras.get("lump") {
       for (tag, v) in lj {
@@ -864,6 +901,35 @@ pub fn export_level(
       }
     }
   }
+  // the checkpoints: a continue point each (level-info.gc) and an actor that makes it Jak's when
+  // he passes by; a level replacing one of the game's keeps the game's continue points
+  if replacing && !checkpoints.is_empty() {
+    notes.add("export.note.checkpoints_replaced", "", checkpoints.len());
+  } else {
+    let mut taken: HashSet<String> = exported.iter().map(|e| e.name.clone()).collect();
+    for (k, (name, p, _)) in checkpoints.iter().enumerate() {
+      let cp = format!("{}-checkpoint-{}", o.name, k + 1);
+      let ty = behavior_type_name(&o.name, &format!("{name}-continue"));
+      let comment = format!("{name}: Jak passing by continues from here ({cp})");
+      generated += &checkpoint_code(&ty, &cp, 4.0, &comment);
+      generated.push('\n');
+      let mut actor = format!("{name}-continue");
+      let mut i = 2;
+      while taken.contains(&actor) {
+        actor = format!("{name}-continue-{i}");
+        i += 1;
+      }
+      taken.insert(actor.clone());
+      actor_lines.push(format!(
+        "{{\"trans\": [{x}, {y}, {z}], \"etype\": \"{ty}\", \"game_task\": 0, \"quat\": [0.0, 0.0, 0.0, 1.0], \"bsphere\": [{x}, {y}, {z}, 16.0], \"lump\": {{\"name\": \"{actor}\"}}}}",
+        x = num(p.x as f64),
+        y = num(p.y as f64),
+        z = num(p.z as f64),
+      ));
+      rep.actors += 1;
+      rep.behaviors += 1;
+    }
+  }
   if kill_masks > 0 {
     notes.add("export.note.kill_masks", "", kill_masks);
   }
@@ -893,8 +959,8 @@ pub fn export_level(
 
   let mut nav_line = String::new();
   if !o.navmeshes.is_empty() {
-    // their ids after the actors', far from them
-    let first = base_id + rep.actors as u32 + 1000;
+    // their ids far after the actors' (a creature names its nav mesh by it)
+    let first = nav_first_aid(base_id);
     let entries: Vec<NavExportEntry> = o
       .navmeshes
       .iter()
@@ -1030,10 +1096,11 @@ pub fn export_level(
   rep.files.push(from_path(&gd_path));
 
   // the level's definition in the game's code
+  let (start, start_yaw) = start_marker.unwrap_or((o.start, 0.0));
   let bottom = if bounds.valid() {
-    bounds.lo.y
+    bounds.lo.y.min(start.y)
   } else {
-    o.start.y
+    start.y
   } - 20.0;
   let info_path = dir.join("level-info.gc");
   let info_text = if let Some(r) = replaced {
@@ -1056,7 +1123,7 @@ pub fn export_level(
   } else {
     format!(
       ";; add this to goal_src/jak3/engine/level/level-info.gc\n\n{}",
-      level_info(o, bottom)
+      level_info(o, (start, start_yaw), bottom, &checkpoints)
     )
   };
   write_text(&info_path, &info_text)?;

@@ -663,6 +663,16 @@ const BALL = shape("cylinder", [0.6, 1, 0.6], [1, 0.9, 0.3]);
 const ROOF = shape("roof", [4.4, 1.6, 4.4], CRATE);
 const TOWER = shape("box", [2, 5, 2], WALL_COLOR);
 const CAP = shape("roof-hip", [2.6, 1.4, 2.6], RED_PAD);
+// what makes a level playable: flags on poles, a death zone, the walkable ground, a platform
+const POLE = shape("cylinder", [0.12, 2, 0.12], [0.45, 0.45, 0.45]);
+const START_FLAG = shape("box", [0.8, 0.5, 0.05], [0.2, 0.5, 1]);
+const CHECK_FLAG = shape("box", [0.8, 0.5, 0.05], [0.25, 0.9, 0.35]);
+const SPAWN_FLAG = shape("box", [0.8, 0.5, 0.05], [1, 0.45, 0.12]);
+const ZONE = shape("box", [16, 0.3, 6], [1, 0.22, 0.15]);
+const STEP = shape("box", [2.2, 0.5, 2.2], [0.75, 0.78, 0.82]);
+const NAV = shape("box", [1, 0.03, 1], [0.15, 0.9, 0.8]);
+const PLATFORM = shape("box", [2.2, 0.35, 2.2], [0.85, 0.7, 0.4]);
+const ROUTE_POLE = shape("cylinder", [0.15, 0.8, 0.15], [1, 0.85, 0.15]);
 const BAY = shape("box", [2, 3, 0.4], null);
 const PIER = shape("box", [0.45, 3.2, 0.8], [0.55, 0.5, 0.45]);
 
@@ -684,7 +694,11 @@ export const demoNames = [
   "story",
   "local",
   "free_rotate",
+  "navmesh",
+  "route",
+  "spawn",
   "grow",
+  "creature",
 ];
 
 /**
@@ -951,6 +965,133 @@ export function drawDemo(
     label(
       corner,
       before ? "guide.demo.story_before" : "guide.demo.story_after",
+    );
+  } else if (name === "navmesh" || name === "creature") {
+    // the walkable ground appears around two crates, a creature walks on it between them; or
+    // (creature) on that ground, a click puts the orange flag the creature appears at
+    const flagged = name === "creature";
+    period(flagged ? 6 : 5);
+    mesh(BOX, translate([-1.5, 0, -0.5]));
+    mesh(BOX, translate([1.8, 0, 1]));
+    const k = flagged ? 1 : ease(t, 0.6, 1.6);
+    if (k > 0) {
+      // the cells of the nav mesh: not under the crates nor too close to them
+      const near = (x: number, z: number, cx: number, cz: number) =>
+        Math.abs(x - cx) < 1.6 && Math.abs(z - cz) < 1.6;
+      for (let x = -5; x <= 5; x += 1.25)
+        for (let z = -4; z <= 4; z += 1.25) {
+          if (near(x, z, -1.5, -0.5) || near(x, z, 1.8, 1)) continue;
+          mesh(
+            NAV,
+            chain(translate([x, 0.01, z]), scale([1.1, 1, 1.1])),
+            NONE,
+            0.35 * k,
+          );
+        }
+    }
+    const path: V3[] = [
+      [-4, 0, 3],
+      [-0.2, 0, 1.6],
+      [0.2, 0, -2.6],
+      [4, 0, -3],
+    ];
+    const born = flagged ? 2.6 : 1.8;
+    if (flagged) {
+      // the cursor to the ground, a click: the flag
+      const at = screen(path[0]);
+      cursor(t < 1.2 ? mix2(start, at, ease(t, 0.2, 1.2)) : at);
+      click(at, (t - 1.3) / 0.4);
+      if (t > 1.4) {
+        mesh(POLE, translate(add(path[0], [-0.6, 0, -0.4])));
+        mesh(SPAWN_FLAG, translate(add(path[0], [-0.15, 1.45, -0.4])));
+      }
+    }
+    if (t > born) {
+      const u = ease(t, born, born + 2.8);
+      const seg = Math.min(2, Math.floor(u * 3));
+      mesh(BALL, translate(mix(path[seg], path[seg + 1], u * 3 - seg)));
+    }
+    label(
+      corner,
+      flagged
+        ? t < born
+          ? "guide.demo.creature_place"
+          : "guide.demo.creature_walk"
+        : k < 1
+          ? "guide.demo.navmesh"
+          : "guide.demo.navmesh_walk",
+    );
+  } else if (name === "route") {
+    // three clicks give a platform its route; then it goes along it
+    period(7);
+    const points: V3[] = [
+      [-3.5, 0.6, 1],
+      [0, 0.6, 2.5],
+      [2.5, 2.2, -0.5],
+      [3.5, 3.2, -3],
+    ];
+    const clicks = [1.2, 2, 2.8];
+    const shown = 1 + clicks.filter((c) => t > c).length;
+    for (let i = 0; i + 1 < shown; i++)
+      pic.lines.push({
+        a: screen(points[i]),
+        b: screen(points[i + 1]),
+        color: "#ffd933",
+      });
+    for (let i = 1; i < shown; i++) mesh(ROUTE_POLE, translate(points[i]));
+    let at = points[0];
+    if (t > 3.4) {
+      const u = ease(t, 3.4, 6.4) * 3;
+      const seg = Math.min(2, Math.floor(u));
+      at = mix(points[seg], points[seg + 1], u - seg);
+    }
+    mesh(PLATFORM, translate(add(at, [0, -0.35, 0])), t < 3.2 ? SELECTED : NONE);
+    clicks.forEach((c, i) => click(screen(points[i + 1]), (t - c) / 0.4));
+    const aim = clicks.findIndex((c) => t < c);
+    cursor(
+      aim < 0
+        ? screen(points[3])
+        : mix2(
+            aim === 0 ? start : screen(points[aim]),
+            screen(points[aim + 1]),
+            ease(t, aim === 0 ? 0.2 : clicks[aim - 1] + 0.2, clicks[aim]),
+          ),
+    );
+    label(corner, t < 3.2 ? "guide.demo.route" : "guide.demo.route_go");
+  } else if (name === "spawn") {
+    // Jak starts at the blue flag, passes the green one, falls into the red zone: back at the green
+    period(6);
+    for (const p of [
+      [-4, 0, 0],
+      [0, 0.5, 0],
+      [4, 1, 0],
+    ] as V3[])
+      mesh(STEP, translate(p));
+    mesh(ZONE, translate([0, -3, 0]), NONE, 0.45);
+    const flag = (at: V3, f: Shape) => {
+      mesh(POLE, translate(at));
+      mesh(f, translate(add(at, [0.45, 1.45, 0])));
+    };
+    flag([-4.6, 0.5, -0.6], START_FLAG);
+    flag([-0.6, 1, -0.6], CHECK_FLAG);
+    let p: V3;
+    if (t < 1.2) p = [-4, 0.5, 0];
+    else if (t < 2.2) {
+      const u = t - 1.2;
+      p = add(mix([-4, 0.5, 0], [0, 1, 0], u), [0, 3 * u * (1 - u), 0]);
+    } else if (t < 3.6) {
+      // a jump too short: he falls
+      const u = (t - 2.2) / 1.4;
+      p = add(mix([0, 1, 0], [2.6, -3, 0], u), [0, 3 * u * (1 - u), 0]);
+    } else p = [0, 1, 0];
+    if (!(t > 3.5 && t < 3.9)) mesh(BALL, translate(p));
+    label(
+      corner,
+      t < 1.2
+        ? "guide.demo.spawn_start"
+        : t < 3.6
+          ? "guide.demo.spawn_fall"
+          : "guide.demo.spawn_back",
     );
   } else if (name === "grow") {
     // a wall stretched by its end: more bays and pillars, not a wider texture

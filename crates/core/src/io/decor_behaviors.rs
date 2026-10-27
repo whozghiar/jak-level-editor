@@ -427,6 +427,55 @@ pub fn launch_code(ty: &str, radius: f32, to: [f32; 3], time: f32, comment: &str
   o
 }
 
+/// The GOAL code of a checkpoint: Jak within `radius` meters of it continues from the continue
+/// point `continue_name` (the level's, level-info.gc) when he dies or falls
+pub fn checkpoint_code(ty: &str, continue_name: &str, radius: f32, comment: &str) -> String {
+  // the game's own way (game-info.gc): set-continue! by the continue point's name, once (not each
+  // frame Jak stands there)
+  let r = meters_of(radius);
+  let mut o = String::new();
+  if !comment.is_empty() {
+    let _ = writeln!(o, ";; {comment}");
+  }
+  let _ = write!(
+    o,
+    "(deftype {ty} (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+(defmethod init-from-entity! ((this {ty}) (arg0 entity-actor))
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (go (method-of-object this idle))
+  )
+
+(defstate idle ({ty})
+  :virtual #t
+  :trans (behavior ()
+    (when (and *target*
+               (< (vector-vector-xz-distance (-> self root trans) (target-pos 0)) {r})
+               (< (fabs (- (-> (target-pos 0) y) (-> self root trans y))) 16384.0)
+               (not (string= (-> *game-info* current-continue name) \"{continue_name}\"))
+               )
+      (set-continue! *game-info* \"{continue_name}\" #f)
+      )
+    )
+  :code (behavior ()
+    (until #f
+      (suspend)
+      )
+    #f
+    )
+  )
+
+"
+  );
+  o
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

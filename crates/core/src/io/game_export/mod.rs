@@ -48,11 +48,14 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::editor::arrange::{K_CHECKPOINT, K_SPAWN, K_START};
 use crate::i18n::{tr, tr_en};
 use crate::io::behaviors::{
   Condition, ConditionKind, behavior_code, behavior_type_name, condition_of,
 };
-use crate::io::decor_behaviors::{bounce_code, collision_extras, decor_behavior_of, launch_code};
+use crate::io::decor_behaviors::{
+  bounce_code, checkpoint_code, collision_extras, decor_behavior_of, launch_code,
+};
 use crate::io::game_data::{GameData, LevelInfo};
 use crate::io::gltf::{ExportMode, ExportOptions, ImportOptions, export_glb, import_gltf};
 use crate::io::nav_export::{NavExportEntry, write_navmesh_blob};
@@ -60,7 +63,7 @@ use crate::math::{
   AABB, Mat4, Quat, Ray, Transform, Vec3, cross, dot, length, length2, normalize, radians,
   ray_aabb, transform_ray,
 };
-use crate::navmesh::{NavMeshData, navmesh_ignores};
+use crate::navmesh::{NavMeshData, navmesh_ignores, navmesh_under};
 use crate::prefs::Prefs;
 use crate::scene::pick::{PickFilter, pick};
 use crate::scene::{Mesh, Node, NodeKind, Primitive, Scene};
@@ -416,6 +419,15 @@ pub fn check_continues(scene: &Scene, data: Option<&GameData>, level: &str) -> V
 /// level opened (where its shell is now) inside the document, else the ground at its middle. Makes
 /// the scene's cache again (the world matrices after the last changes).
 pub fn export_start_point(scene: &mut Scene, data: Option<&GameData>) -> Vec3 {
+  // the editor's start flag (Gameplay: Jak starts here)
+  scene.begin_frame();
+  if let Some(i) = scene
+    .nodes
+    .iter()
+    .position(|n| n.kind == NodeKind::Actor && n.extras["etype"] == K_START)
+  {
+    return scene.cache().worlds[i].col3(3);
+  }
   // the level opened where it is now: the group of its shell (moved with it)
   let prefix = format!("{}-", scene.settings.level);
   let placed = scene

@@ -399,7 +399,7 @@ fn shapes_placed_one_and_many() {
       "place",
       json!({"kind": "thing", "name": "x", "position": [0, 0, 0]})
     ),
-    "kind: object, model, decor, prefab or shape"
+    "kind: object, model, decor, prefab, shape or gameplay"
   );
   // many at once, one undo step; an item refused says why
   let items = json!([
@@ -421,4 +421,27 @@ fn shapes_placed_one_and_many() {
   assert_eq!(undone["change"], strf!(tr("undo.place_many"), 2));
   assert_eq!(ok(&ed, "get_status", json!({}))["document"]["elements"], 3);
   assert_eq!(ok(&ed, "get_node", json!({"id": floor}))["id"], floor);
+  // what makes it playable: a checkpoint, a death zone of the size asked
+  let cp = ok(
+    &ed,
+    "place",
+    json!({"kind": "gameplay", "name": "checkpoint", "position": [3, 0, 3]}),
+  );
+  assert_eq!(cp["nodes"][0]["kind"], "actor");
+  let zone = ok(
+    &ed,
+    "place",
+    json!({"kind": "gameplay", "name": "death_zone", "position": [0, -20, 0], "size": [50, 1, 50]}),
+  );
+  assert_eq!(zone["nodes"][0]["size"], json!([50.0, 1.0, 50.0]));
+  // the pillar repeated in a row of 3, the copies dropped onto the ground
+  let id = pillar["id"].clone();
+  let rep = ok(
+    &ed,
+    "repeat",
+    json!({"ids": [id], "mode": "row", "count": 3, "spacing": 4}),
+  );
+  assert_eq!(rep["copies"], 3);
+  let moved = ok(&ed, "arrange", json!({"ids": rep["ids"], "how": "face"}));
+  assert_eq!(moved["moved"], 0);
 }

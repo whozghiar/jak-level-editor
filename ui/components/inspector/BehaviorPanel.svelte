@@ -4,6 +4,7 @@
   // there at all), and its parameters, every res lump the code of its type reads (game data: params),
   // typed. The engine's calls: actor_behavior, set_actor_behavior, set_actor_param (behaviors.rs).
   import { t } from "../../lib/i18n";
+  import { call } from "../../lib/rpc";
   import Tip from "../common/Tip.svelte";
   import Condition from "./Condition.svelte";
   import DragNumber from "./DragNumber.svelte";
@@ -43,6 +44,12 @@
   let { id }: { id: number } = $props();
   const q = query<Behavior>("actor_behavior", () => ({ id }));
   const b = $derived(q.value);
+  // where it goes, when its type moves along a route (a platform, an elevator)
+  const routeQ = query<{ tag: string; points: number[][] } | null>(
+    "actor_route",
+    () => ({ id }),
+  );
+  const route = $derived(routeQ.value);
 
   const kUnits = 4096; // game units per meter
   const doorModes = ["approach", "locked", "always", "when"];
@@ -280,6 +287,32 @@
     </div>
     <Tip text={t("behavior.present.tip")} />
   </div>
+
+  <!-- its route: points clicked in the view, drawn over it in yellow -->
+  {#if route}
+    <h3 class={heading}>{t("route.title")}</h3>
+    <p class={muted}>
+      {route.points.length
+        ? t("route.count", route.points.length)
+        : t("route.empty")}
+    </p>
+    <div class="mt-1 flex flex-wrap gap-1.5">
+      <button
+        class={small}
+        onclick={() => call("start_route_placement")}
+        >{t("route.draw")}</button
+      >
+      <Tip text={t("route.draw.tip")} />
+      {#if route.points.length}
+        <button
+          class={small}
+          onclick={() => commit("set_route", { id, points: [] })}
+          >{t("route.clear")}</button
+        >
+        <Tip text={t("route.clear.tip")} />
+      {/if}
+    </div>
+  {/if}
 
   {#if b.params.length}
     <details class="mt-3">

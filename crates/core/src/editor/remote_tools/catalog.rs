@@ -522,7 +522,26 @@ impl Editor {
         };
         self.start_part_placement(&level.background, found, false);
       }
-      _ => return fail("kind: object, model, decor, prefab or shape".into()),
+      "gameplay" => {
+        // where Jak starts, a checkpoint, a creature's spawn point, a death zone (its size like a
+        // shape's)
+        if name == "creature" {
+          self.placing.creature = str_arg(a, "creature").to_string();
+        }
+        if !self.start_gameplay_placement(name, false) {
+          return fail(if name == "creature" {
+            "creature: grunt, kg-grunt, flitter or roboguard (the creatures a level can place)"
+              .into()
+          } else {
+            "name: start, checkpoint, creature or death_zone".into()
+          });
+        }
+        if let Some(size) = vec3_arg(a, "size") {
+          let p = self.placement_mut();
+          p.shape.size = Vec3::new(size.x.max(0.1), size.y.max(0.1), size.z.max(0.1));
+        }
+      }
+      _ => return fail("kind: object, model, decor, prefab, shape or gameplay".into()),
     }
     self.placement_mut().yaw = yaw;
 

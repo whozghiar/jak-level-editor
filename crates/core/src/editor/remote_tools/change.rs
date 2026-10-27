@@ -4,6 +4,70 @@
 use super::*;
 
 impl Editor {
+  /// The route of a moving object (a platform, an elevator): `points` in meters in the world,
+  /// from where it is; none: its route taken away
+  pub(super) fn tool_set_route(&mut self, a: &Value) -> R {
+    let id = int(a, "id", 0) as u32;
+    let points: Vec<Vec3> = a
+      .get("points")
+      .and_then(Value::as_array)
+      .map(|l| l.iter().filter_map(vec3_of).collect())
+      .unwrap_or_default();
+    self.set_route(id, &points, "undo.route")?;
+    Ok(self.actor_route(id))
+  }
+
+  /// `ids` (else the selection) put in order: how "ground", "height", "line" or "face"
+  pub(super) fn tool_arrange(&mut self, a: &Value) -> R {
+    if let Some(list) = a.get("ids").and_then(Value::as_array) {
+      let ids: Vec<u32> = list
+        .iter()
+        .filter_map(|v| v.as_u64())
+        .map(|v| v as u32)
+        .collect();
+      self.selection = ids.iter().copied().collect();
+      self.primary = ids.first().copied().unwrap_or(0);
+    }
+    if self.selection.is_empty() {
+      return Err("ids: the elements to arrange (or select them first)".into());
+    }
+    let how = str_arg(a, "how");
+    if !["ground", "height", "line", "face"].contains(&how) {
+      return Err("how: ground, height, line or face".into());
+    }
+    let moved = self.arrange_selection(how);
+    Ok(json!({"moved": moved}))
+  }
+
+  /// Copies of `ids` (else the selection) in a row, a circle or scattered, kept: one undo entry
+  pub(super) fn tool_repeat(&mut self, a: &Value) -> R {
+    if let Some(list) = a.get("ids").and_then(Value::as_array) {
+      self.selection = list
+        .iter()
+        .filter_map(|v| v.as_u64())
+        .map(|v| v as u32)
+        .collect();
+    }
+    if self.selection.is_empty() {
+      return Err("ids: the elements to repeat (or select them first)".into());
+    }
+    let o = RepeatOptions::from_json(a);
+    if !["row", "circle", "scatter"].contains(&o.mode.as_str()) {
+      return Err("mode: row, circle or scatter".into());
+    }
+    self.repeat_finish(false);
+    let n = self.repeat_preview(&o);
+    self.repeat_finish(true);
+    let nodes: Vec<Value> = self
+      .selection
+      .iter()
+      .rev()
+      .take(n)
+      .map(|&id| json!(id))
+      .collect();
+    Ok(json!({"copies": n, "ids": nodes}))
+  }
+
   pub(super) fn tool_set_shape(&mut self, a: &Value) -> R {
     let id = uint(a, "id");
     let p = self

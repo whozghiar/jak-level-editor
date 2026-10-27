@@ -532,6 +532,19 @@ impl Editor {
       | "level_style" => self
         .placement_call(name, a)
         .unwrap_or_else(|| Err(format!("unknown call: {name}"))),
+      // arrange.rs
+      "arrange_selection"
+      | "repeat_preview"
+      | "repeat_finish"
+      | "history_list"
+      | "history_goto"
+      | "start_gameplay_placement"
+      | "actor_route"
+      | "start_route_placement"
+      | "set_route"
+      | "gameplay_list" => self
+        .arrange_call(name, a)
+        .unwrap_or_else(|| Err(format!("unknown call: {name}"))),
       // structures.rs
       "building_kit"
       | "start_house_placement"

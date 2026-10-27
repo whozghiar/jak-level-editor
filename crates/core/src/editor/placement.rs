@@ -13,6 +13,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use super::arrange::{K_CREATURE, K_ROUTE_POINT, K_SPAWN, K_START, marker_mesh};
 use super::groups::{new_group_id, set_group_tag};
 use super::levels::{style_water_mesh, unique_name};
 use super::structures::{BuildingKit, StructureParams};
@@ -44,6 +45,8 @@ pub enum PlacementKind {
   Shape,
   /// a house in the style of a level (editor/structures): its box under the cursor
   House,
+  /// where Jak starts, a checkpoint (editor/arrange): an actor with a flag the export never draws
+  Marker,
 }
 
 /// What the Place tool puts in the level: a prefab, an object of the catalog, a model, a decor
@@ -68,6 +71,8 @@ pub struct Placement {
   pub material: i32,
   /// House: the structure it is (`shape` is its box)
   pub house: StructureParams,
+  /// Shape: what its node's extras get (a death zone's collision)
+  pub extras: Value,
   /// radians (R, Ctrl + wheel)
   pub yaw: f32,
   /// the turn the right button gives it, in the world (applied after the yaw)
@@ -89,6 +94,7 @@ impl Default for Placement {
       shape: ShapeParams::default(),
       material: -1,
       house: StructureParams::default(),
+      extras: Value::Null,
       yaw: 0.0,
       tilt: Quat::default(),
       once: false,
@@ -104,6 +110,7 @@ impl Placement {
       PlacementKind::Part => format!("part:{}#{}", self.path, self.part.mesh_node),
       PlacementKind::Shape => format!("shape:{}#{}", self.shape.to_json(), self.material),
       PlacementKind::House => format!("house:{}", self.house.to_json()),
+      PlacementKind::Marker => format!("marker:{}", self.name),
       PlacementKind::Prefab => self.path.clone(),
     }
   }
@@ -132,6 +139,8 @@ pub(crate) struct PlacingState {
   pub styles: BTreeMap<String, LevelStyle>,
   /// what its buildings are made of, read once its decor is, by level (editor/structures)
   pub kits: BTreeMap<String, BuildingKit>,
+  /// the creature a spawn point gives (editor/arrange), its type
+  pub creature: String,
 }
 
 fn surface_json(s: &Surface) -> Value {
@@ -156,7 +165,7 @@ impl Editor {
     &mut self.placing.placement
   }
 
-  fn begin_placement(&mut self, p: Placement) {
+  pub(crate) fn begin_placement(&mut self, p: Placement) {
     self.placing.placement = p;
     self.tool = ToolMode::Place;
   }
@@ -324,6 +333,7 @@ impl Editor {
           merge_mesh(&mut self.scene, &part, &level.textures, &level.materials)
         }
       }
+      PlacementKind::Marker => marker_mesh(&pl.name),
       PlacementKind::Shape | PlacementKind::House => {
         let material = if pl.material >= 0 {
           pl.material
@@ -342,7 +352,7 @@ impl Editor {
     let pl = &self.placing.placement;
     match pl.kind {
       PlacementKind::Part => self.catalog.store.failed_level(&pl.path),
-      PlacementKind::Shape | PlacementKind::House => false,
+      PlacementKind::Shape | PlacementKind::House | PlacementKind::Marker => false,
       _ => !pl.path.is_empty() && self.catalog.store.failed_model(&pl.path),
     }
   }
@@ -384,6 +394,16 @@ impl Editor {
   pub fn place_at(&mut self, m: &Mat4) -> Vec<u32> {
     self.placement_caches();
     let pl = self.placing.placement.clone();
+    if pl.kind == PlacementKind::Marker && pl.name == K_ROUTE_POINT {
+      // a point of the route of the actor the tool was started on: no element of its own
+      let id = pl.path.parse().unwrap_or(0);
+      if let Err(e) = self.route_add_point(id, m.col3(3)) {
+        log_warn!("{}", e);
+      }
+      self.selection = [id].into_iter().collect();
+      self.primary = id;
+      return Vec::new();
+    }
     if pl.kind == PlacementKind::House {
       // the house built there (its pieces placed one by one); the next one a little different
       return match self.build_structure(&pl.house, m) {
@@ -398,7 +418,9 @@ impl Editor {
       };
     }
     let mut roots = Vec::new();
-    let change = NodeChange::new(&self.scene);
+    let mut change = NodeChange::new(&self.scene);
+    // what the placement replaces (the start before)
+    let mut gone: Vec<u32> = Vec::new();
     if pl.kind == PlacementKind::Prefab {
       let Some(prefab) = self.prefab_scene(&pl.path) else {
         return roots;
@@ -486,14 +508,63 @@ impl Editor {
         PlacementKind::Shape => {
           // its own mesh: its size changes apart from the others'
           let own = mesh.map(|m| Arc::new(Mesh::clone(&m)));
+          let mut extras = json!({"og_shape": pl.shape.to_json()});
+          if let Some(o) = pl.extras.as_object() {
+            for (k, v) in o {
+              extras[k] = v.clone();
+            }
+          }
           roots.push(self.scene.add(Node {
             name: unique_name(&pl.name, &mut names),
             kind: NodeKind::Render,
             mesh: own,
-            extras: json!({"og_shape": pl.shape.to_json()}),
+            extras,
             local,
             ..Default::default()
           }));
+        }
+        PlacementKind::Marker => {
+          // one start: the one before goes
+          if pl.name == K_START {
+            let old: Vec<u32> = self
+              .scene
+              .nodes
+              .iter()
+              .filter(|n| n.kind == NodeKind::Actor && n.extras["etype"] == K_START)
+              .map(|n| n.id)
+              .collect();
+            gone = old;
+          }
+          // a creature's spawn point: an actor of its type, shown by its flag
+          let (name, extras) = if pl.name == K_CREATURE {
+            let mut i = 1;
+            let name = loop {
+              let name = format!("{}-{i}", pl.path);
+              if !names.contains(&name) {
+                break name;
+              }
+              i += 1;
+            };
+            (name, json!({"etype": pl.path, K_SPAWN: true}))
+          } else {
+            (unique_name(&pl.name, &mut names), json!({"etype": pl.name}))
+          };
+          let id = self.scene.add(Node {
+            name,
+            kind: NodeKind::Actor,
+            extras,
+            local,
+            ..Default::default()
+          });
+          self.scene.add(Node {
+            parent: id,
+            name: format!("{}-flag", pl.name),
+            kind: NodeKind::Render,
+            mesh,
+            extras: json!({"og_marker": true}),
+            ..Default::default()
+          });
+          roots.push(id);
         }
         PlacementKind::Part | PlacementKind::Prefab | PlacementKind::House => {
           let mut base = pl
@@ -525,6 +596,10 @@ impl Editor {
         }
       }
     }
+    for &id in &gone {
+      change.save_subtree(&self.scene, id);
+    }
+    self.scene.remove(&gone);
     // lit like the level around it (not an actor's model: the game lights it); a batch: at its end
     if let Some((_, placed)) = &mut self.placing.batch {
       placed.extend_from_slice(&roots);

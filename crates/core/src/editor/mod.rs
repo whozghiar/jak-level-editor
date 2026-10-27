@@ -31,6 +31,7 @@
 //!   preview.rs    the inspector's preview of an animation or an effect (preview.cpp)
 
 mod api;
+pub mod arrange;
 mod behaviors;
 mod catalog;
 mod effects;
@@ -332,6 +333,8 @@ pub struct Editor {
   // ---- the Place tool, prefabs (placement.rs); the library's lists and workers (catalog.rs)
   pub(crate) placing: placement::PlacingState,
   pub(crate) catalog: catalog::CatalogState,
+  /// a repeat of the selection being shown (arrange.rs)
+  pub(crate) repeating: Option<arrange::Repeating>,
   // ---- the terrain brush, the topology tool, the animation preview
   pub terrain: terrain_tool::TerrainState,
   pub(crate) topology: topology_tool::TopologyState,
@@ -404,6 +407,7 @@ impl Editor {
       host: Default::default(),
       placing: Default::default(),
       catalog: Default::default(),
+      repeating: None,
       terrain: Default::default(),
       topology: Default::default(),
       preview: Default::default(),

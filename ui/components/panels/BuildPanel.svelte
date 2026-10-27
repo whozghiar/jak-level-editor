@@ -15,6 +15,7 @@
   import { panelDrag } from "../common/panelDrag";
   import Tip from "../common/Tip.svelte";
   import TextureBrowser from "../windows/TextureBrowser.svelte";
+  import WalkSection from "./WalkSection.svelte";
 
   type Surface = { material: number; texture: string; tile: number };
   type Style = {
@@ -74,6 +75,39 @@
     }
     houseReading = false;
   }
+  // ---- a creature's spawn point (its type), and what makes the level playable to find it again
+  const creatures = ["grunt", "kg-grunt", "flitter", "roboguard"];
+  let creature = $state("grunt");
+  const startCreature = (once: boolean) =>
+    call("start_gameplay_placement", { what: "creature", creature, once });
+  type Playable = {
+    id: number;
+    kind: string;
+    name: string;
+    position: [number, number, number];
+    stranded?: boolean;
+  };
+  let playable = $state<Playable[]>([]);
+  const readPlayable = async () =>
+    (playable = (await call<Playable[]>("gameplay_list", {}, true)) ?? playable);
+  onMount(() => {
+    void readPlayable();
+    return onEngine("jle:changed", readPlayable);
+  });
+  const dot: Record<string, string> = {
+    start: "bg-blue-500",
+    checkpoint: "bg-green-500",
+    creature: "bg-orange-500",
+    death_zone: "bg-red-500",
+    route: "bg-yellow-400",
+  };
+  // selected and shown, 6 m around it
+  async function find(p: Playable) {
+    await call("select", { ids: [p.id], mode: "replace" });
+    const [x, y, z] = p.position;
+    viewport.frame({ lo: [x - 3, y - 1, z - 3], hi: [x + 3, y + 3, z + 3] });
+  }
+
   const snap = $derived(s.gizmo.snap);
   const placing = $derived(
     s.tool === "place" && s.placement?.kind === "shape"
@@ -192,6 +226,68 @@
       {t("build.snap", snap.translate)}
     </label>
     <Tip text={t("build.snap.tip")} />
+
+    <!-- what makes it a level to play: where Jak starts, the checkpoints, the falls to death -->
+    <h3 class={heading}>{t("build.gameplay")}</h3>
+    <Tip guide="gameplay" />
+    <div class="flex flex-wrap gap-1.5">
+      {#each ["start", "checkpoint", "death_zone"] as what (what)}
+        <button
+          class="{button} {s.tool === 'place' &&
+          s.placement?.name ===
+            ({ start: 'jak-start', checkpoint: 'checkpoint', death_zone: 'death-zone' } as Record<string, string>)[what]
+            ? 'border-orange-500'
+            : ''}"
+          onclick={() => call("start_gameplay_placement", { what })}
+          onpointerdown={(e) =>
+            panelDrag(e, t(`build.gameplay.${what}`), () =>
+              call("start_gameplay_placement", { what, once: true }),
+            )}>{t(`build.gameplay.${what}`)}</button
+        >
+        <Tip text={t(`build.gameplay.${what}.tip`)} />
+      {/each}
+    </div>
+    <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <Dropdown
+        items={creatures.map((c) => ({ label: t(`creature.${c}`), value: c }))}
+        value={creature}
+        label={t(`creature.${creature}`)}
+        onselect={(c) => (creature = c)}
+      />
+      <button
+        class="{button} {s.tool === 'place' && s.placement?.name === 'creature-spawn'
+          ? 'border-orange-500'
+          : ''}"
+        onclick={() => startCreature(false)}
+        onpointerdown={(e) =>
+          panelDrag(e, t(`creature.${creature}`), () => startCreature(true))}
+        >{t("build.gameplay.creature")}</button
+      >
+      <Tip text={t("build.gameplay.creature.tip")} />
+    </div>
+    {#if playable.length}
+      <p class="mt-2 font-semibold text-neutral-300">{t("build.gameplay.list")}</p>
+      <Tip text={t("build.gameplay.list.tip")} />
+      <div class="flex max-h-40 flex-col overflow-y-auto">
+        {#each playable as p (p.id)}
+          <button
+            class="flex items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-neutral-700"
+            onclick={() => find(p)}
+          >
+            <span class="inline-block h-2 w-2 shrink-0 rounded-full {dot[p.kind] ?? ''}"></span>
+            <span class="text-neutral-400">{t(`build.gameplay.kind.${p.kind}`)}</span>
+            <span class="truncate">{p.name}</span>
+            {#if p.stranded}
+              <span class="shrink-0 text-amber-400" title={t("build.gameplay.stranded.tip")}
+                >{t("build.gameplay.stranded")}</span
+              >
+            {/if}
+          </button>
+        {/each}
+      </div>
+    {/if}
+    <!-- where creatures walk, where moving objects go -->
+    <WalkSection />
 
     <!-- floors and walls looking like a level's -->
     <h3 class={heading}>{t("build.style")}</h3>
