@@ -36,6 +36,7 @@ export const guideDemos: Record<string, string | null> = {
   topology: null,
   shape_edit: "build",
   style: null,
+  structures: "grow",
   preview: null,
   jak2_level: null,
   terrain: null,
@@ -69,6 +70,7 @@ export const guideSections: { key: string; ids: string[] }[] = [
       "build",
       "shape_edit",
       "style",
+      "structures",
       "terrain",
       "palette",
       "catalog",
@@ -178,4 +180,5 @@ export const tutorials: { id: string; prefix: string; steps: TourStep[] }[] = [
     steps: [["start", [], "build_tab"], ["paint", []], ["shape", []], ["walls", []], ["generate", []]],
   },
   { id: "assembly", prefix: "tuto.assembly.", steps: [["select", ["select"]], ["prefab", ["prefab"]], ["game", ["prefab"], "prefabs_tab"]] },
+  { id: "structures", prefix: "tuto.structures.", steps: [["make", ["grow"], "build_tab"], ["grow", ["grow"]], ["set", [], "prefabs_tab"]] },
 ];

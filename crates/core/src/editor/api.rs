@@ -532,6 +532,15 @@ impl Editor {
       | "level_style" => self
         .placement_call(name, a)
         .unwrap_or_else(|| Err(format!("unknown call: {name}"))),
+      // structures.rs
+      "building_kit"
+      | "start_house_placement"
+      | "start_structure_placement"
+      | "structure_info"
+      | "set_structure"
+      | "create_prefab_set" => self
+        .structures_call(name, a)
+        .unwrap_or_else(|| Err(format!("unknown call: {name}"))),
       "catalog" | "prefabs" | "want_game_prefabs" | "game_prefabs" | "texture_list"
       | "palette_texture" | "selection_meshes" => self
         .catalog_call(name, a)

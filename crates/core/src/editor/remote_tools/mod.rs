@@ -21,6 +21,12 @@ use serde_json::{Map, Value, json};
 
 use super::levels::{LevelRole, copy_nodes, paste_nodes};
 use super::placement::PlacementKind;
+use super::structures::{K_STRUCTURE_KINDS, StructureParams};
+
+/// the first id of a list of new roots ({roots: [...]})
+fn id_of(v: &Value) -> u32 {
+  v["roots"][0].as_u64().unwrap_or(0) as u32
+}
 use super::remote::Reply;
 use super::{CameraState, Editor};
 use crate::game::mood::weather_presets;
@@ -183,6 +189,11 @@ impl Editor {
       "list_prefabs" => self.tool_list_prefabs(a),
       "place" => self.remote_place(a),
       "place_many" => self.tool_place_many(a),
+      "build_house" => self.tool_build_house(a),
+      "build_structure" => self.tool_build_structure(a),
+      "set_structure" => self.tool_set_structure(a),
+      "create_prefab_set" => self.tool_create_prefab_set(a),
+      "building_kit" => self.tool_building_kit(a),
       "generate_navmesh" => self.tool_generate_navmesh(a),
       "export_navmesh" => self.tool_export_navmesh(a).into(),
       "match_lighting" => self.tool_match_lighting(a).into(),

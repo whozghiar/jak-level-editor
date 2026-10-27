@@ -28,6 +28,52 @@
   } | null;
 
   const s = $derived(engine.state);
+  // ---- a wall, a floor or a house of the level's own pieces (editor/structures): what it is
+  // like, then placed; it grows when it is resized once placed
+  let kind = $state<"wall" | "floor" | "house">("house");
+  let floors = $state(2);
+  let wallFloors = $state(1);
+  let windows = $state(false);
+  let roof = $state("auto");
+  let wear = $state(0.5);
+  let houseReading = $state(false);
+  const placingHouse = $derived(
+    s.tool === "place" && s.placement?.kind === "house",
+  );
+  // a seed of its own each time: each one a little different; asked again while the level's
+  // buildings are read
+  async function placeHouse(once: boolean) {
+    const level = styleLevel;
+    const seed = Math.floor(Math.random() * 1e6);
+    const f = kind === "wall" ? wallFloors : floors;
+    for (let i = 0; i < 60; i++) {
+      const r = await call<{ reading?: boolean } | null>(
+        "start_structure_placement",
+        { kind, level, floors: f, roof, wear, seed, windows, once },
+      );
+      houseReading = !!r?.reading;
+      if (!houseReading || level !== styleLevel) return;
+      await new Promise((ok) => setTimeout(ok, 500));
+    }
+    houseReading = false;
+  }
+  // a set of prefabs of the level's structures, saved with the user's
+  let setMade = $state("");
+  async function makeSet() {
+    const level = styleLevel;
+    setMade = "";
+    houseReading = true;
+    for (let i = 0; i < 60; i++) {
+      const r = await call<{ reading?: boolean; paths?: string[] } | null>(
+        "create_prefab_set",
+        { level },
+      );
+      if (r?.paths) setMade = t("build.structures.set_made", r.paths.length);
+      if (!r?.reading) break;
+      await new Promise((ok) => setTimeout(ok, 500));
+    }
+    houseReading = false;
+  }
   const snap = $derived(s.gizmo.snap);
   const placing = $derived(
     s.tool === "place" && s.placement?.kind === "shape"
@@ -89,6 +135,25 @@
     return ids;
   });
 </script>
+
+{#snippet choice(
+  label: string,
+  items: [string, string | number][],
+  value: string | number,
+  set: (v: string | number) => void,
+)}
+  <div class="flex flex-wrap items-center gap-1">
+    <span class="w-14 text-neutral-400">{label}</span>
+    {#each items as [text, v] (v)}
+      <button
+        class="rounded border px-1.5 py-0.5 text-xs {value === v
+          ? 'border-orange-500 bg-orange-500/15'
+          : 'border-[#2a2a2a] bg-[#0b0b0b] hover:border-[#3a3a3a]'}"
+        onclick={() => set(v)}>{text}</button
+      >
+    {/each}
+  </div>
+{/snippet}
 
 <div class="p-3 text-sm">
   {#if !s.document.open}
@@ -186,6 +251,84 @@
               >{t("build.style.terrain")}</button
             >
             <Tip text={t("build.style.terrain.tip")} />
+          {/if}
+          {#if style.wall && style.wall.material >= 0}
+            <!-- a wall, a floor or a house of this level's own pieces, solid, that grows -->
+            <h3 class="{heading} mt-3">{t("build.structures")}</h3>
+            <Tip guide="structures" />
+            <p class={muted}>{t("build.structures.intro", styleLevel)}</p>
+            {@render choice(
+              t("build.structures.kind"),
+              [
+                [t("structure.kind.wall"), "wall"],
+                [t("structure.kind.floor"), "floor"],
+                [t("structure.kind.house"), "house"],
+              ],
+              kind,
+              (v) => (kind = v as "wall" | "floor" | "house"),
+            )}
+            {#if kind === "house"}
+              {@render choice(
+                t("build.house.floors"),
+                [["1", 1], ["2", 2], ["3", 3], ["4", 4]],
+                floors,
+                (v) => (floors = v as number),
+              )}
+              {@render choice(
+                t("build.house.roof"),
+                [
+                  [t("build.house.roof.auto"), "auto"],
+                  [t("build.house.roof.gable"), "gable"],
+                  [t("build.house.roof.hip"), "hip"],
+                  [t("build.house.roof.flat"), "flat"],
+                ],
+                roof,
+                (v) => (roof = v as string),
+              )}
+            {:else if kind === "wall"}
+              {@render choice(
+                t("build.structures.height"),
+                [
+                  ["1", 1],
+                  ["2", 2],
+                  ["3", 3],
+                ],
+                wallFloors,
+                (v) => (wallFloors = v as number),
+              )}
+              <label class="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" class={check} bind:checked={windows} />
+                {t("structure.windows")}
+              </label>
+            {/if}
+            {@render choice(
+              t("build.house.wear"),
+              [
+                [t("build.house.wear.none"), 0],
+                [t("build.house.wear.some"), 0.5],
+                [t("build.house.wear.lots"), 1],
+              ],
+              wear,
+              (v) => (wear = v as number),
+            )}
+            <button
+              class="{button} {placingHouse ? 'border-orange-500' : ''}"
+              disabled={houseReading}
+              onclick={() => placeHouse(false)}
+              onpointerdown={(e) =>
+                panelDrag(e, t(`structure.kind.${kind}`), () => placeHouse(true))}
+              >{t(
+                houseReading
+                  ? "build.house.reading"
+                  : `build.structures.place.${kind}`,
+              )}</button
+            >
+            <Tip text={t("build.structures.place.tip")} />
+            <button class={button} disabled={houseReading} onclick={makeSet}
+              >{t("build.structures.set")}</button
+            >
+            <Tip text={t("build.structures.set.tip", styleLevel)} />
+            {#if setMade}<p class={muted}>{setMade}</p>{/if}
           {/if}
         {/if}
       </div>

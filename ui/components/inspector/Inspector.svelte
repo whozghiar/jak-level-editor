@@ -15,6 +15,7 @@
   import DragNumber from "./DragNumber.svelte";
   import NavMeshSection from "./NavMeshSection.svelte";
   import PreviewSection from "./PreviewSection.svelte";
+  import StructureSection from "./StructureSection.svelte";
   import SurfacePanel from "./SurfacePanel.svelte";
   import TopologySection from "./TopologySection.svelte";
   import {
@@ -196,6 +197,9 @@
       </div>
       <Tip text={t("group.make.tip")} />
     {/if}
+
+    <!-- a structure of a level's pieces: its size and look, made again when they change -->
+    <StructureSection id={primary} />
 
     <h3 class={heading}>{t(kindKey[n.kind] ?? "kind.group")}</h3>
     <p class="break-words">{n.name}</p>

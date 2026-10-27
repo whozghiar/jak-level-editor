@@ -51,6 +51,7 @@ pub mod remote;
 mod remote_tools;
 mod selection;
 mod state;
+pub mod structures;
 mod surfaces;
 pub mod terrain_tool;
 #[cfg(test)]

@@ -389,6 +389,10 @@ impl Editor {
   /// of `ids` at its world matrix, lit like where it goes, one undo step (`label`: undo.move,
   /// undo.rotate, undo.scale).
   pub fn transform_nodes(&mut self, ids: &[u32], worlds: &[Mat4], label: &str) {
+    // a whole structure scaled: made again at its new size with more of its pieces, not stretched
+    if label == "undo.scale" && self.scale_structure(ids, worlds) {
+      return;
+    }
     let mut change = NodeChange::new(&self.scene);
     let mut moved = Vec::new();
     for (&id, w) in ids.iter().zip(worlds) {

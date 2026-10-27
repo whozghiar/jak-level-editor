@@ -663,6 +663,8 @@ const BALL = shape("cylinder", [0.6, 1, 0.6], [1, 0.9, 0.3]);
 const ROOF = shape("roof", [4.4, 1.6, 4.4], CRATE);
 const TOWER = shape("box", [2, 5, 2], WALL_COLOR);
 const CAP = shape("roof-hip", [2.6, 1.4, 2.6], RED_PAD);
+const BAY = shape("box", [2, 3, 0.4], null);
+const PIER = shape("box", [0.45, 3.2, 0.8], [0.55, 0.5, 0.45]);
 
 /** The demos: drawDemo's names. */
 export const demoNames = [
@@ -682,6 +684,7 @@ export const demoNames = [
   "story",
   "local",
   "free_rotate",
+  "grow",
 ];
 
 /**
@@ -949,6 +952,26 @@ export function drawDemo(
       corner,
       before ? "guide.demo.story_before" : "guide.demo.story_after",
     );
+  } else if (name === "grow") {
+    // a wall stretched by its end: more bays and pillars, not a wider texture
+    period(5);
+    const len = 4 + 6 * ease(t, 1, 3.4);
+    const bays = Math.max(2, Math.round(len / 2));
+    const b = len / bays;
+    for (let i = 0; i < bays; i++)
+      mesh(
+        BAY,
+        chain(translate([-len / 2 + b * (i + 0.5), 0, 0]), scale([b / 2, 1, 1])),
+        SELECTED,
+      );
+    for (let i = 0; i <= bays; i++)
+      mesh(PIER, translate([-len / 2 + b * i, 0, 0]), SELECTED);
+    const tip: V3 = [len / 2, 1.5, 0];
+    pic.gizmoAxes(tip, 0.8, t > 0.8 && t < 3.6 ? 0 : -1);
+    const grip = screen(add(tip, [0.6, 0, 0]));
+    cursor(t < 0.9 ? mix2(start, grip, ease(t, 0, 0.9)) : grip);
+    if (t > 1 && t < 3.6) readout(grip, "%.1f m", len);
+    label(corner, "guide.demo.grow");
   }
   pic.draw(ctx);
   return true;

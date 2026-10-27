@@ -406,6 +406,14 @@ fn tools() -> Value {
           ),
         ),
         (
+          "surface",
+          json!({"type": "string", "enum": ["floor", "wall", "building", "roof", "trim"],
+                 "description": "kind 'shape' with a style: which of the level's looks it takes: \
+                   its floors', its walls (its banks, ditches, outer walls), its buildings' walls \
+                   (their facades'), their roofs' or their frames' (building_kit); omitted: a \
+                   floor or a ground its floors', the rest its walls'"}),
+        ),
+        (
           "bumps",
           num("kind 'shape', ground: meters its top goes up and down")
         ),
@@ -450,6 +458,161 @@ fn tools() -> Value {
                "items": {"type": "object"}}),
       )],
       &["items"],
+    ),
+    tool(
+      "build_house",
+      "Builds a whole house in the style of a level of the game, from its own parts: walls of \
+       its buildings' texture on a plinth, bands between the floors and pillars at the corners \
+       (relief), the level's windows and door in openings their size, a pipe down a wall, wear \
+       on the walls (stains, holes, broken plaster), a roof of its roofs' texture (flat in \
+       Spargus, sloped elsewhere), a chimney, an awning, a lamp and a sign by the door. Its front \
+       (the door) faces yaw_deg (0: +z). One undo entry, one group 'house-<level>'. The game's \
+       buildings are large: a floor is about as high as two of its windows (11 m in the \
+       slums). Returns the group, its elements' ids, its size and the parts used.",
+      vec![
+        (
+          "level",
+          str(
+            "the level it looks like (e.g. 'ctysluma' the slums, 'wascitya' Spargus, 'ctygenb' \
+             Haven City)",
+          ),
+        ),
+        (
+          "position",
+          vec3("the middle of its footprint, [x, y, z] in meters")
+        ),
+        (
+          "yaw_deg",
+          num("the direction its front faces, in degrees (0: +z)")
+        ),
+        ("floors", integer("1 to 4 (2 by default)")),
+        (
+          "width",
+          num("meters along its front; omitted: three windows wide"),
+        ),
+        ("depth", num("meters; omitted: two windows deep")),
+        (
+          "roof",
+          json!({"type": "string", "enum": ["auto", "gable", "hip", "flat"],
+                 "description": "auto (default): the level's roofs (flat or sloped)"}),
+        ),
+        (
+          "wear",
+          num("0 (new) to 1 (worn out): how many stains, holes and broken plaster (0.5)"),
+        ),
+        (
+          "seed",
+          integer("another number: other windows, wear and chimney")
+        ),
+        (
+          "on_ground",
+          boolean("false: at the position exactly; true (default): on the surface below"),
+        ),
+      ],
+      &["level", "position"],
+    ),
+    tool(
+      "build_structure",
+      "Builds a structure of a level's own pieces that grows when it is resized (set_structure): \
+       a 'wall' (solid: the level's texture on both faces and its top, pillars and a plinth \
+       standing out of both faces, bands between its floors, a coping; in each bay the level's \
+       relief, wear, pipes, lamps, beams, windows if asked), a 'floor' (a solid slab of the level's \
+       ground, a curb, the seams of its paving, dirt patches and vents in its cells) or a 'house' \
+       (build_house). A wall runs along x before the turn (its front +z), a floor lies in x and \
+       z. Its bays and cells keep their details when it grows: a longer wall gets new bays, a \
+       larger floor new cells. One undo entry, one group '<kind>-<level>'.",
+      vec![
+        (
+          "kind",
+          json!({"type": "string", "enum": ["wall", "floor", "house"]}),
+        ),
+        (
+          "level",
+          str("the level it looks like (e.g. 'ctyinda' the industrial zone)")
+        ),
+        (
+          "position",
+          vec3("the middle of its base, [x, y, z] in meters")
+        ),
+        (
+          "yaw_deg",
+          num("its turn, in degrees (a wall's front, a house's door: 0 is +z)")
+        ),
+        (
+          "size",
+          vec3(
+            "meters: a wall's [length, height, thickness], a floor's [width, thickness, depth], a \
+             house's [width, 0, depth]; 0: from the level's pieces",
+          ),
+        ),
+        ("floors", integer("a house: 1 to 6")),
+        (
+          "windows",
+          boolean("a wall: the level's windows in some of its bays")
+        ),
+        (
+          "roof",
+          json!({"type": "string", "enum": ["auto", "gable", "hip", "flat"]}),
+        ),
+        (
+          "wear",
+          num("0 (new) to 1 (worn out): stains, holes, dirt (0.5)")
+        ),
+        (
+          "seed",
+          integer("another number: other details, the same rules")
+        ),
+        (
+          "on_ground",
+          boolean("false: at the position exactly; true (default): on the surface below"),
+        ),
+      ],
+      &["kind", "level", "position"],
+    ),
+    tool(
+      "set_structure",
+      "Makes a structure (any of its elements' id) again at another size or look, where it \
+       stands: more or fewer of the level's pieces, never stretched (a wall twice as long gets \
+       twice as many bays and pillars). Give what changes: size (or length, width, height, \
+       depth), floors, windows, roof, wear, seed. One undo entry.",
+      vec![
+        ("id", integer("an element of the structure")),
+        ("size", vec3("meters, as build_structure's")),
+        ("length", num("a wall's length (or a house's width)")),
+        ("height", num("a wall's height (a floor's thickness)")),
+        (
+          "depth",
+          num("a floor's or a house's depth (a wall's thickness)")
+        ),
+        ("floors", integer("a house: 1 to 6")),
+        ("windows", boolean("a wall: windows in some bays")),
+        ("wear", num("0 to 1")),
+        ("seed", integer("another look")),
+      ],
+      &["id"],
+    ),
+    tool(
+      "create_prefab_set",
+      "Saves a set of prefabs of a level's structures with the user's prefabs (only when the user \
+       asks for prefabs): walls of 2 and 4 bays, a high wall, a wall with windows, floors of 16 m \
+       and 32 m, houses of 1, 2 and 3 floors, named '<level>-...'. Each is solid and grows when it \
+       is resized once placed (set_structure, the scale gizmo). Returns their names.",
+      vec![("level", str("the level they look like"))],
+      &["level"],
+    ),
+    tool(
+      "building_kit",
+      "What a level's buildings are made of, to build other structures in its style (walls, \
+       towers, floors, ceilings) with place and place_many: its decor parts by role (window, \
+       glass, shade, door, doorframe, pipe, pipe_ring, wear, roof, chimney, awning, sign, lamp, \
+       vine), each with its size once turned to face +z ([width, height, depth] in meters) and \
+       the rotation_deg that turns it so (give it to place, adding your wall's yaw to its y); \
+       the textures of its walls, roofs and frames (place's shape with style and surface).",
+      vec![(
+        "level",
+        str("a level name from list_levels (one of Jak II's: \"jak2/<level>\", e.g. jak2/castle)"),
+      )],
+      &["level"],
     ),
     tool(
       "find_nodes",
@@ -1058,7 +1221,17 @@ const K_INSTRUCTIONS: &str = "Tools of Jak Level Editor (levels of Jak 3), actin
   player can walk around. Look at it from the back and \
   the sides with set_camera and capture_view: what the player can reach must never show its \
   back. 3. Look before you report: \
-  capture_view from the player's height (1.6 m above the ground) around what you built.";
+  capture_view from the player's height (1.6 m above the ground) around what you built. 4. Build \
+  like the level, and solid: build_structure makes walls, floors and houses of the level's own \
+  pieces, closed on every side (a wall has the level's texture and relief on both faces, a floor \
+  a slab with its sides and underside); prefer them to the game's facades wherever the player \
+  could get behind. To make one larger or smaller, set_structure (or the scale gizmo) builds it \
+  again with more or fewer of its pieces: never stretch it with transform_nodes. For anything \
+  else, building_kit gives the level's parts by role and its textures: masses as shapes in its \
+  style (style and surface: building, wall, floor, roof, trim), never a bare flat wall (a plinth, \
+  bands, pillars a little out of the wall, overhangs), the level's own parts on them (windows in \
+  openings their size, a door in a doorway, wear, pipes, roof plates), turned by the \
+  rotation_deg of the kit plus the wall's yaw.";
 
 /// the tools that may wait for a level to load or for the editor to read the levels
 const SLOW: &[&str] = &[
@@ -1066,6 +1239,11 @@ const SLOW: &[&str] = &[
   "open_project",
   "list_decor",
   "place",
+  "build_house",
+  "build_structure",
+  "set_structure",
+  "create_prefab_set",
+  "building_kit",
   "list_catalog",
   "list_models",
   "place_many",
@@ -1387,7 +1565,7 @@ mod tests {
       .answer(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
       .unwrap();
     let tools = list["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 47);
+    assert_eq!(tools.len(), 52);
     let place = tools.iter().find(|t| t["name"] == "place").unwrap();
     assert_eq!(
       place["inputSchema"]["required"],

@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 
 use super::groups::{new_group_id, set_group_tag};
 use super::levels::{style_water_mesh, unique_name};
+use super::structures::{BuildingKit, StructureParams};
 use super::{Editor, ToolMode};
 use crate::history::NodeChange;
 use crate::i18n::tr;
@@ -41,6 +42,8 @@ pub enum PlacementKind {
   Model,
   Part,
   Shape,
+  /// a house in the style of a level (editor/structures): its box under the cursor
+  House,
 }
 
 /// What the Place tool puts in the level: a prefab, an object of the catalog, a model, a decor
@@ -63,6 +66,8 @@ pub struct Placement {
   pub shape: ShapeParams,
   /// Shape: its material in the document (a level's style), -1 the grey grid
   pub material: i32,
+  /// House: the structure it is (`shape` is its box)
+  pub house: StructureParams,
   /// radians (R, Ctrl + wheel)
   pub yaw: f32,
   /// the turn the right button gives it, in the world (applied after the yaw)
@@ -83,6 +88,7 @@ impl Default for Placement {
       level: String::new(),
       shape: ShapeParams::default(),
       material: -1,
+      house: StructureParams::default(),
       yaw: 0.0,
       tilt: Quat::default(),
       once: false,
@@ -97,6 +103,7 @@ impl Placement {
       PlacementKind::Object | PlacementKind::Model => format!("model:{}", self.path),
       PlacementKind::Part => format!("part:{}#{}", self.path, self.part.mesh_node),
       PlacementKind::Shape => format!("shape:{}#{}", self.shape.to_json(), self.material),
+      PlacementKind::House => format!("house:{}", self.house.to_json()),
       PlacementKind::Prefab => self.path.clone(),
     }
   }
@@ -123,6 +130,8 @@ pub(crate) struct PlacingState {
   pub style_level: String,
   /// measured once its decor is read, by level
   pub styles: BTreeMap<String, LevelStyle>,
+  /// what its buildings are made of, read once its decor is, by level (editor/structures)
+  pub kits: BTreeMap<String, BuildingKit>,
 }
 
 fn surface_json(s: &Surface) -> Value {
@@ -315,7 +324,7 @@ impl Editor {
           merge_mesh(&mut self.scene, &part, &level.textures, &level.materials)
         }
       }
-      PlacementKind::Shape => {
+      PlacementKind::Shape | PlacementKind::House => {
         let material = if pl.material >= 0 {
           pl.material
         } else {
@@ -333,7 +342,7 @@ impl Editor {
     let pl = &self.placing.placement;
     match pl.kind {
       PlacementKind::Part => self.catalog.store.failed_level(&pl.path),
-      PlacementKind::Shape => false,
+      PlacementKind::Shape | PlacementKind::House => false,
       _ => !pl.path.is_empty() && self.catalog.store.failed_model(&pl.path),
     }
   }
@@ -375,6 +384,19 @@ impl Editor {
   pub fn place_at(&mut self, m: &Mat4) -> Vec<u32> {
     self.placement_caches();
     let pl = self.placing.placement.clone();
+    if pl.kind == PlacementKind::House {
+      // the house built there (its pieces placed one by one); the next one a little different
+      return match self.build_structure(&pl.house, m) {
+        Ok((roots, _)) => {
+          self.placing.placement.house.seed = pl.house.seed.wrapping_add(1);
+          roots
+        }
+        Err(e) => {
+          log_warn!("{}", e);
+          Vec::new()
+        }
+      };
+    }
     let mut roots = Vec::new();
     let change = NodeChange::new(&self.scene);
     if pl.kind == PlacementKind::Prefab {
@@ -473,7 +495,7 @@ impl Editor {
             ..Default::default()
           }));
         }
-        PlacementKind::Part | PlacementKind::Prefab => {
+        PlacementKind::Part | PlacementKind::Prefab | PlacementKind::House => {
           let mut base = pl
             .part
             .name
@@ -524,18 +546,48 @@ impl Editor {
     self.placing.batch = Some((NodeChange::new(&self.scene), Vec::new()));
   }
 
+  /// a batch whose undo step starts from `change` (what it replaces saved in it)
+  pub(crate) fn begin_place_batch_with(&mut self, change: NodeChange) {
+    self.placing.batch = Some((change, Vec::new()));
+  }
+
+  /// the batch dropped: no undo step, nothing lit (what it placed stays)
+  pub(crate) fn discard_place_batch(&mut self) {
+    self.placing.batch = None;
+  }
+
+  /// the meshes merged into the document forgotten (another document is about to take them)
+  pub(crate) fn forget_merged_meshes(&mut self) {
+    self.placing.prefab_meshes.clear();
+    self.placing.previews.clear();
+  }
+
   /// the batch's end: what it placed lit like the level around it, one undo step when it placed
   /// something; how many roots it placed
   pub fn end_place_batch(&mut self) -> usize {
+    self.finish_place_batch(None, None)
+  }
+
+  /// the batch's end: `light` (else all it placed) lit like the level around it, one undo step
+  /// named `label` (else "Place N")
+  pub(crate) fn finish_place_batch(
+    &mut self,
+    light: Option<&[u32]>,
+    label: Option<String>,
+  ) -> usize {
     let Some((change, placed)) = self.placing.batch.take() else {
       return 0;
     };
     if placed.is_empty() {
       return 0;
     }
-    light_like_surroundings(&mut self.scene, &placed, K_LIGHT_MAX_VERTICES);
+    light_like_surroundings(
+      &mut self.scene,
+      light.unwrap_or(&placed),
+      K_LIGHT_MAX_VERTICES,
+    );
     self.scene.begin_frame();
-    let label = strf!(tr("undo.place_many"), placed.len());
+    let label = label.unwrap_or_else(|| strf!(tr("undo.place_many"), placed.len()));
     self.history.push(change.commit(&self.scene, label, None));
     placed.len()
   }
