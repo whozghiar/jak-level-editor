@@ -263,15 +263,19 @@ pub fn export_level(
     );
   }
 
-  // --- the game's collision: one mesh per surface, in the game's space ---------------------------
+  // --- the game's collision: one mesh per surface, in the game's space; the collision made with
+  // the collision tool (og_collision "made") whatever the choice ---------------------------------
   let mut game_collision: Vec<Arc<Mesh>> = Vec::new();
-  if o.game_collision {
+  {
     let mut surfaces: BTreeMap<BuilderSurface, Mesh> = BTreeMap::new();
     let mut taken_out = 0;
     for i in 0..count {
       let n = &scene.nodes[i];
       let Some(mesh) = &n.mesh else { continue };
       if n.kind != NodeKind::Collision || !exported_part(i) {
+        continue;
+      }
+      if !o.game_collision && n.extras["og_collision"] != "made" {
         continue;
       }
       let p = parent_index(n);

@@ -10,6 +10,7 @@ impl Editor {
     match self.tool {
       ToolMode::Place => self.stop_placement(),
       ToolMode::Topology => self.stop_topology(),
+      ToolMode::Collision => self.stop_collision_tool(),
       ToolMode::Terrain => {
         if !self.terrain_cancel_stroke() {
           self.stop_terrain_brush();

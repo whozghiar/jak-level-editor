@@ -72,7 +72,7 @@ use crate::strf;
 use builder::*;
 pub use builder::{builder_lump_value, builder_surface};
 use collision::*;
-pub(crate) use collision::{TriGrid, collision_group_level, piece_level};
+pub(crate) use collision::{TriGrid, collision_group_level, collision_hot_spots, piece_level};
 pub use collision::{collision_levels, default_decor_collision, own_level_node};
 use readme::*;
 pub use write::export_level;

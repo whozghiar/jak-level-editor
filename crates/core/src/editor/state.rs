@@ -104,6 +104,7 @@ impl Editor {
       "gizmo": self.gizmo,
       "brush": self.brush_state(),
       "topology": topology,
+      "collision": self.collision_state(),
       "preview": self.preview_state(),
       "view": self.view,
       "story": story,

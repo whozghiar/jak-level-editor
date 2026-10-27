@@ -837,6 +837,59 @@ export class Renderer {
     this.tris.length = 0;
   }
 
+  // Many triangles (`lines`: lines, two vertices each) drawn as flush() draws them (flat colors,
+  // see-through, over the surfaces), from `data` (VERTEX_BYTES each: f32 x, y, z, u8 rgba): uploaded
+  // once while it stays the same buffer. `slot`: one per kind of batch (the collision tool's faces,
+  // their edges, those picked)
+  private batches = new Map<
+    number,
+    { vao: WebGLVertexArrayObject; vbo: WebGLBuffer; data: ArrayBuffer | null }
+  >();
+  drawTris(slot: number, data: ArrayBuffer, depth_test = true, lines = false) {
+    const gl = this.gl;
+    let b = this.batches.get(slot);
+    if (!b) {
+      b = { vao: gl.createVertexArray()!, vbo: gl.createBuffer()!, data: null };
+      gl.bindVertexArray(b.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, b.vbo);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 4, gl.UNSIGNED_BYTE, true, VERTEX_BYTES, 12);
+      gl.bindVertexArray(null);
+      this.batches.set(slot, b);
+    }
+    const count = Math.floor(data.byteLength / VERTEX_BYTES);
+    if (!count) return;
+    gl.bindVertexArray(b.vao);
+    if (b.data !== data) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, b.vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, new Uint8Array(data), gl.STATIC_DRAW);
+      b.data = data;
+    }
+    const u = this.flat_prog.u;
+    gl.useProgram(this.flat_prog.p);
+    gl.uniformMatrix4fv(u.u_mvp, false, this.draw_vp);
+    gl.uniform1f(u.u_alpha, 1);
+    gl.uniform4f(u.u_override, 0, 0, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    if (depth_test) gl.enable(gl.DEPTH_TEST);
+    else gl.disable(gl.DEPTH_TEST);
+    gl.depthFunc(this.depthFunc(gl.LEQUAL));
+    gl.depthMask(false);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    this.polygonOffset(-1, -2);
+    gl.drawArrays(lines ? gl.LINES : gl.TRIANGLES, 0, count);
+    this.stats.draws++;
+    gl.bindVertexArray(null);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+    gl.depthMask(true);
+    gl.enable(gl.DEPTH_TEST);
+  }
+
   // ---------------------------------------------------------------------------------------------
   // the scene
 

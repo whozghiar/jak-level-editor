@@ -119,13 +119,21 @@
     if (tauri && !embedded) getCurrentWindow().setTitle(text);
   });
 
-  // the terrain brush's window: open while the tool is
+  // the terrain brush's window, the collision tool's: open while the tool is
   $effect(() => {
     const on = s.tool === "terrain";
     untrack(() =>
       on
         ? !windows.isOpen("terrain") && windows.open("terrain")
         : windows.close("terrain"),
+    );
+  });
+  $effect(() => {
+    const on = s.tool === "collision";
+    untrack(() =>
+      on
+        ? !windows.isOpen("collision") && windows.open("collision")
+        : windows.close("collision"),
     );
   });
 
@@ -183,7 +191,7 @@
   const rightW = $derived(Math.max(260, Math.min(right, width * 0.4)));
 
   const statusKey = $derived(
-    `status.${s.tool === "place" || s.tool === "topology" || s.tool === "terrain" ? s.tool : "select"}`,
+    `status.${s.tool === "select" ? "select" : s.tool}`,
   );
   const last = $derived(engine.log.at(-1));
   const logColor = {

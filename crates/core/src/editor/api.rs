@@ -482,6 +482,19 @@ impl Editor {
       | "topology_drag_end" | "topology_extrude" | "topology_subdivide" | "topology_flip" => {
         self.topology_call(name, a)
       }
+      "start_collision_tool"
+      | "stop_collision_tool"
+      | "collision_color_by"
+      | "collision_overlay"
+      | "collision_pick"
+      | "collision_box"
+      | "collision_select"
+      | "collision_paint"
+      | "collision_delete"
+      | "collision_move"
+      | "collision_add"
+      | "collision_from_pieces"
+      | "collision_check" => self.collision_call(name, a),
       "preview_options" | "start_preview" | "stop_preview" | "preview_frame" => {
         self.preview_call(name, a)
       }

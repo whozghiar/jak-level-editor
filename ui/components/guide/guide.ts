@@ -26,6 +26,7 @@ export const guideDemos: Record<string, string | null> = {
   bounce: "bounce",
   launch: "launch",
   collision: null,
+  collision_tool: null,
   ingame: null,
   surface: null,
   event: null,
@@ -98,6 +99,7 @@ export const guideSections: { key: string; ids: string[] }[] = [
     ids: [
       "ingame",
       "collision",
+      "collision_tool",
       "surface",
       "event",
       "bounce",
@@ -172,6 +174,7 @@ export const tutorials: { id: string; prefix: string; steps: TourStep[] }[] = [
     prefix: "tuto.blender.",
     steps: [["export", []], ["import", [], "catalog_tab"], ["checks", []], ["collision", []], ["again", [], "catalog_tab"]],
   },
+  { id: "collision", prefix: "tuto.collision.", steps: [["show", []], ["pick", []], ["change", []], ["add", []]] },
   { id: "materials", prefix: "tuto.materials.", steps: [["window", []], ["catalog", ["build"], "catalog_tab"], ["light", []]] },
   { id: "catalog", prefix: "tuto.catalog.", steps: [["game", [], "catalog_tab"], ["objects", ["place"]], ["decor", []], ["jak2", []]] },
   { id: "prefabs", prefix: "tuto.prefabs.", steps: [["game", ["prefab"], "prefabs_tab"], ["mine", ["prefab"]]] },

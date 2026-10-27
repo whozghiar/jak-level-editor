@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { engine } from "../lib/engine.svelte";
   import { gameView } from "./game_view";
+  import { attachCollisionTool } from "./collision_tool.svelte";
   import { attachNavmeshOverlay } from "./navmesh_overlay";
   import { attachRouteOverlay } from "./route_overlay";
   import { effects } from "./particles";
@@ -31,6 +32,7 @@
     const offTools = [
       attachTerrainTool(),
       attachTopologyTool(),
+      attachCollisionTool(),
       attachPreview(),
     ];
     const fit = () => {

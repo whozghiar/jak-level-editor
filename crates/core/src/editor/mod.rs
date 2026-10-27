@@ -34,6 +34,7 @@ mod api;
 pub mod arrange;
 mod behaviors;
 mod catalog;
+mod collision_tool;
 mod effects;
 pub mod export;
 pub mod extract;
@@ -112,6 +113,8 @@ pub enum ToolMode {
   Topology,
   /// the terrain brush: ground painted, raised, dug, walls
   Terrain,
+  /// the collision's faces: painted, deleted, moved, added (collision_tool.rs)
+  Collision,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,6 +175,8 @@ pub struct ViewSettings {
   /// the distance fog of the backdrops
   pub fog: bool,
   pub navmesh: bool,
+  /// the levels' collision over the view, a color per surface (the collision tool shows it too)
+  pub collision: bool,
   pub labels: bool,
   pub grid: bool,
   pub textures: bool,
@@ -190,6 +195,7 @@ impl Default for ViewSettings {
       ocean: true,
       fog: true,
       navmesh: true,
+      collision: false,
       labels: true,
       grid: true,
       textures: true,
@@ -338,6 +344,7 @@ pub struct Editor {
   // ---- the terrain brush, the topology tool, the animation preview
   pub terrain: terrain_tool::TerrainState,
   pub(crate) topology: topology_tool::TopologyState,
+  pub(crate) collision: collision_tool::CollisionToolState,
   pub(crate) preview: preview::PreviewState,
   // ---- the export for the game, the nav meshes (export.rs)
   pub export: export::ExportState,
@@ -410,6 +417,7 @@ impl Editor {
       repeating: None,
       terrain: Default::default(),
       topology: Default::default(),
+      collision: Default::default(),
       preview: Default::default(),
       export: Default::default(),
       nav: Default::default(),

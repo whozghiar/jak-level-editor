@@ -13,7 +13,7 @@
 //   selection: { count, primary, hash, group, level, topology_editable }
 //       group: group_of(primary), 0 none; level: level_of_node(primary); topology_editable(primary)
 //   clipboard_empty: nothing copied yet
-//   tool: "select" | "place" | "topology" | "terrain"
+//   tool: "select" | "place" | "topology" | "terrain" | "collision"
 //   gizmo: { mode: "translate" | "rotate" | "scale", local, snap: { enabled, translate, rotate_deg, scale } }
 //   brush: { magnet, size } (the terrain brush: M and [ ] change them)
 //   view: { game_view, game_view_ready, game_view_error, effects, actors, ocean, fog, navmesh,
@@ -37,7 +37,7 @@ export type Job = {
   total: number;
   finished?: boolean;
 };
-export type Tool = "select" | "place" | "topology" | "terrain";
+export type Tool = "select" | "place" | "topology" | "terrain" | "collision";
 export type GizmoMode = "translate" | "rotate" | "scale";
 
 const defaults = () => ({
@@ -88,6 +88,7 @@ const defaults = () => ({
     ocean: true,
     fog: true,
     navmesh: true,
+    collision: false,
     labels: true,
     grid: true,
     textures: true,

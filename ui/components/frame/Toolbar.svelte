@@ -3,6 +3,7 @@
   // copy / paste / delete, a prefab, undo / redo.
   import type { Component } from "svelte";
   import IconAxis from "~icons/mdi/axis-arrow";
+  import IconCollision from "~icons/mdi/cube-scan";
   import IconChevronDown from "~icons/mdi/chevron-down";
   import IconCopy from "~icons/mdi/content-copy";
   import IconPaste from "~icons/mdi/content-paste";
@@ -131,6 +132,19 @@
       on: s.tool === "terrain",
       enabled: s.document.open,
       guide: "terrain",
+    },
+  )}
+  {@render button(
+    IconCollision,
+    t("toolbar.collision"),
+    () =>
+      call(
+        s.tool === "collision" ? "stop_collision_tool" : "start_collision_tool",
+      ),
+    {
+      on: s.tool === "collision",
+      enabled: s.document.open,
+      guide: "collision_tool",
     },
   )}
 

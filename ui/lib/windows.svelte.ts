@@ -19,6 +19,7 @@ import NewPrefabWindow from "../components/windows/NewPrefabWindow.svelte";
 import SaveAsWindow from "../components/windows/SaveAsWindow.svelte";
 import SettingsWindow from "../components/windows/SettingsWindow.svelte";
 import TerrainWindow from "../components/windows/TerrainWindow.svelte";
+import CollisionWindow from "../components/windows/CollisionWindow.svelte";
 import TexturesWindow from "../components/windows/TexturesWindow.svelte";
 import WelcomeWindow from "../components/windows/WelcomeWindow.svelte";
 
@@ -61,6 +62,14 @@ export const registry: Record<string, WindowDef> = {
     width: 270,
     anchor: "top-right",
     onclose: () => void call("stop_terrain_brush"),
+  },
+  // the collision tool's: open while the tool is; closed, the tool ends
+  collision: {
+    title: "collision.title",
+    component: CollisionWindow,
+    width: 330,
+    anchor: "top-right",
+    onclose: () => void call("stop_collision_tool"),
   },
   textures: {
     title: "textures.title",

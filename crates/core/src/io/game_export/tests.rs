@@ -637,6 +637,50 @@ fn the_decors_behaviors() {
   );
 }
 
+/// the collision made with the collision tool is written whatever the export's choice of collision
+/// (here the decor's), by its surface
+#[test]
+fn the_collision_made_in_the_tool() {
+  let data = real_data();
+  let tmp = temp_dir("game-export-made-collision");
+  let mut d = Scene::new();
+  d.add(render(
+    "slab",
+    make_box("slab", -1),
+    0,
+    Vec3::new(0.0, 0.0, 0.0),
+  ));
+  let mut floor = (*make_floor(-1)).clone();
+  for p in &mut floor.prims {
+    p.tri_pat = vec![16 << 10; p.tri_count()]; // metal
+  }
+  d.add(Node {
+    name: "collision-floor".into(),
+    kind: NodeKind::Collision,
+    mesh: Some(Arc::new(floor)),
+    extras: json!({"og_collision": "made"}),
+    ..Default::default()
+  });
+  d.begin_frame();
+  let o = LevelExportOptions {
+    name: "my-made".into(),
+    nickname: "mmd".into(),
+    iso_name: "MYMADE".into(),
+    folder: from_path(&tmp.join("export-made")),
+    game_collision: false,
+    ..Default::default()
+  };
+  let r = export_level(&d, Some(&data), &o).expect("exported");
+  let dd = tmp.join("export-made/custom_assets/jak3/levels/my-made");
+  let extras = glb_extras(&read_glb_json(&dd.join("my-made.glb")));
+  let c = &extras["my-made-collision-16-0-0"];
+  assert!(
+    c["collide_material"] == 16 && c["set_invisible"] == 1,
+    "{extras:?}"
+  );
+  assert_eq!(r.collision_triangles, 2);
+}
+
 /// the game's collision follows its decor: a level as extracted (a floor, a wall, a block, their
 /// collision), and the document made from it, the wall deleted and the block moved 30 m
 #[test]

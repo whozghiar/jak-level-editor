@@ -277,7 +277,7 @@ pub(super) const K_CACHE_BOX_HI: Vec3 = Vec3::new(3.2, 4.4, 3.2);
 /// The places of the floors (the faces up, a point every 3 m) where the cache would get more
 /// triangles than it holds (`sides`: 2 when the builder doubles every face): how many, and where,
 /// the densest first
-pub(super) fn collision_hot_spots(all: &TriGrid, sides: usize) -> Vec<(usize, Vec3)> {
+pub(crate) fn collision_hot_spots(all: &TriGrid, sides: usize) -> Vec<(usize, Vec3)> {
   let mut floors: HashMap<u64, Vec3> = HashMap::new();
   let mut sample = |p: Vec3| {
     floors

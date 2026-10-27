@@ -271,6 +271,7 @@
         view("ocean", "menu.view.ocean"),
         view("fog", "menu.view.fog"),
         view("navmesh", "menu.view.navmesh"),
+        view("collision", "menu.view.collision"),
         view("labels", "menu.view.labels"),
         view("grid", "menu.view.grid"),
         view("textures", "menu.view.textures"),

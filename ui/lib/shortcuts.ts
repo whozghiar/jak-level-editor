@@ -88,10 +88,18 @@ export function handleShortcut(e: KeyboardEvent): void {
     });
   else if (!ctrl && k === "t")
     call(tool === "topology" ? "stop_topology" : "start_topology");
+  else if (!ctrl && k === "c")
+    call(tool === "collision" ? "stop_collision_tool" : "start_collision_tool");
   else if (tool === "place" && !ctrl && k === "r")
     call("turn_placement", { degrees: shift ? -45 : 45 });
   else if (k === "delete")
-    call(tool === "topology" ? "topology_delete" : "delete_selection");
+    call(
+      tool === "topology"
+        ? "topology_delete"
+        : tool === "collision"
+          ? "collision_delete"
+          : "delete_selection",
+    );
   else if (!ctrl && k === "f") frameView("selection");
   else if (k === "home") frameView("all");
   else if (!ctrl && k === "w") call("set_gizmo", { mode: "translate" });
