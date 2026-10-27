@@ -372,7 +372,9 @@ place it (or drag it into the view). Hovering an entry shows what it is.
   (drips, splashes, falls), and the others (explosions, trails). Each runs in the view as the game
   makes it.
 - **Models**: the other 3D models of the game, the ones that are not part of a level's scenery
-  (a broken piece of a robot, a barrel, a sign), placed as decor: they do nothing.
+  (a broken piece of a robot, a barrel, a sign), placed as decor: they do nothing. Your own models,
+  made in Blender, come first, under **My models**
+  ([Your own models](#your-own-models-from-blender)).
 - **Decor**: the pieces of the levels' scenery itself (a pillar, an arch, a catwalk of the
   industrial zone), searched by name across every level, or by level.
 - **Materials**: every texture of the levels: select shapes or pieces, click a texture, they take
@@ -591,7 +593,10 @@ of its triangles) and its **faces** (the triangles). Move points with the gizmo;
 ### See what an object does: the preview
 
 The inspector's **Preview** plays an object's animation where it stands (a door opening), its
-movement (an elevator), or shows it **breaking** (a fence of the factory thrown apart).
+movement (an elevator), or shows it **breaking** (a fence of the factory thrown apart). The pieces
+fly as the game throws them (its `joint-exploder`, in `engine/anim/joint-exploder.gc`): 5 to 15 m/s
+up and up to 20 m/s sideways, falling at 70 m/s², turning 8.4 degrees a frame, bouncing off the
+ground, and shrinking to nothing in 2 seconds.
 
 ![The preview of a breakable fence](captures/building/preview.png)
 
@@ -604,6 +609,38 @@ its decor (Haven City as it was), its prefabs, or a whole level of Jak II opened
 `jak2-<name>`, light compared with the level's: **Match the lighting** in the inspector).
 
 ![The atoll of Jak II opened as a level of Jak 3](captures/building/jak2-level.png)
+
+### Your own models: from Blender
+
+Model a market stall in Blender, bring it in once, then place it in any level as often as you like:
+
+1. In Blender: **File > Export > glTF 2.0**, format **glTF Binary (.glb)**. Model in meters (1 unit
+   is 1 meter; Jak is about 1.6 m tall), standing on the ground at the origin. Give its materials an
+   image (Base Color) or a plain color; apply its modifiers when exporting.
+2. **Drop the `.glb` on the editor's window**, or **File > Import a model** (`.glb`, or `.gltf` with
+   the files it names). It is copied into the library's `models/` folder and follows the cursor:
+   click where it goes.
+3. From then on it is in the Catalog's **Models**, under **My models**. Importing a file of the same
+   name again replaces it (edited in Blender); what was already placed stays as it was.
+
+Select it: the inspector's **Imported model** section says what was checked when it came in.
+
+| Check | What it tells |
+|---|---|
+| Mesh | its triangles; the pieces with an image but no UV map (they show one color: unwrap them) |
+| Size | in meters: a model 100 times too big was made in centimeters |
+| Images | how many, the largest (over 1024 pixels the level gets heavy) |
+| Colors without an image | made into small images of that color: the game draws a material without an image as a checkerboard |
+| Parts | Blender's objects, placed as one piece |
+| Animations | made with an armature: the **Preview** plays them; in the game the model stays still (decor) |
+| Collision | by its shape, or by **the box around it** when its shape is more than the game gathers around Jak |
+
+A model of your own always collides, unlike the game's small details: by its shape, or, when it is
+too detailed (the game gathers about 460 triangles around Jak, and he falls through the floor past
+that), by the box around it: 12 triangles, solid all around, not drawn. **In the game > Its
+collision** changes it, on any piece of decor.
+
+![A street lamp made in Blender: its smooth globe is too detailed, it collides by the box around it](captures/building/my-model.png)
 
 ### The light of what you place
 
@@ -692,6 +729,41 @@ a way to break it first.
 **The decor** can do things too (inspector, **In the game**): collide or not, sound like stone or
 metal under Jak's feet, hurt or burn him, **bounce** him up, **launch** him along an arc.
 [the appendix](#appendix-what-the-decor-can-do-in-the-game) explains what the game allows.
+
+### The collision, face by face
+
+The **In the game** settings work piece by piece. The **Collision** tool (**C**, or the toolbar)
+works on the collision itself, face by face, as the game stores it, like the collision dock of
+OpenRAC's editor for Ratchet & Clank. Example: the street under Jak's start in the industrial zone
+made ice, and a box added for him to climb on.
+
+1. **See it.** Open a level and press **C**: its collision is drawn over it, a color per surface,
+   and the **Collision** window opens. **Colors** chooses what the colors tell: the **material**
+   (the sound of the steps; ice slides), the **effect on Jak** (hurts, burns, kills) or the
+   **kind** (ground, wall, obstacle). The legend lists the surfaces and their faces. **View >
+   Collision** shows it without the tool.
+2. **Pick faces.** A click picks the face under the cursor; **Shift + click** adds one or takes it
+   out; a **double click** takes the faces of its surface touching it (a whole floor); a **drag**
+   draws a box (every face whose middle is in it, seen or not). A surface of the legend takes all
+   its faces, and **Faces under the pieces selected** takes those under the pieces you selected
+   before the tool.
+3. **Change them.** Choose a surface (material, effect, kind, and More options) and **Give it to
+   the faces picked**; **Delete** them (**Del**): Jak goes through there; **Move** them: they are
+   drawn where they go while you set the distances, then **Move them**.
+4. **Add some.** A click leaves a yellow cross where it landed: **A floor** or **A box** adds one
+   there, of the surface chosen (a floor over a hole, an invisible wall at a cliff's edge).
+   **Collision from the shape of the pieces selected** gives pieces faces of their shape to change
+   one by one (their own collision becomes none).
+5. **Check.** **Where Jak may fall through** marks in red the floors with more triangles around
+   Jak than the game gathers at once (460).
+
+Every change is one step of **Undo**, and is saved with the project. The export writes the faces
+with their surfaces: the levels' with **The game's collision** (the export's choice, the default),
+the ones the tool added always.
+
+| Colored by kind: ground green, walls blue, the street picked | The street made ice, a box of metal added |
+|---|---|
+| ![kind](captures/collision/kind.png) | ![painted](captures/collision/painted.png) |
 
 ## 12. Where creatures walk: nav meshes
 
@@ -795,7 +867,7 @@ result and shows it to you, in your window, every change undoable. It needs your
 | Key | Action |
 |---|---|
 | W, E, R | Move, rotate, scale |
-| T, B | Topology tool, terrain brush (again or Esc: done) |
+| T, B, C | Topology tool, terrain brush, collision tool (again or Esc: done) |
 | Click, Shift / Ctrl + click | Select, add to (or take out of) the selection |
 | Double click, left button held still | Select the whole prefab or group (else the assembly) |
 | Drag from an empty spot | Box selection (Shift: add, Ctrl: take out) |
@@ -868,7 +940,7 @@ saved with the project and in prefabs, and written by **Level > Export for the g
 
 | Behavior | How it is made | Code generated |
 |---|---|---|
-| **Collision**: by its shape, none (walked through), invisible (an invisible wall); its material, what it does to Jak, its mode and its flags | the level builder's own glTF extras on the piece | none |
+| **Collision**: by its shape, by the box around it (a detailed model), none (walked through), invisible (an invisible wall); its material, what it does to Jak, its mode and its flags | the level builder's own glTF extras on the piece; the box, an invisible mesh of 12 triangles in its place | none |
 | **Bounce**: Jak landing on its top is thrown up *height* meters, on foot, in a dive and on the jetboard | a `bouncer` of the game without a model, as the board vents of the Industrial Zone are, on top of the piece | a type of the level deriving `bouncer` |
 | **Propulsion**: Jak stepping on its top is thrown along an arc to a point *distance* meters away, *height* above, turned *yaw* degrees from the piece's facing, in *time* seconds | the game's directed launch (`'launch-dir`), sent as the Metal Head puffers send it | a small `process-drawable` type of the level |
 | Breaking, squashing, dipping, swaying | not offered for the decor: they need a model of its own that the game draws as an actor (see [Breakable](#breakable) and [Deformation](#deformation)) | |
@@ -910,6 +982,8 @@ So, for a piece of decor:
 |---|---|
 | seen, walked through (cables, light shafts, foliage) | `set_collision: 1, ignore: 1` |
 | not seen, solid (an invisible wall) | `set_collision: 1, set_invisible: 1` |
+| faces of the collision edited one by one (the Collision tool) | the levels' collision meshes, a surface per triangle (`og_tri_pat_views`), and the tool's own (`og_collision: "made"`), written by surface as `<level>-collision-<material>-<event>-<mode>` (`crates/core/src/editor/collision_tool.rs`) |
+| solid by the box around it (a detailed model: a statue, a model of your own) | the piece `set_collision: 1, ignore: 1`; a mesh `<piece>-collision-box` (its own bounds where it stands) `set_collision: 1, set_invisible: 1, double_sided: 1` with the piece's surface and event (`box_around`, `crates/core/src/io/game_export/write.rs`) |
 | deadly, endless fall, burns, melts | `collide_event` 1, 2, 3, 6 (4 and 5: deadly and burn throwing Jak up) |
 | its surface (the sound and dust of the steps; ice slides) | `collide_material`, in the builder's numbering (`builder_material`, `crates/core/src/io/decor_behaviors.rs`) |
 
@@ -1031,6 +1105,18 @@ to the landing point, the time set (in 300ths of a second) and the gravity -3276
 | `for-break-bridge-board-a` to `-d` (`levels/forest/forest-bridges.gc:90-170`) | `'trigger`, or `'attack` by an uppercut, a dive or the board | `joint-exploder`, dust; completes a subtask |
 | `wascity-cactus` (`waswide-obs.gc:272-560`) | `'attack`: light hits shake its joints and take 0.1 of its 1.0 health; knockbacks or Dark Jak break it | `joint-exploder`, `drop-pickup` |
 | `des-cactus-a`, `-b` (`levels/desert/des-cactus.gc:10-300`) | damage of 2 or more against its health; `'impact-impulse` above 204800 | `joint-exploder` |
+
+How the pieces fly (`joint-exploder.gc`, its tuning by default, `new joint-exploder-tuning` with 0):
+each joint listed is given a speed of -20 to 20 m/s along the ground (81920 units) and 5 to 15 m/s up
+(20480 to 61440) and a random axis it turns about by `rot-speed` 8.4 degrees **a frame**
+(`init-joint-list`); each frame it falls by `gravity` -286720 (70 m/s²) and moves
+(`integrate-and-kill`); off the level's collision it bounces, the speed reflected, 0.75 of it kept
+along the ground (`hit-xz-reaction`) and 0.7 up (`hit-y-reaction`), turning half as fast
+(`do-collision-response`); the model shrinks to nothing in `duration` (2 s), its height in three
+quarters of it (`joint-exploder-shatter`). Tuning 1 throws the pieces away from a point (Jak, 4 m up:
+the fences); objects change the numbers (the cacti of the desert: 4 s, 40 m/s², 10 to 30 m/s up).
+The inspector's Preview throws the pieces with tuning 0, off the bottom of the model
+(`exploded`, `crates/core/src/editor/preview.rs`).
 
 The tools of the common code: `joint-exploder` (`engine/anim/joint-exploder.gc:37-51, 730-769`: a
 skeleton group, an animation, a list of joints), `debris-spawn` (`engine/common-obs/debris.gc:478`:

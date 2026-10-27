@@ -545,14 +545,14 @@ export_level {"name": "mtstreet", "nickname": "mts"}
 |---|---|
 | `list_prefabs` | the user's prefabs and the game's (`library/prefabricated/`) |
 | `list_catalog` | the objects of the game: `group` `objects` (props, doors, water), `effects` (smoke, fire, lights, sparks, water: `effect_kind`), `interactive` (crates, platforms, buttons) |
-| `list_models`, `list_decor` | the models of the game (placed as decor), the decor parts of the levels |
+| `list_models`, `list_decor` | the models of the game and the user's own (`from: my-models`, placed as decor), the decor parts of the levels |
 | `list_textures` | textures for `set_material` |
 
 **Building**
 
 | Tool | What it does |
 |---|---|
-| `place`, `place_many` | put a `prefab`, an `object`, a `model`, a `decor` part, a new `shape` (box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip, cylinder, ground; `style` and `surface` a level's look) or a `gameplay` element (`start`, `checkpoint`, `death_zone`) at a position, turned, scaled, `on_ground`; `place_many` up to 2,000 at once, one undo |
+| `place`, `place_many` | put a `prefab`, an `object`, a `model` (or a `.glb` made in Blender, `path`: imported into My models first), a `decor` part, a new `shape` (box, floor, wall, doorway, window, pillar, ramp, stairs, roof, roof-hip, cylinder, ground; `style` and `surface` a level's look) or a `gameplay` element (`start`, `checkpoint`, `death_zone`) at a position, turned, scaled, `on_ground`; `place_many` up to 2,000 at once, one undo |
 | `build_house` | a whole house in the style of a level, from its own pieces (rule 4) |
 | `build_structure`, `set_structure` | a solid wall, floor or house of a level's pieces; built again at another size or look (more pieces, not stretched) |
 | `create_prefab_set` | nine structures of a level saved as the user's prefabs, still growing once placed |

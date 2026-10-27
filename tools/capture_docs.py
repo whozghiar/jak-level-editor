@@ -699,6 +699,104 @@ def building(args, e):
         e.shot(out('building', 'jak2-level.png'), settle=4)
 
 
+def sample_glb(path):
+    """A model as Blender exports one (plain colors, no image): a street lamp, a stone base and a
+    pole of 12 triangles each, and a smooth globe of 9216 triangles (dense: it collides by the box
+    around it)."""
+    meshes = []
+
+    def box(lo, hi):
+        (x0, y0, z0), (x1, y1, z1) = lo, hi
+        pos, nrm, idx = [], [], []
+        for n, quad in (((0, -1, 0), [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)]),
+                        ((0, 1, 0), [(x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)]),
+                        ((0, 0, -1), [(x0, y0, z0), (x0, y1, z0), (x1, y1, z0), (x1, y0, z0)]),
+                        ((0, 0, 1), [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]),
+                        ((-1, 0, 0), [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)]),
+                        ((1, 0, 0), [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)])):
+            k = len(pos)
+            pos += quad
+            nrm += [n] * 4
+            idx += [k, k + 1, k + 2, k, k + 2, k + 3]
+        return pos, nrm, idx
+
+    def globe(c, r, rings=48, segments=96):
+        pos, nrm, idx = [], [], []
+        for i in range(rings + 1):
+            a = math.pi * i / rings
+            for j in range(segments + 1):
+                b = 2 * math.pi * j / segments
+                n = (math.sin(a) * math.cos(b), math.cos(a), math.sin(a) * math.sin(b))
+                nrm.append(n)
+                pos.append(tuple(c[k] + r * n[k] for k in range(3)))
+        for i in range(rings):
+            for j in range(segments):
+                k = i * (segments + 1) + j
+                idx += [k, k + 1, k + segments + 2, k, k + segments + 2, k + segments + 1]
+        return pos, nrm, idx
+
+    parts = (('Base', box((-0.5, 0, -0.5), (0.5, 0.4, 0.5)), 0), ('Pole', box((-0.08, 0.4, -0.08), (0.08, 3.0, 0.08)), 0),
+             ('Globe', globe((0, 3.4, 0), 0.45), 1))
+    binary, views, accessors, nodes = b'', [], [], []
+    for name, (pos, nrm, idx), material in parts:
+        prim = {'material': material}
+        for key, data, fmt, kind, target in (('POSITION', pos, 'f', 'VEC3', 34962), ('NORMAL', nrm, 'f', 'VEC3', 34962),
+                                             ('indices', idx, 'I', 'SCALAR', 34963)):
+            flat = [v for item in data for v in (item if isinstance(item, tuple) else (item,))]
+            chunk = struct.pack('<%d%s' % (len(flat), fmt), *flat)
+            views.append({'buffer': 0, 'byteOffset': len(binary), 'byteLength': len(chunk), 'target': target})
+            binary += chunk
+            acc = {'bufferView': len(views) - 1, 'componentType': 5125 if key == 'indices' else 5126,
+                   'count': len(data), 'type': kind}
+            if key == 'POSITION':
+                acc['min'] = [min(p[k] for p in pos) for k in range(3)]
+                acc['max'] = [max(p[k] for p in pos) for k in range(3)]
+            accessors.append(acc)
+            if key == 'indices':
+                prim['indices'] = len(accessors) - 1
+            else:
+                prim.setdefault('attributes', {})[key] = len(accessors) - 1
+        meshes.append({'name': name, 'primitives': [prim]})
+        nodes.append({'name': name, 'mesh': len(meshes) - 1})
+    doc = {'asset': {'version': '2.0', 'generator': 'Khronos glTF Blender I/O v4.2.70'},
+           'scene': 0, 'scenes': [{'nodes': list(range(len(nodes)))}], 'nodes': nodes, 'meshes': meshes,
+           'materials': [{'name': 'Stone', 'pbrMetallicRoughness': {'baseColorFactor': [0.18, 0.17, 0.16, 1]}},
+                         {'name': 'Glass', 'pbrMetallicRoughness': {'baseColorFactor': [1.0, 0.75, 0.3, 1]}}],
+           'accessors': accessors, 'bufferViews': views, 'buffers': [{'byteLength': len(binary)}]}
+    js = json.dumps(doc).encode()
+    js += b' ' * (-len(js) % 4)
+    binary += b'\0' * (-len(binary) % 4)
+    with open(path, 'wb') as f:
+        f.write(struct.pack('<III', 0x46546C67, 2, 28 + len(js) + len(binary)))
+        f.write(struct.pack('<II', len(js), 0x4E4F534A) + js + struct.pack('<II', len(binary), 0x004E4942) + binary)
+
+
+def my_model(args, e):
+    # a model made in Blender (written here as Blender writes one), imported then selected: what was
+    # checked, its collision by the box around it. The library is left as it was: its copy goes.
+    folder = os.path.join(LIBRARY, 'models')
+    had = os.path.isdir(os.path.join(folder, 'street-lamp'))
+    path = os.path.join(WORK, 'street-lamp.glb')
+    os.makedirs(WORK, exist_ok=True)
+    sample_glb(path)
+    new_street(e)
+    e.call('set_view', {'game_view': True, 'hour': 19, 'weather': 'clear'})
+    try:
+        lamp = e.call('place', {'kind': 'model', 'path': path, 'position': [0, 0.5, 0]})['nodes'][0]['id']
+        e.call('select', {'ids': [lamp]})
+        e.call('set_camera', {'position': [5, 3.5, 7], 'look_at': [0, 2, 0]})
+        e.web.evaluate("""(() => {
+          const h = [...document.querySelectorAll("h3")].find((h) => h.textContent.startsWith("Imported model"));
+          h && h.scrollIntoView({block: "start"});
+        })()""")
+        e.shot(out('building', 'my-model.png'), settle=3)
+    finally:
+        if not had:
+            shutil.rmtree(os.path.join(folder, 'street-lamp'), ignore_errors=True)
+            if os.path.isdir(folder) and not os.listdir(folder):
+                os.rmdir(folder)
+
+
 def scroll_to(e, heading):
     """The left panel scrolled to its section `heading` (its title as shown, in capitals)."""
     e.web.evaluate("""(() => {
@@ -917,6 +1015,28 @@ def game_rendering(args, e):
     e.shot(out('game-rendering', 'effects.png'), settle=4)
 
 
+def collision(args, e):
+    # the collision tool on the street of the industrial zone: colored by kind (ground, walls), the
+    # floor under Jak's start picked (a double click), then painted ice and a box added (undone after)
+    open_level(e, 'ctyinda')
+    s = e.call('get_level_info')['continue_points'][0]['position']
+    g = e.call('raycast', {'origin': [s[0] - 5, s[1] + 10, s[2] + 8]})['point']
+    e.call('set_camera', {'position': [g[0] + 10, g[1] + 12, g[2] + 22], 'look_at': g})
+    eng = e.web.engine
+    eng('start_collision_tool')
+    eng('collision_color_by', {'by': 'kind'})
+    ray = {'origin': [g[0], g[1] + 5, g[2]], 'dir': [0, -1, 0]}
+    eng('collision_pick', dict(ray, add=False, connected=True))
+    e.shot(out('collision', 'kind.png'), settle=3)
+    eng('collision_color_by', {'by': 'material'})
+    eng('collision_paint', {'material': 'ice'})
+    eng('collision_add', {'shape': 'box', 'size': [3, 2, 3], 'material': 'metal'})
+    e.shot(out('collision', 'painted.png'), settle=3)
+    eng('stop_collision_tool')
+    for _ in range(2):
+        e.call('undo')
+
+
 def behaviors(args, e):
     open_level(e, 'ctyinda', actors=True)
     found = e.call('find_nodes', {'etype': 'com-airlock-outer', 'limit': 5})['nodes']
@@ -998,8 +1118,9 @@ def assistant(args, e):
 
 
 SECTIONS = (('getting-started', getting_started), ('levels', levels), ('selecting', selecting), ('groups', groups_),
-            ('catalog', catalog), ('prefabs', prefabs), ('building', building),
-            ('game-rendering', game_rendering), ('behaviors', behaviors), ('export', exporting), ('mcp', assistant))
+            ('catalog', catalog), ('prefabs', prefabs), ('building', building), ('my-model', my_model),
+            ('game-rendering', game_rendering), ('behaviors', behaviors), ('collision', collision), ('export', exporting),
+            ('mcp', assistant))
 
 
 def main():

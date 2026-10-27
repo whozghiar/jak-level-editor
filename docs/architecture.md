@@ -225,6 +225,8 @@ know whether it is up to date.
 
 **The tools are the engine's.** Each tool has its file in `crates/core/src/editor/`: placing
 (`placement.rs`), the terrain brush (`terrain_tool.rs`), the topology tool (`topology_tool.rs`),
+the collision tool (`collision_tool.rs`: the levels' collision face by face, drawn by
+`ui/render/collision_tool.svelte.ts` from the triangles `collision_overlay` answers),
 the structures in a level's style (`structures.rs`: its building kit read from its decor, walls,
 floors and houses planned from it and made again when resized, prefab sets), arranging, repeating, the history list, the gameplay
 markers (start, checkpoints, creatures' spawn points, death zones) and the routes of moving objects
@@ -523,7 +525,7 @@ crates/
     src/io/                       glTF, the library and its index, the catalog, prefabs and the
                                   game's prefab recipes, the game's data, the texture palette,
                                   behaviors, the export for the game and its nav meshes, Jak II's
-                                  structures
+                                  structures, the user's own models (user_models.rs: Blender's)
     src/game/                     the game view's chunks (view.rs), the game's mood: hour, weather,
                                   fog, lights (mood.rs)
     src/navmesh.rs, navmesh/      nav mesh generation (rerecast, a Rust port of Recast; recast.rs:
@@ -533,7 +535,7 @@ crates/
     src/editor/                   the application without its interface: the Editor (mod.rs), the
                                   dispatch of `call` (api.rs), get_state (state.rs), levels,
                                   project, selection, groups, placement, the tools (terrain_tool,
-                                  topology_tool, preview), structures (a level's building kit and
+                                  topology_tool, collision_tool, preview), structures (a level's building kit and
                                   its houses), arrange (arrange, repeat, the history, the gameplay
                                   markers), inspector, panels, catalog, thumbnails,
                                   export, extraction, effects, ocean, surfaces, behaviors, the
@@ -933,6 +935,7 @@ library/jak3/<level>/level.json                    what the folder holds (DGO, a
 library/jak2/...                                   Jak II's levels, the same way
 library/prefabricated/*.glb                        the user's prefabs
 library/prefabricated/game/*.glb                   the game's prefabs (game/jak2/: Jak II's)
+library/models/<name>/<name>.glb                   the user's own models (Blender's: io/user_models.rs)
 library/projects/<name>/                           a saved project
 library/exports/<project>/                         a level exported for the game
 ```
