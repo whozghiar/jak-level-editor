@@ -303,20 +303,19 @@ impl Editor {
     // what to place: by name
     match kind {
       "model" if a.get("path").is_some() => {
-        // a model made elsewhere
+        // a model made elsewhere: imported into My models first, as File > Import a model does
         let path = str_arg(a, "path");
-        let file = Path::new(path);
-        if !file.is_file() {
+        if !Path::new(path).is_file() {
           return fail(format!("path: no file {path}"));
         }
-        let stem = file
-          .file_stem()
-          .map(|s| s.to_string_lossy().into_owned())
-          .unwrap_or_default();
-        let model = CatalogModel {
-          name: if name.is_empty() { stem } else { name.into() },
-          path: path.into(),
-          ..Default::default()
+        let copy = match import_model_file(&self.library.models_folder(), Path::new(path)) {
+          Ok(copy) => copy,
+          Err(e) => return fail(format!("path: {e}")),
+        };
+        self.forget_model_file(&copy);
+        self.refresh_user_models();
+        let Some(model) = self.catalog.models.iter().find(|m| m.path == copy).cloned() else {
+          return fail(format!("path: {copy} is not in the library's models"));
         };
         self.start_model_placement(&model, false);
       }

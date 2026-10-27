@@ -24,6 +24,7 @@ use crate::io::asset_library::merge_mesh;
 use crate::io::catalog::{CatalogModel, CatalogObject, CatalogPart, make_catalog_actor, part_mesh};
 use crate::io::jak2_import::import_jak2_mesh;
 use crate::io::prefabs::{load_prefab, new_prefab_path, place_prefab, save_prefab};
+use crate::io::user_models::{import_model_file, user_model_checks, user_model_decor};
 use crate::math::{Mat4, Quat, Ray, Transform, Vec3, normalize, radians, ray_plane};
 use crate::scene::level_style::{LevelStyle, Surface, measure_style};
 use crate::scene::pick::{PickFilter, PickHit, pick};
@@ -208,6 +209,12 @@ impl Editor {
     self.catalog.store.model(&model.path, true);
   }
 
+  /// A model file read again (imported again: edited in Blender), its preview made again
+  pub(crate) fn forget_model_file(&mut self, path: &str) {
+    self.catalog.store.forget_model(path);
+    self.placing.previews.remove(&format!("model:{path}"));
+  }
+
   pub fn start_part_placement(&mut self, level_background: &str, part: &CatalogPart, once: bool) {
     let jak2 = self.library_jak2.level_of(level_background).is_some();
     self.begin_placement(Placement {
@@ -300,6 +307,11 @@ impl Editor {
             Some(&mut checks),
           );
           Arc::make_mut(&mut m).extras["og_import_checks"] = checks;
+          m
+        } else if pl.game == "user" {
+          // a model of the user's: what could go wrong checked (kept with the mesh)
+          let mut m = merge_mesh(&mut self.scene, &lm.mesh, &lm.textures, &lm.materials);
+          Arc::make_mut(&mut m).extras["og_import_checks"] = user_model_checks(&lm, &pl.path);
           m
         } else {
           let m = merge_mesh(&mut self.scene, &lm.mesh, &lm.textures, &lm.materials);
@@ -493,6 +505,10 @@ impl Editor {
           // which model (its animations: the preview)
           let extras = if jak2 {
             json!({"og_import": {"game": "jak2", "level": pl.level, "part": pl.name, "checks": checks(&mesh)}})
+          } else if pl.game == "user" {
+            let checks = checks(&mesh);
+            json!({"og_model": pl.name, "og_decor": user_model_decor(&checks),
+              "og_import": {"game": "user", "file": pl.name, "checks": checks}})
           } else {
             json!({"og_model": pl.name})
           };
@@ -955,7 +971,28 @@ impl Editor {
           Err(tr("build.style.reading").to_string())
         }
       }
-      "start_model_placement" | "import_model" => {
+      "import_model" => {
+        // a model made elsewhere (Blender...): copied into the library's own models (My models),
+        // then placed
+        let folder = self.library.models_folder();
+        match import_model_file(&folder, std::path::Path::new(s("path"))) {
+          Ok(path) => {
+            self.forget_model_file(&path);
+            self.refresh_user_models();
+            let model = self.catalog.models.iter().find(|m| m.path == path).cloned();
+            match model {
+              Some(model) => {
+                log_info!(tr("log.model_imported"), &model.name, &folder);
+                self.start_model_placement(&model, once);
+                Ok(json!({"name": model.name, "path": path}))
+              }
+              None => Err(format!("{path}: not in the library's models")),
+            }
+          }
+          Err(e) => Err(e),
+        }
+      }
+      "start_model_placement" => {
         let path = s("path");
         let stem = std::path::Path::new(path)
           .file_stem()

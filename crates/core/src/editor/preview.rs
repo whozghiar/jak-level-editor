@@ -571,6 +571,28 @@ impl Editor {
         lib = self.library_jak2.clone();
         o.jak2 = true;
       }
+      if let Some(imp) = extras.get("og_import").filter(|i| i.is_object())
+        && str_of(imp, "game") == "user"
+      {
+        // a model of the user's: its animations in its file of the library (My models)
+        let file = str_of(imp, "file");
+        let path = self
+          .catalog
+          .models
+          .iter()
+          .find(|m| m.game == "user" && m.name == file)
+          .map(|m| m.path.clone());
+        if let Some(path) = path {
+          o.skeleton = self.model_skeleton(&path);
+          o.asset = Some(path);
+          if let Some(s) = &o.skeleton {
+            o.animations = (0..s.animations.len())
+              .filter(|&i| s.animations[i].duration > 0.0)
+              .collect();
+          }
+        }
+        return o;
+      }
       if o.name.is_empty() {
         return o;
       }

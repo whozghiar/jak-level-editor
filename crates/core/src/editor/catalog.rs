@@ -30,6 +30,7 @@ use crate::io::prefabs::{PrefabInfo, list_prefabs};
 use crate::io::texture_palette::{
   PaletteTexture, TexturePalette, all_textures, read_level_textures, recurring_textures,
 };
+use crate::io::user_models::{MY_MODELS, list_user_models};
 use crate::prefs::{Prefs, READ_ONLY};
 use crate::scene::shapes::add_texture_once;
 use crate::scene::{NodeKind, Scene};
@@ -154,7 +155,14 @@ impl Editor {
     }
     let idx = c.index.ready().then_some(&c.index);
     c.objects = build_catalog(&self.library, data.as_deref(), idx);
-    c.models = list_catalog_models(&self.library, data.as_deref(), &c.objects, &BTreeSet::new());
+    // the user's own models first (My models), then the game's
+    c.models = list_user_models(&self.library.models_folder());
+    c.models.extend(list_catalog_models(
+      &self.library,
+      data.as_deref(),
+      &c.objects,
+      &BTreeSet::new(),
+    ));
     // Jak II's: its models alone (its objects' code is not in Jak 3), placed as decor, but its
     // living things' (data/jak2/creatures.json, from its type table)
     c.models_jak2.clear();
@@ -167,6 +175,16 @@ impl Editor {
     if let Some(idx) = idx {
       c.all_parts = all_decor(idx, &self.library);
     }
+  }
+
+  /// The user's models listed again (one was imported): first in the catalog's Models
+  pub(crate) fn refresh_user_models(&mut self) {
+    let c = &mut self.catalog;
+    c.models.retain(|m| m.game != "user");
+    let mut models = list_user_models(&self.library.models_folder());
+    models.append(&mut c.models);
+    c.models = models;
+    c.epoch += 1;
   }
 
   /// the index, once it just became ready
@@ -604,6 +622,11 @@ impl Editor {
         let mut levels: Vec<&str> = models.iter().map(|m| m.group.as_str()).collect();
         levels.sort();
         levels.dedup();
+        // the user's own first
+        if let Some(at) = levels.iter().position(|&l| l == MY_MODELS) {
+          levels.remove(at);
+          levels.insert(0, MY_MODELS);
+        }
         let mut level = s("level");
         if !levels.contains(&level.as_str()) {
           level.clear();

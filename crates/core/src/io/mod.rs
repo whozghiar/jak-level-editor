@@ -19,3 +19,4 @@ pub mod prefabs;
 #[cfg(test)]
 pub(crate) mod test_library;
 pub mod texture_palette;
+pub mod user_models;

@@ -34,13 +34,14 @@ use crate::game::mood::weather_presets;
 use crate::history::NodeChange;
 use crate::i18n::{tr, tr_en};
 use crate::io::behaviors::behavior_kind;
-use crate::io::catalog::{CatalogModel, CatalogPart, PartKind, effect_kind, list_parts};
+use crate::io::catalog::{CatalogPart, PartKind, effect_kind, list_parts};
 use crate::io::decor_behaviors::{decor_behavior_json, decor_behavior_of};
 use crate::io::game_export::{
   check_continues, default_iso_name, default_nickname, untaken_nickname,
 };
 use crate::io::jak2_import::{jak2_structure, lighting_ratio, mesh_lighting, scaled_colors};
 use crate::io::nav_export::export_navmeshes;
+use crate::io::user_models::import_model_file;
 use crate::math::{AABB, Mat4, Quat, Ray, Vec3, length, normalize, radians};
 use crate::navmesh::{navmesh_nodes, navmesh_of_node, navmesh_problem};
 use crate::scene::assemblies::find_assemblies;

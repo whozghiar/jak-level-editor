@@ -104,6 +104,27 @@
         return t("import.check.textures", n("count"), n("renamed"), n("odd"));
       case "metadata":
         return t("import.check.metadata");
+      // a model of the user's (io/user_models.rs)
+      case "user_mesh":
+        return c.ok
+          ? t("import.check.user_mesh", n("triangles"))
+          : t("import.check.user_mesh_uv", n("triangles"), n("no_uv"));
+      case "size":
+        return t("import.check.size", n("x"), n("y"), n("z"));
+      case "user_textures":
+        return t("import.check.user_textures", n("count"), n("largest"));
+      case "plain":
+        return t("import.check.plain", n("count"));
+      case "parts":
+        return t("import.check.parts", n("count"));
+      case "animations":
+        return t("import.check.animations", n("count"), n("joints"));
+      case "collision":
+        return t(
+          c.box ? "import.check.collision_box" : "import.check.collision",
+          n("triangles"),
+          n("around"),
+        );
     }
     return null;
   }
@@ -307,8 +328,13 @@
 {/if}
 
 {#if imported}
-  <h3 class={heading}>{t("import.title", imported.level ?? "")}</h3>
-  <Tip text={t("import.tip")} />
+  {#if imported.game === "user"}
+    <h3 class={heading}>{t("import.user.title", imported.file ?? "")}</h3>
+    <Tip guide="mymodels" />
+  {:else}
+    <h3 class={heading}>{t("import.title", imported.level ?? "")}</h3>
+    <Tip text={t("import.tip")} />
+  {/if}
   <div class="flex flex-col gap-1 text-sm">
     {#each Array.isArray(imported.checks) ? imported.checks : [] as c}
       {@const text = c && typeof c === "object" ? checkText(c) : null}

@@ -189,10 +189,16 @@
     lines.push(t("catalog.place_tip"));
     return lines.join("\n");
   }
+  // the group of the user's own models (io/user_models.rs: MY_MODELS)
+  const myModels = "my-models";
+  const levelLabel = (l: string) =>
+    l === myModels ? t("catalog.my_models") : l;
   const modelTip = (m: Model) =>
     [
       m.name,
-      t("catalog.from", m.group),
+      m.group === myModels
+        ? t("catalog.my_models.tip")
+        : t("catalog.from", m.group),
       t("catalog.model_tip"),
       t("catalog.place_tip"),
     ].join("\n");
@@ -346,17 +352,19 @@
         {/if}
       {:else if tab === "models"}
         {#if game2}<p class={muted}>{t("catalog.models.jak2.tip")}</p>{/if}
-        <!-- the level they come from, or every level -->
+        <!-- the level they come from (or My models: the user's own), or every level -->
         <Dropdown
           items={[
             { label: t("catalog.all_levels"), value: "" },
             ...((answer?.levels ?? []) as string[]).map((l) => ({
-              label: l,
+              label: levelLabel(l),
               value: l,
             })),
           ]}
           value={answer?.level ?? ""}
-          label={answer?.level || t("catalog.all_levels")}
+          label={answer?.level
+            ? levelLabel(answer.level)
+            : t("catalog.all_levels")}
           filter={t("catalog.filter")}
           onselect={(v) => (modelsLevel = v)}
         />

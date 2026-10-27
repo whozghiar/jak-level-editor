@@ -1169,6 +1169,43 @@ pub fn import_gltf(
 }
 
 /// The skeleton of a model file and its animations (scene/skeleton); an error when it has none
+/// What a glTF file holds, from its JSON alone (the user's own models: io/user_models)
+#[derive(Debug, Default)]
+pub struct FileSummary {
+  /// written by the editor (a project, a prefab, an export), not by another program
+  pub editor: bool,
+  /// its nodes with a mesh (Blender's objects)
+  pub parts: usize,
+  pub animations: usize,
+  /// the joints of its skeleton (0: none)
+  pub joints: usize,
+  /// the files next to it that it names (a .gltf's buffers and images), relative, decoded
+  pub files: Vec<String>,
+}
+
+pub fn file_summary(path: impl AsRef<Path>) -> Result<FileSummary, String> {
+  let path = path.as_ref();
+  let binary = !path
+    .extension()
+    .is_some_and(|e| e.eq_ignore_ascii_case("gltf"));
+  let d = load_file(path, binary)?.doc;
+  let named =
+    |uri: &str| (!uri.is_empty() && !uri.starts_with("data:")).then(|| percent_decode(uri));
+  Ok(FileSummary {
+    editor: d.asset.extras.get("ogle").is_some() || d.asset.generator == "jak-level-editor",
+    parts: d.nodes.iter().filter(|n| n.mesh >= 0).count(),
+    animations: d.animations.len(),
+    joints: d.skins.first().map_or(0, |s| s.joints.len()),
+    files: d
+      .buffers
+      .iter()
+      .map(|b| b.uri.as_str())
+      .chain(d.images.iter().map(|i| i.uri.as_str()))
+      .filter_map(named)
+      .collect(),
+  })
+}
+
 pub fn load_skeleton(path: impl AsRef<Path>) -> Result<Skeleton, String> {
   // its images are not needed
   let file = load_file(path.as_ref(), true)?;
@@ -1391,6 +1428,9 @@ impl GlbWriter {
   }
 }
 
+/// The white texture the builder's file gives the materials without one (ExportContext::texture)
+const K_PLAIN_TEXTURE: i32 = -2;
+
 fn png(width: i32, height: i32, rgba: &[u8]) -> Option<Vec<u8>> {
   use image::ImageEncoder;
   let mut out = Vec::new();
@@ -1455,29 +1495,34 @@ impl<'a> ExportContext<'a> {
     if let Some(&gi) = self.texture_map.get(&(ti, double_alpha)) {
       return gi;
     }
-    let Some(t) = usize::try_from(ti)
-      .ok()
-      .and_then(|i| self.scene.textures.get(i))
-    else {
-      return -1;
-    };
-    if t.width <= 0 || t.height <= 0 || t.rgba.len() != t.width as usize * t.height as usize * 4 {
-      return -1;
-    }
-    let encoded = if double_alpha {
-      let mut rgba = t.rgba.clone();
-      for a in rgba.iter_mut().skip(3).step_by(4) {
-        *a = (*a as u32 * 2).min(255) as u8;
-      }
-      png(t.width, t.height, &rgba)
+    let (name, encoded) = if ti == K_PLAIN_TEXTURE {
+      ("jle-plain".to_string(), png(8, 8, &[255; 8 * 8 * 4]))
     } else {
-      png(t.width, t.height, &t.rgba)
+      let Some(t) = usize::try_from(ti)
+        .ok()
+        .and_then(|i| self.scene.textures.get(i))
+      else {
+        return -1;
+      };
+      if t.width <= 0 || t.height <= 0 || t.rgba.len() != t.width as usize * t.height as usize * 4 {
+        return -1;
+      }
+      let encoded = if double_alpha {
+        let mut rgba = t.rgba.clone();
+        for a in rgba.iter_mut().skip(3).step_by(4) {
+          *a = (*a as u32 * 2).min(255) as u8;
+        }
+        png(t.width, t.height, &rgba)
+      } else {
+        png(t.width, t.height, &t.rgba)
+      };
+      (t.name.clone(), encoded)
     };
     let Some(encoded) = encoded else { return -1 };
     let view = self.w.add_view(0, |bin| bin.extend_from_slice(&encoded));
     self
       .images
-      .push(json!({"name": t.name, "bufferView": view, "mimeType": "image/png"}));
+      .push(json!({"name": name, "bufferView": view, "mimeType": "image/png"}));
     self
       .textures
       .push(json!({"source": self.images.len() - 1, "sampler": 0}));
@@ -1506,7 +1551,12 @@ impl<'a> ExportContext<'a> {
     } else {
       m.cutoff
     };
-    let ti = self.texture(m.texture, game_alpha);
+    let mut ti = self.texture(m.texture, game_alpha);
+    if ti < 0 && self.builder {
+      // a material of one color (Blender's without an image): the builder would draw it with
+      // its debug checker; white, its color in the vertices' (ExportContext::mesh)
+      ti = self.texture(K_PLAIN_TEXTURE, false);
+    }
     if ti >= 0 {
       pbr["baseColorTexture"] = json!({"index": ti});
     }

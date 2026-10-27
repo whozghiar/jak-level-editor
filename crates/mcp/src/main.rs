@@ -356,7 +356,8 @@ fn tools() -> Value {
     tool(
       "place",
       "Puts in the document an object of the catalog (kind 'object', name from list_catalog), a \
-       model (kind 'model', from list_models, or a .glb file made elsewhere with path), a decor \
+       model (kind 'model', from list_models, or a .glb or .gltf file made elsewhere, Blender's, \
+       with path: imported into the library's My models first, then in list_models), a decor \
        part (kind 'decor', name and level from list_decor), a prefab (kind 'prefab') or a new \
        shape (kind 'shape', name box, floor, wall, doorway, window, pillar, ramp, stairs, roof, \
        roof-hip, cylinder or ground, with size, and opening [width, height] for a doorway or a \
@@ -380,7 +381,7 @@ fn tools() -> Value {
         ),
         (
           "path",
-          str("kind 'model': a .glb or .gltf file instead of a model of the game")
+          str("kind 'model': a .glb or .gltf file (Blender's) instead of a model of the game")
         ),
         (
           "size",

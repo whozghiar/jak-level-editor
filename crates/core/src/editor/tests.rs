@@ -878,6 +878,14 @@ fn a_dropped_folder_is_the_library() {
   let before = ed.library_root.clone();
   assert_eq!(drop(&mut ed, &file), "file");
   assert_eq!(ed.library_root, before);
+  // a model made in Blender is imported, a file of the editor's opens
+  let model = tmp.join("chair.gltf");
+  let asset =
+    |generator: &str| format!(r#"{{"asset": {{"version": "2.0", "generator": "{generator}"}}}}"#);
+  std::fs::write(&model, asset("Khronos glTF Blender I/O v4.2.70")).unwrap();
+  assert_eq!(drop(&mut ed, &model), "model");
+  std::fs::write(&model, asset("jak-level-editor")).unwrap();
+  assert_eq!(drop(&mut ed, &model), "file");
   assert_eq!(drop(&mut ed, &folder), "library");
   assert!(
     Path::new(&ed.library_root).ends_with("my.library"),

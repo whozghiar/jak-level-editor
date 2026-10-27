@@ -162,7 +162,9 @@ impl Editor {
       "drop_path" => {
         let path = s(a, "path");
         if !std::path::Path::new(path).is_dir() {
-          return Ok(json!("file"));
+          // a model made elsewhere (Blender...) is imported; the editor's own files open
+          let made_elsewhere = crate::io::gltf::file_summary(path).is_ok_and(|f| !f.editor);
+          return Ok(json!(if made_elsewhere { "model" } else { "file" }));
         }
         self.set_library(path);
         Ok(json!("library"))

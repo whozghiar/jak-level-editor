@@ -59,15 +59,16 @@ export function openProject(): void {
   });
 }
 
-/** File > Import a model: a .glb made elsewhere (Blender...), placed like a model of the catalog. */
+/**
+ * File > Import a model: a .glb or .gltf made elsewhere (Blender...), copied into the library's My
+ * models (the catalog's Models), then placed like a model of the catalog.
+ */
 export async function importModel(): Promise<void> {
   const path = await open({
     filters: [{ name: "glTF (.glb, .gltf)", extensions: ["glb", "gltf"] }],
     defaultPath: engine.state.projects_root || undefined,
   });
-  if (typeof path !== "string") return;
-  const name = path.replace(/^.*[\\/]/, "").replace(/\.[^.]*$/, "");
-  call("start_model_placement", { name, path, once: false });
+  if (typeof path === "string") call("import_model", { path, once: false });
 }
 
 /** File > Quit, the title bar's cross: the window's close, which asks first (LevelEditor). */

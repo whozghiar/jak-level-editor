@@ -93,14 +93,17 @@
         });
       }),
     );
-    // a project dropped on the window opens; a folder is taken as the library (process_event)
+    // a project dropped on the window opens; a model made elsewhere (Blender...) is imported into
+    // My models and placed (each one dropped); a folder is taken as the library (process_event)
     keep(
-      getCurrentWebview().onDragDropEvent((e) => {
+      getCurrentWebview().onDragDropEvent(async (e) => {
         if (e.payload.type !== "drop" || !e.payload.paths.length) return;
-        const path = e.payload.paths[0];
-        void call<string>("drop_path", { path }).then(
-          (r) => r === "file" && openProjectFile(path),
-        );
+        const [first, ...more] = e.payload.paths;
+        const r = await call<string>("drop_path", { path: first });
+        if (r === "file") openProjectFile(first);
+        if (r !== "model") return;
+        for (const path of [first, ...more])
+          if (/\.(glb|gltf)$/i.test(path)) await call("import_model", { path });
       }),
     );
     return () => {

@@ -310,10 +310,20 @@ impl AssetLibrary {
 
   /// <library>/prefabricated: the prefabs, kept out of git (they hold the game's decor)
   pub fn prefab_folder(&self) -> String {
+    self.beside("prefabricated")
+  }
+
+  /// <library>/models: the user's own models (io/user_models)
+  pub fn models_folder(&self) -> String {
+    self.beside("models")
+  }
+
+  /// a folder next to the game's
+  fn beside(&self, name: &str) -> String {
     match self.root.rfind('/') {
       _ if self.root.is_empty() => String::new(),
-      Some(at) => format!("{}/prefabricated", &self.root[..at]),
-      None => format!("{}/prefabricated", self.root),
+      Some(at) => format!("{}/{name}", &self.root[..at]),
+      None => format!("{}/{name}", self.root),
     }
   }
 
@@ -447,11 +457,51 @@ pub fn load_model_asset(path: &str, skin: bool) -> Result<LoadedMesh, String> {
   if mesh.prims.is_empty() {
     return Err(format!("no geometry in {path}"));
   }
+  plain_colors_as_textures(&mut tmp);
   Ok(LoadedMesh {
     mesh: Arc::new(mesh),
     textures: std::mem::take(&mut tmp.textures),
     materials: std::mem::take(&mut tmp.materials),
   })
+}
+
+/// The materials of one color without an image (Blender's often are) given a small image of that
+/// color, white then: the game draws a material without a texture with a checker, and the editor
+/// shows them as the program that made them (glTF's color is linear, an image's is sRGB)
+pub fn plain_colors_as_textures(doc: &mut Scene) {
+  let srgb = |c: f32| {
+    let c = c.clamp(0.0, 1.0);
+    let s = if c <= 0.0031308 {
+      12.92 * c
+    } else {
+      1.055 * c.powf(1.0 / 2.4) - 0.055
+    };
+    (s * 255.0).round() as u8
+  };
+  for i in 0..doc.materials.len() {
+    let m = &doc.materials[i];
+    // a material of the game: its color doubled (the PS2's)
+    if m.texture >= 0 || m.base_color.w > 1.5 {
+      continue;
+    }
+    let c = m.base_color;
+    let texel = [
+      srgb(c.x),
+      srgb(c.y),
+      srgb(c.z),
+      (c.w.clamp(0.0, 1.0) * 255.0).round() as u8,
+    ];
+    let t = doc.add_texture(Texture {
+      name: format!("{}-color", m.name),
+      width: 8,
+      height: 8,
+      rgba: texel.repeat(64),
+      ..Default::default()
+    });
+    let m = &mut doc.materials[i];
+    m.texture = t;
+    m.base_color = crate::math::Vec4::new(1.0, 1.0, 1.0, 1.0);
+  }
 }
 
 /// Copies a mesh into a document: textures (deduplicated by name and content) and materials are
