@@ -356,6 +356,51 @@ fn cut_in_pieces(src: &Mesh, cell: f32) -> (Mesh, Skeleton) {
   (bind, s)
 }
 
+/// How long the game's pieces fly (joint-exploder-tuning's duration)
+const EXPLODE_SECONDS: f32 = 2.0;
+
+/// Where the pieces are `t` seconds after they were thrown, as the game's joint-exploder moves them
+/// with its default tuning (engine/anim/joint-exploder.gc: integrate-and-kill,
+/// do-collision-response, joint-exploder-shatter), frame by frame at 60 a second: falling at
+/// 70 m/s² (-286720 units), turning by their angle each frame; off the ground they bounce back
+/// with 0.75 of their speed along it and 0.7 of it up, turning half as fast; they shrink to nothing
+/// in 2 s, their height in 1.5 s
+fn exploded(rest: &[Mat4], velocity: &[Vec3], spin: &[Vec3], ground: f32, t: f32) -> Vec<Mat4> {
+  const DT: f32 = 1.0 / 60.0;
+  let frames = (t / DT) as usize;
+  let shrink = |d: f32| (1.0 - t / d).max(0.0001);
+  let scale = Mat4::scale(Vec3::new(
+    shrink(EXPLODE_SECONDS),
+    shrink(0.75 * EXPLODE_SECONDS),
+    shrink(EXPLODE_SECONDS),
+  ));
+  let mut worlds = rest.to_vec();
+  for (i, w) in worlds.iter_mut().enumerate() {
+    let (Some(&v), Some(&s)) = (velocity.get(i), spin.get(i)) else {
+      continue;
+    };
+    let at = rest[i].col3(3);
+    let (mut pos, mut v, mut angle, mut turned) = (at, v, length(s), 0.0);
+    for _ in 0..frames {
+      v.y -= 70.0 * DT;
+      pos += v * DT;
+      turned += angle;
+      if pos.y < ground {
+        pos.y = ground + 0.01;
+        v = Vec3::new(v.x * 0.75, -v.y * 0.7, v.z * 0.75);
+        angle *= 0.5;
+      }
+    }
+    let q = if turned > 0.0 {
+      Quat::axis_angle(s, turned)
+    } else {
+      Quat::default()
+    };
+    *w = Mat4::translate(pos) * Mat4::rotate(q) * scale * Mat4::translate(at * -1.0) * rest[i];
+  }
+  worlds
+}
+
 /// A small generator of the same numbers each time (the pieces of a preview thrown the same way):
 /// -1..1
 struct Rng(u64);
@@ -408,10 +453,12 @@ struct AnimPreview {
   base: Vec3,
   height: f32,
   time: f32,
-  /// broken: where its pieces were, how they fly
+  /// broken: where its pieces were, how they fly (m/s; the axis they turn about, by the angle of a
+  /// frame), the height they bounce off
   rest: Vec<Mat4>,
   velocity: Vec<Vec3>,
   spin: Vec<Vec3>,
+  ground: f32,
   /// a change of the document ends it
   revision: u64,
   /// an actor without a model: `moving` is its picture, drawn over the view
@@ -741,33 +788,26 @@ impl Editor {
     }
     moving.touch();
     if animation == K_BROKEN || animation == K_FRACTURE {
-      // each piece thrown out of the middle and up, turning, then falling
+      // each piece thrown as the game's joint-exploder throws it by default (its tuning 0,
+      // engine/anim/joint-exploder.gc): -20 to 20 m/s along the ground, 5 to 15 m/s up, turning
+      // 8.4 degrees a frame about an axis of its own; the ground: the bottom of the model
       p.rest = skeleton_pose(&skeleton, -1, 0.0);
       let b = bind.bounds();
-      let middle = if b.valid() {
-        b.center()
-      } else {
-        Vec3::default()
-      };
-      // a crate's pieces fly less far than a wall's
-      let k = if b.valid() {
-        (length(b.hi - b.lo) / 8.0).clamp(0.5, 1.5)
-      } else {
-        1.0
-      };
+      p.ground = if b.valid() { b.lo.y } else { 0.0 };
       let mut rng = Rng(7);
-      for w in &p.rest {
-        let mut out = w.col3(3) - middle;
-        out.y = 0.0;
-        out = if length(out) > 0.01 {
-          normalize(out)
+      for _ in &p.rest {
+        p.velocity.push(Vec3::new(
+          20.0 * rng.next(),
+          10.0 + 5.0 * rng.next(),
+          20.0 * rng.next(),
+        ));
+        let axis = Vec3::new(rng.next(), rng.next(), rng.next());
+        let axis = if length(axis) > 0.01 {
+          normalize(axis)
         } else {
-          Vec3::new(rng.next(), 0.0, rng.next())
+          Vec3::new(0.0, 1.0, 0.0)
         };
-        let v = out * (2.5 + 1.5 * rng.next()) + Vec3::new(0.0, 5.0 + 1.5 * rng.next(), 0.0);
-        p.velocity.push(v * k);
-        p.spin
-          .push(Vec3::new(rng.next(), rng.next(), rng.next()) * 4.0);
+        p.spin.push(axis * radians(8.4));
       }
     }
     let moving = Arc::new(moving);
@@ -930,25 +970,13 @@ impl Editor {
       let t = if looping { p.time } else { p.time.min(6.0) };
       vec![motion_at(p.motion, t, p.base, p.height)]
     } else {
-      // 2.5 s of flight, then again (or the pieces left lying)
+      // the game's 2 s, then again (or the pieces gone)
       let t = if looping {
-        p.time % 2.5
+        p.time % EXPLODE_SECONDS
       } else {
-        p.time.min(2.5)
+        p.time.min(EXPLODE_SECONDS)
       };
-      let mut worlds = p.rest.clone();
-      for (i, w) in worlds.iter_mut().enumerate().take(p.velocity.len()) {
-        let at = p.rest[i].col3(3);
-        let moved = p.velocity[i] * t + Vec3::new(0.0, -9.8 * 0.5 * t * t, 0.0);
-        let turn = length(p.spin[i]) * t;
-        let q = if turn > 0.0 {
-          Quat::axis_angle(p.spin[i], turn)
-        } else {
-          Quat::default()
-        };
-        *w = Mat4::translate(at + moved) * Mat4::rotate(q) * Mat4::translate(at * -1.0) * p.rest[i];
-      }
-      worlds
+      exploded(&p.rest, &p.velocity, &p.spin, p.ground, t)
     };
     let joints = joint_matrices(&s, &worlds);
     json!({
@@ -1032,8 +1060,10 @@ mod tests {
   use serde_json::{Value, json};
 
   use super::super::Editor;
+  use super::{EXPLODE_SECONDS, exploded};
   use crate::io::asset_library::{AssetLibrary, game_folder, load_model_asset};
   use crate::io::test_library::{make_box, real_library};
+  use crate::math::{Mat4, Vec3, length, radians};
   use crate::scene::{Node, NodeKind};
 
   fn editor() -> Editor {
@@ -1175,6 +1205,27 @@ mod tests {
         .unwrap()
         .is_null()
     );
+  }
+
+  #[test]
+  fn pieces_fly_as_the_game_throws_them() {
+    // a piece 1 m up, thrown at 10 m/s along x and up: it never goes through the ground, slows
+    // down by bouncing, and is gone (shrunk) after 2 s
+    let rest = [Mat4::translate(Vec3::new(0.0, 1.0, 0.0))];
+    let (v, s) = (
+      [Vec3::new(10.0, 10.0, 0.0)],
+      [Vec3::new(0.0, radians(8.4), 0.0)],
+    );
+    let mut last_x = 0.0;
+    for k in 1..=20 {
+      let w = exploded(&rest, &v, &s, 0.0, k as f32 * 0.1)[0];
+      let at = w.col3(3);
+      assert!(at.y >= 0.0 && at.x > last_x, "{k}: {at:?}");
+      last_x = at.x;
+    }
+    assert!(last_x < 20.0, "bounces slow it down: {last_x}");
+    let end = exploded(&rest, &v, &s, 0.0, EXPLODE_SECONDS)[0];
+    assert!(length(end.col3(0)) < 0.01 && length(end.col3(1)) < 0.01);
   }
 
   #[test]
