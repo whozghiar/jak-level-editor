@@ -42,16 +42,8 @@ Two examples of failures, and what they mean:
 
 ## Build
 
-Two jobs, each on Windows and on Linux (`fail-fast: false`: a failure on one system does not stop
-the other):
-
-**ogle-extract** builds the extractor (C++) as the releases do: CMake, Ninja, Clang, the C runtime
-inside the program on Windows (`MultiThreaded`). On Windows,
-[`ilammy/msvc-dev-cmd`](https://github.com/ilammy/msvc-dev-cmd) gives Clang the headers and
-libraries of Visual Studio. The job lists what it built: `build-release/bin/ogle-extract(.exe)`
-and its tables `ogle-extract-data/`.
-
-**Editor**:
+One job, on Windows and on Linux (`fail-fast: false`: a failure on one system does not stop the
+other), **Editor**:
 
 1. installs Rust (stable) and Node.js 22, and on Linux the system packages of a Tauri application
    (webkit2gtk and others); the Rust build is cached between runs
@@ -62,8 +54,7 @@ and its tables `ogle-extract-data/`.
 3. `yarn install --frozen-lockfile`, then `yarn tauri build --no-bundle`: the interface (Vite) and
    the program, without making installers (the releases make them).
 
-There is no macOS job: ogle-extract is compiled with `-mavx` (x86 only) and the editor was never
-tried there.
+There is no macOS job: the editor was never tried there.
 
 The OpenGOAL Launcher does not build the editor: it downloads the portable zip of a published
 release.
@@ -83,12 +74,11 @@ check, then publish by hand. [RELEASING.md](../RELEASING.md) gives the steps.
    by GitHub from the commits. One release runs at a time (`concurrency: release`): two would take
    the same number.
 2. **Build** (`windows-x64` and `linux-x64`):
-   - ogle-extract in `build-release/`;
    - the editor and its installers with [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action)
-     and `src-tauri/tauri.release.conf.json`, which puts ogle-extract in their resources; the action
-     uploads the installers to the draft;
+     and `src-tauri/tauri.release.conf.json` (the installers' kinds); the action uploads the
+     installers to the draft;
    - the MCP server, `cargo build --release -p jak-level-editor-mcp`;
-   - the three zips, uploaded with `gh release upload --clobber` (a job run again replaces them).
+   - the two zips, uploaded with `gh release upload --clobber` (a job run again replaces them).
 
    On Windows, `RUSTFLAGS=-C target-feature=+crt-static` puts the C runtime inside the programs:
    they run on a Windows without the Visual C++ redistributable.
@@ -97,10 +87,9 @@ The draft then holds, per platform:
 
 | Asset | Content |
 |---|---|
-| `*_x64-setup.exe`, `*_x64_en-US.msi` | the Windows installers (NSIS, for the current user; MSI): the editor, `lang/`, `data/`, `ogle-extract.exe` and `ogle-extract-data/` in its folder |
+| `*_x64-setup.exe`, `*_x64_en-US.msi` | the Windows installers (NSIS, for the current user; MSI): the editor, `lang/` and `data/` in its folder |
 | `*_amd64.deb`, `*_amd64.AppImage` | the Linux packages, the same resources |
-| `jak-level-editor-portable-<platform>.zip` | at its root: `jak-level-editor(.exe)`, `lang/`, `data/`, `ogle-extract(.exe)`, `ogle-extract-data/` (the editor finds them next to itself); the OpenGOAL Launcher downloads `https://github.com/whozghiar/jak-level-editor/releases/download/v<version>/jak-level-editor-portable-<platform>.zip` |
-| `ogle-extract-<platform>.zip` | at its root: `ogle-extract(.exe)` and `ogle-extract-data/` |
+| `jak-level-editor-portable-<platform>.zip` | at its root: `jak-level-editor(.exe)`, `lang/`, `data/` (the editor finds them next to itself); the OpenGOAL Launcher downloads `https://github.com/whozghiar/jak-level-editor/releases/download/v<version>/jak-level-editor-portable-<platform>.zip` |
 | `jak-level-editor-mcp-<platform>.zip` | `jak-level-editor-mcp(.exe)`, the MCP server ([mcp.md](mcp.md)): it starts the editor found next to it |
 
 The workflow has the permission `contents: write` (to push the version's commit and its tag, create
@@ -112,8 +101,8 @@ start no other workflow (GitHub does not run workflows for what a run's own toke
 | Workflow | Commands, from the repository's folder |
 |---|---|
 | Lint | `cargo fmt --all --check`, `npx yarn check-format`, `npx yarn typecheck` |
-| Build | `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build`, `cargo test -p jak-level-editor-core -p jak-level-editor-mcp`, `npx yarn tauri build --no-bundle` |
-| Release | [The extraction](architecture.md#20-the-extraction) gives the build of the installers with ogle-extract |
+| Build | `cargo test -p jak-level-editor-core -p jak-level-editor-mcp`, `npx yarn tauri build --no-bundle` |
+| Release | `npx yarn tauri build --config src-tauri/tauri.release.conf.json` (on Windows with `RUSTFLAGS=-C target-feature=+crt-static`) |
 
 Running Lint before you push saves a round trip: it takes seconds.
 

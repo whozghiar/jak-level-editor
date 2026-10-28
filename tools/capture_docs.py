@@ -18,8 +18,9 @@ C:/Users/you/Documents/Jak Level Editor, the folder the editor proposes. What th
 to <work> (an export, an extraction), never into the library: it only reads it. The remote
 control's requests carry the token the editor writes into <work>/prefs/remote.json.
 
-Needs Jak 3 (and Jak II for its pictures) extracted with the editor, the disc it came from for the
-extraction's picture (--disc, else the OpenGOAL Launcher's extracted disc), and the prefabs of yours
+Needs Jak 3 (and Jak II for its pictures) extracted with the editor, the game installed with
+OpenGOAL for the extraction's and the settings' pictures (--game: its folder, else the OpenGOAL
+Launcher's installation), and the prefabs of yours
 the pictures use (main-town-building-a to -d, small-fountain, haven-tree, ind-facade-60). From the
 repository root:
 
@@ -50,7 +51,7 @@ SIZE = (1600, 900)
 # where the script writes (preferences, web view data, an export, an extraction): --work
 WORK = os.path.join(tempfile.gettempdir(), 'jle-captures')
 LIBRARY = os.path.join(REPO, 'library')
-DISC = ''  # --disc
+GAME = ''  # --game
 # the folder shown in the pictures for the library (the one the editor proposes)
 SHOWN_LIBRARY = 'C:/Users/you/Documents/Jak Level Editor'
 
@@ -71,7 +72,7 @@ def paths():
     """What the pictures show instead of a path of this computer: [(path, shown)], the longest
     first, each with / and with \\."""
     home = os.path.expanduser('~')
-    pairs = [(DISC, 'C:/Users/you/jak-level-editor/iso_data/jak3')] if DISC else []
+    pairs = [(GAME, 'C:/Program Files/OpenGOAL')] if GAME else []
     pairs += [(os.path.join(WORK, 'exports'), SHOWN_LIBRARY + '/exports'), (os.path.join(WORK, 'extract'), SHOWN_LIBRARY),
              (LIBRARY, SHOWN_LIBRARY), (os.path.join(REPO, 'build', 'bin'), 'C:/Users/you/AppData/Local/Jak Level Editor'),
              (REPO, 'C:/Users/you/jak-level-editor'), (WORK, 'C:/Users/you/Documents/Jak Level Editor'),
@@ -277,7 +278,12 @@ class DevTools:
             self.click(label)
 
     def type_into(self, selector, text, focus=False):
-        """A text field's value, as typed (its input event); `focus`: left in it."""
+        """A text field's value, as typed (its input event); `focus`: left in it. The field is
+        waited for (a window fills itself once the engine answered)."""
+        for _ in range(50):
+            if self.evaluate('!!document.querySelector(%s)' % json.dumps(selector)):
+                break
+            time.sleep(0.2)
         self.evaluate('''(() => {
           const i = document.querySelector(%s);
           i.focus();
@@ -446,8 +452,8 @@ def getting_started(args, e):
     })()''')
     e.shot(out('getting-started', 'guide.png'), settle=2)
     e.web.close_windows()
-    # File > Settings: the library, the language, the extractor, the assistant (let in: it already
-    # listens for this session)
+    # File > Settings: the library, the language, the games installed, the assistant (let in: it
+    # already listens for this session)
     e.web.menu('File', 'Settings...')
     e.web.click('Let an assistant control the editor')
     e.shot(out('getting-started', 'settings.png'))
@@ -455,20 +461,20 @@ def getting_started(args, e):
 
 
 def first_start(args, exe):
-    """The first start (no preferences: the first-run assistant), then the extraction of the disc into
-    <work>/extract (the library is only read)."""
+    """The first start (no preferences: the first-run assistant), then the extraction of the game
+    installed (--game) into <work>/extract (the library is only read)."""
     proposed = os.path.join(os.path.expanduser('~'), 'Documents', 'Jak Level Editor')
     made = not os.path.exists(proposed)
     e = Editor(exe, args.port + 1, args.devtools + 1, os.path.join(WORK, 'prefs-first'), None,
                os.path.join(WORK, 'wv2-first'))
     try:
         e.shot(out('getting-started', 'welcome.png'), settle=2)
-        disc = args.disc
-        if not disc or not os.path.exists(disc):
-            print('  no disc (--disc): extraction.png not taken')
+        if not GAME or not os.path.isdir(GAME):
+            print('  no game installed (--game): extraction.png not taken')
             return
         e.web.key('Escape')
         e.web.close_windows()
+        e.web.engine('set_game_install', {'game': 'jak3', 'folder': GAME})
         target = os.path.join(WORK, 'extract')
         shutil.rmtree(target, ignore_errors=True)
         os.makedirs(target)
@@ -476,15 +482,13 @@ def first_start(args, exe):
         e.web.click('File')
         e.web.evaluate('''[...document.querySelectorAll('[class*="group/sub"] button')]
           .find((b) => b.textContent.trim() === "Jak 3").click()''')
-        e.web.type_into('[role=dialog][aria-label="Extract game assets"] section:nth-of-type(1) input:not([type=radio])',
-                        disc)
         e.web.type_into('[role=dialog][aria-label="Extract game assets"] section:nth-of-type(2) input', target)
         for _ in range(120):
-            if (e.web.engine('extract_state') or {}).get('detected', {}).get('game'):
+            if (e.web.engine('extract_state') or {}).get('detected', {}).get('install'):
                 break
             time.sleep(0.5)
         e.web.click('Extract all the levels')
-        for _ in range(1800):
+        for _ in range(3600):
             s = e.web.engine('extract_state') or {}
             if not s.get('running') and (s.get('finished') or s.get('error')):
                 break
@@ -1124,7 +1128,7 @@ SECTIONS = (('getting-started', getting_started), ('levels', levels), ('selectin
 
 
 def main():
-    global OUT, WORK, LIBRARY, DISC
+    global OUT, WORK, LIBRARY, GAME
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=47896, help="the editor's remote control (the first start's: +1)")
     ap.add_argument('--devtools', type=int, default=9333, help="its web view's DevTools (the first start's: +1)")
@@ -1133,18 +1137,17 @@ def main():
     ap.add_argument('--editor', default='', help='the program (by default target/release, else target/debug)')
     ap.add_argument('--library', default=LIBRARY, help='the library to read (library/ of the repository)')
     ap.add_argument('--work', default=WORK, help='where the script writes (preferences, an export, an extraction)')
-    ap.add_argument('--disc', default='', help="the Jak 3 disc folder or .iso the extraction's picture reads")
+    ap.add_argument('--game', default='', help="the folder of the Jak 3 installed with OpenGOAL (the extraction's picture)")
     args = ap.parse_args()
     OUT, WORK, LIBRARY = args.out, os.path.abspath(args.work), os.path.abspath(args.library)
-    if not args.disc:
-        # the OpenGOAL Launcher's extracted disc, if it is there
+    if not args.game:
+        # the OpenGOAL Launcher's installation, if it is there
         try:
             with open(os.path.join(os.environ.get('APPDATA', ''), 'OpenGOAL-Launcher', 'settings.json')) as f:
-                install = json.load(f).get('installationDir') or ''
-            args.disc = os.path.join(install, 'active', 'jak3', 'data', 'iso_data', 'jak3')
+                args.game = json.load(f).get('installationDir') or ''
         except (OSError, ValueError):
             pass
-    DISC = os.path.normpath(args.disc) if args.disc else ''
+    GAME = os.path.normpath(args.game) if args.game else ''
     only = set(filter(None, args.only.split(',')))
     exe = os.path.abspath(args.editor) if args.editor else find_editor()
     if not only or 'first-start' in only:
@@ -1153,7 +1156,8 @@ def main():
     if only and only <= {'first-start'}:
         return
     e = Editor(exe, args.port, args.devtools, os.path.join(WORK, 'prefs'),
-               {'library_root': LIBRARY.replace('\\', '/'), 'library_chosen': True, 'guide_seen': True, 'language': 'en'},
+               {'library_root': LIBRARY.replace('\\', '/'), 'library_chosen': True, 'guide_seen': True, 'language': 'en',
+                'game_installs': {'jak3': GAME} if GAME else {}},
                os.path.join(WORK, 'wv2'))
     try:
         for name, f in SECTIONS:

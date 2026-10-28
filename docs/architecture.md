@@ -177,7 +177,6 @@ You do not need to learn these by heart: come back here when a word stops you.
 | `src/`, `index.html` | the standalone app's page: it only shows `ui/LevelEditor.svelte` | rarely |
 | `lang/` | the interface's texts: `en.json`, `fr.json` | change the text of a button |
 | `data/` | what the editor knows of the games, read from OpenGOAL's decompiled code | nothing by hand: `tools/` makes it |
-| `extractor/` | **ogle-extract** (C++): reads the levels from the disc | change what is extracted |
 | `tools/` | Python scripts: `data/` made again, the documentation's pictures | |
 | `docs/` | this documentation and its pictures | |
 | `.github/workflows/` | the checks GitHub runs ([workflows.md](workflows.md)) | |
@@ -200,8 +199,8 @@ flowchart LR
   end
   Assistant["AI assistant"] --> MCP["MCP server<br/>crates/mcp"]
   MCP -- "remote control<br/>127.0.0.1:47821" --> Engine
-  Engine -- "runs" --> Extractor["ogle-extract<br/>extractor/"]
-  Extractor -- "reads" --> Disc[("your disc")]
+  Engine -- "runs (extraction)" --> Extractor["OpenGOAL's extractor<br/>the game installed"]
+  Engine -- "starts, drives (F5)" --> Game["gk, goalc<br/>the game installed"]
 ```
 
 ## 4. The engine: the document and its history
@@ -339,16 +338,16 @@ given without asking who started it:
 | Installed and updated | by you: an installer or the portable zip of a release | by the launcher: its *Settings > Level Editor* downloads a release's portable zip, and its header shows when a newer release is out |
 | The library, at first | `Documents/Jak Level Editor` | `<the launcher's install folder>/jak-level-editor` (`--default-library`) |
 | Its preferences | `%APPDATA%/OpenGOAL/jak-level-editor` | `%APPDATA%/OpenGOAL-Launcher/jak-level-editor` (`JLE_PREFS_DIR`) |
-| The disc to extract | the one you choose (an `.iso` or a folder) | the one the launcher already extracted, for each game (`--extract-source`) |
-| ogle-extract | installed with the editor | the same: the portable zip holds it |
+| The game levels are extracted from and tried in | the folder chosen in *File > Settings* | the game the launcher installed with its active version (`--game-install`) |
 | Command line | yes ([19](#19-command-line)) | the launcher's ([17](#17-in-the-launcher)) |
 
 (The folders are Windows'; Linux and macOS have theirs: [16](#16-what-the-host-gives-the-editor).)
 
 The two never step on each other: their preferences and libraries are separate, so you can use
-both. Neither runs the game: the export writes the files to copy into a jak-project (OpenGOAL's
-sources), with a README giving the exact lines; the user guide's
-[export](user-guide.md#14-playing-it-in-the-game-export) goes through it.
+both. Neither installs or compiles the game: **F5** tries the level in the game installed
+([24](#24-the-export-for-the-game)), and the export writes the files to copy into a jak-project
+(OpenGOAL's sources), with a README giving the exact lines; the user guide's
+[section 14](user-guide.md#14-playing-it-in-the-game-try-it-export-it) goes through both.
 
 The launcher keeps no copy of the editor's code: a published release of this repository reaches its
 users without a release of the launcher ([17](#17-in-the-launcher),
@@ -389,14 +388,15 @@ The tools run under the same lock as your clicks: you see them happen, and Ctrl+
 
 Follow the industrial zone, `ctyinda`, from the disc to the game:
 
-1. **On the disc**, it is `CIA.DGO`, a file of the `DGO` folder of your Jak 3. Nothing of the game
-   is in this repository: everything comes from your copy.
-2. **The extraction** (File > Extract game assets): ogle-extract, a C++ program made of the readers
-   of OpenGOAL's decompiler, reads the DGO and writes into your library
-   `jak3/ctyinda/decor/ctyinda-background.glb` (the shell, the decor, the collision and the actors,
-   each piece with its 8 palettes), `jak3/ctyinda/models/` (the actors' models) and
-   `jak3/ctyinda/level.json` (what the folder holds). The whole disc, 272 level files, takes a
-   minute or two and 3.7 GB.
+1. **On the disc**, it is `CIA.DGO`, a file of the `DGO` folder of your Jak 3, which OpenGOAL
+   extracted into its installation (`iso_data/jak3/`). Nothing of the game is in this repository:
+   everything comes from your copy.
+2. **The extraction** (File > Extract game assets): OpenGOAL's own extractor reads the DGO and
+   writes what its game draws (`ctyinda.fr3`), its objects and its models; the editor writes from
+   them into your library `jak3/ctyinda/decor/ctyinda-background.glb` (the shell, the decor, the
+   collision and the actors, each piece with its 8 palettes), `jak3/ctyinda/models/` (the actors'
+   models) and `jak3/ctyinda/level.json` (what the folder holds). The whole game, 272 level files,
+   takes a few minutes and 3.9 GB ([20](#20-the-extraction)).
 3. **What the disc does not say plainly** is in `data/`: which kinds of actors are creatures, what
    settings each object's code reads, the order of the story's tasks. Python scripts of `tools/`
    read it from OpenGOAL's decompiled code. It is how the inspector knows that a door can stay
@@ -418,9 +418,9 @@ the game, and where it lives:
 
 | What | Where | Today |
 |---|---|---|
-| Reading the disc | ogle-extract (`extractor/main.cpp`) | it recognizes the three games; it extracts Jak 3, and Jak II for its decor |
+| Reading the levels | OpenGOAL's extractor, then `crates/core/src/io/extraction/` | Jak 3, and Jak II for its decor |
 | The extracted levels | `library/<game>/` | `jak3/`, `jak2/` |
-| What the editor knows of a game | `data/<game>/` | `data/jak3/` (objects, particles, story, prefabs), `data/jak2/` (creatures, prefabs) |
+| What the editor knows of a game | `data/<game>/` | `data/jak3/` (objects, particles, story, prefabs, animated texture slots), `data/jak2/` (creatures, prefabs, animated texture slots) |
 | The game rendering | `crates/core/src/game/`, `ui/render/game_view.ts` | Jak 3's background shader and its hours and weathers |
 | The export | `crates/core/src/io/game_export/` | Jak 3's files: `goal_src/jak3/`, `custom_assets/jak3/` |
 | The interface | `ui/lib/games.ts` | Jak 3 `ready`; the others in the Game menu, marked *Work in progress* |
@@ -437,28 +437,23 @@ To build it yourself (to work on it, or a version not released yet), you need:
   Visual Studio C++ build tools Rust links with: accept.
 - [Node.js](https://nodejs.org) 22. Yarn, the interface's package manager, comes through `npx`:
   nothing more to install.
-- For **ogle-extract**, the extractor (C++, from OpenGOAL's decompiler): CMake 3.20+, Ninja and a
-  C++20 compiler (tested with Clang 19 on Windows).
 - On Linux, the system packages of a Tauri application:
   [Tauri's prerequisites](https://v2.tauri.app/start/prerequisites/) (webkit2gtk 4.1 and others).
 
 On **Windows**, step by step:
 
-1. Install the tools once: Rust with [rustup](https://rustup.rs), Node.js 22, and for the extractor
-   with [Scoop](https://scoop.sh) in a PowerShell window `scoop install git cmake ninja llvm python`
-   (or with `winget`: `Kitware.CMake`, `Ninja-build.Ninja`, `LLVM.LLVM`, `Git.Git`).
+1. Install the tools once: Rust with [rustup](https://rustup.rs), Node.js 22, and Git (with
+   [Scoop](https://scoop.sh) in a PowerShell window `scoop install git python`, or `winget`'s
+   `Git.Git`).
 2. Get this repository (`git clone ...`, or the ZIP of the repository's page) and open a terminal
    in its folder. For an AI agent working on the editor, also `git submodule update --init` (the
    knowledge base and the editor's skills, in `.agents/skills/`), then `npx yarn skills:link`
    (Claude Code's links to them, in `.claude/skills/`).
-3. Build the extractor, then the editor. The last line builds the editor and starts it (the first
-   time takes a few minutes).
+3. Build the editor and start it (the first time takes a few minutes).
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # ogle-extract, once
-cmake --build build                                        # build/bin/ogle-extract and its tables
-npx yarn install                                           # the interface's packages, once
-npx yarn tauri dev                                         # build the editor and start it
+npx yarn install     # the interface's packages, once
+npx yarn tauri dev   # build the editor and start it
 ```
 
 `npx yarn tauri dev` is for working on the editor (the interface reloads when its files change).
@@ -470,9 +465,7 @@ npx yarn tauri build
 
 It writes `target/release/jak-level-editor.exe` (`jak-level-editor` on Linux): next time,
 double-click it. The installers are in `target/release/bundle/` (`.msi`, `.deb`, `.AppImage`).
-The editor finds `ogle-extract` next to itself, in its resources, or in `build/bin/` of this
-folder: keep the extractor built there (or see [The extraction](#20-the-extraction)
-to put it in the installers, as the releases do).
+The levels are read from a game installed with OpenGOAL ([The extraction](#20-the-extraction)).
 
 The tests:
 
@@ -561,8 +554,6 @@ src/, index.html, package.json    the standalone app's frontend (mounts ui/Level
                                   fonts
 src-tauri/                        the standalone app (binary jak-level-editor): Tauri + the plugin,
                                   tauri.conf.json, its capability, its icons
-extractor/                        ogle-extract (C++, from OpenGOAL's decompiler), built by the root
-                                  CMakeLists.txt (nothing else is C++)
 data/, lang/                      the game's tables, the interface's texts (en, fr)
 tools/                            Python: data/ made again from the game's code, the documentation's
                                   pictures
@@ -576,11 +567,8 @@ third-party/                      where the third-party code is, and its license
 .github/workflows/                lint.yaml, build.yaml, release.yaml (workflows.md)
 ```
 
-`extractor/` stays a native tool the engine runs (`crates/core/src/editor/extract.rs`), as the
-launcher runs OpenGOAL's own extractor, compiler and game: it is OpenGOAL's decompiler, not the
-editor. `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build` writes
-`build/bin/ogle-extract(.exe)` and its tables `build/bin/ogle-extract-data/`, where the engine
-looks for it (after the program's own folder and its resources; `$JLE_EXTRACTOR` last).
+The editor is all Rust and TypeScript: OpenGOAL's programs (its extractor, its compiler, its game)
+are the installation's, run as they are ([20](#20-the-extraction), [24](#the-try-in-the-game-f5)).
 
 ## 12. Who does what
 
@@ -734,19 +722,16 @@ the port) closes the connection unanswered. The MCP server reads the token from 
 The application that hosts the editor (`src-tauri/`, the app) gives it a `Host`
 (`crates/core/src/host.rs`, `tauri_plugin_jak_level_editor::Builder::host`); an application
 starting the app fills the same fields with the command line's `--default-library` and
-`--extract-source` ([19](#19-command-line)), as the OpenGOAL Launcher does. The editor never asks
-who gave them: it uses what it is given and hides what it is not. It runs no game of its own: a
-level is exported, the export's README and the guide's tutorial "Add your level to the game by
-hand" tell how to add it to the game.
+`--game-install` ([19](#19-command-line)), as the OpenGOAL Launcher does. The editor never asks who
+gave them: it uses what it is given and hides what it is not. It installs no game of its own: the
+levels are extracted from the game installed, a level is tried in it or exported, the export's
+README and the guide's tutorial "Add your level to the game by hand" telling how to add it to the
+game.
 
 | Field | The app on its own | Started by the OpenGOAL Launcher |
 |---|---|---|
 | `default_library` | `Documents/Jak Level Editor` | `<install>/jak-level-editor` |
-| `extract_sources` | none (the user's discs) | by game, `<install>/active/<game>/data/iso_data/<game>`: the discs it already extracted (Jak 3's, Jak II's...) |
-| `extractor` | none: ogle-extract is found next to the program or in its resources | the same, from the portable zip |
-
-`extractor_provider` lets a host that has no ogle-extract fetch one when the Extract window asks
-(the window's **Download ogle-extract**); the app has no provider, since it ships ogle-extract.
+| `game_installs` | none: the folders of *File > Settings* (the preference `game_installs`) | by game, `<install>`: the games installed with the launcher's active version, whose levels are extracted and tried |
 
 **The preferences** (`crates/core/src/prefs.rs`) and the caches next to them (thumbnails, the
 catalog's index, `remote.json`) are in `Prefs::dir()`: `$JLE_PREFS_DIR` when set (tests; the
@@ -763,17 +748,15 @@ the interface shows the first-run assistant (`library_setup`, `choose_library {p
 `default_library`; File > Settings changes it later (another folder is used as it is: nothing is
 moved or deleted). `default_library` falls back to `library/` of the editor's repository only when
 the program runs from it (a development build), never to the program's folder. The Extract
-window's disc is the host's of the game chosen (`extract_sources`, by game: `host_sources` of
-`extract_defaults`), else the one chosen last; ogle-extract is `extractor`
-first, and when it is missing the window offers `extractor_provider`'s download (`extract_fetch`,
-a job: `jle:progress` "extract_fetch").
+window's game is the installation of `game_installs` (`extract_detect {game}`: its folder, the
+installation found or why not, its disc's serial, its levels; `extract_start {game, output}`).
 
-**The level builder and gk**: OpenGOAL's builder needs fixes for the editor's exports (a level
-without regions, nav meshes, flat collision fragments, translucent surfaces, collision on both
-sides per mesh, the list of everything visible). They are in the user's fork
-`whozghiar/jak-project`, whose tooling releases are tagged `vX.Y.Z-whozghiar.N` (upstream's X.Y.Z,
-the fork's build N): build the exported levels with it. The OpenGOAL Launcher plays the games with
-the official tooling and does not install the fork.
+**The level builder and gk**: OpenGOAL's own builder lacks what the editor's levels need (a
+level without regions, nav meshes, flat collision fragments, translucent surfaces, collision on
+both sides per mesh, the list of everything visible). The export and the level's code make up for
+it ([24](#24-the-export-for-the-game)): the official tooling builds and plays the levels, a try in
+the game included. The user's fork `whozghiar/jak-project` fixes them in its builder instead; the
+level's code then leaves what the level already has.
 
 ## 17. In the launcher
 
@@ -786,12 +769,11 @@ starts the active version:
 
 ```text
 JLE_PREFS_DIR=<launcher's config folder>/jak-level-editor
-jak-level-editor --lang fr --default-library=<install>/jak-level-editor
-                 --extract-source=jak3=<install>/active/jak3/data/iso_data/jak3 ...
+jak-level-editor --lang fr --default-library=<install>/jak-level-editor --game-install=jak3=<install> ...
 ```
 
-`--lang` is the launcher's language; there is one `--extract-source` per game the launcher
-installed. A version of the editor that does not know an option written `--name=value` skips it
+`--lang` is the launcher's language; there is one `--game-install` per game the launcher installed
+with its active version. A version of the editor that does not know an option written `--name=value` skips it
 whole (v1.0.0 does), so the launcher can start any release. The launcher's side is
 `src-tauri/src/commands/features/level_editor.rs` of
 [whozghiar/open-goal-launcher](https://github.com/whozghiar/open-goal-launcher).
@@ -802,11 +784,7 @@ The app gives the plugin its command line:
 (`--hidden`: no window, the preferences left unchanged; `--open-level`: a level of the library
 opened at the start). The plugin takes the translations and the game's tables from the app's
 resources (`lang/`, `data/`: `bundle.resources` of src-tauri/tauri.conf.json; a build copies them
-into `target/<profile>/`), else the repository's. ogle-extract is found next to the executable,
-in the resources or in the repository's `build/bin/`: to ship it with the app, add
-`"../build/bin/ogle-extract.exe": "ogle-extract.exe"` and `"../build/bin/ogle-extract-data/":
-"ogle-extract-data/"` to `bundle.resources` once it is built (a missing path there fails
-`tauri build`).
+into `target/<profile>/`), else the repository's.
 
 ## 18. Conventions
 
@@ -832,15 +810,15 @@ in the resources or in the repository's `build/bin/`: to ship it with the app, a
 - Formatting: `rustfmt.toml` (2 spaces), prettier for the interface (`npx yarn format`).
 - The games: `ui/lib/games.ts` lists the series' games and which are `ready`. What is planned shows
   the class `wip` of `ui/components/common/classes.ts` with the text `wip` (*Work in progress*,
-  *Travaux en cours*): the Game menu (the games not ready), the Extract window (a Jak and Daxter
-  disc), the Levels panel (Jak II's levels). A game's files go in `data/<game>/` and
+  *Travaux en cours*): the Game menu (the games not ready), the Extract window (Jak and Daxter),
+  the Levels panel (Jak II's levels). A game's files go in `data/<game>/` and
   `library/<game>/`.
 
 ## 19. Command line
 
 ```text
 jak-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>] [--hidden]
-                 [--open-level <name>] [--default-library=<folder>] [--extract-source=<game>=<disc>]...
+                 [--open-level <name>] [--default-library=<folder>] [--game-install=<game>=<folder>]...
 jak-level-editor-mcp [--remote-port <port>]
 ```
 
@@ -853,15 +831,16 @@ jak-level-editor-mcp [--remote-port <port>]
   server does when it starts the editor; without it, the remote control listens on 47821 only when
   File > Settings lets an assistant control the editor; `0`: as the preferences say);
   `--hidden` runs the editor without a window and without touching the preferences (scripts).
-- `--default-library=<folder>` and `--extract-source=<game>=<disc>` (once per game: `jak3`, `jak2`)
-  are what an application starting the editor gives it, as a host does
-  ([16](#16-what-the-host-gives-the-editor)): the library the first-run assistant offers, the discs
-  it already extracted, which the Extract window takes for their game.
+- `--default-library=<folder>` and `--game-install=<game>=<folder>` (once per game: `jak3`,
+  `jak2`) are what an application starting the editor gives it, as a host does
+  ([16](#16-what-the-host-gives-the-editor)): the library the first-run assistant offers, the
+  folder of a game installed (the launcher's installation folder), whose levels are extracted and
+  tried; *File > Settings* shows it without letting it change.
 - `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones; the
   OpenGOAL Launcher's own folder for its editor; for the MCP server, the folder of the editor's
   `remote.json`).
 - `jak-level-editor-mcp` is the MCP server ([25](#25-the-remote-control-and-the-mcp-server)).
-- The OpenGOAL Launcher starts the editor with `--lang`, `--default-library`, `--extract-source`
+- The OpenGOAL Launcher starts the editor with `--lang`, `--default-library`, `--game-install`
   and `JLE_PREFS_DIR` ([17](#17-in-the-launcher)).
 - The C++ editor's other modes have their equivalents: `--selftest` is
   `cargo test -p jak-level-editor-core`, `--mcp` is `jak-level-editor-mcp`, and the pictures of
@@ -880,46 +859,56 @@ jak-level-editor-mcp [--remote-port <port>]
 
 ## 20. The extraction
 
-```text
-ogle-extract <game.iso | disc folder> <output folder> [--levels CIA,CIB] [--textures]
-ogle-extract --detect <game.iso | folder>   # game, version and serial (json)
-ogle-extract --list <game.iso | folder>     # the levels of the disc (json)
-```
+**File > Extract game assets** reads the levels of a game installed with OpenGOAL and writes them
+into the library (`crates/core/src/io/extraction/`, run on a thread of its own by
+`crates/core/src/editor/extract.rs`). Only OpenGOAL's own programs read the game: nothing of it is
+compiled into the editor, and nothing is written in the installation.
 
-An `.iso` is read in place: only the files read (the `DGO` and `CGO` folders, about 400 MB) are
-copied to a work folder of the destination, deleted when done. Measured with Jak 3 NTSC
-(SCUS-97330) on a 16-core processor and an SSD: 272 levels in 1 minute 10 to 1 minute 30, 3.7 GB.
-[`extractor/README.md`](../extractor/README.md) has the details.
+| Step | Who | What |
+|---|---|---|
+| The installation | `io/game_install.rs`, `find_extraction` | the folder given by the host (`--game-install`) or chosen in *File > Settings*: its `extractor`, the disc's files OpenGOAL extracted (`iso_data/<game>/`), the decompiler's configuration (`decompiler/config/<game>/`) |
+| The levels | `game_levels` | `levels_to_extract` of the configuration's inputs, those whose DGO is on the disc |
+| Reading the levels | OpenGOAL's `extractor --decompile`, by batches of 34 levels, two batches at once | in `<preferences>/extract/<game>/<n>/data/`: a copy of the configuration, its inputs narrowed to the common files and the batch's DGOs; it writes each level's `.fr3` (what its game draws) and its objects (`raw_obj/`, `entities/`), not its models as glTF (`rip_levels` off) |
+| The decor | `decor.rs`, from the `.fr3` (`fr3.rs`, format 43) | `<level>/decor/<level>-background.glb`: the shell in pieces, the prototypes and a node per instance, the 8 light palettes, the collision by surface, the actors |
+| The actors and regions | `bsp.rs`, from the level's bsp-header (`goal_object.rs` links the object) | each actor with the type of its tags (`lump_types`); Jak 3's regions |
+| The models | `models.rs`, from the `.fr3` and the level's art groups (`art.rs`, `lzo.rs`) | each model as OpenGOAL's extractor writes it (fr3_to_gltf.cpp), with its own vertices only: its skeleton, animations and blend shapes; its materials' blends from the `.fr3`; the texture of an animated slot from `data/<game>/texture-slots.json` |
+| What the folder holds | `mod.rs` | `level.json`; `library.json`; the particles' textures (`common/sprites/`, from `data/jak3/sprite-pages.json`) |
 
-ogle-extract is a C++ program of its own, built with CMake from the repository's root (which
-builds nothing else):
+A run reads the common file once for its 34 levels, which it reads in parallel, and the streamed
+art (`JAEXTERN.STR`: the common models' animations). The editor writes the models, not
+OpenGOAL's extractor:
+
+- Its models lose all their animations at random: `add_merc` (fr3_to_gltf.cpp) keeps a reference
+  to the model's node, the skeleton's nodes added after it move the node list, and the test that
+  writes the animations reads the freed memory. Some models of every run lose them (35 of Jak 3's
+  in the library ogle-extract wrote, from the same code), more when several levels are read at
+  once.
+- Each of its models holds the whole level's vertices: 16 GB written for Jak 3.
+
+`models.rs` writes them as `add_merc` does: the same files bit for bit, but every model with all its
+animations, and the same from one extraction to the next. The `.fr3` does not keep which level
+vertex a blend shape's vertex is (`mod_to_global_vertex_idx`): it is found again from the
+modifiable draws, matched strip by strip with the draws they come from.
+
+Two more fixes on the fly: a level two DGOs hold (Jak II's `nest`, in `NES.DGO` and `NESTT.DGO`) is
+read again alone, as the extractor names a `.fr3` after its level; and the actors' scripts take the
+line breaks of the extractor's `entities/<level>-actors.json` around the editor's values (it prints
+a list's integers times 8). A run uses up to 2.5 GB of memory and 0.3 GB of disk, deleted once its
+levels are written. The `.fr3` format follows OpenGOAL's `TFRAG3_VERSION`
+(common/custom_data/Tfrag3Data.h): a tooling writing another is refused with its version until
+`fr3.rs` reads it.
+
+Measured with Jak 3 (SCES-52460), OpenGOAL v0.3.9, on a 16-core processor and an SSD: 272 levels in
+31 seconds, 3.6 GB (Jak II: 147 levels in 28 seconds, 2.6 GB); a library on a hard disk takes about
+two minutes per game, writing the files. The test
+`extracts_from_the_installation` (ignored: it needs the game) runs it:
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build      # build/bin/ogle-extract(.exe) and its tables, build/bin/ogle-extract-data/
+JLE_GAME_INSTALL="<OpenGOAL Launcher folder>" JLE_EXTRACT_OUT=<library folder> \
+  cargo test -p jak-level-editor-core --lib extracts_from_the_installation -- --ignored --nocapture
 ```
 
-The editor runs the first it finds: the one its host gives (or fetches on demand: **Download
-ogle-extract** in the Extract window, for a host with an `extractor_provider`), next to its own program, in its
-resources, in `build/bin/` of the repository it was built from, else the file `$JLE_EXTRACTOR` names; its tables
-(`ogle-extract-data/`) next to it. The installers ship it when they are built with
-`src-tauri/tauri.release.conf.json`, which adds `build-release/bin/` (ogle-extract and its tables)
-to the resources, as the releases do:
-
-```bash
-cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
-      -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-cmake --build build-release
-npx yarn tauri build --config src-tauri/tauri.release.conf.json
-```
-
-(`MultiThreaded`: the C runtime inside the program, which then runs on a Windows without the VC++
-redistributable; the releases build the editor the same way, `RUSTFLAGS=-C
-target-feature=+crt-static`.) Without that file, `tauri build` makes installers without the
-extractor (a build for working on the editor).
-
-The releases put it in the installers, in the portable zip (which the OpenGOAL Launcher
-downloads), and alone in `ogle-extract-<platform>.zip`: [workflows.md, Release](workflows.md#release).
+`JLE_EXTRACT_LEVELS=CIA.DGO,CTA.DGO` extracts these only; `JLE_GAME=jak2`, Jak II.
 
 ## 21. Files
 
@@ -1032,6 +1021,7 @@ and rules read in OpenGOAL's decompiled code, no asset.
 | `data/jak3/game-data.json` | `python tools/gen_game_data.py <jak-project>/goal_src` (with `tools/object_categories.json`) |
 | `data/jak3/particles.json` | `python tools/gen_particles.py <jak-project>/goal_src` |
 | `data/jak2/creatures.json` | `python tools/gen_jak2_creatures.py` |
+| `data/jak2/texture-slots.json`, `data/jak3/texture-slots.json` | `python tools/gen_texture_slots.py <jak-project>/common/texture/texture_slots.cpp` |
 | `data/jak3/prefabs.json`, `data/jak2/prefabs.json` | `python tools/gen_prefab_recipes.py library --game jak3` (`jak2`); `tools/prefab_review.json` keeps the review |
 
 Read a checkout of the game's own code (read only), then build the editor again: it reads the
@@ -1114,6 +1104,51 @@ their actor; links between actors by id become links by name.
 `README.md` to `goal_src/jak3/game.gp` and `level-info.gc` (or the one `:nickname` to change for a
 replacement), build with `(mi)`, start `gk -g jak3 -- -boot -fakeiso -debug`, then in the REPL
 `(lt)` and `(start 'play (get-continue-by-name *game-info* "<name>-start"))`.
+
+### The try in the game (F5)
+
+A try (`crates/core/src/editor/game_test.rs`, the job `game_test`) does the same without touching
+the game's sources, in the game the user installed (`crates/core/src/io/game_install.rs` finds it:
+a Launcher installation, an OpenGOAL release, a jak-project):
+
+| Step | What | Where |
+|---|---|---|
+| export | the document exported as the level `jle-test` (nickname `jlt`) | `<prefs>/game-test/jak3/work/` |
+| goalc | the game's `goalc`, kept between tries: a fresh goalc knows no type, so it compiles the engine once (`(make "$OUT/obj/entity-debug.o")`, about 15 s), in a project of its own: links to the installed game's `goal_src`, `iso_data` and `decompiler_out/jak3/raw_obj`, a copy of its `decompiler/config/jak3/`, an `out/` of its own | `<prefs>/game-test/jak3/goalc/` |
+| build | goalc loads `jle-test.gp`: the game's `game.gp`, then the lines the export's README adds to it (`build-custom-level`, the level's code as a `goalc` step, `custom-level-cgo`), the level linked into the project's `custom_assets/jak3/levels/`. Its `inputs.jsonc` lists `GAME.CGO` and the fewest DGOs holding the level's art groups, as the game's `goal_src/jak3/dgos/*.gd` list them (`art_group_dgos`): the builder reads no other. `(make "$OUT/iso/JLT.DGO")` builds the level, compiles its code and packs it | `goalc/out/jak3/` |
+| put | the DGO and the `.fr3` copied next to the game's | the game's `out/jak3/iso/JLT.DGO`, `out/jak3/fr3/jle-test.fr3` |
+| start | `gk -- -boot -fakeiso -debug` (the last try's closed first: it scans `out/jak3/iso` when it starts), goalc connected (`(lt)`) once Jak is there | |
+| load | the level declared to the running game (the `level-load-info` of `level-info.gc`, then `cons!` onto `*level-load-list*`: `lookup-level-info` and `get-continue-by-name` read that list), `(start 'play ...)` at `jle-test-start`, until the level is `active` | |
+
+What the official builder lacks, the export writes (`write.rs`): one region that does nothing
+when the level has none (the builder dies without one), the collision of the decor colliding by
+its shape as invisible meshes from both sides (`-collision-shape-*`: the builder makes one side,
+and the decor faces either way), the flat triangles of the collision meshes moved by 1/64 m
+(`lift_flat`: the builder loses some of a flat fragment's), a face giving the builder's grid a cell
+along a side under 7.3 m.
+
+What the builder does not write in the level, the level's code sets (`level_login_code` in
+`builder.rs`, `<name>-login` at the end of `<name>-obs.gc`): the level's definition calls it at its
+callback slot 33, which the game calls in `birth` of a level after its bsp's birth, before the
+birth of the nav meshes of `(-> bsp nav-meshes)`; its actors are born in the frames after. Each part
+only when the level lacks it:
+
+| Part | What the code does |
+|---|---|
+| visibility | `all-visible-list`: 2048 bytes set, in the level's heap (`malloc 'loading-level`); the game copies it into the level's `vis-bits` every frame (`cam-update.gc`): with `ps2-actor-vis?`, on by default, an actor not in them is never born (`entity.gc`) |
+| translucent surfaces, when an exported material is (`translucent_in_game`) | a `drawable-tree-tfrag-trans` made like the level's `drawable-tree-tfrag` (its arrays shared), added to a new `drawable-tree-array`: the game draws the TRANS trees of the level's `.fr3` through it (`draw-drawable-tree-tfrag-trans`) |
+| nav meshes | the blob of `navmesh_blob` as static data of the code (`*<name>-nav-words*`, `*<name>-nav-links*`), copied into the level's heap 16-aligned and linked there: its pointers, its type tags (`(the-as uint <type>)`), symbols, empty lists; `(-> bsp nav-meshes)` a boxed array of its roots |
+
+Compiled by the official goalc (checked on demo-ruins and ironworks, 8 nav meshes); not yet seen in
+the game.
+
+goalc is driven through its nREPL port (a free one): each form is followed by
+`(seval (fmt #t "jle-done-<n>\n"))`, whose text says the form is done (goalc prints its prompt
+before its answers; goos' `print` would stay in its buffer). gk takes port 8114 for Jak 3 whatever its `--port` says (`game/runtime.cpp`): a try
+refuses to start while another program holds it, and stops when gk says it could not take it, so
+that goalc never talks to another game. `stop_game_test` (the window closing) kills gk and goalc
+(killed: a goalc that quits resets its game) and removes the two files; `goalc.log` and `gk.log`
+are written next to `work/` after each try.
 
 ## 25. The remote control and the MCP server
 

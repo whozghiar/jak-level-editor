@@ -44,9 +44,9 @@ python tools/capture_docs.py --out <folder>                  # somewhere else, t
 ```
 
 - `first-start` (in `getting-started/`) starts a second editor with no preferences at all: the
-  first-run assistant, then the extraction of a disc (`--disc`, by default the one the OpenGOAL
-  Launcher extracted) into the work folder; its preferences and the levels it wrote are deleted
-  afterwards.
+  first-run assistant, then the extraction of the Jak 3 installed with OpenGOAL (`--game`, its
+  folder, by default the OpenGOAL Launcher's installation) into the work folder; its preferences
+  and the levels it wrote are deleted afterwards. The settings' picture shows that game too.
 - The library (`--library`, by default `library/` of the repository) is only read. What the
   script writes (an export, an extraction) goes to the work folder.
 - The paths of your computer the windows show are replaced in the pictures: the library is shown

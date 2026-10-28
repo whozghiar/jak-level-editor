@@ -43,7 +43,7 @@ make a door open only once a crate is broken, then export the result for the gam
 |---|---|
 | **Jak 3** | edited and exported: everything on this page |
 | **Jak II** | its levels and buildings are brought into Jak 3's levels as decor; editing Jak II's own levels: *Work in progress* |
-| **Jak and Daxter** | its disc is recognized; extracting and editing its levels: *Work in progress* |
+| **Jak and Daxter** | extracting and editing its levels: *Work in progress* |
 
 The editor shows it as it is: its **Game** menu (at the right of the menu bar) names the game you
 edit, and lists the others marked *Work in progress*.
@@ -52,14 +52,16 @@ edit, and lists the others marked *Work in progress*.
 
 ## How it works, in short
 
-- **Nothing of the game is in this repository.** Everything comes from your disc: the editor
-  extracts it once, with its own extractor (ogle-extract, made from OpenGOAL's decompiler).
-- **It needs nothing else to run**: not OpenGOAL, not the game. It does not run the game either:
-  the export gives the files to add to OpenGOAL's sources.
+- **Nothing of the game is in this repository.** Everything comes from the game you installed with
+  OpenGOAL: the editor reads its levels once, with OpenGOAL's own extractor, and writes them into
+  your library. Nothing is written in the installation.
+- **With the game installed** (by the OpenGOAL Launcher, or an OpenGOAL release), **F5 tries the
+  level in it**: built in seconds, nothing of the game installed or compiled. The export gives the
+  files to add to OpenGOAL's sources for good.
 - **On its own or from the OpenGOAL Launcher**: the
   [OpenGOAL Launcher](https://github.com/whozghiar/open-goal-launcher) installs and updates the
-  editor's releases and opens it with its *Level Editor* button, giving it its library and the discs
-  it already extracted.
+  editor's releases and opens it with its *Level Editor* button, giving it its library and the games
+  it installed.
 
 [How it is built](docs/architecture.md) explains it from the start, with examples.
 
@@ -67,9 +69,9 @@ edit, and lists the others marked *Work in progress*.
 
 - **Download it**: each [release](https://github.com/whozghiar/jak-level-editor/releases)
   has installers for Windows (`.exe`, `.msi`) and Linux (`.deb`, `.AppImage`), and a portable zip.
-  Then follow [Install](docs/user-guide.md#2-install) in the user guide: you need your copy of
-  Jak 3 (the disc image or its folder) and about 4 GB of disk.
-- **Build it yourself**: Rust, Node.js 22, and CMake for the extractor;
+  Then follow [Install](docs/user-guide.md#2-install) in the user guide: you need Jak 3 installed
+  with OpenGOAL (from your own copy of the game) and about 4 GB of disk.
+- **Build it yourself**: Rust and Node.js 22;
   [Build it yourself](docs/architecture.md#10-build-it-yourself-and-test-it) goes step by step.
 
 It runs on Windows 10/11 and Linux, 64-bit; there is no macOS version.
@@ -88,9 +90,10 @@ It runs on Windows 10/11 and Linux, 64-bit; there is no macOS version.
 ## License
 
 ISC (see [`LICENSE`](LICENSE)), the license of OpenGOAL. This editor is built on the work of the
-[OpenGOAL](https://github.com/open-goal/jak-project) team: its extractor is made of the data readers
-of OpenGOAL's decompiler (`extractor/opengoal/`, ISC license), its game rendering draws with the
-game's own shader (TFragment), its game data is generated from OpenGOAL's decompiled code. It is an
+[OpenGOAL](https://github.com/open-goal/jak-project) team: it reads the levels OpenGOAL's own
+extractor writes (its `.fr3` format, read as jak-project's `Tfrag3Data` describes it), its game
+rendering draws with the game's own shader (TFragment), its game data is generated from OpenGOAL's
+decompiled code. It is an
 independent project, not affiliated with the OpenGOAL team nor endorsed by it. Third-party code
 keeps its own license (`third-party/README.md`). Jak 3 belongs to Sony Interactive Entertainment and
 was developed by Naughty Dog: no data of the game is in this repository; the screenshots show levels
