@@ -55,7 +55,12 @@
   const modes = ["row", "circle", "scatter"] as const;
 </script>
 
-{#snippet number(label: string, value: number, step: number, set: (v: number) => void)}
+{#snippet number(
+  label: string,
+  value: number,
+  step: number,
+  set: (v: number) => void,
+)}
   <label class="flex items-center justify-between gap-2">
     <span class="text-neutral-300">{label}</span>
     <input
@@ -87,7 +92,12 @@
     {/each}
   </div>
   <Tip text={t(`repeat.mode.${mode}.tip`)} />
-  {@render number(t("repeat.count"), count, 1, (v) => (count = Math.max(1, Math.round(v))))}
+  {@render number(
+    t("repeat.count"),
+    count,
+    1,
+    (v) => (count = Math.max(1, Math.round(v))),
+  )}
   {#if mode === "row"}
     <div class="flex items-center justify-between gap-2">
       <span class="text-neutral-300">{t("repeat.axis")}</span>
@@ -104,10 +114,20 @@
     </div>
     {@render number(t("repeat.spacing"), spacing, 0.5, (v) => (spacing = v))}
   {:else}
-    {@render number(t("repeat.radius"), radius, 1, (v) => (radius = Math.max(0.5, v)))}
+    {@render number(
+      t("repeat.radius"),
+      radius,
+      1,
+      (v) => (radius = Math.max(0.5, v)),
+    )}
   {/if}
   {#if mode === "scatter"}
-    {@render number(t("repeat.vary"), vary, 0.05, (v) => (vary = Math.min(0.5, v)))}
+    {@render number(
+      t("repeat.vary"),
+      vary,
+      0.05,
+      (v) => (vary = Math.min(0.5, v)),
+    )}
     <button class={button} onclick={() => seed++}>{t("repeat.again")}</button>
   {/if}
   <p class={muted}>{t("repeat.text", copies)}</p>

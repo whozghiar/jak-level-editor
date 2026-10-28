@@ -1045,7 +1045,11 @@ export function drawDemo(
       const seg = Math.min(2, Math.floor(u));
       at = mix(points[seg], points[seg + 1], u - seg);
     }
-    mesh(PLATFORM, translate(add(at, [0, -0.35, 0])), t < 3.2 ? SELECTED : NONE);
+    mesh(
+      PLATFORM,
+      translate(add(at, [0, -0.35, 0])),
+      t < 3.2 ? SELECTED : NONE,
+    );
     clicks.forEach((c, i) => click(screen(points[i + 1]), (t - c) / 0.4));
     const aim = clicks.findIndex((c) => t < c);
     cursor(
@@ -1102,7 +1106,10 @@ export function drawDemo(
     for (let i = 0; i < bays; i++)
       mesh(
         BAY,
-        chain(translate([-len / 2 + b * (i + 0.5), 0, 0]), scale([b / 2, 1, 1])),
+        chain(
+          translate([-len / 2 + b * (i + 0.5), 0, 0]),
+          scale([b / 2, 1, 1]),
+        ),
         SELECTED,
       );
     for (let i = 0; i <= bays; i++)

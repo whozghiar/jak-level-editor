@@ -20,8 +20,18 @@
   };
   // the creature's size: its radius, height, highest step, steepest slope
   const sizes = {
-    small: { agent_radius: 0.3, agent_height: 1, max_climb: 0.5, max_slope: 45 },
-    medium: { agent_radius: 0.6, agent_height: 2, max_climb: 0.8, max_slope: 45 },
+    small: {
+      agent_radius: 0.3,
+      agent_height: 1,
+      max_climb: 0.5,
+      max_slope: 45,
+    },
+    medium: {
+      agent_radius: 0.6,
+      agent_height: 2,
+      max_climb: 0.8,
+      max_slope: 45,
+    },
     large: { agent_radius: 1.5, agent_height: 4, max_climb: 1, max_slope: 35 },
   } as const;
   type Size = keyof typeof sizes;
@@ -79,7 +89,8 @@
       class="rounded border px-1.5 py-0.5 text-xs {size === k
         ? 'border-orange-500 bg-orange-500/15'
         : 'border-[#2a2a2a] bg-[#0b0b0b] hover:border-[#3a3a3a]'}"
-      onclick={() => call("set_navmesh", { params: sizes[k as Size] }).then(refresh)}
+      onclick={() =>
+        call("set_navmesh", { params: sizes[k as Size] }).then(refresh)}
       >{t(`walk.size.${k}`)}</button
     >
   {/each}
@@ -91,7 +102,9 @@
   >
   <Tip text={t("walk.make.tip")} />
   {#if st?.nodes.length}
-    <button class={button} disabled={busy} onclick={clear}>{t("walk.clear")}</button>
+    <button class={button} disabled={busy} onclick={clear}
+      >{t("walk.clear")}</button
+    >
   {/if}
   <button class={button} onclick={() => windows.open("navmesh")}
     >{t("walk.settings")}</button

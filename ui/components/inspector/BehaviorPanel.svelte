@@ -297,9 +297,7 @@
         : t("route.empty")}
     </p>
     <div class="mt-1 flex flex-wrap gap-1.5">
-      <button
-        class={small}
-        onclick={() => call("start_route_placement")}
+      <button class={small} onclick={() => call("start_route_placement")}
         >{t("route.draw")}</button
       >
       <Tip text={t("route.draw.tip")} />

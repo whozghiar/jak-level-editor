@@ -145,7 +145,10 @@
   // the ISO name made from the level's name (default_iso_name, game_export/mod.rs): it follows the
   // name until it is typed in itself
   const isoOf = (name: string) =>
-    name.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase() || "CUSTOM";
+    name
+      .replace(/[^a-z0-9]/gi, "")
+      .slice(0, 8)
+      .toUpperCase() || "CUSTOM";
   function setName(v: string) {
     if (o!.iso_name === isoOf(o!.name)) o!.iso_name = isoOf(v);
     o!.name = v;

@@ -89,7 +89,8 @@
   };
   let playable = $state<Playable[]>([]);
   const readPlayable = async () =>
-    (playable = (await call<Playable[]>("gameplay_list", {}, true)) ?? playable);
+    (playable =
+      (await call<Playable[]>("gameplay_list", {}, true)) ?? playable);
   onMount(() => {
     void readPlayable();
     return onEngine("jle:changed", readPlayable);
@@ -235,7 +236,13 @@
         <button
           class="{button} {s.tool === 'place' &&
           s.placement?.name ===
-            ({ start: 'jak-start', checkpoint: 'checkpoint', death_zone: 'death-zone' } as Record<string, string>)[what]
+            (
+              {
+                start: 'jak-start',
+                checkpoint: 'checkpoint',
+                death_zone: 'death-zone',
+              } as Record<string, string>
+            )[what]
             ? 'border-orange-500'
             : ''}"
           onclick={() => call("start_gameplay_placement", { what })}
@@ -255,7 +262,8 @@
         onselect={(c) => (creature = c)}
       />
       <button
-        class="{button} {s.tool === 'place' && s.placement?.name === 'creature-spawn'
+        class="{button} {s.tool === 'place' &&
+        s.placement?.name === 'creature-spawn'
           ? 'border-orange-500'
           : ''}"
         onclick={() => startCreature(false)}
@@ -266,7 +274,9 @@
       <Tip text={t("build.gameplay.creature.tip")} />
     </div>
     {#if playable.length}
-      <p class="mt-2 font-semibold text-neutral-300">{t("build.gameplay.list")}</p>
+      <p class="mt-2 font-semibold text-neutral-300">
+        {t("build.gameplay.list")}
+      </p>
       <Tip text={t("build.gameplay.list.tip")} />
       <div class="flex max-h-40 flex-col overflow-y-auto">
         {#each playable as p (p.id)}
@@ -274,11 +284,18 @@
             class="flex items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-neutral-700"
             onclick={() => find(p)}
           >
-            <span class="inline-block h-2 w-2 shrink-0 rounded-full {dot[p.kind] ?? ''}"></span>
-            <span class="text-neutral-400">{t(`build.gameplay.kind.${p.kind}`)}</span>
+            <span
+              class="inline-block h-2 w-2 shrink-0 rounded-full {dot[p.kind] ??
+                ''}"
+            ></span>
+            <span class="text-neutral-400"
+              >{t(`build.gameplay.kind.${p.kind}`)}</span
+            >
             <span class="truncate">{p.name}</span>
             {#if p.stranded}
-              <span class="shrink-0 text-amber-400" title={t("build.gameplay.stranded.tip")}
+              <span
+                class="shrink-0 text-amber-400"
+                title={t("build.gameplay.stranded.tip")}
                 >{t("build.gameplay.stranded")}</span
               >
             {/if}
@@ -366,7 +383,12 @@
             {#if kind === "house"}
               {@render choice(
                 t("build.house.floors"),
-                [["1", 1], ["2", 2], ["3", 3], ["4", 4]],
+                [
+                  ["1", 1],
+                  ["2", 2],
+                  ["3", 3],
+                  ["4", 4],
+                ],
                 floors,
                 (v) => (floors = v as number),
               )}
@@ -412,7 +434,9 @@
               disabled={houseReading}
               onclick={() => placeHouse(false)}
               onpointerdown={(e) =>
-                panelDrag(e, t(`structure.kind.${kind}`), () => placeHouse(true))}
+                panelDrag(e, t(`structure.kind.${kind}`), () =>
+                  placeHouse(true),
+                )}
               >{t(
                 houseReading
                   ? "build.house.reading"

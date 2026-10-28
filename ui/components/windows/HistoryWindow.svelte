@@ -9,7 +9,11 @@
   let steps = $state<string[]>([]);
   let at = $state(0);
   async function read() {
-    const r = await call<{ steps: string[]; at: number }>("history_list", {}, true);
+    const r = await call<{ steps: string[]; at: number }>(
+      "history_list",
+      {},
+      true,
+    );
     if (r) [steps, at] = [r.steps, r.at];
   }
   onMount(() => {

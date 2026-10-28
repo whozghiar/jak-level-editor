@@ -214,7 +214,10 @@
         {#if game === "jak2"}
           <p class="mt-1 text-neutral-300">{t("extract.jak2")}</p>
           <p class="mt-1 flex items-center gap-2 {muted}">
-            <span class={wip}>{t("wip")}</span>{t("menu.game.wip_tip", "Jak II")}
+            <span class={wip}>{t("wip")}</span>{t(
+              "menu.game.wip_tip",
+              "Jak II",
+            )}
           </p>
         {/if}
       {/if}
