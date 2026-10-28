@@ -68,13 +68,14 @@ edit, and lists the others marked *Work in progress*.
 ## Get it
 
 - **Download it**: each [release](https://github.com/whozghiar/jak-level-editor/releases)
-  has installers for Windows (`.exe`, `.msi`) and Linux (`.deb`, `.AppImage`), and a portable zip.
+  has installers for Windows (`.exe`, `.msi`), Linux (`.deb`, `.AppImage`) and macOS (`.dmg`), and a
+  portable zip.
   Then follow [Install](docs/user-guide.md#2-install) in the user guide: you need Jak 3 installed
   with OpenGOAL (from your own copy of the game) and about 4 GB of disk.
 - **Build it yourself**: Rust and Node.js 22;
   [Build it yourself](docs/architecture.md#10-build-it-yourself-and-test-it) goes step by step.
 
-It runs on Windows 10/11 and Linux, 64-bit; there is no macOS version.
+It runs on Windows 10/11 and Linux (64-bit), and on macOS 12 or later (Apple Silicon and Intel).
 
 ## Documentation
 

@@ -1,7 +1,7 @@
 # Making a release
 
 A release is a **draft** GitHub release that `.github/workflows/release.yaml` makes, with the
-editor built for Windows and Linux. You start it, check the draft, then publish it by hand.
+editor built for Windows, Linux and macOS. You start it, check the draft, then publish it by hand.
 
 ## 1. Choose what the release changes
 
@@ -39,19 +39,24 @@ To try a build without releasing: the **Build** workflow builds the editor at ev
 ## 3. Check the draft
 
 The workflow takes 20 to 30 minutes. The draft (**Releases**, marked *Draft*) then holds, for
-`windows-x64` and `linux-x64`:
+`windows-x64`, `linux-x64` and `macos-universal` (one program for Apple Silicon and Intel Macs):
 
 | Asset | What it is |
 |---|---|
 | `Jak.Level.Editor_X.Y.Z_x64-setup.exe` | Windows installer (for the current user, no administrator rights) |
 | `Jak.Level.Editor_X.Y.Z_x64_en-US.msi` | Windows installer (MSI, for all users) |
 | `jak-level-editor_X.Y.Z_amd64.deb`, `Jak.Level.Editor_X.Y.Z_amd64.AppImage` | Linux packages |
+| `Jak.Level.Editor_X.Y.Z_universal.dmg` | macOS: the disk image, its app to drag into Applications |
 | `jak-level-editor-portable-<platform>.zip` | the editor without installing: unzip it anywhere and run `jak-level-editor`; the OpenGOAL Launcher downloads it |
 | `jak-level-editor-mcp-<platform>.zip` | the MCP server, for an AI assistant (optional): put it next to the editor's program |
 
 Download the portable zip of your system, start the editor, and open **File > Extract game
 assets...**: it must find the Jak 3 you installed with OpenGOAL (its version and its levels, in
 green).
+
+On macOS, try the `.dmg`. Its app is signed ad hoc, not by Apple (no Apple developer account): the
+first opening needs **System Settings > Privacy & Security > Open Anyway** (the user guide says
+so).
 
 Edit the release notes GitHub wrote if you like.
 
@@ -70,4 +75,4 @@ Nothing to do in the launcher: it reads this repository's releases. At its next 
 launcher compares the latest published release with the editor version it has active, and shows a
 download icon in its header when the release is newer. Its *Settings > Level Editor* then downloads
 the release's `jak-level-editor-portable-<platform>.zip`, so a release must hold the portable zips
-of `windows-x64` and `linux-x64`.
+of `windows-x64` and `linux-x64` (the launcher does not offer the editor on macOS yet).

@@ -230,6 +230,14 @@ fn system_locales() -> Vec<String> {
 #[cfg(not(windows))]
 fn system_locales() -> Vec<String> {
   let mut out = Vec::new();
+  // macOS: the languages of System Settings (an application opened from the Finder has no LANG)
+  #[cfg(target_os = "macos")]
+  if let Ok(o) = std::process::Command::new("defaults")
+    .args(["read", "-g", "AppleLanguages"])
+    .output()
+  {
+    out.extend(plist_strings(&String::from_utf8_lossy(&o.stdout)));
+  }
   for var in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"] {
     if let Ok(v) = std::env::var(var) {
       out.extend(
@@ -240,6 +248,16 @@ fn system_locales() -> Vec<String> {
     }
   }
   out
+}
+
+/// The strings of a list as `defaults read` prints it: `(\n    "fr-FR",\n    en\n)`
+#[cfg(any(target_os = "macos", test))]
+fn plist_strings(text: &str) -> Vec<String> {
+  text
+    .split([',', '(', ')', '\n'])
+    .map(|s| s.trim().trim_matches('"').to_string())
+    .filter(|s| !s.is_empty())
+    .collect()
 }
 
 /// The text of a key in the selected language.
@@ -602,6 +620,12 @@ fn float_body(v: f64, conv: char, precision: Option<usize>, alt: bool) -> String
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn macos_languages_read() {
+    let text = "(\n    \"fr-FR\",\n    en\n)\n";
+    assert_eq!(plist_strings(text), ["fr-FR", "en"]);
+  }
 
   #[test]
   fn printf() {

@@ -283,8 +283,13 @@ fn kill_started(pid: u32, name: &str) {
       ));
     c
   } else {
-    let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default();
-    if comm.trim() != name {
+    // its program (Linux: its name, macOS: its path)
+    let comm = Command::new("ps")
+      .args(["-p", &pid.to_string(), "-o", "comm="])
+      .output()
+      .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+      .unwrap_or_default();
+    if std::path::Path::new(&comm).file_name() != Some(std::ffi::OsStr::new(name)) {
       return;
     }
     let mut c = Command::new("kill");

@@ -87,7 +87,8 @@ after a fall.
 
 ### What you need
 
-- Windows 10/11 or Linux, 64-bit, a graphics card with WebGL2 (any card of the last ten years).
+- Windows 10/11 or Linux (64-bit), or macOS 12 or later (Apple Silicon or Intel), a graphics card
+  with WebGL2 (any card of the last ten years).
 - On Windows, **WebView2**, the web view the interface is drawn in: part of Windows 11, and of
   Windows 10 once Edge is up to date (else the
   [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/)).
@@ -103,19 +104,24 @@ after a fall.
 ### Download it
 
 Each [release](https://github.com/whozghiar/jak-level-editor/releases) has, for Windows
-(`windows-x64`) and Linux (`linux-x64`):
+(`windows-x64`), Linux (`linux-x64`) and macOS (`macos-universal`, Apple Silicon and Intel):
 
 - an **installer**: `..._x64-setup.exe` (Windows, for your user alone, no administrator rights) or
-  the `.msi` (for all users); the `.deb` or the `.AppImage` on Linux;
+  the `.msi` (for all users); the `.deb` or the `.AppImage` on Linux; the `.dmg` on macOS (drag the
+  editor into Applications);
 - a **portable** zip, `jak-level-editor-portable-<platform>.zip`: unzip it anywhere and run
   `jak-level-editor` (`.exe` on Windows); nothing is installed;
 - `jak-level-editor-mcp-<platform>.zip`, the MCP server for an AI assistant (optional, see
   [15](#15-building-with-an-ai-assistant)): put it next to the editor's program.
 
+On macOS the editor is not signed by Apple: the first time, macOS refuses to open it. Open
+**System Settings > Privacy & Security**, then **Open Anyway** next to its name (or, in a Terminal,
+`xattr -dr com.apple.quarantine "/Applications/Jak Level Editor.app"`); it opens normally after.
+
 The releases are numbered
 `vX.Y.Z` (v1.0.0, then v1.0.1 for fixes, v1.1.0 for new features, v2.0.0 for a change that breaks
-something): GitHub builds the editor on Windows and Linux and makes a draft release with these
-files, published by hand ([RELEASING.md](../RELEASING.md)). There is no macOS version.
+something): GitHub builds the editor on Windows, Linux and macOS and makes a draft release with
+these files, published by hand ([RELEASING.md](../RELEASING.md)).
 
 With the [OpenGOAL Launcher](https://github.com/whozghiar/open-goal-launcher), you download
 nothing by hand: its **Settings > Level Editor** installs a release (its portable zip), its header

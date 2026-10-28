@@ -3,15 +3,16 @@
 What the three workflows of [`.github/workflows/`](../.github/workflows/) do, when they run, and how
 to run the same checks on your computer before you push.
 
-A **workflow** is a list of jobs that GitHub runs on its own computers (the *runners*: Windows and
-Linux machines started for the occasion and thrown away afterwards), written in a YAML file. Their
+A **workflow** is a list of jobs that GitHub runs on its own computers (the *runners*: Windows,
+Linux and macOS machines started for the occasion and thrown away afterwards), written in a YAML
+file. Their
 runs are in the **Actions** tab of the repository. A green tick next to a commit means they all
 passed; a red cross means one failed: click it, then the job, to read its log.
 
 | Workflow | File | Runs | Answers |
 |---|---|---|---|
 | **Lint** | [`lint.yaml`](../.github/workflows/lint.yaml) | at every push on any branch, on every pull request, by hand | is the code written in the expected form? |
-| **Build** | [`build.yaml`](../.github/workflows/build.yaml) | the same | does it build and pass its tests on Windows and Linux? |
+| **Build** | [`build.yaml`](../.github/workflows/build.yaml) | the same | does it build and pass its tests on Windows, Linux and macOS? |
 | **Release** | [`release.yaml`](../.github/workflows/release.yaml) | by hand, with `patch`, `minor` or `major` | the next version `vX.Y.Z`, tagged, and its installers and zips in a draft release |
 
 Lint and Build run side by side and independently: a formatting mistake does not hide whether the
@@ -42,8 +43,8 @@ Two examples of failures, and what they mean:
 
 ## Build
 
-One job, on Windows and on Linux (`fail-fast: false`: a failure on one system does not stop the
-other), **Editor**:
+One job, on Windows, Linux and macOS (an Apple Silicon Mac; `fail-fast: false`: a failure on one
+system does not stop the others), **Editor**:
 
 1. installs Rust (stable) and Node.js 22, and on Linux the system packages of a Tauri application
    (webkit2gtk and others); the Rust build is cached between runs
@@ -53,8 +54,6 @@ other), **Editor**:
    tests. The runners have no game: the tests that read extracted levels skip themselves;
 3. `yarn install --frozen-lockfile`, then `yarn tauri build --no-bundle`: the interface (Vite) and
    the program, without making installers (the releases make them).
-
-There is no macOS job: the editor was never tried there.
 
 The OpenGOAL Launcher does not build the editor: it downloads the portable zip of a published
 release.
@@ -73,11 +72,14 @@ check, then publish by hand. [RELEASING.md](../RELEASING.md) gives the steps.
    commit and pushes both at once; then creates the draft release on that tag, its notes written
    by GitHub from the commits. One release runs at a time (`concurrency: release`): two would take
    the same number.
-2. **Build** (`windows-x64` and `linux-x64`):
+2. **Build** (`windows-x64`, `linux-x64` and `macos-universal`):
    - the editor and its installers with [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action)
-     and `src-tauri/tauri.release.conf.json` (the installers' kinds); the action uploads the
+     and `src-tauri/tauri.release.conf.json` (the installers' kinds; on macOS the app signed ad hoc,
+     `signingIdentity: "-"`, there being no Apple developer account); the action uploads the
      installers to the draft;
    - the MCP server, `cargo build --release -p jak-level-editor-mcp`;
+   - on macOS both programs for Apple Silicon and Intel in one (`universal-apple-darwin`: the
+     editor by the action's `--target`, the MCP server built twice and joined by `lipo`);
    - the two zips, uploaded with `gh release upload --clobber` (a job run again replaces them).
 
    On Windows, `RUSTFLAGS=-C target-feature=+crt-static` puts the C runtime inside the programs:
@@ -89,6 +91,7 @@ The draft then holds, per platform:
 |---|---|
 | `*_x64-setup.exe`, `*_x64_en-US.msi` | the Windows installers (NSIS, for the current user; MSI): the editor, `lang/` and `data/` in its folder |
 | `*_amd64.deb`, `*_amd64.AppImage` | the Linux packages, the same resources |
+| `*_universal.dmg` | macOS: the disk image of the app (`lang/` and `data/` in its `Contents/Resources/`) |
 | `jak-level-editor-portable-<platform>.zip` | at its root: `jak-level-editor(.exe)`, `lang/`, `data/` (the editor finds them next to itself); the OpenGOAL Launcher downloads `https://github.com/whozghiar/jak-level-editor/releases/download/v<version>/jak-level-editor-portable-<platform>.zip` |
 | `jak-level-editor-mcp-<platform>.zip` | `jak-level-editor-mcp(.exe)`, the MCP server ([mcp.md](mcp.md)): it starts the editor found next to it |
 
