@@ -1,17 +1,17 @@
 <script lang="ts" module>
-  // the window's choices, kept while it is closed (ExtractState's source and output)
-  let source = $state("");
+  // the window's destination, kept while it is closed
   let output = $state("");
 </script>
 
 <script lang="ts">
-  // File > Extract game assets (ui_extract_window, extract.cpp): ogle-extract reads the user's disc
-  // (an .iso or a disc folder) and writes its levels to <library>/<game>/. The engine runs it
-  // (crates/core/src/editor/extract.rs); the window follows it with extract_state, on jle:progress
-  // and every 500 ms while it runs.
+  // File > Extract game assets: the levels of a game installed with OpenGOAL (the OpenGOAL
+  // Launcher's, else the folder of the settings), read by its own extractor and written to
+  // <library>/<game>/. The engine runs it (crates/core/src/io/extraction, editor/extract.rs); the
+  // window follows it with extract_state, on jle:progress and every 500 ms while it runs.
   import { open } from "@tauri-apps/plugin-dialog";
   import { Progressbar } from "flowbite-svelte";
   import { onMount } from "svelte";
+  import { refreshGameTest } from "../../lib/game_test.svelte";
   import { has, t } from "../../lib/i18n";
   import { games } from "../../lib/games";
   import { call, onEngine } from "../../lib/rpc";
@@ -20,18 +20,18 @@
   // the game asked (File > Extract game assets > Jak II, a panel's Extract Jak II...)
   let { game: asked }: { game?: string } = $props();
 
-  // a text of the engine: its translation (then ": detail"), else as ogle-extract said it
+  // a text of the engine: its translation (then ": detail"), else as it came
   type Text = { key: string; args: number[]; detail: string; text: string };
   type Extraction = {
     running: boolean;
-    detecting: boolean;
     detected: {
-      source: string;
       game: string;
-      name: string;
-      version: string;
-      serial: string;
+      folder: string;
+      from_host: boolean;
+      install: { version: string; root: string } | null;
       error: Text | null;
+      serial: string;
+      levels: number;
     };
     log: string[];
     step: Text | null;
@@ -43,16 +43,8 @@
     seconds: number;
   };
   type Defaults = {
-    source: string;
     output: string;
     library: { root: string; levels: number } | null;
-    iso_dir: string;
-    extractor_found: boolean;
-    extractor_dirs: string[]; // where it is looked for
-    host_sources: Record<string, string>; // the discs the host already extracted, by game
-    can_fetch: boolean; // the host downloads ogle-extract (extract_fetch)
-    fetching: boolean;
-    fetch_error: string;
   };
 
   let ex = $state<Extraction>();
@@ -71,30 +63,28 @@
   }
 
   const running = $derived(!!ex?.running);
-  const extracting = $derived(running && !ex?.detecting);
-  const recognized = $derived(
-    !!ex?.detected.game && ex.detected.source === source,
-  );
-  // Jak 3, or Jak II for its structures (brought into Jak 3 levels: Catalog > Decor > Jak II)
-  const jak2 = $derived(recognized && ex?.detected.game === "jak2");
-  const matches = $derived(
-    recognized && (ex?.detected.game === "jak3" || jak2),
-  );
-  // Jak and Daxter: recognized, planned (its levels are neither extracted nor edited yet)
-  const jak1 = $derived(recognized && ex?.detected.game === "jak1");
-
-  // the game whose disc is read: the one asked, else the disc's; choosing one takes the host's
-  // disc of it (the launcher's iso_data/<game>) when it has one, else asks for its disc
+  // the game whose levels are read: Jak 3, or Jak II for its structures (brought into Jak 3
+  // levels: Catalog > Decor > Jak II)
   let game = $state("jak3");
-  const gameName = $derived(games.find((g) => g.id === game)?.name ?? "");
-  $effect(() => {
-    if (recognized && ex) game = ex.detected.game;
-  });
+  const detected = $derived(
+    ex?.detected.game === game ? ex.detected : undefined,
+  );
+  const ready = $derived(!!detected?.install && !detected.error);
+
+  function show(s: Extraction | undefined) {
+    if (s) ex = s;
+  }
+  const refresh = async () =>
+    show(await call<Extraction>("extract_state", {}, true));
+  const detect = async () =>
+    show(await call<Extraction>("extract_detect", { game }));
+  const start = async () =>
+    show(await call<Extraction>("extract_start", { game, output }));
+  const cancel = async () => show(await call<Extraction>("extract_stop"));
+
   function pick(g: string) {
     game = g;
-    if (ex?.detected.source === source && ex.detected.game === g) return;
-    source = defaults?.host_sources[g] ?? "";
-    if (source) detect();
+    detect();
   }
   let picked = "";
   $effect(() => {
@@ -104,79 +94,40 @@
     }
   });
 
-  function show(s: Extraction | undefined) {
-    if (s) ex = s;
-  }
-
-  const refresh = async () =>
-    show(await call<Extraction>("extract_state", {}, true));
-  const detect = async () =>
-    show(await call<Extraction>("extract_detect", { source }));
-  const start = async () =>
-    show(await call<Extraction>("extract_start", { source, output }));
-  const cancel = async () => show(await call<Extraction>("extract_stop"));
-
-  async function chooseSource(directory: boolean) {
-    const d = await call<Defaults>("extract_defaults", {}, true);
+  // the folder of the game installed, as File > Settings keeps it
+  async function chooseInstall() {
     const path = await open({
-      directory,
-      defaultPath: d?.iso_dir || undefined,
-      filters: directory
-        ? undefined
-        : [{ name: "Disc image (.iso)", extensions: ["iso"] }],
+      directory: true,
+      defaultPath: detected?.folder || undefined,
     });
     if (typeof path !== "string") return;
-    source = path;
+    await call("set_game_install", { game, folder: path });
+    refreshGameTest();
     detect();
   }
 
   async function chooseOutput() {
-    const d = await call<Defaults>("extract_defaults", {}, true);
     const path = await open({
       directory: true,
-      defaultPath: d?.output || undefined,
+      defaultPath: output || undefined,
     });
     if (typeof path === "string") output = path;
-  }
-
-  // the host's download of ogle-extract (extract_fetch): its progress, then the disc read again
-  let download = $state<{ done: number; total: number }>();
-  async function fetchExtractor() {
-    download = { done: 0, total: 1 };
-    if (!(await call("extract_fetch"))) download = undefined;
-  }
-  async function fetched(p: {
-    id: string;
-    done: number;
-    total: number;
-    finished: boolean;
-  }) {
-    if (p?.id !== "extract_fetch") return;
-    download = p.finished ? undefined : p;
-    if (!p.finished) return;
-    defaults = await call<Defaults>("extract_defaults");
-    if (source && defaults?.extractor_found) detect();
   }
 
   onMount(() => {
     const timer = setInterval(() => ex?.running && refresh(), 500);
     const off = onEngine("jle:progress", refresh);
-    const offFetch = onEngine("jle:progress", fetched);
     (async () => {
       defaults = await call<Defaults>("extract_defaults");
       if (!defaults) return;
       if (!output) output = defaults.output;
       await refresh();
-      if (!source && !asked && !(ex?.running && !ex.detecting)) {
-        // the disc chosen last
-        source = defaults.source;
-        detect();
-      }
+      if (ex?.running) game = ex.detected.game || game;
+      else if (!asked) detect();
     })();
     return () => {
       clearInterval(timer);
       off();
-      offFetch();
     };
   });
 
@@ -196,39 +147,7 @@
     "shrink-0 rounded border border-[#2a2a2a] bg-[#0b0b0b] px-3 py-1 text-sm hover:border-[#3a3a3a] hover:bg-[#1a1a1a] disabled:pointer-events-none disabled:opacity-50";
 </script>
 
-{#if defaults && !defaults.extractor_found}
-  <p class={bad}>{t("extract.missing")}</p>
-  {#if defaults.can_fetch}
-    <p class="mt-1 text-sm text-neutral-400">{t("extract.fetch.help")}</p>
-    <button
-      class="mt-3 rounded border border-orange-600 bg-orange-600 px-6 py-2 font-semibold text-white hover:bg-orange-500 disabled:pointer-events-none disabled:opacity-40"
-      disabled={!!download || defaults.fetching}
-      onclick={fetchExtractor}
-      >{download || defaults.fetching
-        ? t("extract.fetching")
-        : t("extract.fetch")}</button
-    >
-    {#if download && download.total > 1}
-      <div class="mt-3">
-        <Progressbar
-          color="orange"
-          size="h-2"
-          progress={Math.round((100 * download.done) / download.total)}
-        />
-      </div>
-    {/if}
-    {#if defaults.fetch_error && !download}
-      <p class="mt-2 {bad}">
-        {t("extract.fetch_failed", defaults.fetch_error)}
-      </p>
-    {/if}
-  {:else}
-    <p class="mt-1 text-sm text-neutral-400">{t("extract.missing.help")}</p>
-    <ul class="mt-1 list-disc pl-5 text-sm break-all text-neutral-400">
-      {#each defaults.extractor_dirs as dir}<li>{dir}</li>{/each}
-    </ul>
-  {/if}
-{:else if defaults}
+{#if defaults}
   <div class="flex flex-col gap-4 text-sm">
     <div>
       <p class="text-neutral-300">{t("extract.intro")}</p>
@@ -239,11 +158,10 @@
       {/if}
     </div>
 
-    <!-- 1. the disc -->
+    <!-- 1. the game installed -->
     <section>
-      <h3 class={heading}>{t("extract.disc")}</h3>
+      <h3 class={heading}>{t("extract.game")}</h3>
       <div class="mb-2 flex flex-wrap items-center gap-3">
-        <span class="text-neutral-400">{t("catalog.game")}</span>
         {#each games as g}
           <label
             class="flex items-center gap-1.5 {g.extractable
@@ -255,7 +173,7 @@
               class={check}
               name="extract-game"
               checked={game === g.id}
-              disabled={!g.extractable || extracting}
+              disabled={!g.extractable || running}
               onchange={() => pick(g.id)}
             />
             {g.name}
@@ -263,64 +181,43 @@
           </label>
         {/each}
       </div>
-      <div class="flex gap-2">
-        <input
-          class={input}
-          placeholder={t("extract.disc.hint")}
-          bind:value={source}
-          onchange={detect}
-          disabled={extracting}
-        />
-        <button
-          class={button}
-          disabled={extracting}
-          onclick={() => chooseSource(false)}>{t("extract.iso_file")}</button
-        >
-        <button
-          class={button}
-          disabled={extracting}
-          onclick={() => chooseSource(true)}>{t("extract.folder")}</button
-        >
-      </div>
-      <div class="mt-1.5">
-        {#if running && ex?.detecting}
-          <p class={muted}>{t("extract.detecting")}</p>
-        {:else if recognized && ex}
-          <p>
-            <span
-              class="font-semibold {matches
-                ? good
-                : jak1
-                  ? 'text-amber-300'
-                  : bad}">{ex.detected.name}</span
+      {#if detected}
+        <div class="flex items-center gap-2">
+          <span
+            class="min-w-0 flex-1 font-mono text-xs break-all text-neutral-300 select-text"
+            >{detected.folder || t("settings.games.none")}</span
+          >
+          {#if !detected.from_host}
+            <button class={button} disabled={running} onclick={chooseInstall}
+              >{t("settings.games.choose")}</button
             >
-            <span class={muted}
-              >{ex.detected.version} &nbsp;-&nbsp; {ex.detected.serial}</span
-            >
+          {/if}
+        </div>
+        {#if ready && detected.install}
+          <p class="mt-1.5 {good}">
+            {t(
+              "extract.game.found",
+              detected.install.version || "?",
+              detected.levels,
+              detected.serial || "?",
+            )}
           </p>
-          {#if jak1}
-            <p class="mt-1 flex items-center gap-2 text-neutral-300">
-              <span class={wip}>{t("wip")}</span>{t("extract.jak1")}
-            </p>
-          {:else if !matches}<p class={bad}>{t("extract.wrong_game")}</p>{/if}
-          {#if jak2}<p class="mt-1 text-neutral-300">
-              {t("extract.jak2")}
-            </p>
-            <p class="mt-1 flex items-center gap-2 {muted}">
-              <span class={wip}>{t("wip")}</span>{t(
-                "menu.game.wip_tip",
-                "Jak II",
-              )}
+        {:else if detected.error}
+          <p class="mt-1.5 {bad}">{text(detected.error)}</p>
+          {#if !detected.from_host}<p class="mt-1 {muted}">
+              {t("extract.game.help")}
             </p>{/if}
-        {:else if ex?.detected.error && ex.detected.source === source}
-          <p class={bad}>{text(ex.detected.error)}</p>
-        {:else if !source}
-          <p class={muted}>{t("extract.disc.choose", gameName)}</p>
         {/if}
-        {#if source && Object.values(defaults.host_sources).includes(source)}
-          <p class="mt-1 {muted}">{t("extract.host_disc")}</p>
+        {#if detected.from_host}<p class="mt-1 {muted}">
+            {t("settings.games.from_host")}
+          </p>{/if}
+        {#if game === "jak2"}
+          <p class="mt-1 text-neutral-300">{t("extract.jak2")}</p>
+          <p class="mt-1 flex items-center gap-2 {muted}">
+            <span class={wip}>{t("wip")}</span>{t("menu.game.wip_tip", "Jak II")}
+          </p>
         {/if}
-      </div>
+      {/if}
     </section>
 
     <!-- 2. where -->
@@ -331,9 +228,9 @@
           class={input}
           placeholder={t("extract.destination.hint")}
           bind:value={output}
-          disabled={extracting}
+          disabled={running}
         />
-        <button class={button} disabled={extracting} onclick={chooseOutput}
+        <button class={button} disabled={running} onclick={chooseOutput}
           >{t("extract.choose")}</button
         >
       </div>
@@ -344,14 +241,14 @@
 
     <button
       class="self-start rounded border border-orange-600 bg-orange-600 px-6 py-2 font-semibold text-white hover:bg-orange-500 disabled:pointer-events-none disabled:opacity-40"
-      disabled={running || !matches || !output}
+      disabled={running || !ready || !output}
       onclick={start}
     >
       {t("extract.start")}
     </button>
 
     <!-- progress and outcome of an extraction -->
-    {#if ex && !ex.detecting && (running || ex.log.length)}
+    {#if ex && (running || ex.log.length)}
       {#if running}
         <div class="flex items-end gap-3">
           <div class="flex-1">

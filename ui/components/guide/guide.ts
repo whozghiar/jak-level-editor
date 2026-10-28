@@ -34,6 +34,7 @@ export const guideDemos: Record<string, string | null> = {
   story: "story",
   replace: "replace",
   export: null,
+  game_test: null,
   place_drag: "place",
   topology: null,
   shape_edit: "build",
@@ -109,7 +110,7 @@ export const guideSections: { key: string; ids: string[] }[] = [
   },
   {
     key: "guide.section.level",
-    ids: ["levels", "jak2_level", "story", "replace", "export"],
+    ids: ["levels", "jak2_level", "story", "replace", "export", "game_test"],
   },
 ];
 

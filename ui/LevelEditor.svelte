@@ -87,6 +87,8 @@
         confirmDiscard(async () => {
           // "Don't save": the engine may outlive the window (a host application): the changes go
           if (engine.state.document.unsaved) await call("close_document");
+          // the game of the tries closes with the editor, its files taken out of the game
+          await call("stop_game_test", {}, true);
           await Promise.all(offs.map((off) => off()));
           offs.length = 0;
           await win.close();

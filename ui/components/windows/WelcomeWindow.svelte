@@ -11,9 +11,6 @@
     root: string;
     root_game: boolean;
     host: string;
-    extractor: string;
-    extractor_dirs: string[];
-    can_fetch: boolean;
   };
 
   // the first start: where the library goes (until the user chose), then the guided tour

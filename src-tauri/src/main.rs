@@ -6,17 +6,16 @@
 // Jak Level Editor (crates/tauri-plugin, ui/), with its command line:
 //   jak-level-editor [project.glb] [--library <folder>] [--lang <code>] [--remote-port <port>]
 //                    [--hidden] [--open-level <name>]
-//                    [--default-library=<folder>] [--extract-source=<game>=<disc>]...
+//                    [--default-library=<folder>] [--game-install=<game>=<folder>]...
 // The OpenGOAL Launcher's Level Editor button starts this program (its portable build) with the
-// last two, its library and the discs it already extracted.
+// last two, its library and the games it installed.
 
 use tauri_plugin_jak_level_editor::Host;
 
 // what this app gives the editor (docs/architecture.md §16): the library in Documents/Jak Level
 // Editor (known before the app, so the editor starts on it), unless the command line gives
-// another. No game runtime: the standalone app exports the levels; the guide tells how to add one
-// to the game by hand. ogle-extract is found next to the program or in its resources
-// (jle_core::editor::extract::extractor_path).
+// another. The games installed with OpenGOAL, whose levels are extracted and tried, are chosen in
+// its settings.
 fn host() -> Host {
   Host {
     name: "standalone".into(),

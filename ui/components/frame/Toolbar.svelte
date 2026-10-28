@@ -1,12 +1,13 @@
 <script lang="ts">
   // The toolbar (ui_toolbar in panels.cpp): the gizmo's modes, the tools, Local, Snap and its steps,
   // copy / paste / delete, a prefab, undo / redo.
-  import type { Component } from "svelte";
+  import { onMount, type Component } from "svelte";
   import IconAxis from "~icons/mdi/axis-arrow";
   import IconCollision from "~icons/mdi/cube-scan";
   import IconChevronDown from "~icons/mdi/chevron-down";
   import IconCopy from "~icons/mdi/content-copy";
   import IconPaste from "~icons/mdi/content-paste";
+  import IconPlay from "~icons/mdi/play";
   import IconMove from "~icons/mdi/cursor-move";
   import IconDelete from "~icons/mdi/delete";
   import IconMagnet from "~icons/mdi/magnet";
@@ -18,6 +19,13 @@
   import IconUndo from "~icons/mdi/undo";
   import IconTopology from "~icons/mdi/vector-polyline";
   import { engine, type GizmoMode } from "../../lib/engine.svelte";
+  import {
+    gameTest,
+    gameTestTip,
+    refreshGameTest,
+    testInGame,
+    watchGameTest,
+  } from "../../lib/game_test.svelte";
   import { t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
   import { windows } from "../../lib/windows.svelte";
@@ -25,6 +33,14 @@
 
   const s = $derived(engine.state);
   const sel = $derived(s.selection.count > 0);
+  const gt = $derived(gameTest.state);
+
+  onMount(watchGameTest);
+  // a document opened or closed: a try can start or not
+  $effect(() => {
+    void s.document.open;
+    refreshGameTest();
+  });
   const snap = $derived(s.gizmo.snap);
 
   function gizmo(mode: GizmoMode) {
@@ -234,6 +250,13 @@
     () => windows.open("new_prefab"),
     { enabled: sel, guide: "prefab", short: true },
   )}
+  <div class="mx-1 h-6 border-l border-neutral-800"></div>
+  {@render button(IconPlay, t("toolbar.test"), testInGame, {
+    enabled: !!gt?.available && !gt.busy,
+    on: !!gt?.busy,
+    tip: gameTestTip(),
+    short: true,
+  })}
   <div class="mx-1 h-6 border-l border-neutral-800"></div>
   {@render button(IconUndo, t("toolbar.undo"), () => call("undo"), {
     enabled: s.history.can_undo,

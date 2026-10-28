@@ -1,4 +1,5 @@
-//! The library: the folder ogle-extract writes to, the game in its subfolder jak3/.
+//! The library: the folder the extraction writes to (io/extraction), the game in its subfolder
+//! jak3/.
 //!
 //!   <game>/library.json                           the game, its version, the levels extracted
 //!   <game>/<level>/decor/<level>-background.glb   a level: its decor, collision and actors
@@ -100,13 +101,6 @@ pub fn editor_tree() -> Option<PathBuf> {
 /// is then the host's (Editor::default_library).
 pub fn default_library_root() -> String {
   editor_tree().map_or_else(String::new, |t| from_path(&t.join("library")))
-}
-
-/// Where the user's own disc images and disc folders go in a development build, so File > Extract
-/// has a folder of its own to suggest: iso_data/ next to library/ (its .gitignore keeps them out of
-/// this repository); "" otherwise.
-pub fn default_iso_data_dir() -> String {
-  editor_tree().map_or_else(String::new, |t| from_path(&t.join("iso_data")))
 }
 
 /// The folder of the extracted game in a library folder (<library>/jak3, absolute, '/' separated),

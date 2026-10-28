@@ -3,7 +3,7 @@
 //! host gives (`Prefs::use_dir`), or in $JLE_PREFS_DIR (the OpenGOAL Launcher gives its own
 //! settings folder, so that its editor never shares a library with the standalone app's): where
 //! the extracted game is, the disc it came from, the language,
-//! recent projects. Thumbnails and the catalog's index are cached next to them.
+//! recent projects, the games installed where levels are tried. Thumbnails and the catalog's index are cached next to them.
 //!
 //! The C++ editor kept them in OpenGOAL/open-goal-level-editor: while the standalone app's folder
 //! has no preferences, that one's are read (and written to the new folder at the next save).
@@ -28,10 +28,8 @@ fn slashed(dir: &str) -> String {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Prefs {
-  /// the folder ogle-extract writes to: the game in its subfolder jak3/
+  /// the folder the extraction writes to: the game in its subfolder jak3/
   pub library_root: String,
-  /// the user's .iso or disc folder
-  pub extract_source: String,
   /// "" = the system's
   pub language: String,
   pub recent_projects: Vec<String>,
@@ -44,6 +42,9 @@ pub struct Prefs {
   /// computer (editor/remote.rs); off unless the user turns it on, or the MCP server starts the
   /// editor itself (--remote-port)
   pub remote_control: bool,
+  /// the games installed whose levels are extracted and tried, by game ("jak3": its folder),
+  /// chosen in the settings (io/game_install.rs); a host's (the OpenGOAL Launcher's) comes first
+  pub game_installs: std::collections::BTreeMap<String, String>,
 }
 
 /// The settings folder of an application, as SDL_GetPrefPath makes it ('/' separated, ending

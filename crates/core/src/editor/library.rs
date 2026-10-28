@@ -1,24 +1,24 @@
 //! Where the library lives: the host's default (crate::host::Host), the first-run assistant's
-//! choice, the settings' change of folder; the extraction's help from the host (its disc already
-//! extracted, its ogle-extract, its provider fetching one).
+//! choice, the settings' change of folder; File > Extract game assets: the game installed whose
+//! levels it reads (the host's, else the settings').
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
-use super::extract::{extractor_path, extractor_places};
-use super::{Editor, tr_err};
-use crate::host::{Host, HostEvent, HostEvents};
-use crate::i18n::{Arg, strf, tr};
+use super::extract::{Detected, Text};
+use super::{Editor, text_string, tr_err};
+use crate::host::Host;
+use crate::i18n::tr;
 use crate::io::asset_library::{default_library_root, from_path, game_folder};
+use crate::io::extraction::{Options, game_levels};
+use crate::io::game_install::{find_extraction, read_jsonc};
 use crate::prefs::{Prefs, READ_ONLY};
 use crate::{log_error, log_info};
 
 impl Editor {
   /// What the application gives the editor (the plugin's Builder::host and set_host).
   pub fn set_host(&mut self, host: Host) {
-    self.extraction.extractor = host.extractor.clone();
     self.host = host;
   }
 
@@ -34,13 +34,10 @@ impl Editor {
 
   /// What the first-run assistant and the settings show (library_setup): `chosen` (no assistant
   /// then; the command line modes never ask), `default` and `default_game` (it holds an extracted
-  /// game), `root` and `root_game` (the library now), `host`; ogle-extract: `extractor` (its path,
-  /// "" when missing), `extractor_dirs` (where it is looked for), `can_fetch` (the host's download).
+  /// game), `root` and `root_game` (the library now), `host`.
   pub fn library_setup(&self) -> Value {
     let default = self.default_library();
     let has_game = |root: &str| !game_folder(root).is_empty();
-    let x = &self.extraction;
-    let (host, res) = (x.extractor.as_deref(), x.resource_dir.as_deref());
     json!({
       "chosen": Prefs::get().library_chosen || READ_ONLY.load(std::sync::atomic::Ordering::Relaxed),
       "default_game": has_game(&default),
@@ -48,9 +45,6 @@ impl Editor {
       "root": self.library_root,
       "root_game": has_game(&self.library_root),
       "host": self.host.name,
-      "extractor": extractor_path(host, res),
-      "extractor_dirs": extractor_places(host, res),
-      "can_fetch": self.host.extractor_provider.is_some(),
     })
   }
 
@@ -69,103 +63,94 @@ impl Editor {
     Ok(self.library_setup())
   }
 
-  /// File > Extract game assets' first values (Extraction::defaults): the disc chosen last, else
-  /// Jak 3's the host already extracted; `host_sources`, the host's discs by game (the launcher's
-  /// iso_data/<game>), which the window takes when its game is chosen; the library, else its
-  /// default; `can_fetch` (the host can fetch ogle-extract when it is missing), `fetching`.
+  /// File > Extract game assets' first values (extract_defaults): `output`, the library (its
+  /// default before one is chosen); `library` {root, levels} when one is loaded.
   pub(crate) fn extract_defaults(&self) -> Value {
-    let host_sources: BTreeMap<&str, String> = (self.host.extract_sources.iter())
-      .map(|(game, disc)| (game.as_str(), disc.to_string_lossy().into_owned()))
-      .collect();
-    let mut source = Prefs::get().extract_source.clone();
-    if source.is_empty() {
-      source = host_sources.get("jak3").cloned().unwrap_or_default();
-    }
     let root = if self.library_root.is_empty() {
       self.default_library()
     } else {
       self.library_root.clone()
     };
-    let mut d = self
-      .extraction
-      .defaults(&source, &root, self.library.levels().len());
-    d["host_sources"] = json!(host_sources);
-    d["can_fetch"] = json!(self.host.extractor_provider.is_some());
-    d["fetching"] = json!(self.busy("extract_fetch"));
+    let levels = self.library.levels().len();
+    json!({
+      "output": root,
+      "library": (levels > 0).then(|| json!({ "root": self.library_root, "levels": levels })),
+    })
+  }
+
+  /// The game the Extract window extracts (extract_detect): its installation, or why not
+  pub(crate) fn extract_detect(&mut self, game: &str) -> Value {
+    let d = self.extraction_source(game);
+    self.extraction.set_detected(d);
+    self.extraction.snapshot()
+  }
+
+  /// The installation of `game` to extract its levels from: its disc's serial, its levels
+  fn extraction_source(&self, game: &str) -> Detected {
+    let (folder, from_host) = self.game_folder(game);
+    let mut d = Detected {
+      game: game.into(),
+      folder: folder.clone(),
+      from_host,
+      ..Default::default()
+    };
+    if folder.is_empty() {
+      d.error = Some(Text::key("game_install.error.none"));
+      return d;
+    }
+    match find_extraction(game, Path::new(&folder)) {
+      Ok(mut install) => {
+        install.version = self.gk_version(&install.gk);
+        let disc = install.data().join("iso_data").join(game);
+        d.serial = read_jsonc(&disc.join("buildinfo.json"))
+          .ok()
+          .and_then(|b| b[0]["serial"].as_str().map(str::to_string))
+          .unwrap_or_default();
+        match game_levels(&install, &[]) {
+          Ok(levels) => d.levels = levels.len(),
+          Err(e) => {
+            d.error = Some(Text {
+              detail: e,
+              ..Text::key("extract.error.extraction")
+            })
+          }
+        }
+        d.install = Some(install);
+      }
+      Err(key) => d.error = Some(Text::key(key)),
+    }
     d
   }
 
-  /// The Extract window's Download ogle-extract (extract_fetch): the host's provider fetches it on a
-  /// job (jle:progress "extract_fetch"), then the extraction uses it; why not in `fetch_error`.
-  pub(crate) fn extract_fetch(&mut self) -> Result<(), String> {
-    let Some(provider) = self.host.extractor_provider.clone() else {
-      return Err(tr("extract.no_provider").into());
-    };
-    if self.busy("extract_fetch") {
-      return Ok(());
+  /// Extracts the levels of `game` to `output`/<game> (extract_start): its installation's
+  /// extractor works in the editor's folder (<preferences>/extract/<game>)
+  pub(crate) fn extract_start(&mut self, game: &str, output: &str) -> Value {
+    let d = self.extraction_source(game);
+    let (install, error) = (d.install.clone(), d.error.clone());
+    self.extraction.set_detected(d);
+    match (install, error) {
+      (Some(install), None) => {
+        let work = PathBuf::from(Prefs::dir()).join("extract").join(game);
+        if self
+          .extraction
+          .start(install, output, work, Options::default())
+        {
+          log_info!(tr("log.extracting"), output);
+        }
+      }
+      (_, error) => log_error!(
+        "%s",
+        text_string(&error.unwrap_or_else(|| Text::key("game_install.error.none")))
+      ),
     }
-    self.extraction.fetch_error.clear();
-    let label = tr("extract.fetching").to_string();
-    let (notify, job) = (self.notify.clone(), label.clone());
-    let events: HostEvents = Arc::new(move |e| match e {
-      HostEvent::Progress { done, total } => {
-        if let Some(n) = &notify {
-          let p = json!({"id": "extract_fetch", "label": job, "done": done, "total": total.max(1), "finished": false});
-          n("jle:progress", p);
-        }
-      }
-      HostEvent::Step { key, args } => {
-        let args: Vec<Arg> = args.into_iter().map(Arg::from).collect();
-        log_info!("%s", strf(tr(&key), &args));
-      }
-      HostEvent::Log { line } => log_info!("%s", line),
-    });
-    self.run_job(
-      "extract_fetch",
-      label,
-      move || provider.fetch(events),
-      |ed, r| match r {
-        Ok(path) => {
-          log_info!(
-            tr("log.extractor_fetched"),
-            path.to_string_lossy().into_owned()
-          );
-          ed.extraction.extractor = Some(path.clone());
-          ed.host.extractor = Some(path);
-        }
-        Err(e) => {
-          log_error!(tr("extract.fetch_failed"), e.clone());
-          ed.extraction.fetch_error = e;
-        }
-      },
-    );
-    Ok(())
+    self.extraction.snapshot()
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::path::PathBuf;
-
   use super::*;
-  use crate::host::ExtractorProvider;
   use crate::io::test_library::temp_dir;
-
-  // a host's provider: an "ogle-extract" written in a folder of its own, or an error
-  struct TestProvider(Result<PathBuf, String>);
-
-  impl ExtractorProvider for TestProvider {
-    fn fetch(&self, events: HostEvents) -> Result<PathBuf, String> {
-      events(HostEvent::Progress { done: 1, total: 2 });
-      events(HostEvent::Log {
-        line: "downloading".into(),
-      });
-      let path = self.0.clone()?;
-      std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-      std::fs::write(&path, b"not really ogle-extract").unwrap();
-      Ok(path)
-    }
-  }
 
   fn editor(host: Host) -> Editor {
     let mut ed = Editor::new();
@@ -211,67 +196,36 @@ mod tests {
   }
 
   #[test]
-  fn extraction_helped_by_the_host() {
+  fn extraction_from_the_game_installed() {
     let tmp = temp_dir("extract-host");
-    let disc = tmp.join("active/jak3/data/iso_data/jak3");
-    let disc2 = tmp.join("active/jak2/data/iso_data/jak2");
-    let fetched = tmp.join("fetched").join(if cfg!(windows) {
-      "ogle-extract.exe"
-    } else {
-      "ogle-extract"
-    });
     let was = Prefs::get().clone();
-    Prefs::get().extract_source.clear();
+    Prefs::get().game_installs.clear();
+    // none: where to choose it
+    let mut ed = editor(Host::default());
+    let snap = ed.call("extract_detect", &json!({"game": "jak3"})).unwrap();
+    assert_eq!(snap["detected"]["error"]["key"], "game_install.error.none");
+    // the host's: what it lacks
     let mut ed = editor(Host {
       name: "launcher".into(),
       default_library: Some(tmp.join("jak-level-editor")),
-      extract_sources: BTreeMap::from([
-        ("jak3".into(), disc.clone()),
-        ("jak2".into(), disc2.clone()),
-      ]),
-      extractor_provider: Some(Arc::new(TestProvider(Ok(fetched.clone())))),
-      ..Default::default()
+      game_installs: [("jak3".into(), tmp.clone())].into(),
     });
+    let snap = ed.call("extract_detect", &json!({"game": "jak3"})).unwrap();
+    assert_eq!(snap["detected"]["from_host"], true);
+    assert_eq!(
+      snap["detected"]["error"]["key"],
+      "game_install.error.no_game"
+    );
     let d = ed.call("extract_defaults", &Value::Null).unwrap();
-    assert_eq!(
-      d["source"],
-      disc.to_string_lossy().as_ref(),
-      "the host's disc"
-    );
-    assert_eq!(
-      d["host_sources"]["jak2"],
-      disc2.to_string_lossy().as_ref(),
-      "Jak II's too"
-    );
     assert_eq!(d["output"], from_path(&tmp.join("jak-level-editor")));
-    assert_eq!(d["can_fetch"], true);
-    // the user's own disc wins
-    Prefs::get().extract_source = "D:/my.iso".into();
-    assert_eq!(ed.extract_defaults()["source"], "D:/my.iso");
-    Prefs::get().extract_source.clear();
-    // fetched (inline: an editor on its own), then used before any other
-    ed.call("extract_fetch", &Value::Null).unwrap();
-    let d = ed.extract_defaults();
-    assert_eq!(d["extractor"], fetched.to_string_lossy().as_ref(), "{d}");
-    assert_eq!(d["extractor_found"], true);
-    assert_eq!(d["fetch_error"], "");
-    let dir = fetched.parent().unwrap().to_string_lossy().into_owned();
-    assert_eq!(d["extractor_dirs"][0], dir.as_str());
-    assert_eq!(ed.host.extractor.as_deref(), Some(fetched.as_path()));
-
-    // a provider that fails: why, for the window
-    let mut ed = editor(Host {
-      extractor_provider: Some(Arc::new(TestProvider(Err("offline".into())))),
-      ..Default::default()
-    });
-    ed.call("extract_fetch", &Value::Null).unwrap();
-    assert_eq!(ed.extract_defaults()["fetch_error"], "offline");
-    // no provider: an error
-    assert!(
-      editor(Host::default())
-        .call("extract_fetch", &Value::Null)
-        .is_err()
-    );
+    // started without its game: nothing runs
+    let snap = ed
+      .call(
+        "extract_start",
+        &json!({"game": "jak3", "output": tmp.to_string_lossy()}),
+      )
+      .unwrap();
+    assert_eq!(snap["running"], false);
     *Prefs::get() = was;
   }
 }

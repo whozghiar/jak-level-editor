@@ -73,11 +73,11 @@ pub struct ExportOptions {
 // ------------------------------------------------------------------------------------------------
 
 const BYTE: u32 = 5120;
-const UNSIGNED_BYTE: u32 = 5121;
+pub(crate) const UNSIGNED_BYTE: u32 = 5121;
 const SHORT: u32 = 5122;
-const UNSIGNED_SHORT: u32 = 5123;
-const UNSIGNED_INT: u32 = 5125;
-const FLOAT: u32 = 5126;
+pub(crate) const UNSIGNED_SHORT: u32 = 5123;
+pub(crate) const UNSIGNED_INT: u32 = 5125;
+pub(crate) const FLOAT: u32 = 5126;
 
 const MODE_TRIANGLES: i64 = 4;
 const MODE_TRIANGLE_STRIP: i64 = 5;
@@ -581,7 +581,7 @@ fn read_u32_view(doc: &Doc, bufs: &[Cow<'_, [u8]>], view: i64) -> Vec<u32> {
 }
 
 // Keys of the OpenGOAL level builder on collision nodes: a rip's collision is marked with them,
-// and collide_pat is the exact surface of the node (ogle-extract, the decompiler's rips).
+// and collide_pat is the exact surface of the node (the extraction's decor, io/extraction).
 const COLLISION_KEYS: [&str; 13] = [
   "set_collision",
   "set_invisible",
@@ -1297,19 +1297,19 @@ pub fn load_skeleton(path: impl AsRef<Path>) -> Result<Skeleton, String> {
 // export
 // ------------------------------------------------------------------------------------------------
 
-const ARRAY_BUFFER: u32 = 34962;
-const ELEMENT_ARRAY_BUFFER: u32 = 34963;
+pub(crate) const ARRAY_BUFFER: u32 = 34962;
+pub(crate) const ELEMENT_ARRAY_BUFFER: u32 = 34963;
 
 #[derive(Default)]
-struct GlbWriter {
-  views: Vec<Value>,
-  accessors: Vec<Value>,
-  bin: Vec<u8>,
+pub(crate) struct GlbWriter {
+  pub(crate) views: Vec<Value>,
+  pub(crate) accessors: Vec<Value>,
+  pub(crate) bin: Vec<u8>,
 }
 
 impl GlbWriter {
   /// A buffer view of what `fill` appends to the binary chunk (4 bytes aligned)
-  fn add_view(&mut self, target: u32, fill: impl FnOnce(&mut Vec<u8>)) -> usize {
+  pub(crate) fn add_view(&mut self, target: u32, fill: impl FnOnce(&mut Vec<u8>)) -> usize {
     while !self.bin.len().is_multiple_of(4) {
       self.bin.push(0);
     }
@@ -1323,7 +1323,7 @@ impl GlbWriter {
     self.views.len() - 1
   }
 
-  fn accessor(&mut self, view: usize, count: usize, ctype: u32, ty: &str) -> usize {
+  pub(crate) fn accessor(&mut self, view: usize, count: usize, ctype: u32, ty: &str) -> usize {
     self
       .accessors
       .push(json!({"bufferView": view, "componentType": ctype, "count": count, "type": ty}));
@@ -1331,7 +1331,7 @@ impl GlbWriter {
   }
 
   /// floats, N per element (`f` gives them), with their bounds when `minmax`
-  fn add_floats<T, const N: usize>(
+  pub(crate) fn add_floats<T, const N: usize>(
     &mut self,
     data: &[T],
     f: impl Fn(&T) -> [f32; N],
@@ -1358,12 +1358,12 @@ impl GlbWriter {
     acc
   }
 
-  fn add_u8(&mut self, data: &[u8], count: usize, target: u32, ty: &str) -> usize {
+  pub(crate) fn add_u8(&mut self, data: &[u8], count: usize, target: u32, ty: &str) -> usize {
     let view = self.add_view(target, |bin| bin.extend_from_slice(data));
     self.accessor(view, count, UNSIGNED_BYTE, ty)
   }
 
-  fn add_u16(&mut self, data: &[u16], target: u32) -> usize {
+  pub(crate) fn add_u16(&mut self, data: &[u16], target: u32) -> usize {
     let view = self.add_view(target, |bin| {
       bin.reserve(data.len() * 2);
       for v in data {
@@ -1373,7 +1373,7 @@ impl GlbWriter {
     self.accessor(view, data.len(), UNSIGNED_SHORT, "SCALAR")
   }
 
-  fn add_u32_view(&mut self, data: &[u32], target: u32) -> usize {
+  pub(crate) fn add_u32_view(&mut self, data: &[u32], target: u32) -> usize {
     self.add_view(target, |bin| {
       bin.reserve(data.len() * 4);
       for v in data {
@@ -1382,7 +1382,7 @@ impl GlbWriter {
     })
   }
 
-  fn write(mut self, mut doc: Value, path: &Path) -> Result<(), String> {
+  pub(crate) fn write(mut self, mut doc: Value, path: &Path) -> Result<(), String> {
     doc["bufferViews"] = Value::Array(std::mem::take(&mut self.views));
     doc["accessors"] = Value::Array(std::mem::take(&mut self.accessors));
     // no geometry (an empty document): no buffer, no binary chunk (a buffer is never empty)
@@ -1431,7 +1431,7 @@ impl GlbWriter {
 /// The white texture the builder's file gives the materials without one (ExportContext::texture)
 const K_PLAIN_TEXTURE: i32 = -2;
 
-fn png(width: i32, height: i32, rgba: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn png(width: i32, height: i32, rgba: &[u8]) -> Option<Vec<u8>> {
   use image::ImageEncoder;
   let mut out = Vec::new();
   image::codecs::png::PngEncoder::new(&mut out)

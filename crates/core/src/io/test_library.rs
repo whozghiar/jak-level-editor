@@ -1,4 +1,4 @@
-//! Test fixtures (src/app/selftest.cpp): a small library written in ogle-extract's layout, the
+//! Test fixtures (src/app/selftest.cpp): a small library written in the extraction's layout, the
 //! story library, and helpers to read and edit the .glb files they make.
 
 #![allow(dead_code)] // helpers for the tests of other modules too
@@ -167,7 +167,7 @@ fn node(name: &str, kind: NodeKind, parent: u32, mesh: Option<Arc<Mesh>>) -> Nod
   }
 }
 
-/// A level written like ogle-extract writes one: a background with the terrain (tfrag), a decor
+/// A level written like the extraction writes one: a background with the terrain (tfrag), a decor
 /// prototype with two instances (TIE), collision and an actor; the model of its actor type; the
 /// models every level shares.
 pub fn write_library(root: &Path) -> bool {
@@ -257,7 +257,7 @@ pub fn write_library(root: &Path) -> bool {
   ok
 }
 
-/// A level as ogle-extract writes one, with the decor of `bg` and rip actors (glTF nodes with
+/// A level as the extraction writes one, with the decor of `bg` and rip actors (glTF nodes with
 /// their extras).
 pub fn write_rip_level(
   game: &Path,

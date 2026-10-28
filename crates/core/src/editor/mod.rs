@@ -38,6 +38,7 @@ mod collision_tool;
 mod effects;
 pub mod export;
 pub mod extract;
+mod game_test;
 mod groups;
 mod inspector;
 pub mod levels;
@@ -349,6 +350,8 @@ pub struct Editor {
   // ---- the export for the game, the nav meshes (export.rs)
   pub export: export::ExportState,
   pub nav: export::NavState,
+  // ---- the tries of the level in the game installed (game_test.rs)
+  pub(crate) game_test: game_test::GameTestState,
   /// the preferences changed are written (not in the tests)
   pub write_prefs: bool,
   /// the assistants connected through the MCP server (remote.rs)
@@ -359,8 +362,8 @@ pub struct Editor {
   pub remote_session: Option<u16>,
   /// the interface's viewport listens (call `frontend_ready`): it can make the pictures of the view
   pub interface_ready: bool,
-  /// what the application hosting the editor gives it (crate::host): the default library, a disc
-  /// already extracted, the extractor
+  /// what the application hosting the editor gives it (crate::host): the default library, the
+  /// games installed
   pub host: crate::host::Host,
 }
 
@@ -421,6 +424,7 @@ impl Editor {
       preview: Default::default(),
       export: Default::default(),
       nav: Default::default(),
+      game_test: Default::default(),
       write_prefs: true,
       remote_clients: 0,
       remote: None,
@@ -719,7 +723,7 @@ fn listed(l: &LevelEntry, data: Option<&GameData>) -> bool {
 }
 
 /// A text of the extraction in the editor's language: its key's translation with its numbers,
-/// then its detail; as ogle-extract said it when there is no such key.
+/// then its detail; its text when there is no such key.
 pub(crate) fn text_string(t: &extract::Text) -> String {
   let fmt = tr(&t.key);
   let mut s = if fmt == t.key {
@@ -745,33 +749,25 @@ fn extraction_event(me: &Weak<Mutex<Editor>>, e: &extract::ExtractionEvent) {
   let mut ed = lock(&me);
   match e {
     extract::ExtractionEvent::Line {
-      detecting,
       done,
       total,
       current,
     } => {
-      if !detecting {
-        let job = Job {
-          id: "extract".into(),
-          label: current.clone(),
-          done: *done,
-          total: (*total).max(1),
-          finished: false,
-        };
-        ed.emit("jle:progress", json!(job));
-      }
+      let job = Job {
+        id: "extract".into(),
+        label: current.clone(),
+        done: *done,
+        total: (*total).max(1),
+        finished: false,
+      };
+      ed.emit("jle:progress", json!(job));
     }
     extract::ExtractionEvent::Ended {
-      detecting,
       finished,
       error,
       output,
       seconds,
     } => {
-      if *detecting {
-        ed.emit("jle:changed", json!({"state": true}));
-        return;
-      }
       ed.emit(
         "jle:progress",
         json!({"id": "extract", "label": "", "done": 1, "total": 1, "finished": true}),

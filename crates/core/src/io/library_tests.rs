@@ -38,7 +38,7 @@ fn named<'a>(s: &'a Scene, name: &str) -> &'a Node {
 fn small_level(dir: &Path) -> (AssetLibrary, Scene) {
   assert!(
     write_library(dir),
-    "library written in ogle-extract's layout"
+    "library written in the extraction's layout"
   );
   let mut library = AssetLibrary::default();
   library.scan(&game_folder(dir.to_str().unwrap())).unwrap();
@@ -1129,17 +1129,16 @@ fn real_library_scan_and_largest_level() {
 fn editor_tree_defaults() {
   // this editor's own tree when the program runs from it (the tests do): never jak-project's,
   // which it neither builds against nor runs; an installed editor has none (its host's library)
-  use super::asset_library::{default_iso_data_dir, default_library_root, editor_tree};
+  use super::asset_library::{default_library_root, editor_tree};
   let Some(tree) = editor_tree() else {
     return; // a target folder outside the tree: an installed editor's case
   };
-  let (library, iso) = (default_library_root(), default_iso_data_dir());
-  for p in [&library, &iso] {
-    assert!(!p.contains('\\') && !p.contains("/jak-project/"), "{p}");
-  }
-  let (library, iso) = (Path::new(&library), Path::new(&iso));
-  assert_eq!(iso.parent(), library.parent());
-  assert_eq!(iso.file_name().unwrap(), "iso_data");
+  let library = default_library_root();
+  assert!(
+    !library.contains('\\') && !library.contains("/jak-project/"),
+    "{library}"
+  );
+  let library = Path::new(&library);
   assert!(tree.join("crates/core/Cargo.toml").is_file());
   assert_eq!(library, tree.join("library"));
   // the editor's library before one is chosen: the host's, else this tree's

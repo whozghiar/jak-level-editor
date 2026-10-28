@@ -9,9 +9,9 @@ use super::selection::SelectMode;
 use super::{Editor, GizmoState, ViewSettings};
 use crate::game::mood::{MoodSettings, game_mood, weather_presets};
 use crate::i18n::{i18n_languages, tr};
+use crate::log_info;
 use crate::math::{AABB, Mat4, Ray};
 use crate::prefs::Prefs;
-use crate::{log_error, log_info};
 
 // the calls that only read: no change to look for after them (a pick at each mouse move)
 const QUERIES: &[&str] = &[
@@ -433,29 +433,8 @@ impl Editor {
 
       // ---- File > Extract game assets (extract.rs)
       "extract_defaults" => Ok(self.extract_defaults()),
-      "extract_fetch" => self.extract_fetch().map(|_| self.extract_defaults()),
-      "extract_detect" => {
-        self.extraction.detect(s(a, "source"));
-        Ok(self.extraction.snapshot())
-      }
-      "extract_start" => {
-        let (source, output) = (s(a, "source"), s(a, "output"));
-        self.save_prefs(|p| p.extract_source = source.to_string());
-        if self.extraction.start(source, output) {
-          log_info!(tr("log.extracting"), output);
-        } else {
-          // ogle-extract cannot start: why, as the window says it
-          let e = &self.extraction.snapshot()["error"];
-          let t = super::extract::Text {
-            key: s(e, "key").into(),
-            args: get(e, "args").unwrap_or_default(),
-            detail: s(e, "detail").into(),
-            text: s(e, "text").into(),
-          };
-          log_error!("%s", super::text_string(&t));
-        }
-        Ok(self.extraction.snapshot())
-      }
+      "extract_detect" => Ok(self.extract_detect(s(a, "game"))),
+      "extract_start" => Ok(self.extract_start(s(a, "game"), s(a, "output"))),
       "extract_stop" => {
         self.extraction.cancel();
         Ok(self.extraction.snapshot())
@@ -495,6 +474,14 @@ impl Editor {
       | "collision_add"
       | "collision_from_pieces"
       | "collision_check" => self.collision_call(name, a),
+      "game_installs" => Ok(self.game_installs()),
+      "set_game_install" => self.set_game_install(s(a, "game"), s(a, "folder")),
+      "test_in_game" => self.test_in_game().map(|()| self.game_test_state()),
+      "game_test_state" => Ok(self.game_test_state()),
+      "stop_game_test" => {
+        self.stop_game_test();
+        Ok(self.game_test_state())
+      }
       "preview_options" | "start_preview" | "stop_preview" | "preview_frame" => {
         self.preview_call(name, a)
       }

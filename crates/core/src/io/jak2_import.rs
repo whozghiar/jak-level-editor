@@ -1,5 +1,5 @@
 //! The structures of Jak II (buildings, the palace, pillars, cables: the decor parts of its levels)
-//! brought into Jak 3 levels. ogle-extract writes a Jak II disc to <library>/jak2/ with the same
+//! brought into Jak 3 levels. The extraction writes Jak II's levels to <library>/jak2/ with the same
 //! writer as Jak 3 (meters, the same axes, vertex colors, materials and collision layout), so a
 //! part keeps its geometry as it is; what could break is checked and converted when it comes in:
 //!

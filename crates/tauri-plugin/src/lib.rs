@@ -12,7 +12,7 @@ use std::time::Duration;
 use jle_core::editor::protocol::{ProtocolState, content_type, encode_mesh, materials_json};
 use jle_core::editor::remote::K_REMOTE_PORT;
 use jle_core::editor::{Editor, Notify, SharedEditor};
-pub use jle_core::host::{ExtractorProvider, Host, HostEvent, HostEvents};
+pub use jle_core::host::Host;
 use jle_core::i18n::{i18n_init, i18n_select, i18n_system_language, lang_dir, set_lang_dir};
 use jle_core::io::game_data::set_data_dir;
 use jle_core::prefs::{Prefs, READ_ONLY};
@@ -53,9 +53,11 @@ pub struct Options {
   /// no window shown, the preferences left unchanged (tests)
   pub hidden: bool,
   /// what an application starting the editor gives it, as a host does (the OpenGOAL Launcher):
-  /// the library by default, the discs it already extracted by game (Host::extract_sources)
+  /// the library by default
   pub default_library: String,
-  pub extract_sources: BTreeMap<String, String>,
+  /// the games installed (the Launcher's installation folder), by game: where levels are
+  /// extracted from and tried
+  pub game_installs: BTreeMap<String, String>,
 }
 
 /// The plugin with the application's options: `Builder::new().args(std::env::args()).build()`,
@@ -74,7 +76,7 @@ impl Builder {
 
   /// The editor's command line (the first argument is the program):
   /// `[project.glb] --library <folder> --lang <code> --remote-port <port> --hidden
-  /// --open-level <name> --default-library=<folder> --extract-source=<game>=<disc>` (the last two
+  /// --open-level <name> --default-library=<folder> --game-install=<game>=<folder>` (the last two
   /// from an application starting the editor: the OpenGOAL Launcher)
   pub fn args(mut self, args: impl IntoIterator<Item = String>) -> Self {
     let mut args = args.into_iter().skip(1);
@@ -84,10 +86,10 @@ impl Builder {
         o.default_library = folder.into();
         continue;
       }
-      if let Some((game, disc)) =
-        (a.strip_prefix("--extract-source=")).and_then(|v| v.split_once('='))
+      if let Some((game, folder)) =
+        (a.strip_prefix("--game-install=")).and_then(|v| v.split_once('='))
       {
-        o.extract_sources.insert(game.into(), disc.into());
+        o.game_installs.insert(game.into(), folder.into());
         continue;
       }
       let mut next = || args.next().unwrap_or_default();
@@ -109,8 +111,8 @@ impl Builder {
     self
   }
 
-  /// What the application gives the editor: the default library, a disc already extracted, the
-  /// extractor, the game runtime (jle_core::host::Host).
+  /// What the application gives the editor: the default library, the games installed
+  /// (jle_core::host::Host).
   pub fn host(mut self, host: Host) -> Self {
     self.host = host;
     self
@@ -130,10 +132,10 @@ impl Builder {
     if !options.default_library.is_empty() {
       host.default_library = Some(PathBuf::from(&options.default_library));
     }
-    for (game, disc) in &options.extract_sources {
+    for (game, folder) in &options.game_installs {
       host
-        .extract_sources
-        .insert(game.clone(), PathBuf::from(disc));
+        .game_installs
+        .insert(game.clone(), PathBuf::from(folder));
     }
     let prefs_in_app_config = self.prefs_in_app_config;
     let hidden = options.hidden;
@@ -228,7 +230,6 @@ fn setup<R: Runtime>(app: &tauri::AppHandle<R>, options: Options, host: Host) {
     let _ = handle.emit(event, payload);
   });
   let mut editor = Editor::new();
-  editor.extraction.resource_dir = resources;
   editor.set_host(host);
   let shared = editor.shared(Some(notify));
   {
@@ -407,19 +408,17 @@ mod tests {
       "--lang",
       "fr",
       "--default-library=D:/OpenGOAL/jak-level-editor",
+      "--game-install=jak3=D:/OpenGOAL",
+      "--game-install=jak2=D:/a=b",
       "--extract-source=jak3=D:/OpenGOAL/active/jak3/data/iso_data/jak3",
-      "--extract-source=jak2=D:/a=b/jak2",
     ];
     let o = Builder::new().args(args.map(String::from)).options;
     assert_eq!(o.language, "fr");
     assert_eq!(o.default_library, "D:/OpenGOAL/jak-level-editor");
+    assert_eq!(o.game_installs["jak3"], "D:/OpenGOAL");
     assert_eq!(
-      o.extract_sources["jak3"],
-      "D:/OpenGOAL/active/jak3/data/iso_data/jak3"
-    );
-    assert_eq!(
-      o.extract_sources["jak2"], "D:/a=b/jak2",
-      "a '=' in the disc's path"
+      o.game_installs["jak2"], "D:/a=b",
+      "a '=' in the folder's path"
     );
     assert!(
       o.open_path.is_empty(),

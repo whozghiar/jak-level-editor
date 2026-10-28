@@ -15,6 +15,11 @@
     ui,
   } from "../../lib/actions.svelte";
   import { engine } from "../../lib/engine.svelte";
+  import {
+    gameTest,
+    gameTestTip,
+    testInGame,
+  } from "../../lib/game_test.svelte";
   import { editedGame, games } from "../../lib/games";
   import { language, languages, t } from "../../lib/i18n";
   import { call } from "../../lib/rpc";
@@ -343,6 +348,14 @@
           run: () => windows.toggle("navmesh"),
         },
         null,
+        {
+          label: t("menu.level.test"),
+          keys: "F5",
+          guide: "game_test",
+          enabled: !!gameTest.state?.available && !gameTest.state.busy,
+          tip: gameTestTip(),
+          run: testInGame,
+        },
         {
           label: t("menu.file.export_game"),
           guide: "export",

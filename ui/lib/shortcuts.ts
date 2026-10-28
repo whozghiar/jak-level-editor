@@ -8,6 +8,7 @@ import {
   toggleView,
 } from "./actions.svelte";
 import { engine } from "./engine.svelte";
+import { testInGame } from "./game_test.svelte";
 import { call } from "./rpc";
 import { windows } from "./windows.svelte";
 
@@ -106,6 +107,7 @@ export function handleShortcut(e: KeyboardEvent): void {
   else if (!ctrl && k === "e") call("set_gizmo", { mode: "rotate" });
   else if (!ctrl && k === "r") call("set_gizmo", { mode: "scale" });
   else if (k === "f1") windows.toggle("guide", { tab: 0 });
+  else if (k === "f5") testInGame();
   else if (!ctrl && k === "g" && s.view.game_view_ready)
     toggleView("game_view");
   else return;

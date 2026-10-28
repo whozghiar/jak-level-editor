@@ -21,3 +21,5 @@ rerecast = { version = "0.4.0", default-features = false, features = ["std"] }
 glam = "0.32"
 # the token of the remote control (editor/remote.rs)
 getrandom = "0.4"
+# the levels OpenGOAL's extractor writes (.fr3, zstd compressed)
+ruzstd = "0.8"
