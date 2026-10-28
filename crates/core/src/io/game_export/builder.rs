@@ -312,7 +312,7 @@ pub(super) fn level_info(
     :bigmap-id (bigmap-id none)
     :continues '({continues}
       )
-    :callback-list '()
+    :callback-list '((33 . {name}-login)) ;; what the level builder does not write (the level's code)
     :borrow #f
     :bottom-height {}
     :fog-height (meters 80)
@@ -328,6 +328,179 @@ pub(super) fn level_info(
 ",
     meters(bottom)
   )
+}
+
+/// The level's own code for what OpenGOAL's level builder does not write in it, run when the game
+/// births the level (`<name>-login`, the slot 33 of its level-load-info: after its bsp is born,
+/// before its nav meshes are, its actors born in the frames after), each part only when the level
+/// lacks it (the builder of the editor's jak-project branch writes them):
+/// - the list of what is visible, everything (no visibility data: the game copies it in the level's
+///   vis-bits every frame; without it, with the PC setting "PS2 actor vis", on by default, none of
+///   its actors is born)
+/// - `translucent`: a drawable-tree-tfrag-trans like its tfrag tree, through which the game draws
+///   the translucent surfaces the builder put in the level's .fr3 (glass, water, stains)
+/// - `nav`: its nav meshes, the blob of `navmesh_blob` (words, pointers, types, symbols, roots)
+///   copied into the level's heap and linked where it lands
+pub(super) fn level_login_code(name: &str, translucent: bool, nav: Option<&Value>) -> String {
+  let mut code = String::new();
+  // where a blob lands: 16-aligned, as it was laid out
+  let aligned = |bytes: &str| {
+    format!(
+      "(the-as pointer (logand -16 (+ (the-as int (malloc 'loading-level (+ {bytes} 16))) 15)))"
+    )
+  };
+  if let Some(nav) = nav {
+    let words: Vec<String> = nav["words"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .map(|w| format!("#x{:x}", w.as_u64().unwrap_or(0)))
+      .collect();
+    let mut links: Vec<String> = Vec::new();
+    for p in nav["pointers"].as_array().into_iter().flatten() {
+      links.push(p[0].as_u64().unwrap_or(0).to_string());
+      links.push(p[1].as_u64().unwrap_or(0).to_string());
+    }
+    code += &format!(
+      ";; its nav meshes, laid out as the game's (entity-nav-mesh...), linked by {name}-login\n\
+       (define *{name}-nav-words* (new 'static 'array uint32 {} {}))\n\
+       (define *{name}-nav-links* (new 'static 'array int32 {} {}))\n\n",
+      words.len(),
+      words.join(" "),
+      links.len(),
+      if links.is_empty() {
+        "0".into()
+      } else {
+        links.join(" ")
+      },
+    );
+  }
+  code += &format!(
+    ";; What OpenGOAL's level builder does not write in the level, set when the game births it (the
+;; slot 33 of its definition), each part only when the level lacks it
+(defun {name}-login ((lev level))
+  (let ((bsp (-> lev bsp)))
+    ;; everything visible: the game copies this list in the level's vis-bits every frame (with the
+    ;; PC setting \"PS2 actor vis\", an actor not in it is never born)
+    (when (zero? (-> bsp visible-list-length))
+      (let ((vis {}))
+        (mem-set32! vis 512 -1)
+        (set! (-> bsp all-visible-list) (the-as (pointer uint8) vis))
+        (set! (-> bsp visible-list-length) 2048)
+        )
+      )
+",
+    aligned("2048")
+  );
+  if translucent {
+    code += "    ;; the translucent surfaces: drawn through a tree of their own, like the level's tfrag tree
+    (let ((trees (-> bsp drawable-trees))
+          (tfrag (the-as drawable-tree-tfrag #f))
+          (trans? #f)
+          )
+      (dotimes (i (-> trees length))
+        (let ((tree (-> trees trees i)))
+          (cond
+            ((= (-> tree type) drawable-tree-tfrag) (set! tfrag (the-as drawable-tree-tfrag tree)))
+            ((= (-> tree type) drawable-tree-tfrag-trans) (set! trans? #t))
+            )
+          )
+        )
+      (when (and tfrag (not trans?))
+        (let ((trans (new 'loading-level 'drawable-tree-tfrag-trans (-> tfrag length)))
+              (all (new 'loading-level 'drawable-tree-array (+ (-> trees length) 1)))
+              )
+          (set! (-> trans id) (-> tfrag id))
+          (set! (-> trans bsphere quad) (-> tfrag bsphere quad))
+          (set! (-> trans time-of-day-pal) (-> tfrag time-of-day-pal))
+          (dotimes (i (-> tfrag length))
+            (set! (-> trans arrays i) (-> tfrag arrays i))
+            )
+          (set! (-> all id) (-> trees id))
+          (set! (-> all bsphere quad) (-> trees bsphere quad))
+          (dotimes (i (-> trees length))
+            (set! (-> all trees i) (-> trees trees i))
+            )
+          (set! (-> all trees (-> trees length)) trans)
+          (set! (-> bsp drawable-trees) all)
+          )
+        )
+      )
+";
+  }
+  if let Some(nav) = nav {
+    let at = |v: &Value| v.as_u64().unwrap_or(0) * 4;
+    let mut links = String::new();
+    for t in nav["types"].as_array().into_iter().flatten() {
+      links += &format!(
+        "        (set! (-> (the-as (pointer uint32) (&+ base {}))) (the-as uint {}))\n",
+        at(&t[0]),
+        t[1].as_str().unwrap_or("basic")
+      );
+    }
+    for s in nav["symbols"].as_array().into_iter().flatten() {
+      let sym = s[1].as_str().unwrap_or("#f");
+      let value = if sym.starts_with('#') {
+        sym.to_string()
+      } else {
+        format!("'{sym}")
+      };
+      links += &format!(
+        "        (set! (-> (the-as (pointer symbol) (&+ base {}))) {value})\n",
+        at(&s[0])
+      );
+    }
+    for l in nav["empty_lists"].as_array().into_iter().flatten() {
+      let w = if l.is_array() { &l[0] } else { l };
+      links += &format!(
+        "        (set! (-> (the-as (pointer pair) (&+ base {}))) '())\n",
+        at(w)
+      );
+    }
+    let mut roots: Vec<(u64, u64)> = nav["roots"]
+      .as_object()
+      .into_iter()
+      .flatten()
+      .filter_map(|(k, v)| Some((k.strip_prefix("nav-mesh-")?.parse().ok()?, v.as_u64()?)))
+      .collect();
+    roots.sort();
+    let mut set_roots = String::new();
+    for (i, (_, byte)) in roots.iter().enumerate() {
+      set_roots +=
+        &format!("          (set! (-> meshes {i}) (the-as entity-nav-mesh (&+ base {byte})))\n");
+    }
+    let words = nav["words"].as_array().map_or(0, Vec::len);
+    let pairs = nav["pointers"].as_array().map_or(0, Vec::len);
+    code += &format!(
+      "    ;; its nav meshes: the blob copied into the level's heap, linked where it landed; the game
+    ;; births them right after this
+    (when (or (zero? (-> bsp nav-meshes)) (zero? (-> bsp nav-meshes length)))
+      (let* ((size {})
+             (base {})
+             (links (the-as (pointer int32) *{name}-nav-links*))
+             )
+        (mem-copy! base (the-as pointer *{name}-nav-words*) size)
+        (dotimes (i {pairs})
+          (set! (-> (the-as (pointer uint32) (&+ base (* 4 (-> links (* 2 i))))))
+                (the-as uint (&+ base (-> links (+ (* 2 i) 1))))
+                )
+          )
+{links}        (let ((meshes (the-as (array entity-nav-mesh) (new 'loading-level 'boxed-array entity-nav-mesh {}))))
+{set_roots}          (set! (-> bsp nav-meshes) meshes)
+          )
+        )
+      )
+",
+      words * 4,
+      aligned("size"),
+      roots.len()
+    );
+  }
+  code += "    )
+  (none)
+  )
+";
+  code
 }
 
 /// A collision surface as the level builder takes it, and what it does not keep of it ("hdwood",

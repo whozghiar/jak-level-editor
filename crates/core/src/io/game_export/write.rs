@@ -186,8 +186,9 @@ pub fn export_level(
   let mut hidden = 0;
   // the elements that bounce or launch Jak: actors of the level's code
   let mut decor_actions = Vec::new();
-  // the elements whose collision the builder makes from their shape
-  let mut by_shape = Vec::new();
+  // the elements colliding by their shape, with the settings of their collision: the export writes it
+  // (shape_collision)
+  let mut by_shape: Vec<(usize, Value)> = Vec::new();
   // the elements colliding by the box around them (their collision set to "box")
   let mut boxes = Vec::new();
   let mut bounds = AABB::default();
@@ -228,8 +229,12 @@ pub fn export_level(
       let mut e = collision_extras(&decor.collision);
       if decor.collision.kind != "none" {
         rep.collision_from_decor += 1;
-        by_shape.push(i);
-        e["double_sided"] = 1.into();
+        by_shape.push((i, e));
+        // drawn (unless invisible), its collision written apart (shape_collision)
+        e = json!({"set_collision": 1, "ignore": 1});
+        if decor.collision.kind == "invisible" {
+          e["set_invisible"] = 1.into();
+        }
       }
       eo.node_extras.insert(n.id, e);
     } else if (o.game_collision && covered) || see_through(scene, mesh) {
@@ -246,10 +251,10 @@ pub fn export_level(
       notes.add("export.note.collision_small", &n.name, 1);
     } else {
       rep.collision_from_decor += 1;
-      by_shape.push(i);
-      // the decor faces either way (the game draws both sides, its ground often faces down): a
-      // collision made from it holds from both sides (the game's own collision stays one-sided)
-      eo.node_extras.insert(n.id, json!({"double_sided": 1}));
+      by_shape.push((i, json!({"set_collision": 1})));
+      // drawn, its collision written apart (shape_collision)
+      eo.node_extras
+        .insert(n.id, json!({"set_collision": 1, "ignore": 1}));
     }
     if decor.bounce.set || decor.launch.set {
       decor_actions.push(i);
@@ -366,6 +371,7 @@ pub fn export_level(
       if p.nrm.iter().all(|n| n.x == 0.0 && n.y == 1.0 && n.z == 0.0) {
         p.compute_normals();
       }
+      lift_flat(p);
       let mesh = Arc::new(mesh);
       game_collision.push(mesh.clone());
       eo.extra_meshes.push((
@@ -402,13 +408,99 @@ pub fn export_level(
     let mut mesh = box_around(&cache.worlds[i], &n.mesh.as_ref().unwrap().bounds());
     mesh.name = format!("{}-collision-box", n.name);
     let mesh = Arc::new(mesh);
-    let mut e = collision_extras(&DecorCollision {
+    let e = collision_extras(&DecorCollision {
       kind: "invisible".into(),
       ..c
     });
-    e["double_sided"] = 1.into();
     game_collision.push(mesh.clone());
     eo.extra_meshes.push((mesh, e));
+  }
+
+  // the collision of the elements colliding by their shape, written here rather than made by the
+  // builder from their mesh: from both sides (the decor faces either way: the game draws both, its
+  // ground often faces down), the game's own collision staying one-sided; invisible meshes, one per
+  // setting of collision
+  {
+    let mut shapes: BTreeMap<String, (Value, Mesh)> = BTreeMap::new();
+    for (i, extras) in &by_shape {
+      let mut e = extras.clone();
+      e["set_invisible"] = 1.into();
+      let named = shapes.len();
+      let (_, mesh) = shapes.entry(e.to_string()).or_insert_with(|| {
+        let mut m = Mesh::new();
+        m.name = format!("{}-collision-shape-{named}", o.name);
+        m.prims.push(Primitive::default());
+        (e, m)
+      });
+      let out = &mut mesh.prims[0];
+      let w = &cache.worlds[*i];
+      for prim in &scene.nodes[*i].mesh.as_ref().unwrap().prims {
+        for [a, b, c] in triangles(prim) {
+          let (a, b, c) = (w.point(a), w.point(b), w.point(c));
+          let face = cross(b - a, c - a);
+          if length2(face) == 0.0 {
+            continue;
+          }
+          let face = normalize(face);
+          for (tri, nrm) in [([a, b, c], face), ([a, c, b], -face)] {
+            for q in tri {
+              out.idx.push(out.pos.len() as u32);
+              out.pos.push(q);
+              out.nrm.push(nrm);
+            }
+          }
+        }
+      }
+    }
+    for (_, (e, mut mesh)) in shapes {
+      if mesh.prims[0].idx.is_empty() {
+        continue;
+      }
+      lift_flat(&mut mesh.prims[0]);
+      eo.extra_meshes.push((Arc::new(mesh), e));
+    }
+  }
+
+  // the builder's grid of the level's collision has no cell along an axis where the collision
+  // spans less than one (7.3 m): a small invisible face beyond gives it one
+  {
+    let mut span = AABB::default();
+    for (mesh, _) in &eo.extra_meshes {
+      for prim in &mesh.prims {
+        for &q in &prim.pos {
+          span.add(q);
+        }
+      }
+    }
+    const K_HASH_CELL: f32 = 30000.0 / 4096.0;
+    if span.valid() {
+      let size = span.size();
+      let mut at = span.lo;
+      let mut needed = false;
+      for axis in 0..3 {
+        if size[axis] < K_HASH_CELL + 0.2 {
+          at[axis] -= K_HASH_CELL + 0.5;
+          needed = true;
+        }
+      }
+      if needed {
+        let mut p = Primitive {
+          pos: vec![
+            at,
+            at + Vec3::new(0.5, 0.0, 0.0),
+            at + Vec3::new(0.0, 0.5, 0.5),
+          ],
+          idx: vec![0, 1, 2],
+          ..Default::default()
+        };
+        p.compute_normals();
+        let mut m = Mesh::new();
+        m.name = format!("{}-collision-span", o.name);
+        m.prims.push(p);
+        eo.extra_meshes
+          .push((Arc::new(m), json!({"set_collision": 1, "set_invisible": 1})));
+      }
+    }
   }
 
   // --- where Jak would meet more collision than the game gathers at once -----------------------
@@ -421,8 +513,8 @@ pub fn export_level(
         }
       }
     }
-    // the faces made from the decor's shape twice: the builder doubles them
-    for &i in &by_shape {
+    // the faces made from the decor's shape twice: both sides
+    for &(i, _) in &by_shape {
       let w = &cache.worlds[i];
       for prim in &scene.nodes[i].mesh.as_ref().unwrap().prims {
         for [a, b, c] in triangles(prim) {
@@ -985,6 +1077,7 @@ pub fn export_level(
   rep.files.push(from_path(&glb));
 
   let mut nav_line = String::new();
+  let mut nav_blob = None;
   if !o.navmeshes.is_empty() {
     // their ids far after the actors' (a creature names its nav mesh by it)
     let first = nav_first_aid(base_id);
@@ -1004,6 +1097,7 @@ pub fn export_level(
       .collect();
     let nav = dir.join(format!("{}-nav.json", o.name));
     write_navmesh_blob(&entries, &nav)?;
+    nav_blob = Some(navmesh_blob(&entries));
     rep.files.push(from_path(&nav));
     rep.navmeshes = entries.len();
     nav_line = format!("  \"nav_data\": \"{install_dir}{}-nav.json\",\n", o.name);
@@ -1019,6 +1113,23 @@ pub fn export_level(
   } else if replacing && !o.region_trees.is_object() {
     // unknown (extracted before the regions were): {} is a level that has none (ctywide)
     notes.add("export.note.regions_missing", &o.replaces, 1);
+  }
+  if regions_line.is_empty() {
+    // OpenGOAL's builder dies on a level without regions (it writes their array without its actors):
+    // one region, 100 m under the level, that does nothing
+    let at = if bounds.valid() {
+      let c = (bounds.lo + bounds.hi) * 0.5;
+      Vec3::new(c.x, bounds.lo.y - 100.0, c.z)
+    } else {
+      o.start - Vec3::new(0.0, 100.0, 0.0)
+    };
+    let sphere = json!([at.x, at.y, at.z, 1.0]);
+    let tree = json!({"target": {"bsphere": sphere, "regions": [
+      {"id": base_id + 2000, "shape": "sphere", "bsphere": sphere}
+    ]}});
+    regions_line = format!(
+      "  // no region of its own: one that does nothing (OpenGOAL's builder needs one)\n  \"region_trees\": {tree},\n"
+    );
   }
 
   // the level for the builder
@@ -1040,7 +1151,7 @@ pub fn export_level(
   // the game's collision is in the file; the builder makes the rest from the decor's shape
   \"automatic_wall_detection\": {auto_walls},
   \"automatic_wall_angle\": 45.0,
-  \"double_sided_collide\": {double},
+  \"double_sided_collide\": false,
   \"base_id\": {base_id},
   \"base_region_id\": {base_id},
   \"cameras\": [],
@@ -1052,9 +1163,6 @@ pub fn export_level(
     name = o.name,
     iso = o.iso_name,
     nick = o.nickname,
-    // the faces made from the decor are doubled each (extras double_sided, the builder of the
-    // editor's fork); all of them when the level has no collision of the game's
-    double = rep.collision_from_decor > 0 && !o.game_collision,
     arts = art_list.join(", "),
   );
   for (i, line) in actor_lines.iter().enumerate() {
@@ -1071,6 +1179,25 @@ pub fn export_level(
   let jsonc = dir.join(format!("{}.jsonc", o.name));
   write_text(&jsonc, &j)?;
   rep.files.push(from_path(&jsonc));
+
+  // what OpenGOAL's level builder does not write in a level of its own, set by the level's code when
+  // the game births it (its definition calls it): its visibility, the tree of its translucent
+  // surfaces (when some exported material is), its nav meshes
+  if !replacing {
+    let only: HashSet<u32> = eo.only.iter().copied().collect();
+    let translucent = scene.nodes.iter().any(|n| {
+      only.contains(&n.id)
+        && n.mesh.as_ref().is_some_and(|m| {
+          m.prims.iter().any(|p| {
+            usize::try_from(p.material)
+              .ok()
+              .and_then(|i| scene.materials.get(i))
+              .is_some_and(translucent_in_game)
+          })
+        })
+    });
+    generated += &level_login_code(&o.name, translucent, nav_blob.as_ref());
+  }
 
   // the level's code: the behaviors set in the editor
   let code_stem = format!("{}-obs", o.name);
@@ -1193,6 +1320,45 @@ pub fn export_level(
 
   rep.files.push(from_path(&md_path));
   Ok(rep)
+}
+
+/// OpenGOAL's builder groups the collision in fragments, each with a grid over its box: a fragment
+/// of flat triangles (a floor, a wall square to an axis) has a box without thickness, and some of
+/// its triangles are lost there (Jak falls through). Each triangle flat along an axis (thinner than
+/// 1/64 m: the world's matrices leave a floor's heights a hair apart) gets that thickness, its
+/// vertices set at its lowest or 1/64 m above: the same ones for every triangle at that place (by
+/// where they are), one more when that left it flat. `p` is not indexed (no vertex shared).
+fn lift_flat(p: &mut Primitive) {
+  const K_LIFT: f32 = 1.0 / 64.0;
+  let odd = |v: Vec3| {
+    let q = |x: f32| (x * 64.0).round() as i64;
+    (q(v.x).wrapping_mul(73_856_093)
+      ^ q(v.y).wrapping_mul(19_349_663)
+      ^ q(v.z).wrapping_mul(83_492_791))
+      & 1
+      == 1
+  };
+  for t in 0..p.idx.len() / 3 {
+    let k = [0, 1, 2].map(|j| p.idx[t * 3 + j] as usize);
+    if k.iter().any(|&v| v >= p.pos.len()) {
+      continue;
+    }
+    let v = k.map(|v| p.pos[v]);
+    for axis in 0..3 {
+      let lo = v[0][axis].min(v[1][axis]).min(v[2][axis]);
+      let hi = v[0][axis].max(v[1][axis]).max(v[2][axis]);
+      if hi - lo >= K_LIFT {
+        continue;
+      }
+      let mut lift = v.map(odd);
+      if lift[0] == lift[1] && lift[1] == lift[2] {
+        lift[0] = !lift[0];
+      }
+      for j in 0..3 {
+        p.pos[k[j]][axis] = if lift[j] { lo + K_LIFT } else { lo };
+      }
+    }
+  }
 }
 
 /// The box `local` (a mesh's own bounds) where `world` puts it: 12 triangles facing out

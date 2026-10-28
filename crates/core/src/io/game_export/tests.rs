@@ -396,16 +396,21 @@ fn a_small_level() {
   ] {
     assert!(keys.contains(k), "{k}");
   }
+  // the box's collision written apart, invisible, from both sides; a face giving the builder's grid
+  // a cell along the level's height (under 7.3 m)
+  let shape = &extras["my-test-collision-shape-0"];
   assert!(
-    surfaces == 2
+    surfaces == 4
+      && extras["my-test-collision-span"]["set_collision"] == 1
+      && shape["set_collision"] == 1
       && extras["testlvl-floor"]["ignore"] == 1
-      && extras["box-1"].get("set_collision").is_none()
+      && extras["box-1"]["ignore"] == 1
       && extras["lamp-1"]["ignore"] == 1
       && r.collision_triangles == 2
       && r.collision_from_decor == 1
       && r.dense_places == 0,
     "export: the game's collision one node per surface, the shell not colliding twice, a 6 m box \
-     by its shape, a 2 m lamp without collision"
+     by its shape (written apart), a 2 m lamp without collision"
   );
   // a level's blended walls (their depth written) cut out in the builder's solid tree; the decor
   // faces either way, its collision holds from both sides (the game's own stays one-sided)
@@ -419,10 +424,7 @@ fn a_small_level() {
     .filter(|m| m["name"] != "glass")
     .all(|m| !blend(m));
   assert!(
-    walls_cut
-      && glass_blended
-      && extras["box-1"]["double_sided"] == 1
-      && level["double_sided_collide"] == false,
+    walls_cut && glass_blended && level["double_sided_collide"] == false,
     "export: a level's blended walls cut out, its glass in the builder's translucent tree \
      (og_blend), the decor's collision from both sides"
   );
@@ -610,13 +612,17 @@ fn the_decors_behaviors() {
     .map(|a| (a["lump"]["name"].as_str().unwrap_or_default(), a))
     .collect();
   let dgc = read_text(&tmp.join("export-decor/goal_src/jak3/levels/my-decor/my-decor-obs.gc"));
-  let ice = &extras["ice-slab"];
-  assert!(ice["collide_material"] == 1 && ice["collide_event"] == 1 && ice["noedge"] == 1);
+  // the deadly ice drawn, its collision written apart with its surface
+  assert_eq!(extras["ice-slab"]["ignore"], 1);
+  assert!(extras.values().any(|e| e["set_invisible"] == 1
+    && e["collide_material"] == 1
+    && e["collide_event"] == 1
+    && e["noedge"] == 1));
   assert_eq!(extras["cable"]["ignore"], 1);
   // collision by the box around it: none of its own, an invisible box of metal in its place
   assert_eq!(extras["statue"]["ignore"], 1);
   let b = &extras["statue-collision-box"];
-  assert!(b["set_invisible"] == 1 && b["collide_material"] == 16 && b["double_sided"] == 1);
+  assert!(b["set_invisible"] == 1 && b["collide_material"] == 16);
   let pad = actors["pad-bounce"];
   assert!(
     pad["etype"] == "my-decor-pad-bounce"
@@ -768,7 +774,8 @@ fn the_games_collision_follows_its_decor() {
     (2..=8).contains(&fr.collision_triangles)
       && taken_out >= 16
       && extras["lvx-floor"]["ignore"] == 1
-      && extras["lvx-block"].get("set_collision").is_none(),
+      && extras["lvx-block"]["ignore"] == 1
+      && extras["my-follow-collision-shape-0"]["set_invisible"] == 1,
     "export: the game's collision taken out with the pieces deleted or moved (rubble's coarser \
      one too), a moved piece colliding by its shape: collision {}, taken out {taken_out}, block {}",
     fr.collision_triangles,
@@ -964,7 +971,28 @@ fn the_projects_exported_like_the_cpp_editor() {
     }
     scene.begin_frame();
     export_level(&scene, Some(&data), &o).expect("exported");
-    let (theirs, ours) = (export_texts(&export), export_texts(&tmp.join(project)));
+    let (theirs, mut ours) = (export_texts(&export), export_texts(&tmp.join(project)));
+    // the level's code for what OpenGOAL's builder does not write (level_login_code), called by the
+    // level's definition: added since; a code file of nothing else, and its line in the DGO, when
+    // theirs had none
+    for text in ours.values_mut() {
+      for start in [
+        ";; its nav meshes, laid out",
+        ";; What OpenGOAL's level builder does not write in the level",
+      ] {
+        if let Some(i) = text.find(start) {
+          text.truncate(i);
+        }
+      }
+    }
+    let obs = format!("goal_src/jak3/levels/{project}/{project}-obs.gc");
+    if !theirs.contains_key(&obs) {
+      ours.remove(&obs);
+      let gd = format!("custom_assets/jak3/levels/{project}/{project}.gd");
+      if let Some(t) = ours.get_mut(&gd) {
+        *t = t.replace(&format!("  \"{project}-obs.o\"\n"), "");
+      }
+    }
     assert_eq!(
       theirs.keys().collect::<Vec<_>>(),
       ours.keys().collect::<Vec<_>>(),
@@ -984,9 +1012,22 @@ fn the_projects_exported_like_the_cpp_editor() {
         ":mood-func 'update-mood-default",
         ":mood-func 'update-mood-ctyindb ;; the city's: the level's lights lit as the editor shows them",
       );
+      // the level's code called when the game births it: added since
+      let text = text.replace(
+        ":callback-list '()",
+        &format!(
+          ":callback-list '((33 . {project}-login)) ;; what the level builder does not write (the level's code)"
+        ),
+      );
+      // the region that does nothing, which OpenGOAL's builder needs: added since
+      let regions_added = !text.contains("region_trees");
       let ours: String = ours[path]
         .lines()
         .filter(|l| !l.contains(":level-flags (level-flags sky)"))
+        .filter(|l| {
+          !(regions_added
+            && (l.contains("no region of its own") || l.starts_with("  \"region_trees\": ")))
+        })
         .map(|l| format!("{l}\n"))
         .collect();
       if let Some(d) = first_difference(&text, &ours) {
@@ -999,10 +1040,22 @@ fn the_projects_exported_like_the_cpp_editor() {
         &dir.join(format!("custom_assets/jak3/levels/{project}/{project}.glb")),
       ))
     };
-    let (theirs, ours) = (glb(&export), glb(&tmp.join(project)));
+    let (theirs, mut ours) = (glb(&export), glb(&tmp.join(project)));
+    // the collision of the decor colliding by its shape written apart since (the builder made it
+    // from the decor, from both sides with double_sided): the element drawn without it
+    ours
+      .retain(|name, _| !name.contains("-collision-shape-") && !name.ends_with("-collision-span"));
     assert_eq!(theirs.len(), ours.len(), "{project}: the .glb's nodes");
     for (name, e) in &theirs {
-      assert_eq!(Some(e), ours.get(name), "{project}: the extras of {name}");
+      let mut e = e.clone();
+      if e.get("double_sided").is_some() {
+        let invisible = e["set_invisible"] == 1;
+        e = json!({"set_collision": 1, "ignore": 1});
+        if invisible {
+          e["set_invisible"] = 1.into();
+        }
+      }
+      assert_eq!(Some(&e), ours.get(name), "{project}: the extras of {name}");
     }
     compared += 1;
   }
@@ -1081,13 +1134,24 @@ fn gameplay_markers_exported() {
       && r.behaviors == 1,
     "{code}"
   );
+  // what OpenGOAL's builder does not write, set by the level's code when the game births it: its
+  // visibility (no translucent surface here, no nav mesh)
+  assert!(
+    info.contains(":callback-list '((33 . my-cp-login))")
+      && code.contains("(defun my-cp-login ((lev level))")
+      && code.contains("(set! (-> bsp visible-list-length) 2048)")
+      && !code.contains("drawable-tree-tfrag-trans")
+      && !code.contains("nav-words"),
+    "{code}"
+  );
   // the flags are not in the level; the death zone is, invisible, an endless fall (event 2)
   let extras = glb_extras(&read_glb_json(&dir.join("my-cp.glb")));
   assert!(
     !extras.keys().any(|k| k.contains("flag"))
+      && extras["death-zone"]["set_invisible"] == 1
       && extras
-        .get("death-zone")
-        .is_some_and(|e| e["collide_event"] == 2 && e["set_invisible"] == 1),
+        .values()
+        .any(|e| e["collide_event"] == 2 && e["set_invisible"] == 1),
     "{extras:?}"
   );
   let _ = std::fs::remove_dir_all(&tmp);

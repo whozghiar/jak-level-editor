@@ -58,7 +58,7 @@ use crate::io::decor_behaviors::{
 };
 use crate::io::game_data::{GameData, LevelInfo};
 use crate::io::gltf::{ExportMode, ExportOptions, ImportOptions, export_glb, import_gltf};
-use crate::io::nav_export::{NavExportEntry, write_navmesh_blob};
+use crate::io::nav_export::{NavExportEntry, navmesh_blob, write_navmesh_blob};
 use crate::math::{
   AABB, Mat4, Quat, Ray, Transform, Vec3, cross, dot, length, length2, normalize, radians,
   ray_aabb, transform_ray,
@@ -66,7 +66,7 @@ use crate::math::{
 use crate::navmesh::{NavMeshData, navmesh_ignores, navmesh_under};
 use crate::prefs::Prefs;
 use crate::scene::pick::{PickFilter, pick};
-use crate::scene::{Mesh, Node, NodeKind, Primitive, Scene};
+use crate::scene::{Mesh, Node, NodeKind, Primitive, Scene, translucent_in_game};
 use crate::strf;
 
 use builder::*;

@@ -51,8 +51,8 @@ pub(super) fn readme(
 ## What is in this folder
 
 It is laid out like the jak-project checkout (OpenGOAL's source folder, the one with `goal_src` and
-`custom_assets`) it goes into: a checkout of whozghiar/jak-project, whose level builder has the
-fixes these levels need (its releases are the OpenGOAL the OpenGOAL Launcher installs).
+`custom_assets`) it goes into: a checkout of OpenGOAL's jak-project. Its own level builder will do:
+the export and the level's code make up for what it does not write (below).
 
 - `{install_dir}`: the level for OpenGOAL's level builder: `{name}.glb` (its decor and collision), `{name}.jsonc` (its names and actors), `{name}.gd` (its DGO, {nick_upper}.DGO), `level-info.gc` (its definition in the game's code){}.
 ",
@@ -158,8 +158,8 @@ fixes these levels need (its releases are the OpenGOAL the OpenGOAL Launcher ins
   );
   if rep.navmeshes > 0 {
     md += &format!(
-      "- The nav meshes are in `{name}-nav.json` (`nav_data` of the level): OpenGOAL's level builder
-  for Jak 3 writes them in the level only when it reads `nav_data` (see the editor's README).
+      "- The nav meshes are in the level's code, linked when the game births the level, and in
+  `{name}-nav.json` (`nav_data`, for a builder that writes them in the level itself).
 "
     );
   }
@@ -167,13 +167,18 @@ fixes these levels need (its releases are the OpenGOAL the OpenGOAL Launcher ins
   game mixes with the hour of the day and the level's lights; the pieces made in the editor are lit
   like the level's from their color.
 - The surfaces seen through (stains, decals, glass, water, glows) are blended over what is behind
-  them by the level builder of the editor's jak-project branch (the translucent tree, and the PS2
-  blend of each material: `extras.og_blend`); OpenGOAL's own builder does not draw them.
-- That builder also: makes the collision of the decor colliding by its shape hold from both sides
-  (`extras.double_sided`, the game's collision staying one-sided), lists everything visible in the
-  level (no visibility data: with the PC settings' PS2 actor visibility, the actors of a level are
-  born only where it says they are seen) and keeps the grid of a collision spread over a whole
-  city to 2 million cells (the level's memory).
+  them: the builder puts them in the level's .fr3, and the level's code adds the tree that draws
+  them. Their PS2 blend (`extras.og_blend`: a glow adding light) is the editor's jak-project
+  branch's builder's only; OpenGOAL's own blends them as plain transparency.
+- What OpenGOAL's own builder lacks, the export writes itself: the collision of the decor colliding
+  by its shape, from both sides (invisible meshes `-collision-shape-*`; the game's collision stays
+  one-sided), its flat triangles moved by 1/64 m (the builder loses some of a flat floor's), a
+  region that does nothing when the level has none (the builder dies without one), and a face
+  giving the builder's grid a cell along a side of the level under 7.3 m.
+- The level's code (the `-login` function of its `-obs.gc`, which its definition calls when the
+  game births it) sets what the builder does not write in the level: the list of what is visible
+  (everything: with the PC setting PS2 actor vis, on by default, its actors would never be born),
+  the tree drawing its translucent surfaces, its nav meshes. Each only when the level lacks it.
 ";
   if rep.regions > 0 {
     md += &format!(
