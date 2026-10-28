@@ -28,8 +28,8 @@ of a jak-project checkout (goal_src/jak3, read only). The editor draws the effec
              (over its life, 0 to 1)}
   textures   the texture pages and textures the launchers draw
 
-It also writes extractor/data/jak3/sprite-pages.json: the texture pages ogle-extract writes to
-library/jak3/common/sprites/ for the editor to draw the particles with.
+It also writes data/jak3/sprite-pages.json: the texture pages the extraction writes to
+library/jak3/common/sprites/ for the editor to draw the particles with (io/extraction).
 
 Usage: python tools/gen_particles.py <jak-project>/goal_src
 """
@@ -380,9 +380,9 @@ def main():
         f.write('\n')
     print('%s: %d groups, %d launchers (%d by curves), %d texture pages' % (
         dst, len(groups), len(launchers), len(by_launcher), len(pages)))
-    # the pages ogle-extract writes the textures of (library/jak3/common/sprites/)
+    # the pages the extraction writes the textures of (library/jak3/common/sprites/)
     ids = sorted({int(s[3].split(':')[0]) for l in launchers.values() for s in l if s[1] == 'tex' and ':' in s[3]})
-    sprite_pages = os.path.join(REPO, 'extractor', 'data', 'jak3', 'sprite-pages.json')
+    sprite_pages = os.path.join(REPO, 'data', 'jak3', 'sprite-pages.json')
     with open(sprite_pages, 'w', encoding='utf-8', newline='\n') as f:
         json.dump({'pages': sorted(pages), 'page_ids': ids}, f, indent=1)
         f.write('\n')

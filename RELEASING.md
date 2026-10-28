@@ -47,11 +47,11 @@ The workflow takes 20 to 30 minutes. The draft (**Releases**, marked *Draft*) th
 | `Jak.Level.Editor_X.Y.Z_x64_en-US.msi` | Windows installer (MSI, for all users) |
 | `jak-level-editor_X.Y.Z_amd64.deb`, `Jak.Level.Editor_X.Y.Z_amd64.AppImage` | Linux packages |
 | `jak-level-editor-portable-<platform>.zip` | the editor without installing: unzip it anywhere and run `jak-level-editor`; the OpenGOAL Launcher downloads it |
-| `ogle-extract-<platform>.zip` | the extractor alone (`ogle-extract` and `ogle-extract-data/` at its root) |
 | `jak-level-editor-mcp-<platform>.zip` | the MCP server, for an AI assistant (optional): put it next to the editor's program |
 
 Download the portable zip of your system, start the editor, and open **File > Extract game
-assets...**: it must find ogle-extract (no red message) and recognize your disc.
+assets...**: it must find the Jak 3 you installed with OpenGOAL (its version and its levels, in
+green).
 
 Edit the release notes GitHub wrote if you like.
 

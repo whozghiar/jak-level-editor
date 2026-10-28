@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Writes data/jak2/creatures.json: the actor types of Jak II that are living things (enemies, the
-people of the city, the sidekicks), from the type table of the extractor (extractor/data/jak2/
-all-types.gc), as tools/gen_game_data.py finds Jak 3's: a type deriving from one of CREATURES. The
-catalog leaves their models out of Jak II's objects (the editor places no creature).
+people of the city, the sidekicks), from Jak II's type table (a jak-project checkout's
+decompiler/config/jak2/all-types.gc, or an OpenGOAL installation's), as tools/gen_game_data.py finds
+Jak 3's: a type deriving from one of CREATURES. The catalog leaves their models out of Jak II's
+objects (the editor places no creature).
 
-Usage: python tools/gen_jak2_creatures.py
+Usage: python tools/gen_jak2_creatures.py <jak-project>/decompiler/config/jak2/all-types.gc
 """
 
 import json
 import os
 import re
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -21,7 +23,10 @@ MORE = ['babak', 'big-bopper', 'dig-balloon-lurker', 'errol-racer', 'intro-flame
 
 
 def main():
-    with open(os.path.join(REPO, 'extractor', 'data', 'jak2', 'all-types.gc'), encoding='utf-8', errors='replace') as f:
+    if len(sys.argv) != 2:
+        print(__doc__)
+        return
+    with open(sys.argv[1], encoding='utf-8', errors='replace') as f:
         text = f.read()
     parent = {m.group(1): m.group(2) for m in re.finditer(r'^\(deftype ([^\s()]+)\s+\(([^\s()]+)\)', text, re.M)}
 

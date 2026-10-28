@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generates data/jak3/game-data.json: what the editor knows about Jak 3 beyond the extracted
 files. It reads the decompiled game code of a jak-project checkout (goal_src/jak3, read only)
-and the extractor's type table (extractor/data/jak3/all-types.gc).
+and its type table (decompiler/config/jak3/all-types.gc).
 
   actors.roles        actor types that are creatures or logic (the others are objects), from
                       their base types
@@ -622,12 +622,12 @@ def game_data(goal_src):
     engine = list(sources(os.path.join(root, 'engine')))
     everything = list(sources(root))
     out = {'format': 1, 'game': game,
-           'source': 'tools/gen_game_data.py, from goal_src/%s of open-goal/jak-project and extractor/data/%s/all-types.gc'
+           'source': 'tools/gen_game_data.py, from goal_src/%s and decompiler/config/%s/all-types.gc of open-goal/jak-project'
                      % (game, game)}
 
     # --- actor roles -----------------------------------------------------------------------------
     parent = {}
-    types_text = read(os.path.join(REPO, 'extractor', 'data', game, 'all-types.gc'))
+    types_text = read(os.path.join(goal_src, '..', 'decompiler', 'config', game, 'all-types.gc'))
     for m in re.finditer(r'^\(deftype ([^\s()]+)\s+\(([^\s()]+)\)', types_text, re.M):
         parent[m.group(1)] = m.group(2)
 

@@ -7,33 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  ogle-extract:
-    name: ogle-extract (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-24.04]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang ninja-build
-
-      - name: Set up MSVC (headers and libraries for Clang)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Build
-        shell: bash
-        run: |
-          cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-          cmake --build build-release
-          ls build-release/bin build-release/bin/ogle-extract-data
-
   app:
     name: Editor (${{ matrix.os }})
     strategy:

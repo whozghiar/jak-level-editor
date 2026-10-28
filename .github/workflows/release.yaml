@@ -4,8 +4,8 @@ name: Release
 # major. The version follows the last tag vX.Y.Z (v1.0.0 for the first release): the run writes it
 # into package.json, Cargo.toml, Cargo.lock and src-tauri/tauri.conf.json, commits that to the
 # branch, tags the commit, then makes a draft release with, per platform, the installers, a
-# portable zip (the OpenGOAL Launcher downloads jak-level-editor-portable-<platform>.zip),
-# ogle-extract alone and the MCP server. RELEASING.md tells how to make one.
+# portable zip (the OpenGOAL Launcher downloads jak-level-editor-portable-<platform>.zip) and the
+# MCP server. RELEASING.md tells how to make one.
 
 on:
   workflow_dispatch:
@@ -126,21 +126,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev clang ninja-build zip
-
-      - name: Set up MSVC (headers and libraries for Clang)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      # build-release/bin/: ogle-extract and ogle-extract-data/, the resources
-      # src-tauri/tauri.release.conf.json adds to the installers
-      - name: Build ogle-extract
-        shell: bash
-        run: |
-          cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-          cmake --build build-release
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev zip
 
       - name: Install the interface's packages
         run: yarn install --frozen-lockfile
@@ -159,7 +145,7 @@ jobs:
       - name: Make the zips and upload them
         shell: bash
         env:
-          # not PLATFORM: Windows' names ignore case, and msvc-dev-cmd sets Platform=x64
+          # not PLATFORM: Windows' names ignore case
           ASSET_PLATFORM: ${{ matrix.platform }}
         run: |
           exe=""; [ "$RUNNER_OS" = Windows ] && exe=.exe
@@ -167,13 +153,11 @@ jobs:
             if [ "$RUNNER_OS" = Windows ]; then (cd "$1" && 7z a -tzip -bso0 "$2" .)
             else (cd "$1" && zip -qr "$2" .); fi
           }
-          rm -rf stage && mkdir -p stage/portable stage/ogle-extract stage/mcp stage/dist
+          rm -rf stage && mkdir -p stage/portable stage/mcp stage/dist
           out="$PWD/stage/dist"
-          cp -r build-release/bin/. stage/ogle-extract/
-          cp -r build-release/bin/. lang data "target/release/jak-level-editor$exe" stage/portable/
+          cp -r lang data "target/release/jak-level-editor$exe" stage/portable/
           cp "target/release/jak-level-editor-mcp$exe" stage/mcp/
           zip_dir stage/portable "$out/jak-level-editor-portable-$ASSET_PLATFORM.zip"
-          zip_dir stage/ogle-extract "$out/ogle-extract-$ASSET_PLATFORM.zip"
           zip_dir stage/mcp "$out/jak-level-editor-mcp-$ASSET_PLATFORM.zip"
           ls -l stage/dist
           gh release upload "$TAG" stage/dist/*.zip --clobber
