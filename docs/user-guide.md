@@ -842,7 +842,7 @@ editor closes that game and takes the two files out again.
 > commands to that game.
 
 When a try fails, its message is in the log; `goalc.log` and `gk.log` in `game-test/jak3/` of the
-editor's settings folder (`%APPDATA%/OpenGOAL/jak-level-editor/` on its own) hold what the compiler
+editor's settings folder (`%APPDATA%/OpenGOAL/level-editor/`) hold what the compiler
 and the game said.
 
 ### Export it
@@ -963,10 +963,12 @@ the game's data and stay on your computer.
 
 Your preferences (the library, the games installed, the language, the recent projects, whether an assistant
 may control the editor), the pictures of the panels and what the catalog read of the levels are
-kept in `%APPDATA%/OpenGOAL/jak-level-editor` on Windows (`~/.local/share/OpenGOAL/jak-level-editor`
-on Linux). The first time, the editor takes the preferences of its previous version
-(`OpenGOAL/open-goal-level-editor`). The OpenGOAL Launcher's editor keeps its own, in the
-launcher's settings folder (`%APPDATA%/OpenGOAL-Launcher/jak-level-editor` on Windows).
+kept in `%APPDATA%/OpenGOAL/level-editor` on Windows (`~/.local/share/OpenGOAL/level-editor`
+on Linux, `~/Library/Application Support/OpenGOAL/level-editor` on macOS), whether you open the
+editor on its own or from the OpenGOAL Launcher. The first time, the editor moves there the newest
+settings of its earlier versions (`OpenGOAL/jak-level-editor`, the launcher's
+`OpenGOAL-Launcher/jak-level-editor`, the C++ editor's `OpenGOAL/open-goal-level-editor`), and
+deletes those folders whenever it finds them.
 
 ## Appendix: what the decor can do in the game
 

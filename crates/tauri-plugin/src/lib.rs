@@ -66,7 +66,6 @@ pub struct Options {
 pub struct Builder {
   options: Options,
   host: Host,
-  prefs_in_app_config: bool,
 }
 
 impl Builder {
@@ -118,14 +117,6 @@ impl Builder {
     self
   }
 
-  /// The editor's preferences (its library, its caches) in `<the app's config folder>/
-  /// jak-level-editor/` rather than the standalone app's folder: a host application's editor
-  /// never shares them with the standalone app (jle_core::prefs::Prefs::use_dir).
-  pub fn prefs_in_app_config(mut self) -> Self {
-    self.prefs_in_app_config = true;
-    self
-  }
-
   pub fn build<R: Runtime>(self) -> TauriPlugin<R> {
     let options = self.options;
     let mut host = self.host;
@@ -137,7 +128,6 @@ impl Builder {
         .game_installs
         .insert(game.clone(), PathBuf::from(folder));
     }
-    let prefs_in_app_config = self.prefs_in_app_config;
     let hidden = options.hidden;
     tauri::plugin::Builder::new("jak-level-editor")
       .invoke_handler(tauri::generate_handler![call])
@@ -155,9 +145,6 @@ impl Builder {
         }
       })
       .setup(move |app, _api| {
-        if prefs_in_app_config && let Ok(dir) = app.path().app_config_dir() {
-          Prefs::use_dir(&dir.join("jak-level-editor"));
-        }
         setup(app, options, host);
         Ok(())
       })

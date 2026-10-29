@@ -337,14 +337,14 @@ given without asking who started it:
 | How you open it | its program | the *Level Editor* button of the sidebar |
 | Installed and updated | by you: an installer or the portable zip of a release | by the launcher: its *Settings > Level Editor* downloads a release's portable zip, and its header shows when a newer release is out |
 | The library, at first | `Documents/Jak Level Editor` | `<the launcher's install folder>/jak-level-editor` (`--default-library`) |
-| Its preferences | `%APPDATA%/OpenGOAL/jak-level-editor` | `%APPDATA%/OpenGOAL-Launcher/jak-level-editor` (`JLE_PREFS_DIR`) |
+| Its preferences | `%APPDATA%/OpenGOAL/level-editor` | the same folder |
 | The game levels are extracted from and tried in | the folder chosen in *File > Settings* | the game the launcher installed with its active version (`--game-install`) |
 | Command line | yes ([19](#19-command-line)) | the launcher's ([17](#17-in-the-launcher)) |
 
 (The folders are Windows'; Linux and macOS have theirs: [16](#16-what-the-host-gives-the-editor).)
 
-The two never step on each other: their preferences and libraries are separate, so you can use
-both. Neither installs or compiles the game: **F5** tries the level in the game installed
+Both keep their preferences in the same folder, so the library, the language and the recent
+projects follow the editor however it is opened. Neither installs or compiles the game: **F5** tries the level in the game installed
 ([24](#24-the-export-for-the-game)), and the export writes the files to copy into a jak-project
 (OpenGOAL's sources), with a README giving the exact lines; the user guide's
 [section 14](user-guide.md#14-playing-it-in-the-game-try-it-export-it) goes through both.
@@ -715,7 +715,7 @@ default. When it starts listening it writes `remote.json` (`{"port", "token"}`, 
 token (`{"id", "tool", "args", "token"}`): one without it, or with another, is answered "refused"
 and its connection closed, and a line that is not a JSON object (a web page's HTTP request sent to
 the port) closes the connection unanswered. The MCP server reads the token from that file
-(`$JLE_PREFS_DIR`, else the standalone app's preferences' folder).
+(`$JLE_PREFS_DIR`, else the editor's preferences' folder).
 
 ## 16. What the host gives the editor
 
@@ -734,13 +734,12 @@ game.
 | `game_installs` | none: the folders of *File > Settings* (the preference `game_installs`) | by game, `<install>`: the games installed with the launcher's active version, whose levels are extracted and tried |
 
 **The preferences** (`crates/core/src/prefs.rs`) and the caches next to them (thumbnails, the
-catalog's index, `remote.json`) are in `Prefs::dir()`: `$JLE_PREFS_DIR` when set (tests; the
-OpenGOAL Launcher gives `<its config folder>/jak-level-editor/`, so its editor keeps its own
-library), else the folder a host gave before they were first read (`Prefs::use_dir`; the plugin's
-`Builder::prefs_in_app_config()` gives `<the app's config folder>/jak-level-editor/`), else the
-standalone app's `%APPDATA%/OpenGOAL/jak-level-editor`
-(`~/.local/share/...` on Linux, `~/Library/Application Support/...` on macOS), which reads the C++
-editor's preferences the first time.
+catalog's index, `remote.json`) are in `Prefs::dir()`: `$JLE_PREFS_DIR` when set (tests and
+captures, with fresh preferences), else `%APPDATA%/OpenGOAL/level-editor` (`~/.local/share/...` on
+Linux, `~/Library/Application Support/...` on macOS), whoever started the editor. The first time,
+the newest folder of earlier editors becomes that one, its caches with it, and the others are
+deleted, as they are at every start: the standalone app's `OpenGOAL/jak-level-editor`, the OpenGOAL Launcher's
+`<its config folder>/jak-level-editor` and the C++ editor's `OpenGOAL/open-goal-level-editor`.
 
 **The library** (`crates/core/src/editor/library.rs`): until the user chose one (the preference
 `library_chosen`; preferences of before it whose library holds an extracted game count as chosen),
@@ -768,7 +767,6 @@ icon when a newer release is out. Its sidebar's *Level Editor* button starts the
 version:
 
 ```text
-JLE_PREFS_DIR=<launcher's config folder>/jak-level-editor
 jak-level-editor --lang fr --default-library=<install>/jak-level-editor --game-install=jak3=<install> ...
 ```
 
@@ -836,23 +834,22 @@ jak-level-editor-mcp [--remote-port <port>]
   ([16](#16-what-the-host-gives-the-editor)): the library the first-run assistant offers, the
   folder of a game installed (the launcher's installation folder), whose levels are extracted and
   tried; *File > Settings* shows it without letting it change.
-- `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests with fresh ones; the
-  OpenGOAL Launcher's own folder for its editor; for the MCP server, the folder of the editor's
-  `remote.json`).
+- `JLE_PREFS_DIR` (environment) puts the preferences in another folder (tests and captures with
+  fresh ones; for the MCP server, the folder of the editor's `remote.json`).
 - `jak-level-editor-mcp` is the MCP server ([25](#25-the-remote-control-and-the-mcp-server)).
-- The OpenGOAL Launcher starts the editor with `--lang`, `--default-library`, `--game-install`
-  and `JLE_PREFS_DIR` ([17](#17-in-the-launcher)).
+- The OpenGOAL Launcher starts the editor with `--lang`, `--default-library` and `--game-install`
+  ([17](#17-in-the-launcher)).
 - The C++ editor's other modes have their equivalents: `--selftest` is
   `cargo test -p jak-level-editor-core`, `--mcp` is `jak-level-editor-mcp`, and the pictures of
   `--screenshot` are taken through the remote control and the web view's DevTools
   ([captures](captures/README.md)).
 - The preferences, the panels' pictures (`thumbs/`), what the catalog read of the levels
   (`index/`) and, while the remote control listens, its `remote.json` are in
-  `%APPDATA%/OpenGOAL/jak-level-editor` on Windows (`~/.local/share/OpenGOAL/jak-level-editor` on
-  Linux, `~/Library/Application Support/...` on macOS); the OpenGOAL Launcher's editor keeps its own
-  in `<launcher's config folder>/jak-level-editor`. While the standalone app's folder has no
-  preferences, the C++ editor's (`OpenGOAL/open-goal-level-editor`) are read, and saved into the
-  new folder the next time they change.
+  `%APPDATA%/OpenGOAL/level-editor` on Windows (`~/.local/share/OpenGOAL/level-editor` on
+  Linux, `~/Library/Application Support/...` on macOS), whether the editor runs on its own or from
+  the OpenGOAL Launcher. The first time, the newest folder of earlier editors
+  (`OpenGOAL/jak-level-editor`, the launcher's `jak-level-editor`, the C++ editor's
+  `OpenGOAL/open-goal-level-editor`) becomes that one; the others are deleted, at every start.
 - The translations (`lang/`) and the game's tables (`data/`) are read from the application's
   resources (`bundle.resources` of `src-tauri/tauri.conf.json`; a build copies them next to the
   program in `target/<profile>/`: build again after changing them), else from the repository.
@@ -1162,8 +1159,8 @@ engine's lock like the user's actions: they show at once and can be undone. `cap
 interface for a picture of its 3D view (the event `jle:request`, answered with `frontend_reply`).
 
 `jak-level-editor-mcp` (`crates/mcp`) speaks MCP on its standard input and output and forwards each
-tool call to the editor with the token of its `remote.json` (`$JLE_PREFS_DIR`, else the standalone
-app's preferences' folder), and starts `jak-level-editor --remote-port <port>` (found next to it,
+tool call to the editor with the token of its `remote.json` (`$JLE_PREFS_DIR`, else the editor's
+preferences' folder), and starts `jak-level-editor --remote-port <port>` (found next to it,
 else in `target/release/` or `target/debug/`) when none listens. The tools, their arguments and the rules of
 an agent: [the MCP tutorial](mcp.md#9-every-tool).
 

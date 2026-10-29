@@ -73,9 +73,8 @@ you ask it to.
    ```
 
 3. **Another client**: run `<repository>/target/release/jak-level-editor-mcp` as a stdio server
-   (`--remote-port <port>` if the editor was started with another port than 47821). For the editor
-   of the OpenGOAL Launcher, give the server the launcher's editor settings folder:
-   `JLE_PREFS_DIR=%APPDATA%/OpenGOAL-Launcher/jak-level-editor` (its `remote.json`).
+   (`--remote-port <port>` if the editor was started with another port than 47821). It finds the
+   editor the same way whether you opened it on its own or from the OpenGOAL Launcher.
 4. Check: ask the assistant to call `get_status` (*"call get_status of the level editor"*). Its
    answer gives the library and the document, for example
    `{"levels": 272, "document": {"open": true, "level": "ctysluma", "elements": 13193, ...}, ...}`. The

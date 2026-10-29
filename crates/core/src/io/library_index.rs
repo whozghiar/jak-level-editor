@@ -600,33 +600,13 @@ mod tests {
   use std::time::Instant;
 
   use super::*;
-  use crate::io::asset_library::file_mtime;
   use crate::io::catalog::{build_catalog, jak2_creatures, list_catalog_models};
   use crate::io::game_data::{GameData, game_data_path, level_listed};
   use crate::io::jak2_import::jak2_structure;
   use crate::io::test_library::real_library;
   use crate::io::texture_palette::{all_textures, recurring_textures};
-  use crate::prefs::Prefs;
 
-  /// JSON values alike but for the last digits of their numbers (two parsers)
-  fn alike(a: &Value, b: &Value) -> bool {
-    match (a, b) {
-      (Value::Number(x), Value::Number(y)) => {
-        let (x, y) = (x.as_f64().unwrap(), y.as_f64().unwrap());
-        (x - y).abs() <= 1e-9 * x.abs().max(y.abs()).max(1.0)
-      }
-      (Value::Array(x), Value::Array(y)) => {
-        x.len() == y.len() && x.iter().zip(y).all(|(x, y)| alike(x, y))
-      }
-      (Value::Object(x), Value::Object(y)) => {
-        x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| alike(v, w)))
-      }
-      _ => a == b,
-    }
-  }
-
-  /// The index made of a game's folder (`game`: "jak3", "jak2"), compared with the C++ editor's
-  /// cache of it (<its preferences>/index/<game>) for every level whose file has not changed since.
+  /// The index made of a game's folder (`game`: "jak3", "jak2").
   fn index_of_real(game: &str) -> Option<(AssetLibrary, LibraryIndex)> {
     let root = real_library()?;
     let mut library = AssetLibrary::default();
@@ -645,63 +625,6 @@ mod tests {
       "{game}: {} levels indexed in {:.2} s ({parts} parts)",
       index.levels().len(),
       time.as_secs_f64()
-    );
-    let cpp = format!("{}index/{game}", Prefs::old_dir());
-    let (mut compared, mut stale) = (0, 0);
-    for l in index.levels() {
-      // its path as the C++ editor had it (the library's real folder)
-      let real = std::fs::canonicalize(&l.background).unwrap();
-      let real = real.to_string_lossy().replace('\\', "/");
-      let Some(j) = std::fs::read(cache_file(&cpp, real.trim_start_matches("//?/")))
-        .ok()
-        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-      else {
-        continue;
-      };
-      // the C++ editor's dates: 100 ns since 1601
-      let stamp = file_mtime(&l.background) / 100 + 116444736000000000;
-      if j["stamp"].as_i64() != Some(stamp) {
-        stale += 1;
-        continue;
-      }
-      let c = from_json(&j).unwrap();
-      let sorted = |p: &[CatalogPart]| {
-        let mut p = p.to_vec();
-        p.sort_by(|a, b| {
-          (&a.name, &a.mesh_node, &a.key, a.triangles, a.copies).cmp(&(
-            &b.name,
-            &b.mesh_node,
-            &b.key,
-            b.triangles,
-            b.copies,
-          ))
-        });
-        p
-      };
-      let (mine, theirs) = (sorted(&l.parts), sorted(&c.parts));
-      assert_eq!(mine.len(), theirs.len(), "{}: parts", l.level);
-      for (a, b) in mine.iter().zip(&theirs) {
-        let close = |x: f64, y: f64| (x - y).abs() <= 1e-9 * x.abs().max(1.0);
-        assert!(
-          (&a.name, &a.mesh_node, a.kind, a.triangles, a.copies, &a.key)
-            == (&b.name, &b.mesh_node, b.kind, b.triangles, b.copies, &b.key)
-            && close(a.surface, b.surface)
-            && close(a.edges, b.edges),
-          "{}: {a:?} {b:?}",
-          l.level
-        );
-      }
-      assert_eq!(l.art_names, c.art_names, "{}: art-names", l.level);
-      assert_eq!(l.textures, c.textures, "{}: textures", l.level);
-      assert!(
-        alike(&json!(l.art_lumps), &json!(c.art_lumps)),
-        "{}: art lumps",
-        l.level
-      );
-      compared += 1;
-    }
-    eprintln!(
-      "{game}: {compared} levels the same as the C++ editor's index ({stale} changed since)"
     );
     Some((library, index))
   }

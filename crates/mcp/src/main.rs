@@ -6,10 +6,9 @@
 //!
 //! It forwards each tool call to the editor running on this computer (its remote control,
 //! crates/core/src/editor/remote.rs), with the token the editor wrote to `remote.json` in its
-//! preferences' folder ($JLE_PREFS_DIR, else the standalone app's: for the OpenGOAL Launcher's
-//! editor, its `<launcher's config folder>/jak-level-editor`), and starts the editor when none
-//! listens: everything happens in the window the user sees, and can be undone there. Nothing but
-//! the protocol goes to stdout.
+//! preferences' folder (OpenGOAL/level-editor, whoever started the editor; $JLE_PREFS_DIR when
+//! set), and starts the editor when none listens: everything happens in the window the user sees,
+//! and can be undone there. Nothing but the protocol goes to stdout.
 
 use std::io::{BufRead, Read, Write};
 use std::net::TcpStream;
@@ -23,7 +22,7 @@ use serde_json::{Map, Value, json};
 /// the editor's remote control (jle_core::editor::remote::K_REMOTE_PORT)
 const K_REMOTE_PORT: u16 = 47821;
 
-/// The editor's `remote.json` ({"port", "token"}): in $JLE_PREFS_DIR, else in the standalone app's
+/// The editor's `remote.json` ({"port", "token"}): in $JLE_PREFS_DIR, else in the editor's
 /// preferences' folder (jle_core::prefs::Prefs::dir)
 fn remote_file() -> PathBuf {
   let env = |k: &str| {
@@ -39,7 +38,7 @@ fn remote_file() -> PathBuf {
     } else {
       env("XDG_DATA_HOME").or_else(|| env("HOME").map(|h| h.join(".local/share")))
     };
-    base.unwrap_or_default().join("OpenGOAL/jak-level-editor")
+    base.unwrap_or_default().join("OpenGOAL/level-editor")
   });
   dir.join("remote.json")
 }

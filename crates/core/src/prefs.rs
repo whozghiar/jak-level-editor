@@ -1,14 +1,14 @@
-//! The editor's preferences, kept between sessions in the user's settings folder
-//! (%APPDATA%/OpenGOAL/jak-level-editor on Windows, ~/.local/share/... on Linux), in the one its
-//! host gives (`Prefs::use_dir`), or in $JLE_PREFS_DIR (the OpenGOAL Launcher gives its own
-//! settings folder, so that its editor never shares a library with the standalone app's): where
-//! the extracted game is, the disc it came from, the language,
-//! recent projects, the games installed where levels are tried. Thumbnails and the catalog's index are cached next to them.
+//! The editor's preferences, kept between sessions in one folder whoever starts the editor (on its
+//! own or the OpenGOAL Launcher): %APPDATA%/OpenGOAL/level-editor on Windows,
+//! ~/Library/Application Support/OpenGOAL/level-editor on macOS, ~/.local/share/OpenGOAL/
+//! level-editor on Linux; $JLE_PREFS_DIR instead when set (tests and captures, with fresh ones):
+//! where the extracted game is, the language, recent projects, the games installed where levels
+//! are tried. Thumbnails and the catalog's index are cached next to them.
 //!
-//! The C++ editor kept them in OpenGOAL/open-goal-level-editor: while the standalone app's folder
-//! has no preferences, that one's are read (and written to the new folder at the next save).
+//! Earlier editors kept them elsewhere (`old_dirs`): the first time, the newest of those folders
+//! becomes the new one and the others are deleted.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex, MutexGuard, OnceLock};
 
@@ -47,10 +47,13 @@ pub struct Prefs {
   pub game_installs: std::collections::BTreeMap<String, String>,
 }
 
-/// The settings folder of an application, as SDL_GetPrefPath makes it ('/' separated, ending
-/// with '/'), "./" when the system has none.
-fn pref_path(org: &str, app: &str) -> String {
-  let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+fn env(k: &str) -> Option<String> {
+  std::env::var(k).ok().filter(|v| !v.is_empty())
+}
+
+/// The folder where applications keep their settings, as SDL_GetPrefPath has it ('/' separated),
+/// if the system has one.
+fn settings_base() -> Option<String> {
   let base = if cfg!(windows) {
     env("APPDATA")
   } else if cfg!(target_os = "macos") {
@@ -58,45 +61,65 @@ fn pref_path(org: &str, app: &str) -> String {
   } else {
     env("XDG_DATA_HOME").or_else(|| env("HOME").map(|h| format!("{h}/.local/share")))
   };
-  match base {
-    Some(base) => format!(
-      "{}/{org}/{app}/",
-      base.replace('\\', "/").trim_end_matches('/')
-    ),
-    None => "./".into(),
+  base.map(|b| b.replace('\\', "/").trim_end_matches('/').to_owned())
+}
+
+/// The folders where earlier editors kept the preferences: the standalone app's, the OpenGOAL
+/// Launcher's (in its config folder, Tauri's app_config_dir: ~/.config on Linux), the C++ editor's.
+fn old_dirs() -> Vec<PathBuf> {
+  let launcher = if cfg!(windows) || cfg!(target_os = "macos") {
+    settings_base()
+  } else {
+    env("XDG_CONFIG_HOME").or_else(|| env("HOME").map(|h| format!("{h}/.config")))
+  };
+  let mut dirs: Vec<PathBuf> = settings_base()
+    .into_iter()
+    .flat_map(|b| {
+      ["jak-level-editor", "open-goal-level-editor"]
+        .map(|app| Path::new(&b).join("OpenGOAL").join(app))
+    })
+    .collect();
+  dirs.extend(launcher.map(|b| Path::new(&b).join("OpenGOAL-Launcher/jak-level-editor")));
+  dirs
+}
+
+/// The newest preferences of the `old` folders become `dir` (the folder itself, its caches with
+/// it, else its preferences alone), when `dir` has none yet; the old folders are then deleted, as
+/// they are at every start (an earlier editor, or an earlier launcher's, makes its own again).
+fn migrate(dir: &Path, old: &[PathBuf]) {
+  let newest = old
+    .iter()
+    .filter_map(|d| Some((std::fs::metadata(d.join(K_FILE)).ok()?.modified().ok()?, d)))
+    .max_by_key(|(time, _)| *time)
+    .map(|(_, d)| d);
+  if let Some(from) = newest.filter(|_| !dir.join(K_FILE).is_file()) {
+    if let Some(parent) = dir.parent() {
+      let _ = std::fs::create_dir_all(parent);
+    }
+    if std::fs::rename(from, dir).is_err() {
+      let _ = std::fs::create_dir_all(dir);
+      let _ = std::fs::copy(from.join(K_FILE), dir.join(K_FILE));
+    }
+    if !dir.join(K_FILE).is_file() {
+      return;
+    }
+  }
+  for d in old {
+    let _ = std::fs::remove_dir_all(d);
   }
 }
 
 impl Prefs {
   /// folder of the preferences and of the thumbnail cache (created on demand), '/' separated:
-  /// $JLE_PREFS_DIR when set (tests of the application with fresh preferences), else the host's
-  /// (use_dir), else the standalone app's
+  /// $JLE_PREFS_DIR when set (tests of the application with fresh preferences), else
+  /// OpenGOAL/level-editor in the system's settings folder ("./" without one)
   pub fn dir() -> String {
     DIR
-      .get_or_init(|| match std::env::var("JLE_PREFS_DIR") {
-        Ok(d) if !d.is_empty() => slashed(&d),
-        _ => pref_path("OpenGOAL", "jak-level-editor"),
+      .get_or_init(|| match env("JLE_PREFS_DIR") {
+        Some(d) => slashed(&d),
+        None => settings_base().map_or("./".into(), |b| format!("{b}/OpenGOAL/level-editor/")),
       })
       .clone()
-  }
-
-  /// The host's folder for the preferences, given before they are first read (false after: the
-  /// folder stays); $JLE_PREFS_DIR still comes first.
-  pub fn use_dir(dir: &Path) -> bool {
-    if std::env::var_os("JLE_PREFS_DIR").is_some_and(|d| !d.is_empty()) {
-      return false;
-    }
-    DIR.set(slashed(&dir.to_string_lossy())).is_ok()
-  }
-
-  /// the C++ editor's folder, read for the standalone app's first preferences (none in another
-  /// folder: fresh preferences)
-  pub fn old_dir() -> String {
-    if Self::dir() == pref_path("OpenGOAL", "jak-level-editor") {
-      pref_path("OpenGOAL", "open-goal-level-editor")
-    } else {
-      Self::dir()
-    }
   }
 
   pub fn get() -> MutexGuard<'static, Prefs> {
@@ -105,18 +128,15 @@ impl Prefs {
   }
 
   pub fn load(&mut self) {
-    self.load_from(Path::new(&Self::dir()), Path::new(&Self::old_dir()));
+    let dir = Self::dir();
+    if env("JLE_PREFS_DIR").is_none() && dir != "./" && !READ_ONLY.load(Ordering::Relaxed) {
+      migrate(Path::new(&dir), &old_dirs());
+    }
+    self.load_from(Path::new(&dir));
   }
 
-  /// Reads `dir`'s preferences, else (the folder new) `old_dir`'s.
-  pub fn load_from(&mut self, dir: &Path, old_dir: &Path) {
-    let file = dir.join(K_FILE);
-    let file = if file.is_file() {
-      file
-    } else {
-      old_dir.join(K_FILE)
-    };
-    let Ok(text) = std::fs::read(&file) else {
+  pub fn load_from(&mut self, dir: &Path) {
+    let Ok(text) = std::fs::read(dir.join(K_FILE)) else {
       return;
     };
     match serde_json::from_slice::<Prefs>(&text) {
@@ -158,36 +178,59 @@ fn push_recent(list: &mut Vec<String>, v: &str, max: usize) {
 mod tests {
   use super::*;
 
+  // the standalone app's, the launcher's and the C++ editor's folders: one folder left, holding
+  // the newest preferences and their caches
   #[test]
-  fn migrated_from_the_old_folder() {
+  fn the_old_folders_become_one() {
     let tmp = std::env::temp_dir().join(format!("jle-prefs-{}", std::process::id()));
-    let (new, old) = (
-      tmp.join("jak-level-editor"),
-      tmp.join("open-goal-level-editor"),
-    );
     let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&old).unwrap();
-    std::fs::write(
-      old.join(K_FILE),
-      r#"{"library_root": "D:/lib", "language": "fr", "recent_projects": ["a"]}"#,
-    )
-    .unwrap();
+    let new = tmp.join("OpenGOAL/level-editor");
+    let old = [
+      "OpenGOAL/jak-level-editor",
+      "OpenGOAL-Launcher/jak-level-editor",
+      "OpenGOAL/open-goal-level-editor",
+    ]
+    .map(|d| tmp.join(d));
+    let now = std::time::SystemTime::now();
+    for (i, (d, language)) in old.iter().zip(["fr", "en", "de"]).enumerate() {
+      std::fs::create_dir_all(d.join("thumbs")).unwrap();
+      let p = Prefs {
+        language: language.into(),
+        ..Prefs::default()
+      };
+      p.save_to(d);
+      let age = std::time::Duration::from_secs(3600 * (i as u64 + 1));
+      std::fs::File::options()
+        .write(true)
+        .open(d.join(K_FILE))
+        .unwrap()
+        .set_modified(now - age)
+        .unwrap();
+    }
+    migrate(&new, &old);
     let mut p = Prefs::default();
-    p.load_from(&new, &old);
-    assert!(
-      p.library_root == "D:/lib" && p.language == "fr" && !p.guide_seen,
-      "the old folder's preferences read"
-    );
+    p.load_from(&new);
+    assert_eq!(p.language, "fr", "the newest preferences kept");
+    assert!(new.join("thumbs").is_dir(), "with their caches");
+    assert!(old.iter().all(|d| !d.exists()), "the old folders deleted");
+
+    // an old folder made again (by an earlier launcher's editor) is deleted, the preferences kept
+    Prefs {
+      language: "en".into(),
+      ..Prefs::default()
+    }
+    .save_to(&old[1]);
+    migrate(&new, &old);
+    p.load_from(&new);
+    assert_eq!(p.language, "fr");
+    assert!(!old[1].exists());
+
     p.add_recent_project("b");
     p.add_recent_project("a");
-    assert_eq!(p.recent_projects, ["a", "b"]);
-    p.save_to(&new);
-    let mut again = Prefs::default();
-    std::fs::remove_file(old.join(K_FILE)).unwrap();
-    again.load_from(&new, &old);
-    assert_eq!(again, p, "written to the new folder");
+    p.add_recent_project("b");
+    assert_eq!(p.recent_projects, ["b", "a"]);
     assert!(
-      Prefs::dir().ends_with("OpenGOAL/jak-level-editor/")
+      Prefs::dir().ends_with("OpenGOAL/level-editor/")
         || Prefs::dir() == "./"
         || std::env::var_os("JLE_PREFS_DIR").is_some()
     );
@@ -200,7 +243,7 @@ mod tests {
   fn library_chosen_migrated() {
     let tmp = std::env::temp_dir().join(format!("jle-prefs-chosen-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
-    let (dir, old, lib) = (tmp.join("prefs"), tmp.join("old"), tmp.join("lib"));
+    let (dir, lib) = (tmp.join("prefs"), tmp.join("lib"));
     std::fs::create_dir_all(lib.join("jak3")).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
     let write = |root: &std::path::Path| {
@@ -209,7 +252,7 @@ mod tests {
     };
     let load = || {
       let mut p = Prefs::default();
-      p.load_from(&dir, &old);
+      p.load_from(&dir);
       p
     };
     write(&lib);
