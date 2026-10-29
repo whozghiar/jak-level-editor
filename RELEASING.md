@@ -75,4 +75,4 @@ Nothing to do in the launcher: it reads this repository's releases. At its next 
 launcher compares the latest published release with the editor version it has active, and shows a
 download icon in its header when the release is newer. Its *Settings > Level Editor* then downloads
 the release's `jak-level-editor-portable-<platform>.zip`, so a release must hold the portable zips
-of `windows-x64` and `linux-x64` (the launcher does not offer the editor on macOS yet).
+of `windows-x64`, `linux-x64` and `macos-universal` (one for both kinds of Mac).

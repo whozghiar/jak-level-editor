@@ -334,7 +334,7 @@ given without asking who started it:
 
 | | On its own (*Jak Level Editor*) | From the OpenGOAL Launcher |
 |---|---|---|
-| How you open it | its program | the *Level Editor* button of the sidebar (not on macOS for now) |
+| How you open it | its program | the *Level Editor* button of the sidebar |
 | Installed and updated | by you: an installer or the portable zip of a release | by the launcher: its *Settings > Level Editor* downloads a release's portable zip, and its header shows when a newer release is out |
 | The library, at first | `Documents/Jak Level Editor` | `<the launcher's install folder>/jak-level-editor` (`--default-library`) |
 | Its preferences | `%APPDATA%/OpenGOAL/jak-level-editor` | `%APPDATA%/OpenGOAL-Launcher/jak-level-editor` (`JLE_PREFS_DIR`) |
@@ -764,8 +764,8 @@ The launcher installs the editor the way it installs OpenGOAL's tools, and keeps
 code. Its *Settings > Level Editor* lists this repository's releases, downloads a release's
 `jak-level-editor-portable-<platform>.zip` (checked against GitHub's SHA-256 of it) into
 `<install>/versions/level-editor/<version>/`, and makes one version active; its header shows an
-icon when a newer release is out. Its sidebar's *Level Editor* button (not on macOS for now)
-starts the active version:
+icon when a newer release is out. Its sidebar's *Level Editor* button starts the active
+version:
 
 ```text
 JLE_PREFS_DIR=<launcher's config folder>/jak-level-editor
