@@ -171,7 +171,7 @@ You do not need to learn these by heart: come back here when a word stops you.
 |---|---|---|
 | `crates/core/` | **the engine** (Rust): the document, the history, the tools, reading and writing files, the export | change what a tool does, add a call |
 | `crates/tauri-plugin/` | the engine inside a Tauri window: it passes the calls and the events, serves the 3D data, starts the remote control | rarely: it only connects |
-| `src-tauri/` | **the standalone app**: a window, the plugin, the command line, the icons | change the app's name, icon or version |
+| `src-tauri/` | **the standalone app**: a window, the plugin, the command line, the icons (made from `app-icon.svg` by `npx tauri icon src-tauri/app-icon.svg`) | change the app's name, icon or version |
 | `crates/mcp/` | **the MCP server**: a separate program that passes an assistant's requests to the editor | add a tool for assistants (with `crates/core/src/editor/remote_tools/`) |
 | `ui/` | **the interface** (Svelte, TypeScript): `LevelEditor.svelte`, `components/` (menus, panels, inspector, windows), `render/` (the 3D view) | change a panel, a window, how the 3D view draws |
 | `src/`, `index.html` | the standalone app's page: it only shows `ui/LevelEditor.svelte` | rarely |
@@ -553,7 +553,7 @@ ui/                               the interface module: <LevelEditor/> and every
 src/, index.html, package.json    the standalone app's frontend (mounts ui/LevelEditor.svelte), its
                                   fonts
 src-tauri/                        the standalone app (binary jak-level-editor): Tauri + the plugin,
-                                  tauri.conf.json, its capability, its icons
+                                  tauri.conf.json, its capability, its icons (from app-icon.svg)
 data/, lang/                      the game's tables, the interface's texts (en, fr)
 tools/                            Python: data/ made again from the game's code, the documentation's
                                   pictures
