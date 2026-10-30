@@ -18,8 +18,6 @@ tools/build_*.py
 *.tmp
 # Python caches (tools/)
 __pycache__/
-# the tutorial videos show the game and weigh tens of MB: only their subtitles are in the repository
-docs/videos/*/*.mp4
 # the Rust version: cargo's and the frontend's build outputs
 target/
 node_modules/
